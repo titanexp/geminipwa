@@ -2873,19 +2873,23 @@
                 <details open class="settings-group">
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">基本設定</summary>
                     <div style="margin-top:15px;">
-                        <label for="api-key">Gemini APIキー:</label>
-                        <input type="password" id="api-key" placeholder="APIキーを入力" aria-label="Gemini APIキー">
+                        <label for="api-key">APIキー (Gemini / Claude共通):</label>
+                        <input type="password" id="api-key" placeholder="APIキーを入力" aria-label="APIキー">
 
                         <label for="model-name">モデル名:</label>
                         <select id="model-name" aria-label="モデル名">
-                            <optgroup label="無料">
+                            <optgroup label="Gemini (Google)">
                                 <option value="gemini-2.0-flash">gemini-2.0-flash</option>
                                 <option value="gemini-2.5-flash-preview-04-17">gemini-2.5-flash-preview-04-17</option>
                                 <option value="gemini-2.5-flash-preview-05-20">gemini-2.5-flash-preview-05-20</option>
-                            </optgroup>
-                            <optgroup label="有料">
                                 <option value="gemini-2.5-pro-preview-03-25">gemini-2.5-pro-preview-03-25</option>
                                 <option value="gemini-2.5-pro-preview-05-06">gemini-2.5-pro-preview-05-06</option>
+                            </optgroup>
+                            <optgroup label="Claude (Anthropic)">
+                                <option value="claude-3-5-sonnet-20240620">Claude 3.5 Sonnet</option>
+                                <option value="claude-3-opus-20240229">Claude 3 Opus</option>
+                                <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
+                                <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
                             </optgroup>
                             <optgroup label="ユーザー指定" id="user-defined-models-group">
                             </optgroup>
@@ -2903,6 +2907,12 @@
                         <input type="number" id="streaming-speed" min="0" step="1" placeholder="例: 30 (0で無効)" aria-label="文字送り速度">
                     </div>
                 </details>
+
+                <div class="settings-group" id="claude-specific-settings" style="display: none;">
+                    <h3>Claude固有設定</h3>
+                    <label for="claude-api-version">APIバージョン:</label>
+                    <input type="text" id="claude-api-version" value="2023-06-01" placeholder="例: 2023-06-01">
+                </div>
 
                 <details open class="settings-group">
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">パラメータ</summary>
@@ -3006,11 +3016,11 @@
                     <h3>検索</h3>
                     <label class="checkbox-label">
                         <input type="checkbox" id="enable-grounding-toggle">
-                        ネットから情報を取得させる (Google Search)
+                        ネットから情報を取得させる (Google Search, Geminiのみ)
                     </label>
                     <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                         ※ チェック時、モデルは回答生成のためにWeb検索を行う。<br>
-                        ※ 2.0以降でのみ対応(1.5以前は互換なし。エラーになる)<br>
+                        ※ Gemini 2.0以降でのみ対応(1.5以前は互換なし。エラーになる)<br>
                         ※ 推論モデルは推論内で検索する場合があり、引用データが帰らない場合がある。
                     </p>
                 </div>
@@ -3337,7 +3347,7 @@
                                ※ 空欄でデフォルト値。
                            </p>
                            <label for="additional-models" style="margin-top:10px;">追加モデル (カンマ区切り):</label>
-                           <textarea id="additional-models" placeholder="例: gemini-2.0-pro,gemini-2.0-flash-lite" aria-label="追加モデル"></textarea>
+                           <textarea id="additional-models" placeholder="例: gemini-2.0-pro,claude-2" aria-label="追加モデル"></textarea>
                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                                ※ 追加後は設定を保存の上、ページをリロード。
                            </p>
@@ -3459,6 +3469,8 @@
         const CHAT_TITLE_LENGTH = 15;
         const TEXTAREA_MAX_HEIGHT = 120;
         const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
+        const CLAUDE_API_BASE_URL = 'https://api.anthropic.com/v1/messages';
+        const DEFAULT_CLAUDE_API_VERSION = '2023-06-01';
         const DUPLICATE_SUFFIX = ' (コピー)';
         const IMPORT_PREFIX = '(取込) ';
 
@@ -3725,6 +3737,8 @@
             toggleButtonBottomTextCollapseInput: document.getElementById('toggle-button-bottom-text-collapse'),
             toggleButtonBottomTextExpandInput: document.getElementById('toggle-button-bottom-text-expand'),
             toggleButtonTopOpacityInput: document.getElementById('toggle-button-top-opacity'),
+            claudeApiVersionInput: document.getElementById('claude-api-version'),
+            claudeSpecificSettingsDiv: document.getElementById('claude-specific-settings'),
         };
 
         const state = {
@@ -3822,6 +3836,7 @@
                 toggleButtonBottomFontSize: DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE,
                 toggleButtonBottomTextCollapse: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE,
                 toggleButtonBottomTextExpand: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND,
+                claudeApiVersion: DEFAULT_CLAUDE_API_VERSION,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -5310,6 +5325,8 @@
                 elements.toggleButtonBottomFontSizeInput.value = state.settings.toggleButtonBottomFontSize ?? DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE;
                 elements.toggleButtonBottomTextCollapseInput.value = state.settings.toggleButtonBottomTextCollapse || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 elements.toggleButtonBottomTextExpandInput.value = state.settings.toggleButtonBottomTextExpand || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
+                elements.claudeApiVersionInput.value = state.settings.claudeApiVersion || DEFAULT_CLAUDE_API_VERSION;
+
 
                 document.documentElement.style.setProperty('--message-body-font-size', `${state.settings.messageBodyFontSize || DEFAULT_MESSAGE_BODY_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--code-block-font-size', `${state.settings.codeBlockFontSize || DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
@@ -5329,6 +5346,21 @@
                 this.toggleSystemPromptVisibility();
                 this.applySidePanelSettingsToUI();
                 this.updateSessionLinkingUI();
+                this.toggleClaudeSpecificSettings();
+            },
+            toggleClaudeSpecificSettings() {
+                const isClaude = state.settings.modelName?.includes('claude');
+                if (elements.claudeSpecificSettingsDiv) {
+                    elements.claudeSpecificSettingsDiv.style.display = isClaude ? 'block' : 'none';
+                }
+                if (elements.enableGroundingToggle && elements.enableGroundingToggle.parentElement) {
+                     const groundingParent = elements.enableGroundingToggle.parentElement.closest('.settings-group') || elements.enableGroundingToggle.parentElement;
+                     if(groundingParent) groundingParent.style.display = isClaude ? 'none' : 'block';
+                }
+                if (elements.thinkingBudgetInput && elements.thinkingBudgetInput.parentElement) {
+                     const thinkingBudgetParent = elements.thinkingBudgetInput.closest('details') || elements.thinkingBudgetInput.parentElement;
+                     if (thinkingBudgetParent) thinkingBudgetParent.style.display = isClaude ? 'none' : 'block';
+                }
             },
             updateChatScreenElementVisibility() {
                 if (elements.chatTitle) {
@@ -6175,6 +6207,10 @@
                 });
                 elements.persistMessageCollapseStateCheckbox.addEventListener('change', () => {
                     state.settings.persistMessageCollapseState = elements.persistMessageCollapseStateCheckbox.checked;
+                });
+                 elements.modelNameSelect.addEventListener('change', () => {
+                    state.settings.modelName = elements.modelNameSelect.value;
+                    uiUtils.toggleClaudeSpecificSettings();
                 });
 
                 elements.messageContainer.addEventListener('click', (event) => {
@@ -7319,6 +7355,7 @@
 
                 let useStreamingForThisCall = state.settings.streamingOutput;
                 let usePseudoForThisCall = state.settings.pseudoStreaming;
+                const isClaudeModel = state.settings.modelName.includes('claude');
 
                 if (isBackgroundProcess) {
                     useStreamingForThisCall = false;
@@ -7326,32 +7363,30 @@
                 }
 
                 try {
-                    const response = await apiUtils.callGeminiApi(apiMessages, generationConfig, systemInstruction, useStreamingForThisCall, usePseudoForThisCall);
+                    let response;
+                    if (isClaudeModel) {
+                        response = await apiUtils.callClaudeApi(apiMessages, generationConfig, systemInstruction, useStreamingForThisCall);
+                    } else {
+                        response = await apiUtils.callGeminiApi(apiMessages, generationConfig, systemInstruction, useStreamingForThisCall, usePseudoForThisCall);
+                    }
+
                     const dummyModelPrefix = (state.settings.concatDummyModel && state.settings.dummyModel && currentContextEnableDummyModel) ? state.settings.dummyModel : '';
 
-                    if (useStreamingForThisCall && !usePseudoForThisCall) {
+                    if (useStreamingForThisCall) {
                         const tempPlaceholderIndex = state.currentMessages.length;
                         uiUtils.appendMessage('model', '', tempPlaceholderIndex, true);
-                        const streamResult = await apiUtils.handleStreamingResponse(response);
-                        modelResponseMetadata = { finishReason: streamResult.finishReason, safetyRatings: streamResult.safetyRatings };
-                        groundingMetadata = streamResult.groundingMetadata;
-                        usageMetadata = streamResult.usageMetadata;
 
-                        modelResponseRawContent = await this.typeCharacterByCharacter(streamResult.processedChunks, tempPlaceholderIndex, state.abortController.signal, dummyModelPrefix);
-
-                        if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
-                            throw new Error("リクエストがキャンセルされました。");
+                        let streamResult;
+                        if (isClaudeModel) {
+                            streamResult = await apiUtils.handleClaudeStreamingResponse(response);
+                        } else {
+                            streamResult = await apiUtils.handleStreamingResponse(response);
                         }
-                        const placeholderElement = document.getElementById(`streaming-message-${tempPlaceholderIndex}`);
-                        if (placeholderElement) placeholderElement.remove();
 
-                    } else if (useStreamingForThisCall && usePseudoForThisCall) {
-                         const tempPlaceholderIndex = state.currentMessages.length;
-                        uiUtils.appendMessage('model', '', tempPlaceholderIndex, true);
-                        const streamResult = await apiUtils.handleStreamingResponse(response);
                         modelResponseMetadata = { finishReason: streamResult.finishReason, safetyRatings: streamResult.safetyRatings };
                         groundingMetadata = streamResult.groundingMetadata;
                         usageMetadata = streamResult.usageMetadata;
+
                         modelResponseRawContent = await this.typeCharacterByCharacter(streamResult.processedChunks, tempPlaceholderIndex, state.abortController.signal, dummyModelPrefix);
 
                         if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
@@ -7361,32 +7396,48 @@
                         if (placeholderElement) placeholderElement.remove();
                     } else {
                         const data = await response.json();
-                        const candidate = data.candidates?.[0];
-                        let rawContentFromApi = "";
-                        if (candidate) {
-                            modelResponseMetadata = { finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings };
-                            rawContentFromApi = candidate.content?.parts?.map(p => p.text || "").join('\n\n') || "";
-                            groundingMetadata = candidate.groundingMetadata || null;
-                            usageMetadata = data.usageMetadata || null;
-
-                            if (candidate.finishReason && candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") {
-                                rawContentFromApi += `\n\n(理由: ${candidate.finishReason})`;
-                            }
-                            if (!rawContentFromApi && candidate.finishReason === "STOP") {
-                                rawContentFromApi = "(応答が空です)";
-                            }
-                        } else {
-                            rawContentFromApi = "応答候補がありません";
-                            if(data.promptFeedback) {
-                                rawContentFromApi += ` (理由: ${data.promptFeedback.blockReason || '不明'})`;
-                                modelResponseMetadata.promptFeedback = data.promptFeedback;
-                                modelResponseMetadata.finishReason = data.promptFeedback.blockReason || 'ERROR';
+                        if (isClaudeModel) {
+                            if (data.content && data.content.length > 0) {
+                                const textContent = data.content.filter(block => block.type === 'text').map(block => block.text).join('\n\n');
+                                modelResponseRawContent = dummyModelPrefix + textContent;
+                                modelResponseMetadata = { finishReason: data.stop_reason || 'STOP' };
                             } else {
-                                modelResponseMetadata.finishReason = 'ERROR';
+                                modelResponseRawContent = "(応答が空です)";
+                                modelResponseMetadata = { finishReason: 'STOP' };
                             }
-                            usageMetadata = data.usageMetadata || null;
+                             usageMetadata = {
+                                promptTokenCount: data.usage?.input_tokens || 0,
+                                candidatesTokenCount: data.usage?.output_tokens || 0,
+                                totalTokenCount: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0)
+                            };
+                        } else {
+                            const candidate = data.candidates?.[0];
+                            let rawContentFromApi = "";
+                            if (candidate) {
+                                modelResponseMetadata = { finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings };
+                                rawContentFromApi = candidate.content?.parts?.map(p => p.text || "").join('\n\n') || "";
+                                groundingMetadata = candidate.groundingMetadata || null;
+                                usageMetadata = data.usageMetadata || null;
+
+                                if (candidate.finishReason && candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") {
+                                    rawContentFromApi += `\n\n(理由: ${candidate.finishReason})`;
+                                }
+                                if (!rawContentFromApi && candidate.finishReason === "STOP") {
+                                    rawContentFromApi = "(応答が空です)";
+                                }
+                            } else {
+                                rawContentFromApi = "応答候補がありません";
+                                if(data.promptFeedback) {
+                                    rawContentFromApi += ` (理由: ${data.promptFeedback.blockReason || '不明'})`;
+                                    modelResponseMetadata.promptFeedback = data.promptFeedback;
+                                    modelResponseMetadata.finishReason = data.promptFeedback.blockReason || 'ERROR';
+                                } else {
+                                    modelResponseMetadata.finishReason = 'ERROR';
+                                }
+                                usageMetadata = data.usageMetadata || null;
+                            }
+                            modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
                         }
-                        modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
                     }
 
                     if (isBackgroundProcess) {
@@ -8004,6 +8055,7 @@
                      toggleButtonBottomFontSize: parseInt(elements.toggleButtonBottomFontSizeInput.value, 10) || DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE,
                      toggleButtonBottomTextCollapse: elements.toggleButtonBottomTextCollapseInput.value.trim() || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE,
                      toggleButtonBottomTextExpand: elements.toggleButtonBottomTextExpandInput.value.trim() || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND,
+                     claudeApiVersion: elements.claudeApiVersionInput.value.trim() || DEFAULT_CLAUDE_API_VERSION,
                  };
 
                  if (isNaN(newSettings.streamingSpeed) || newSettings.streamingSpeed < 0) {
@@ -8259,6 +8311,7 @@
                             toggleButtonBottomFontSize: DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE,
                             toggleButtonBottomTextCollapse: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE,
                             toggleButtonBottomTextExpand: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND,
+                            claudeApiVersion: DEFAULT_CLAUDE_API_VERSION,
                         };
                         state.backgroundImageUrl = null;
                         state.userIconUrl = null;
@@ -9281,6 +9334,225 @@
                          throw new Error("リクエストがキャンセルされました。");
                     }
                     throw error;
+                }
+            },
+            async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
+                if (!state.settings.apiKey) {
+                    throw new Error("APIキーが設定されていません。");
+                }
+                state.abortController = new AbortController();
+                const { signal } = state.abortController;
+
+                const model = state.settings.modelName;
+                const apiKey = state.settings.apiKey;
+                const claudeApiVersion = state.settings.claudeApiVersion || DEFAULT_CLAUDE_API_VERSION;
+
+                const claudeMessages = [];
+                if (systemInstruction && systemInstruction.parts && systemInstruction.parts.length > 0 && systemInstruction.parts[0].text) {
+                    claudeMessages.push({ role: "system", content: systemInstruction.parts[0].text });
+                }
+
+                let lastRole = null;
+                messagesForApi.forEach(msg => {
+                    const currentRole = msg.role === 'model' ? 'assistant' : 'user';
+                    const contentParts = [];
+                    msg.parts.forEach(part => {
+                        if (part.text) {
+                            contentParts.push({ type: "text", text: part.text });
+                        } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data) {
+                            if (part.inlineData.mimeType.startsWith('image/')) {
+                                contentParts.push({
+                                    type: "image",
+                                    source: {
+                                        type: "base64",
+                                        media_type: part.inlineData.mimeType,
+                                        data: part.inlineData.data
+                                    }
+                                });
+                            } else {
+                                contentParts.push({ type: "text", text: `[添付ファイル: ${part.inlineData.mimeType}]` });
+                            }
+                        }
+                    });
+
+                    if (currentRole === lastRole && claudeMessages.length > 0 && claudeMessages[claudeMessages.length - 1].content.every(c => c.type === 'text') && contentParts.every(c => c.type === 'text')) {
+                        const lastMessage = claudeMessages[claudeMessages.length - 1];
+                        lastMessage.content.push(...contentParts);
+                    } else {
+                        claudeMessages.push({ role: currentRole, content: contentParts });
+                        lastRole = currentRole;
+                    }
+                });
+
+
+                const requestBody = {
+                    model: model,
+                    messages: claudeMessages,
+                    stream: useStreaming,
+                    max_tokens: generationConfig.maxOutputTokens || 4000,
+                };
+                if (generationConfig.temperature !== null) requestBody.temperature = generationConfig.temperature;
+                if (generationConfig.topP !== null) requestBody.top_p = generationConfig.topP;
+                if (generationConfig.topK !== null) requestBody.top_k = generationConfig.topK;
+
+
+                try {
+                    const response = await fetch(CLAUDE_API_BASE_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': apiKey,
+                            'anthropic-version': claudeApiVersion
+                        },
+                        body: JSON.stringify(requestBody),
+                        signal
+                    });
+
+                    if (!response.ok) {
+                        let errorMsg = `Claude APIエラー (${response.status}): ${response.statusText}`;
+                        try {
+                            const errorData = await response.json();
+                            if (errorData.error && errorData.error.message) {
+                                errorMsg = `Claude APIエラー (${response.status}): ${errorData.error.message}`;
+                            } else if (errorData.error && errorData.error.type) {
+                                errorMsg = `Claude APIエラー (${response.status}): ${errorData.error.type}`;
+                            }
+                        } catch (e) {  }
+                        throw new Error(errorMsg);
+                    }
+                    return response;
+                } catch (error) {
+                    if (error.name === 'AbortError') {
+                        throw new Error("リクエストがキャンセルされました。");
+                    }
+                    throw error;
+                }
+            },
+            async handleClaudeStreamingResponse(response) {
+                if (!response.body) {
+                    throw new Error("レスポンスボディがありません。");
+                }
+                const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+                let buffer = '';
+                const processedChunks = [];
+                let isCancelled = false;
+                let finalUsageMetadata = null;
+                let stopReason = 'STOP';
+
+                try {
+                    while (true) {
+                        if (state.abortController?.signal.aborted && !isCancelled) {
+                            isCancelled = true;
+                            await reader.cancel("User aborted");
+                            throw new Error("リクエストがキャンセルされました。");
+                        }
+                                                let readResult;
+                        try {
+                            readResult = await reader.read();
+                        } catch (readError) {
+                            if (readError.name === 'AbortError' || readError.message === "User aborted" || readError.message.includes("aborted")) {
+                                if (!isCancelled) {
+                                    isCancelled = true;
+                                    throw new Error("リクエストがキャンセルされました。");
+                                }
+                                break;
+                            }
+                            throw readError;
+                        }
+
+                        const { value, done } = readResult;
+
+                        if (done) {
+                             if (buffer.trim()) {
+                                processClaudeBuffer(buffer, true);
+                            }
+                            break;
+                        }
+                        buffer += value;
+                        buffer = processClaudeBuffer(buffer, false);
+                    }
+
+                    return {
+                        processedChunks: processedChunks,
+                        finishReason: isCancelled ? 'ABORTED' : stopReason,
+                        safetyRatings: null,
+                        usageMetadata: finalUsageMetadata
+                    };
+                } catch (error) {
+                    const partialChunksOnError = (error.message !== "リクエストがキャンセルされました.") ? processedChunks : [];
+                    throw new Error(`${error.message || error}`, { cause: { originalError: error, partialChunks: partialChunksOnError } });
+                } finally {
+                    if (!reader.closed && !isCancelled) {
+                        try { await reader.cancel("Cleanup cancellation"); } catch(e) {  }
+                    }
+                }
+
+                function processClaudeBuffer(currentBuffer, isFinalChunk) {
+                    let remainingBuffer = currentBuffer;
+                    while (true) {
+                        const eventEndIndex = remainingBuffer.indexOf('\n\n');
+                        if (eventEndIndex === -1) {
+                            if (isFinalChunk && remainingBuffer.trim()) {
+                                parseClaudeSseEvent(remainingBuffer.trim());
+                                remainingBuffer = '';
+                            }
+                            break;
+                        }
+                        const eventString = remainingBuffer.substring(0, eventEndIndex).trim();
+                        remainingBuffer = remainingBuffer.substring(eventEndIndex + 2);
+
+                        if (eventString) {
+                            parseClaudeSseEvent(eventString);
+                        }
+                    }
+                    return remainingBuffer;
+                }
+
+                function parseClaudeSseEvent(eventString) {
+                    const lines = eventString.split('\n');
+                    let eventType = '';
+                    let dataString = '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('event: ')) {
+                            eventType = line.substring(7).trim();
+                        } else if (line.startsWith('data: ')) {
+                            dataString += line.substring(6);
+                        }
+                    }
+
+                    if (eventType && dataString) {
+                        try {
+                            const data = JSON.parse(dataString);
+                            if (eventType === 'content_block_delta' && data.delta && data.delta.type === 'text_delta' && data.delta.text) {
+                                processedChunks.push(data.delta.text);
+                            } else if (eventType === 'message_start' && data.message && data.message.usage) {
+                                finalUsageMetadata = {
+                                    promptTokenCount: data.message.usage.input_tokens || 0,
+                                    candidatesTokenCount: 0, // Will be updated at message_delta or message_stop
+                                    totalTokenCount: data.message.usage.input_tokens || 0
+                                };
+                            } else if (eventType === 'message_delta' && data.usage) {
+                                if (finalUsageMetadata) {
+                                    finalUsageMetadata.candidatesTokenCount = data.usage.output_tokens || 0;
+                                    finalUsageMetadata.totalTokenCount = (finalUsageMetadata.promptTokenCount || 0) + (data.usage.output_tokens || 0);
+                                }
+                                if (data.delta && data.delta.stop_reason) {
+                                    stopReason = data.delta.stop_reason;
+                                }
+                            } else if (eventType === 'message_stop') {
+                                if (data.message && data.message.stop_reason) {
+                                     stopReason = data.message.stop_reason;
+                                }
+                                if (data.message && data.message.usage && finalUsageMetadata) {
+                                     finalUsageMetadata.candidatesTokenCount = data.message.usage.output_tokens || 0;
+                                     finalUsageMetadata.totalTokenCount = (finalUsageMetadata.promptTokenCount || 0) + (data.message.usage.output_tokens || 0);
+                                }
+                            }
+                        } catch (e) {
+                            console.warn("Error parsing Claude SSE data:", e, "Data:", dataString);
+                        }
+                    }
                 }
             },
             async handleStreamingResponse(response) {
