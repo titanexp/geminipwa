@@ -2504,7 +2504,7 @@
         .thought-summary-details summary::-webkit-details-marker { display: none; }
         .thought-summary-details summary::marker { display: none; }
         .thought-summary-details summary::before {
-            content: '🧠';
+            content: '💭';
             font-size: 14px;
             display: inline-block;
         }
@@ -3099,7 +3099,7 @@
                                 </label>
                                 <label class="checkbox-label" style="margin-top: -5px;">
                                     <input type="checkbox" id="expand-thoughts-by-default-toggle">
-                                    思考プロセスをデフォルトで開く (Gemini)
+                                    💭思考プロセスを開いた状態にする (Gemini)
                                 </label>
                                 <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                                     ※ チェック時、モデルの思考プロセスの要約が返る。<br>
@@ -5980,24 +5980,36 @@
                     if (link.dataset.interactiveTitleProcessed === 'true') {
                         return;
                     }
+
                     const titleText = link.getAttribute('title');
                     if (titleText && titleText.trim() !== '') {
                         link.dataset.interactiveTitleProcessed = 'true';
+
+                        let spanToToggle = link.nextElementSibling;
+                        if (!spanToToggle ||
+                            !spanToToggle.classList.contains('interactive-title-content') ||
+                            spanToToggle.textContent !== ` (# "${titleText}")`) {
+
+                            if (spanToToggle && spanToToggle.classList.contains('interactive-title-content')) {
+                                spanToToggle.remove();
+                            }
+
+                            spanToToggle = document.createElement('span');
+                            spanToToggle.classList.add('interactive-title-content', 'interactive-title-content-style');
+                            spanToToggle.textContent = ` (# "${titleText}")`;
+                            spanToToggle.classList.add('hidden');
+                            link.insertAdjacentElement('afterend', spanToToggle);
+                            link.setAttribute('aria-expanded', 'false');
+                        } else {
+                            const isExpanded = link.getAttribute('aria-expanded') === 'true';
+                            spanToToggle.classList.toggle('hidden', !isExpanded);
+                        }
+
                         link.addEventListener('click', function(event) {
                             event.preventDefault();
-                            let toggleContentSpan = this.nextElementSibling;
-                            if (!toggleContentSpan || !toggleContentSpan.classList.contains('interactive-title-content')) {
-                                toggleContentSpan = document.createElement('span');
-                                toggleContentSpan.classList.add('interactive-title-content');
-                                toggleContentSpan.classList.add('interactive-title-content-style');
-                                toggleContentSpan.textContent = ` (# "${titleText}")`;
-                                toggleContentSpan.classList.add('hidden');
-                                this.insertAdjacentElement('afterend', toggleContentSpan);
-                                this.setAttribute('aria-expanded', 'false');
-                            }
-                            const isCurrentlyHidden = toggleContentSpan.classList.contains('hidden');
-                            toggleContentSpan.classList.toggle('hidden', !isCurrentlyHidden);
-                            this.setAttribute('aria-expanded', String(isCurrentlyHidden));
+                            const isCurrentlyHidden = spanToToggle.classList.contains('hidden');
+                            spanToToggle.classList.toggle('hidden', !isCurrentlyHidden);
+                            this.setAttribute('aria-expanded', String(!isCurrentlyHidden));
                         });
                         link.style.cursor = 'pointer';
                     }
@@ -9230,9 +9242,13 @@
                 const currentIndexInGroup = siblings.findIndex(m => m === msgToDelete) + 1;
                 const totalSiblings = siblings.length;
                 const contentPreview = msgToDelete.content.substring(0, 30) + "...";
-                const confirmMsg = `この応答 (${currentIndexInGroup}/${totalSiblings})「${contentPreview}」を削除しますか？\n(この応答のみが削除されます)`;
+                const confirmMsgText = `この応答 (${currentIndexInGroup}/${totalSiblings})「${contentPreview}」を削除しますか？\n(この応答のみが削除されます)`;
 
-                const confirmed = await uiUtils.showCustomConfirm(confirmMsg);
+                let confirmed = true;
+                if (!state.settings.disableDeleteMessageConfirmation) {
+                    confirmed = await uiUtils.showCustomConfirm(confirmMsgText);
+                }
+
                 if (confirmed) {
                     const wasSelected = msgToDelete.isSelected;
                     const groupId = msgToDelete.siblingGroupId;
@@ -9261,14 +9277,16 @@
                             const lastSiblingItem = remainingSiblingsWithIndices[remainingSiblingsWithIndices.length - 1];
                             if (!lastSiblingItem.msg.isSelected) {
                                 lastSiblingItem.msg.isSelected = true;
-                                newlySelectedIndex = lastSiblingItem.originalIndex;
-                            } else {
-                                newlySelectedIndex = lastSiblingItem.originalIndex;
                             }
+                            newlySelectedIndex = lastSiblingItem.originalIndex;
                         } else {
                              const stillSelectedItem = remainingSiblingsWithIndices.find(item => item.msg.isSelected);
                              if (stillSelectedItem) {
                                  newlySelectedIndex = stillSelectedItem.originalIndex;
+                             } else {
+                                const lastSiblingItem = remainingSiblingsWithIndices[remainingSiblingsWithIndices.length - 1];
+                                lastSiblingItem.msg.isSelected = true;
+                                newlySelectedIndex = lastSiblingItem.originalIndex;
                              }
                         }
                     }
@@ -9440,7 +9458,7 @@
                  const toggleButtons = messageElement?.querySelectorAll('.message-toggle-button[data-action="toggle-collapse"]');
 
                  if (contentDiv && contentDiv.classList.contains('collapsed')) {
-                     contentDiv.classList.remove('collapsed');
+                                      contentDiv.classList.remove('collapsed');
                      state.messageCollapsedStates.set(index, false);
                      if (state.settings.persistMessageCollapseState && state.currentChatId) {
                         dbUtils.saveChat();
