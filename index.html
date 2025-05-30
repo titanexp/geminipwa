@@ -2480,8 +2480,94 @@
         .custom-dialog .dialog-cancel-btn:hover:not(:disabled) {
             background-color: var(--bg-button-action-hover);
         }
+        .thought-summary-details {
+            margin-bottom: 10px;
+            font-size: 13px;
+            border: 1px solid var(--border-tertiary);
+            border-radius: 5px;
+            background-color: var(--bg-tertiary);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+        .thought-summary-details summary {
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--text-secondary);
+            list-style: none;
+            padding: 6px 10px;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            user-select: none;
+        }
+        .thought-summary-details summary::-webkit-details-marker { display: none; }
+        .thought-summary-details summary::marker { display: none; }
+        .thought-summary-details summary::before {
+            content: '💭';
+            font-size: 14px;
+            display: inline-block;
+        }
+        .thought-summary-details[open] summary {
+            border-bottom: 1px solid var(--border-tertiary);
+        }
+        .thought-summary-content {
+            padding: 8px 10px;
+            font-size: 13px;
+            line-height: 1.5;
+            color: var(--text-primary);
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        .thought-summary-content > *:first-child { margin-top: 0; }
+        .thought-summary-content > *:last-child { margin-bottom: 0; }
+        .thought-summary-content ul,
+        .thought-summary-content ol { margin-left: 1em;}
+        body.dark-mode .thought-summary-details {
+            border-color: var(--border-primary);
+            background-color: var(--bg-secondary);
+        }
+        body.dark-mode .thought-summary-details summary {
+            color: var(--text-secondary);
+        }
+        body.dark-mode .thought-summary-details[open] summary {
+            border-bottom-color: var(--border-primary);
+        }
+        body.dark-mode .thought-summary-content {
+            color: var(--text-primary);
+        }
+        .thought-summary-content pre {
+            background-color: var(--bg-secondary);
+            padding: 8px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 0.8em 0;
+            font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+            font-size: 12px;
+            border: 1px solid var(--border-tertiary);
+            color: var(--text-secondary);
+        }
+        body.dark-mode .thought-summary-content pre {
+            background-color: var(--bg-tertiary);
+            border-color: var(--border-primary);
+            color: var(--text-secondary);
+        }
+        .thought-summary-content code:not(pre > code) {
+            background-color: var(--bg-secondary);
+            padding: 0.1em 0.3em;
+            border-radius: 3px;
+            font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+            font-size: 0.85em;
+            border: 1px solid var(--border-tertiary);
+            color: var(--text-secondary);
+        }
+        body.dark-mode .thought-summary-content code:not(pre > code) {
+            background-color: var(--bg-tertiary);
+            border-color: var(--border-primary);
+            color: var(--text-secondary);
+        }
         .citation-details {
-            margin-top: 15px;
+            margin-top: 10px;
             font-size: 12px;
             border-top: 1px dashed var(--border-secondary);
             padding-top: 8px;
@@ -2875,7 +2961,7 @@
                     <div style="margin-top:15px;">
                         <label for="api-provider-select">使用するAPIプロバイダー:</label>
                         <select id="api-provider-select" aria-label="APIプロバイダー選択">
-                            <option value="gemini">Gemini</option>
+                            <option value="gemini">Google Gemini</option>
                             <option value="deepseek">DeepSeek</option>
                         </select>
                     </div>
@@ -4456,30 +4542,30 @@
                 }
 
                 const messageData = state.currentMessages[index];
-                let thoughtSummaryContainer = null;
-
                 if (role === 'model' && state.settings.apiProvider === 'gemini' && (messageData?.thoughtSummary || (isStreamingPlaceholder && state.settings.includeThoughts))) {
                     const thoughtDetails = document.createElement('details');
                     thoughtDetails.classList.add('thought-summary-details');
                     if (state.settings.expandThoughtsByDefault) {
                         thoughtDetails.open = true;
                     }
+
                     const thoughtSummaryElem = document.createElement('summary');
                     thoughtSummaryElem.textContent = '思考プロセス';
                     thoughtDetails.appendChild(thoughtSummaryElem);
 
-                    thoughtSummaryContainer = document.createElement('div');
-                    thoughtSummaryContainer.classList.add('thought-summary-content');
+                    const thoughtContentDiv = document.createElement('div');
+                    thoughtContentDiv.classList.add('thought-summary-content');
                     if (isStreamingPlaceholder) {
-                        thoughtSummaryContainer.id = `streaming-thought-summary-${index}`;
+                        thoughtContentDiv.id = `streaming-thought-summary-${index}`;
+                        thoughtContentDiv.innerHTML = '';
                     } else if (messageData?.thoughtSummary) {
                         try {
-                            thoughtSummaryContainer.innerHTML = marked.parse(messageData.thoughtSummary || '');
+                            thoughtContentDiv.innerHTML = marked.parse(messageData.thoughtSummary || '');
                         } catch (e) {
-                            thoughtSummaryContainer.textContent = messageData.thoughtSummary || '';
+                            thoughtContentDiv.textContent = messageData.thoughtSummary || '';
                         }
                     }
-                    thoughtDetails.appendChild(thoughtSummaryContainer);
+                    thoughtDetails.appendChild(thoughtContentDiv);
                     messageDiv.appendChild(thoughtDetails);
                 }
 
@@ -4504,10 +4590,6 @@
 
                 const contentDiv = document.createElement('div');
                 contentDiv.classList.add('message-content');
-                if (isStreamingPlaceholder && role === 'model') {
-                    contentDiv.id = `streaming-content-${index}`;
-                }
-
 
                 if (isCurrentlyCollapsed) {
                     contentDiv.classList.add('collapsed');
@@ -4839,7 +4921,6 @@
                         preElement.appendChild(copyButton);
                     }
                 });
-            },
             updateStreamingMessage(index, newChar, isThoughtSummary = false) {
                 const messageDiv = document.getElementById(`streaming-message-${index}`);
                 if (messageDiv && typeof marked !== 'undefined') {
@@ -4849,31 +4930,29 @@
                     if (isThoughtSummary) {
                         targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
                         streamContent = state.partialThoughtStreamContent;
-                        if (targetContentDiv) {
-                            try {
-                                targetContentDiv.innerHTML = marked.parse(streamContent || '');
-                            } catch (e) {
-                                targetContentDiv.textContent = streamContent;
-                            }
-                        }
                     } else {
-                        targetContentDiv = messageDiv.querySelector(`#streaming-content-${index}`) || messageDiv.querySelector('.message-content:not(.thought-summary-content)');
+                        targetContentDiv = messageDiv.querySelector('.message-content');
                         streamContent = state.partialStreamContent;
-                        if (targetContentDiv) {
-                            try {
-                                const rawHtml = marked.parse(streamContent || '');
-                                const tempDiv = document.createElement('div');
-                                tempDiv.innerHTML = rawHtml;
-                                this.processInteractivePlaceholders(tempDiv);
-                                this.processInteractiveTitles(tempDiv);
-                                targetContentDiv.innerHTML = tempDiv.innerHTML;
-                                this.addCopyButtonsToCodeBlocks(targetContentDiv);
-                            } catch (e) {
-                                targetContentDiv.textContent = streamContent;
-                            }
-                        }
                     }
 
+                    if (targetContentDiv) {
+                        try {
+                            const rawHtml = marked.parse(streamContent || '');
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = rawHtml;
+                            if (!isThoughtSummary) {
+                                this.processInteractivePlaceholders(tempDiv);
+                                this.processInteractiveTitles(tempDiv);
+                            }
+                            targetContentDiv.innerHTML = tempDiv.innerHTML;
+
+                            if (!isThoughtSummary) {
+                                this.addCopyButtonsToCodeBlocks(targetContentDiv);
+                            }
+                        } catch (e) {
+                            targetContentDiv.textContent = streamContent;
+                        }
+                    }
                     if (!isThoughtSummary && state.settings.autoScrollOnNewMessage) {
                         this.scrollToBottom();
                     }
@@ -4886,20 +4965,21 @@
                     if (!finalMessageData) return;
 
                     if (finalMessageData.thoughtSummary && state.settings.apiProvider === 'gemini') {
-                        const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`) || messageDiv.querySelector('.thought-summary-content');
+                        const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
                         if (thoughtContentDiv && typeof marked !== 'undefined') {
                             try {
                                 thoughtContentDiv.innerHTML = marked.parse(finalMessageData.thoughtSummary || '');
                             } catch (e) {
                                 thoughtContentDiv.textContent = finalMessageData.thoughtSummary || '';
                             }
-                            if (thoughtContentDiv.id === `streaming-thought-summary-${index}`) {
-                                thoughtContentDiv.removeAttribute('id');
-                            }
+                            thoughtContentDiv.removeAttribute('id');
+                        } else if (thoughtContentDiv) {
+                            thoughtContentDiv.textContent = finalMessageData.thoughtSummary || '';
+                            thoughtContentDiv.removeAttribute('id');
                         }
                     }
 
-                    const contentDiv = messageDiv.querySelector(`#streaming-content-${index}`) || messageDiv.querySelector('.message-content:not(.thought-summary-content)');
+                    const contentDiv = messageDiv.querySelector('.message-content');
                     const finalRawContent = finalMessageData.content || '';
                     if (contentDiv && typeof marked !== 'undefined') {
                          try {
@@ -4915,9 +4995,6 @@
                          }
                     } else if (contentDiv) {
                         contentDiv.textContent = finalRawContent;
-                    }
-                    if (contentDiv && contentDiv.id === `streaming-content-${index}`) {
-                        contentDiv.removeAttribute('id');
                     }
                     messageDiv.removeAttribute('id');
 
@@ -5963,7 +6040,7 @@
                     if (node.nodeType === Node.TEXT_NODE) {
                         nodesToProcess.push(node);
                     } else if (node.nodeType === Node.ELEMENT_NODE) {
-                        if (node.tagName === 'A' || node.tagName === 'CODE' || node.tagName === 'PRE' || node.closest('.thought-summary-content')) {
+                        if (node.tagName === 'A' || node.tagName === 'CODE' || node.tagName === 'PRE') {
                             return;
                         }
                         for (const childNode of node.childNodes) {
@@ -5978,31 +6055,37 @@
                     const textContent = textNode.nodeValue;
                     let lastIndex = 0;
                     const fragment = document.createDocumentFragment();
+                    let modified = false;
 
                     while ((match = placeholderRegex.exec(textContent)) !== null) {
+                        modified = true;
                         const precedingText = textContent.substring(lastIndex, match.index);
                         if (precedingText) {
                             fragment.appendChild(document.createTextNode(precedingText));
                         }
 
-                        const clickableText = match[1].trim() || "詳細";
+                        const clickableText = match[1].trim();
                         const detailText = match[2];
+
+                        if (!clickableText) {
+                            fragment.appendChild(document.createTextNode(match[0]));
+                            lastIndex = placeholderRegex.lastIndex;
+                            continue;
+                        }
 
                         const link = document.createElement('a');
                         link.href = "#";
                         link.textContent = clickableText;
-                        link.title = detailText;
                         link.style.cursor = 'pointer';
 
                         const detailSpan = document.createElement('span');
-                        detailSpan.classList.add('interactive-title-content', 'interactive-title-content-style', 'hidden');
                         detailSpan.textContent = ` (# "${detailText}")`;
+                        detailSpan.classList.add('interactive-title-content-style', 'hidden');
 
                         link.addEventListener('click', function(event) {
                             event.preventDefault();
-                            const isCurrentlyHidden = detailSpan.classList.contains('hidden');
-                            detailSpan.classList.toggle('hidden', !isCurrentlyHidden);
-                            this.setAttribute('aria-expanded', String(!isCurrentlyHidden));
+                            detailSpan.classList.toggle('hidden');
+                            this.setAttribute('aria-expanded', String(!detailSpan.classList.contains('hidden')));
                         });
                         link.setAttribute('aria-expanded', 'false');
 
@@ -6011,12 +6094,10 @@
 
                         lastIndex = placeholderRegex.lastIndex;
                     }
-
-                    if (lastIndex < textContent.length) {
-                        fragment.appendChild(document.createTextNode(textContent.substring(lastIndex)));
-                    }
-
-                    if (fragment.childNodes.length > 0) {
+                    if (modified) {
+                        if (lastIndex < textContent.length) {
+                            fragment.appendChild(document.createTextNode(textContent.substring(lastIndex)));
+                        }
                         textNode.parentNode.replaceChild(fragment, textNode);
                     }
                 }
@@ -8987,8 +9068,7 @@
             async copyMessageText(index, buttonElement) {
                 const message = state.currentMessages[index];
                 if (!message) return;
-
-                let textToCopy = message.content;
+                                let textToCopy = message.content;
                 if (!textToCopy && message.role === 'user' && message.attachments && message.attachments.length > 0) {
                     textToCopy = `[添付ファイル: ${message.attachments.map(a => a.name).join(', ')}]`;
                 } else if (!textToCopy) {
@@ -9278,7 +9358,7 @@
 
                 if (confirmed) {
                     const wasSelected = msgToDelete.isSelected;
-                    const groupId = msgToDelete.siblingGroupId;
+                                        const groupId = msgToDelete.siblingGroupId;
 
                     state.currentMessages.splice(indexToDelete, 1);
                     state.messageCollapsedStates.delete(indexToDelete);
