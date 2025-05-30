@@ -4921,6 +4921,7 @@
                         preElement.appendChild(copyButton);
                     }
                 });
+            },
             updateStreamingMessage(index, newChar, isThoughtSummary = false) {
                 const messageDiv = document.getElementById(`streaming-message-${index}`);
                 if (messageDiv && typeof marked !== 'undefined') {
@@ -6055,37 +6056,31 @@
                     const textContent = textNode.nodeValue;
                     let lastIndex = 0;
                     const fragment = document.createDocumentFragment();
-                    let modified = false;
 
                     while ((match = placeholderRegex.exec(textContent)) !== null) {
-                        modified = true;
                         const precedingText = textContent.substring(lastIndex, match.index);
                         if (precedingText) {
                             fragment.appendChild(document.createTextNode(precedingText));
                         }
 
-                        const clickableText = match[1].trim();
+                        const clickableText = match[1].trim() || "詳細";
                         const detailText = match[2];
-
-                        if (!clickableText) {
-                            fragment.appendChild(document.createTextNode(match[0]));
-                            lastIndex = placeholderRegex.lastIndex;
-                            continue;
-                        }
 
                         const link = document.createElement('a');
                         link.href = "#";
                         link.textContent = clickableText;
+                        link.title = detailText;
                         link.style.cursor = 'pointer';
 
                         const detailSpan = document.createElement('span');
+                        detailSpan.classList.add('interactive-title-content', 'interactive-title-content-style', 'hidden');
                         detailSpan.textContent = ` (# "${detailText}")`;
-                        detailSpan.classList.add('interactive-title-content-style', 'hidden');
 
                         link.addEventListener('click', function(event) {
                             event.preventDefault();
-                            detailSpan.classList.toggle('hidden');
-                            this.setAttribute('aria-expanded', String(!detailSpan.classList.contains('hidden')));
+                            const isCurrentlyHidden = detailSpan.classList.contains('hidden');
+                            detailSpan.classList.toggle('hidden', !isCurrentlyHidden);
+                            this.setAttribute('aria-expanded', String(!isCurrentlyHidden));
                         });
                         link.setAttribute('aria-expanded', 'false');
 
@@ -6094,10 +6089,12 @@
 
                         lastIndex = placeholderRegex.lastIndex;
                     }
-                    if (modified) {
-                        if (lastIndex < textContent.length) {
-                            fragment.appendChild(document.createTextNode(textContent.substring(lastIndex)));
-                        }
+
+                    if (lastIndex < textContent.length) {
+                        fragment.appendChild(document.createTextNode(textContent.substring(lastIndex)));
+                    }
+
+                    if (fragment.childNodes.length > 0) {
                         textNode.parentNode.replaceChild(fragment, textNode);
                     }
                 }
@@ -9068,7 +9065,8 @@
             async copyMessageText(index, buttonElement) {
                 const message = state.currentMessages[index];
                 if (!message) return;
-                                let textToCopy = message.content;
+
+                let textToCopy = message.content;
                 if (!textToCopy && message.role === 'user' && message.attachments && message.attachments.length > 0) {
                     textToCopy = `[添付ファイル: ${message.attachments.map(a => a.name).join(', ')}]`;
                 } else if (!textToCopy) {
