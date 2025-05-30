@@ -4628,11 +4628,9 @@
                     try {
                         if (role === 'model' && !isStreamingPlaceholder && typeof marked !== 'undefined') {
                             const rawHtml = marked.parse(content || '');
-                            const tempDiv = document.createElement('div');
-                            tempDiv.innerHTML = rawHtml;
-                            this.processInteractivePlaceholders(tempDiv);
-                            this.processInteractiveTitles(tempDiv);
-                            contentDiv.innerHTML = tempDiv.innerHTML;
+                            contentDiv.innerHTML = rawHtml;
+                            this.processInteractivePlaceholders(contentDiv);
+                            this.processInteractiveTitles(contentDiv);
                             this.addCopyButtonsToCodeBlocks(contentDiv);
                         } else if (role === 'user') {
                             const pre = document.createElement('pre'); pre.textContent = content; contentDiv.appendChild(pre);
@@ -4908,7 +4906,7 @@
                                     copyButton.textContent = originalText;
                                     copyButton.disabled = false;
                                 }, 1500);
-                            }).catch(err => {
+                        }).catch(err => {
                                 const originalText = copyButton.textContent;
                                 copyButton.textContent = '失敗';
                                 copyButton.disabled = true;
@@ -4939,15 +4937,11 @@
                     if (targetContentDiv) {
                         try {
                             const rawHtml = marked.parse(streamContent || '');
-                            const tempDiv = document.createElement('div');
-                            tempDiv.innerHTML = rawHtml;
-                            if (!isThoughtSummary) {
-                                this.processInteractivePlaceholders(tempDiv);
-                                this.processInteractiveTitles(tempDiv);
-                            }
-                            targetContentDiv.innerHTML = tempDiv.innerHTML;
+                            targetContentDiv.innerHTML = rawHtml;
 
                             if (!isThoughtSummary) {
+                                this.processInteractivePlaceholders(targetContentDiv);
+                                this.processInteractiveTitles(targetContentDiv);
                                 this.addCopyButtonsToCodeBlocks(targetContentDiv);
                             }
                         } catch (e) {
@@ -4985,11 +4979,9 @@
                     if (contentDiv && typeof marked !== 'undefined') {
                          try {
                              const rawHtml = marked.parse(finalRawContent);
-                             const tempDiv = document.createElement('div');
-                             tempDiv.innerHTML = rawHtml;
-                             this.processInteractivePlaceholders(tempDiv);
-                             this.processInteractiveTitles(tempDiv);
-                             contentDiv.innerHTML = tempDiv.innerHTML;
+                             contentDiv.innerHTML = rawHtml;
+                             this.processInteractivePlaceholders(contentDiv);
+                             this.processInteractiveTitles(contentDiv);
                              this.addCopyButtonsToCodeBlocks(contentDiv);
                          } catch (e) {
                              contentDiv.textContent = finalRawContent;
@@ -5994,7 +5986,7 @@
             processInteractiveTitles(contentElement) {
                 const links = contentElement.querySelectorAll('a[href="#"]');
                 links.forEach(link => {
-                    if (link.dataset.interactiveTitleProcessed === 'true') {
+                    if (link.dataset.interactiveTitleProcessed === 'true' || link.dataset.interactivePlaceholderProcessed === 'true') {
                         return;
                     }
 
@@ -6033,56 +6025,65 @@
                 });
             },
             processInteractivePlaceholders(contentElement) {
-                const placeholderRegex = /(\S*?)\s*\(#\s*"([^"]+)"\)/g;
-                let match;
-                const nodesToProcess = [];
+                const placeholderRegex = /(.*?)?\s*\(#\s*"([^"]+)"\)/g;
 
-                function traverseNodes(node) {
-                    if (node.nodeType === Node.TEXT_NODE) {
+                const walker = document.createTreeWalker(contentElement, NodeFilter.SHOW_TEXT, null, false);
+                const nodesToProcess = [];
+                let node;
+                while (node = walker.nextNode()) {
+                    let parent = node.parentNode;
+                    let skip = false;
+                    while (parent && parent !== contentElement) {
+                        if (['A', 'PRE', 'CODE', 'BUTTON'].includes(parent.tagName) || parent.isContentEditable) {
+                            skip = true;
+                            break;
+                        }
+                        parent = parent.parentNode;
+                    }
+                    if (!skip && node.nodeValue && node.nodeValue.includes('(# "')) {
                         nodesToProcess.push(node);
-                    } else if (node.nodeType === Node.ELEMENT_NODE) {
-                        if (node.tagName === 'A' || node.tagName === 'CODE' || node.tagName === 'PRE') {
-                            return;
-                        }
-                        for (const childNode of node.childNodes) {
-                            traverseNodes(childNode);
-                        }
                     }
                 }
 
-                traverseNodes(contentElement);
-
                 for (const textNode of nodesToProcess) {
                     const textContent = textNode.nodeValue;
+                    let match;
                     let lastIndex = 0;
                     const fragment = document.createDocumentFragment();
+                    let replacementNeeded = false;
+
+                    placeholderRegex.lastIndex = 0;
 
                     while ((match = placeholderRegex.exec(textContent)) !== null) {
+                        replacementNeeded = true;
                         const precedingText = textContent.substring(lastIndex, match.index);
                         if (precedingText) {
                             fragment.appendChild(document.createTextNode(precedingText));
                         }
 
-                        const clickableText = match[1].trim() || "詳細";
+                        const leadingTextContent = (match[1] || "").trim();
+                        const clickableTextDisplay = leadingTextContent || "詳細";
                         const detailText = match[2];
 
                         const link = document.createElement('a');
                         link.href = "#";
-                        link.textContent = clickableText;
+                        link.textContent = clickableTextDisplay;
                         link.title = detailText;
                         link.style.cursor = 'pointer';
+                        link.dataset.interactivePlaceholderProcessed = 'true';
 
                         const detailSpan = document.createElement('span');
-                        detailSpan.classList.add('interactive-title-content', 'interactive-title-content-style', 'hidden');
+                        detailSpan.classList.add('interactive-title-content-style', 'hidden');
                         detailSpan.textContent = ` (# "${detailText}")`;
 
+                        link.setAttribute('aria-expanded', 'false');
                         link.addEventListener('click', function(event) {
                             event.preventDefault();
+                            event.stopPropagation();
                             const isCurrentlyHidden = detailSpan.classList.contains('hidden');
                             detailSpan.classList.toggle('hidden', !isCurrentlyHidden);
                             this.setAttribute('aria-expanded', String(!isCurrentlyHidden));
                         });
-                        link.setAttribute('aria-expanded', 'false');
 
                         fragment.appendChild(link);
                         fragment.appendChild(detailSpan);
@@ -6090,11 +6091,10 @@
                         lastIndex = placeholderRegex.lastIndex;
                     }
 
-                    if (lastIndex < textContent.length) {
-                        fragment.appendChild(document.createTextNode(textContent.substring(lastIndex)));
-                    }
-
-                    if (fragment.childNodes.length > 0) {
+                    if (replacementNeeded) {
+                        if (lastIndex < textContent.length) {
+                            fragment.appendChild(document.createTextNode(textContent.substring(lastIndex)));
+                        }
                         textNode.parentNode.replaceChild(fragment, textNode);
                     }
                 }
@@ -9367,7 +9367,7 @@
                         const oldIdxEquivalent = newIdx >= indexToDelete ? newIdx + 1 : newIdx;
                         if (oldCollapsedStates.has(oldIdxEquivalent)) {
                             state.messageCollapsedStates.set(newIdx, oldCollapsedStates.get(oldIdxEquivalent));
-                        } else {
+                                                    } else {
                             state.messageCollapsedStates.set(newIdx, false);
                         }
                     });
