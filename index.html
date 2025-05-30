@@ -4627,8 +4627,12 @@
                 } else {
                     try {
                         if (role === 'model' && !isStreamingPlaceholder && typeof marked !== 'undefined') {
-                            contentDiv.innerHTML = marked.parse(content || '');
-                            this.processInteractiveTitles(contentDiv);
+                            const rawHtml = marked.parse(content || '');
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = rawHtml;
+                            this.processInteractivePlaceholders(tempDiv);
+                            this.processInteractiveTitles(tempDiv);
+                            contentDiv.innerHTML = tempDiv.innerHTML;
                             this.addCopyButtonsToCodeBlocks(contentDiv);
                         } else if (role === 'user') {
                             const pre = document.createElement('pre'); pre.textContent = content; contentDiv.appendChild(pre);
@@ -4934,7 +4938,14 @@
 
                     if (targetContentDiv) {
                         try {
-                            targetContentDiv.innerHTML = marked.parse(streamContent || '');
+                            const rawHtml = marked.parse(streamContent || '');
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = rawHtml;
+                            if (!isThoughtSummary) {
+                                this.processInteractivePlaceholders(tempDiv);
+                                this.processInteractiveTitles(tempDiv);
+                            }
+                            targetContentDiv.innerHTML = tempDiv.innerHTML;
                             if (!isThoughtSummary) {
                                 this.addCopyButtonsToCodeBlocks(targetContentDiv);
                             }
@@ -4972,8 +4983,12 @@
                     const finalRawContent = finalMessageData.content || '';
                     if (contentDiv && typeof marked !== 'undefined') {
                          try {
-                             contentDiv.innerHTML = marked.parse(finalRawContent);
-                             this.processInteractiveTitles(contentDiv);
+                             const rawHtml = marked.parse(finalRawContent);
+                             const tempDiv = document.createElement('div');
+                             tempDiv.innerHTML = rawHtml;
+                             this.processInteractivePlaceholders(tempDiv);
+                             this.processInteractiveTitles(tempDiv);
+                             contentDiv.innerHTML = tempDiv.innerHTML;
                              this.addCopyButtonsToCodeBlocks(contentDiv);
                          } catch (e) {
                              contentDiv.textContent = finalRawContent;
@@ -6016,6 +6031,73 @@
                     }
                 });
             },
+            processInteractivePlaceholders(contentElement) {
+                const placeholderRegex = /(\S*?)\s*\(#\s*"([^"]+)"\)/g;
+                let match;
+                const nodesToProcess = [];
+
+                function traverseNodes(node) {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        nodesToProcess.push(node);
+                    } else if (node.nodeType === Node.ELEMENT_NODE) {
+                        if (node.tagName === 'A' || node.tagName === 'CODE' || node.tagName === 'PRE') {
+                            return;
+                        }
+                        for (const childNode of node.childNodes) {
+                            traverseNodes(childNode);
+                        }
+                    }
+                }
+
+                traverseNodes(contentElement);
+
+                for (const textNode of nodesToProcess) {
+                    const textContent = textNode.nodeValue;
+                    let lastIndex = 0;
+                    const fragment = document.createDocumentFragment();
+
+                    while ((match = placeholderRegex.exec(textContent)) !== null) {
+                        const precedingText = textContent.substring(lastIndex, match.index);
+                        if (precedingText) {
+                            fragment.appendChild(document.createTextNode(precedingText));
+                        }
+
+                        const clickableText = match[1].trim() || "詳細";
+                        const detailText = match[2];
+
+                        const link = document.createElement('a');
+                        link.href = "#";
+                        link.textContent = clickableText;
+                        link.title = detailText;
+                        link.style.cursor = 'pointer';
+
+                        const detailSpan = document.createElement('span');
+                        detailSpan.classList.add('interactive-title-content', 'interactive-title-content-style', 'hidden');
+                        detailSpan.textContent = ` (# "${detailText}")`;
+
+                        link.addEventListener('click', function(event) {
+                            event.preventDefault();
+                            const isCurrentlyHidden = detailSpan.classList.contains('hidden');
+                            detailSpan.classList.toggle('hidden', !isCurrentlyHidden);
+                            this.setAttribute('aria-expanded', String(!isCurrentlyHidden));
+                        });
+                        link.setAttribute('aria-expanded', 'false');
+
+                        fragment.appendChild(link);
+                        fragment.appendChild(detailSpan);
+
+                        lastIndex = placeholderRegex.lastIndex;
+                    }
+
+                    if (lastIndex < textContent.length) {
+                        fragment.appendChild(document.createTextNode(textContent.substring(lastIndex)));
+                    }
+
+                    if (fragment.childNodes.length > 0) {
+                        textNode.parentNode.replaceChild(fragment, textNode);
+                    }
+                }
+            },
             setAiToAiProcessingState(processing, message = "AI間会話処理中...") {
                 state.isAiToAiChatProcessing = processing;
 
@@ -6495,7 +6577,7 @@
 
                 elements.messageContainer.addEventListener('click', (event) => {
                     const clickedMessage = event.target.closest('.message');
-                    if (event.target.closest('.message-actions button, .message-cascade-controls button, .message-toggle-button, .interactive-title-content, .code-copy-button')) {
+                    if (event.target.closest('.message-actions button, .message-cascade-controls button, .message-toggle-button, .interactive-title-content, .code-copy-button, a[href="#"]')) {
                         return;
                     }
                     if (clickedMessage) {
@@ -8891,8 +8973,12 @@
                 const contentDiv = messageElement.querySelector('.message-content');
                 if (contentDiv && typeof marked !== 'undefined' && originalMessage.role === 'model') {
                     try {
-                        contentDiv.innerHTML = marked.parse(newRawContent || '');
-                        uiUtils.processInteractiveTitles(contentDiv);
+                        const rawHtml = marked.parse(newRawContent || '');
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = rawHtml;
+                        uiUtils.processInteractivePlaceholders(tempDiv);
+                        uiUtils.processInteractiveTitles(tempDiv);
+                        contentDiv.innerHTML = tempDiv.innerHTML;
                         uiUtils.addCopyButtonsToCodeBlocks(contentDiv);
                     } catch (e) {
                         contentDiv.textContent = newRawContent;
@@ -9983,3 +10069,4 @@
     </script>
 </body>
 </html>
+
