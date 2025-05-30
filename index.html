@@ -3655,7 +3655,7 @@
         const LIGHT_MODE_PRIMARY_COLOR = '#ffffff';
 
 
-        const APP_VERSION = "0.25ti";
+        const APP_VERSION = "0.26ti";
         const SWIPE_THRESHOLD = 50;
         const ZOOM_THRESHOLD = 1.01;
         const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -4047,7 +4047,6 @@
                 reader.readAsDataURL(file);
             });
         }
-
         function registerServiceWorker() {
             if ('serviceWorker' in navigator) {
                 window.addEventListener('load', () => {
@@ -5441,11 +5440,10 @@
                 this.applyZoomPreventionSetting();
             },
             applySettingsToUI() {
+                elements.apiProviderSelect.value = state.settings.apiProvider || 'gemini';
                 elements.apiKeyInput.value = state.settings.apiKey || '';
                 elements.modelNameSelect.value = state.settings.modelName || DEFAULT_MODEL;
                 elements.additionalModelsTextarea.value = state.settings.additionalModels || '';
-
-                elements.apiProviderSelect.value = state.settings.apiProvider || 'gemini';
                 elements.deepSeekApiKeyInput.value = state.settings.deepSeekApiKey || '';
                 elements.deepSeekModelNameSelect.value = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
                 elements.deepSeekAdditionalModelsTextarea.value = state.settings.deepSeekAdditionalModels || '';
@@ -5469,7 +5467,6 @@
                 elements.dummyModelInput.value = state.settings.dummyModel || '';
                 elements.enableDummyModelCheckbox.checked = state.settings.enableDummyModel;
                 elements.concatDummyModelCheckbox.checked = state.settings.concatDummyModel;
-
                 elements.pseudoStreamingCheckbox.checked = state.settings.pseudoStreaming;
                 elements.enterToSendCheckbox.checked = state.settings.enterToSend;
                 elements.autoScrollOnNewMessageCheckbox.checked = state.settings.autoScrollOnNewMessage;
@@ -5576,9 +5573,7 @@
                 elements.geminiGroundingParam.classList.toggle('hidden', !showGemini);
 
                 if (showGemini && !elements.geminiSettingsGroup.open) {
-                    elements.geminiSettingsGroup.open = true;
                 } else if (!showGemini && !elements.deepSeekSettingsGroup.open) {
-                     elements.deepSeekSettingsGroup.open = true;
                 }
             },
             updateChatScreenElementVisibility() {
@@ -7569,9 +7564,7 @@
                         if (state.settings.includeThoughts) {
                             commonGenerationConfig.thinkingConfig.includeThoughts = true;
                         }
-                        if (Object.keys(commonGenerationConfig.thinkingConfig).length === 0) {
-                            delete commonGenerationConfig.thinkingConfig;
-                        }
+                         if (Object.keys(commonGenerationConfig.thinkingConfig).length === 0) delete commonGenerationConfig.thinkingConfig;
                     }
                 }
 
@@ -7598,31 +7591,34 @@
                 let usePseudoForThisCall = isBackgroundProcess ? false : (selectedApiProvider === 'gemini' && state.settings.pseudoStreaming);
 
                 try {
-                    let responseStreamIterator;
+                    let apiResponseObject;
+                    if (selectedApiProvider === 'gemini') {
+                        apiResponseObject = await apiUtils.callGeminiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, usePseudoForThisCall);
+                    } else if (selectedApiProvider === 'deepseek') {
+                        apiResponseObject = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
+                    } else {
+                        throw new Error("不明なAPIプロバイダーが選択されています。");
+                    }
+
                     const dummyModelPrefix = (state.settings.concatDummyModel && state.settings.dummyModel && currentContextEnableDummyModel) ? state.settings.dummyModel : '';
                      if (!isBackgroundProcess) {
                         state.partialStreamContent = dummyModelPrefix;
                         state.partialThoughtStreamContent = '';
                     }
 
-                    if (selectedApiProvider === 'gemini') {
-                        const response = await apiUtils.callGeminiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, usePseudoForThisCall);
-                        responseStreamIterator = apiUtils.handleStreamingResponse(response);
-                    } else if (selectedApiProvider === 'deepseek') {
-                        const response = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
-                        responseStreamIterator = apiUtils.handleDeepSeekStreamingResponse(response);
-                    } else {
-                        throw new Error("不明なAPIプロバイダーが選択されています。");
-                    }
-
-
                     if (useStreamingForThisCall) {
+                        let responseStreamIterator;
+                        if (selectedApiProvider === 'gemini') {
+                            responseStreamIterator = apiUtils.handleStreamingResponse(apiResponseObject);
+                        } else if (selectedApiProvider === 'deepseek') {
+                            responseStreamIterator = apiUtils.handleDeepSeekStreamingResponse(apiResponseObject);
+                        }
+
                         let tempPlaceholderIndex;
                         if (!isBackgroundProcess) {
                             tempPlaceholderIndex = state.currentMessages.length;
                             uiUtils.appendMessage('model', '', tempPlaceholderIndex, true);
                         }
-
                         const streamSpeed = state.settings.streamingSpeed;
 
                         for await (const streamData of responseStreamIterator) {
@@ -7681,13 +7677,12 @@
                            modelThoughtSummaryContent = state.partialThoughtStreamContent;
                            modelResponseRawContent = state.partialStreamContent;
                         }
-
-                        if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
+                         if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
                             throw new Error("リクエストがキャンセルされました。");
                         }
 
                     } else {
-                        const data = await responseStreamIterator.json();
+                        const data = await apiResponseObject.json();
                         if (selectedApiProvider === 'gemini') {
                             const candidate = data.candidates?.[0];
                             let rawContentFromApi = "";
@@ -8395,7 +8390,7 @@
                  if (isNaN(newSettings.streamingSpeed) || newSettings.streamingSpeed < 0) {
                      newSettings.streamingSpeed = DEFAULT_STREAMING_SPEED;
                  }
-                                  if (newSettings.temperature !== null && (isNaN(newSettings.temperature) || newSettings.temperature < 0 || newSettings.temperature > 2)) {
+                 if (newSettings.temperature !== null && (isNaN(newSettings.temperature) || newSettings.temperature < 0 || newSettings.temperature > 2)) {
                      newSettings.temperature = null;
                  }
                  if (newSettings.maxTokens !== null && (isNaN(newSettings.maxTokens) || newSettings.maxTokens < 1)) {
