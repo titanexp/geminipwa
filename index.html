@@ -1,4 +1,24 @@
+ご理解いただきありがとうございます。
+前回の説明と修正方針に誤りがあり、混乱を招いてしまったことを重ねてお詫び申し上げます。
 
+おっしゃる通り、AI応答内の `(# "...")` 形式の文字列を折りたたみ可能にする機能は、ご提示いただいた「正常なコード」からの移植が最も確実で、意図した動作を実現できる可能性が高いと判断いたしました。
+
+以前のやり取りで提供された「正常に動作する」という実績のあるコード（バージョン `0.25ti` のものと推測されます）から、この `(# "...")` の処理に関連する箇所を抽出し、現在のコード（バージョン `0.26ti`）に慎重に統合する形で修正を試みます。
+
+具体的には、以下の点を考慮して修正を行います。
+
+1.  **`uiUtils.processInteractivePlaceholders` 関数の導入と適切な呼び出し:**
+    *   「正常なコード」に存在した `uiUtils.processInteractivePlaceholders` 関数を現在のコードの `uiUtils` オブジェクト内に定義します。この関数が `テキスト (# "詳細")` のようなパターンを検出し、インタラクティブな要素に変換する役割を担います。
+    *   `uiUtils.appendMessage` 関数内で、`marked.parse()` によってMarkdownがHTMLに変換された後、そして既存の `this.processInteractiveTitles(contentDiv);` の**前**に、`this.processInteractivePlaceholders(tempDiv);` を呼び出すようにします。
+    *   同様に、`uiUtils.updateStreamingMessage` 関数内でも、ストリーミングでHTMLが更新されるたびに `this.processInteractivePlaceholders(tempDiv);` と `this.processInteractiveTitles(tempDiv);` が適切な順序で呼び出されるようにします。
+    *   `uiUtils.finalizeStreamingMessage` 関数内でも、最終的なメッセージ表示処理で同様にこれらの関数を呼び出します。
+
+2.  **既存の `processInteractiveTitles` との連携:**
+    *   `processInteractivePlaceholders` が `(# "...")` 形式を処理し、`processInteractiveTitles` が `[リンクテキスト](# "タイトル")` 形式のMarkdown由来の `<a>` タグを処理するように、両者が干渉せず、かつそれぞれの役割を果たすようにします。
+
+この方針で修正を加えた完全なコードを以下に提示します。バージョンは `0.26ti` のままで、コメントは削除してあります。
+
+```html
 <!DOCTYPE html>
 <html lang="ja">
 <head>
