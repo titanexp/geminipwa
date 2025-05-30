@@ -4589,7 +4589,7 @@
                     }
                     thoughtDetails.appendChild(thoughtContentDiv);
                     messageDiv.appendChild(thoughtDetails);
-                } else if (role === 'model' && state.settings.apiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts && messageData?.deepSeekThoughtSummary) {
+                } else if (role === 'model' && state.settings.apiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts && (messageData?.deepSeekThoughtSummary || (isStreamingPlaceholder && state.settings.includeDeepSeekThoughts))) {
                     const thoughtDetails = document.createElement('details');
                     thoughtDetails.classList.add('thought-summary-details');
                     if (state.settings.expandDeepSeekThoughtsByDefault) {
@@ -4974,7 +4974,7 @@
                     let streamContent;
                     const selectedApiProvider = state.settings.apiProvider;
 
-                    if (isThoughtSummary && selectedApiProvider === 'gemini') {
+                    if (isThoughtSummary && selectedApiProvider === 'gemini' && state.settings.includeThoughts) {
                         targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
                         streamContent = state.partialThoughtStreamContent;
                     } else if (isThoughtSummary && selectedApiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts) {
@@ -4989,10 +4989,13 @@
                     if (targetContentDiv) {
                         try {
                             if (selectedApiProvider === 'deepseek' && isThoughtSummary && state.settings.includeDeepSeekThoughts && (targetContentDiv.id === `streaming-deepseek-thought-summary-${index}`)) {
-                                const pre = document.createElement('pre');
-                                pre.textContent = streamContent || '';
-                                targetContentDiv.innerHTML = '';
-                                targetContentDiv.appendChild(pre);
+                                let currentPre = targetContentDiv.querySelector('pre');
+                                if (!currentPre) {
+                                    currentPre = document.createElement('pre');
+                                    targetContentDiv.innerHTML = '';
+                                    targetContentDiv.appendChild(currentPre);
+                                }
+                                currentPre.textContent = streamContent || '';
                             } else {
                                 const rawHtml = marked.parse(streamContent || '');
                                 targetContentDiv.innerHTML = rawHtml;
@@ -7850,6 +7853,9 @@
                                 };
                                 if (streamData.groundingMetadata && selectedApiProvider === 'gemini') currentGroundingMetadata = streamData.groundingMetadata;
                                 if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
+                                if (streamData.fullReasoningContent && selectedApiProvider === 'deepseek') {
+                                    modelThoughtSummaryContent = (modelThoughtSummaryContent || "") + streamData.fullReasoningContent;
+                                }
                                 break;
                             } else if (streamData.type === 'error') {
                                 modelResponseMetadata.finishReason = 'ERROR';
@@ -7861,11 +7867,11 @@
                            modelThoughtSummaryContent = state.partialThoughtStreamContent;
                            modelResponseRawContent = state.partialStreamContent;
                         }
-                         if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
+                        if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
                             throw new Error("リクエストがキャンセルされました。");
                         }
 
-                    } else { // Not streaming
+                    } else {
                         const data = await apiResponseObject.json();
                         if (selectedApiProvider === 'gemini') {
                             const candidate = data.candidates?.[0];
@@ -10128,7 +10134,10 @@
                 let finalUsage = null;
                 let finalFinishReason = null;
                 let isCancelled = false;
-                let accumulatedReasoningContent = "";
+                let inThinkBlock = false;
+                let currentThinkContent = '';
+                let accumulatedReasoningContentForMetadata = "";
+
 
                 try {
                     while (true) {
@@ -10163,15 +10172,59 @@
                                 }
                                 try {
                                     const chunk = JSON.parse(jsonData);
-                                    let contentText = null;
+                                    let contentTextChunk = null;
                                     let reasoningTextChunk = null;
 
-                                    if (chunk.choices && chunk.choices[0] && chunk.choices[0].delta && chunk.choices[0].delta.content) {
-                                        contentText = chunk.choices[0].delta.content;
-                                    }
-                                    if (chunk.choices && chunk.choices[0] && chunk.choices[0].delta && chunk.choices[0].delta.reasoning_content) {
-                                        reasoningTextChunk = chunk.choices[0].delta.reasoning_content;
-                                        accumulatedReasoningContent += reasoningTextChunk;
+                                    if (chunk.choices && chunk.choices[0] && chunk.choices[0].delta) {
+                                        const delta = chunk.choices[0].delta;
+                                        let currentDeltaContent = delta.content || "";
+
+                                        let thinkStartPos, thinkEndPos;
+                                        let regularContentPart = "";
+
+                                        do {
+                                            thinkStartPos = currentDeltaContent.indexOf("<think>");
+                                            thinkEndPos = currentDeltaContent.indexOf("</think>");
+
+                                            if (inThinkBlock) {
+                                                if (thinkEndPos !== -1) {
+                                                    const partBeforeEndTag = currentDeltaContent.substring(0, thinkEndPos);
+                                                    currentThinkContent += partBeforeEndTag;
+                                                    reasoningTextChunk = (reasoningTextChunk || "") + partBeforeEndTag;
+                                                    accumulatedReasoningContentForMetadata += partBeforeEndTag;
+                                                    currentThinkContent = "";
+                                                    inThinkBlock = false;
+                                                    currentDeltaContent = currentDeltaContent.substring(thinkEndPos + "</think>".length);
+                                                } else {
+                                                    currentThinkContent += currentDeltaContent;
+                                                    reasoningTextChunk = (reasoningTextChunk || "") + currentDeltaContent;
+                                                    accumulatedReasoningContentForMetadata += currentDeltaContent;
+                                                    currentDeltaContent = "";
+                                                }
+                                            } else { // Not in think block
+                                                if (thinkStartPos !== -1) {
+                                                    const partBeforeStartTag = currentDeltaContent.substring(0, thinkStartPos);
+                                                    if (partBeforeStartTag.length > 0) {
+                                                         contentTextChunk = (contentTextChunk || "") + partBeforeStartTag;
+                                                    }
+                                                    inThinkBlock = true;
+                                                    currentDeltaContent = currentDeltaContent.substring(thinkStartPos + "<think>".length);
+                                                } else {
+                                                    if (currentDeltaContent.length > 0) {
+                                                        contentTextChunk = (contentTextChunk || "") + currentDeltaContent;
+                                                    }
+                                                    currentDeltaContent = "";
+                                                }
+                                            }
+                                        } while (currentDeltaContent.length > 0 && (thinkStartPos !== -1 || thinkEndPos !== -1 || inThinkBlock));
+
+                                        if (currentDeltaContent.length > 0 && !inThinkBlock) { // Remaining as regular content
+                                            contentTextChunk = (contentTextChunk || "") + currentDeltaContent;
+                                        } else if (currentDeltaContent.length > 0 && inThinkBlock) { // Remaining in think block
+                                            currentThinkContent += currentDeltaContent;
+                                            reasoningTextChunk = (reasoningTextChunk || "") + currentDeltaContent;
+                                            accumulatedReasoningContentForMetadata += currentDeltaContent;
+                                        }
                                     }
 
 
@@ -10182,8 +10235,8 @@
                                         finalUsage = chunk.usage;
                                     }
 
-                                    if (contentText !== null || reasoningTextChunk !== null) {
-                                        yield { type: 'chunk', contentText: contentText, thoughtText: reasoningTextChunk };
+                                    if (contentTextChunk !== null || reasoningTextChunk !== null) {
+                                        yield { type: 'chunk', contentText: contentTextChunk, thoughtText: reasoningTextChunk };
                                     }
                                 } catch (e) {
                                 }
@@ -10191,6 +10244,9 @@
                             if (finalFinishReason && finalFinishReason !== 'null' && processingBuffer) break;
                         }
                          if (finalFinishReason && finalFinishReason !== 'null') break;
+                    }
+                    if (inThinkBlock && currentThinkContent) { // If stream ends while in think block
+                         accumulatedReasoningContentForMetadata += currentThinkContent;
                     }
 
                     yield {
@@ -10202,7 +10258,7 @@
                             candidatesTokenCount: finalUsage.completion_tokens,
                             totalTokenCount: finalUsage.total_tokens,
                         } : null,
-                        fullReasoningContent: accumulatedReasoningContent || null
+                        fullReasoningContent: accumulatedReasoningContentForMetadata || null
                     };
                 } catch (error) {
                     yield { type: 'error', error: { message: error.message }, message: error.message };
