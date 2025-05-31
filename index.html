@@ -4297,6 +4297,7 @@
                         role: msg.role, content: msg.content, timestamp: msg.timestamp,
                         thoughtSummary: msg.thoughtSummary || null,
                         deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
+                        generatedByApiProvider: msg.generatedByApiProvider || null,
                         ...(msg.finishReason && { finishReason: msg.finishReason }),
                         ...(msg.safetyRatings && { safetyRatings: msg.safetyRatings }),
                         ...(msg.error && { error: msg.error }),
@@ -4564,7 +4565,9 @@
                 }
 
                 const messageData = state.currentMessages[index];
-                if (role === 'model' && state.settings.apiProvider === 'gemini' && (messageData?.thoughtSummary || (isStreamingPlaceholder && state.settings.includeThoughts))) {
+                const messageApiProvider = messageData?.generatedByApiProvider || state.settings.apiProvider;
+
+                if (role === 'model' && messageApiProvider === 'gemini' && (messageData?.thoughtSummary || (isStreamingPlaceholder && state.settings.apiProvider === 'gemini' && state.settings.includeThoughts))) {
                     const thoughtDetails = document.createElement('details');
                     thoughtDetails.classList.add('thought-summary-details');
                     if (state.settings.expandThoughtsByDefault) {
@@ -4589,7 +4592,7 @@
                     }
                     thoughtDetails.appendChild(thoughtContentDiv);
                     messageDiv.appendChild(thoughtDetails);
-                } else if (role === 'model' && state.settings.apiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts && (messageData?.deepSeekThoughtSummary || (isStreamingPlaceholder && state.settings.includeDeepSeekThoughts))) {
+                } else if (role === 'model' && messageApiProvider === 'deepseek' && (messageData?.deepSeekThoughtSummary || (isStreamingPlaceholder && state.settings.apiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts))) {
                     const thoughtDetails = document.createElement('details');
                     thoughtDetails.classList.add('thought-summary-details');
                     if (state.settings.expandDeepSeekThoughtsByDefault) {
@@ -4967,54 +4970,88 @@
                     }
                 });
             },
-            updateStreamingMessage(index, newCharOrFullChunk, isThoughtSummary = false) {
+            async updateStreamingMessage(index, chunkText, isThoughtSummary = false) {
                 const messageDiv = document.getElementById(`streaming-message-${index}`);
-                if (messageDiv && typeof marked !== 'undefined') {
-                    let targetContentDiv;
-                    let streamContentToRender;
-                    const selectedApiProvider = state.settings.apiProvider;
+                if (!messageDiv || typeof marked === 'undefined') return;
 
-                    if (isThoughtSummary && selectedApiProvider === 'gemini' && state.settings.includeThoughts) {
-                        targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
-                        state.partialThoughtStreamContent += newCharOrFullChunk || "";
-                        streamContentToRender = state.partialThoughtStreamContent;
-                    } else if (isThoughtSummary && selectedApiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts) {
-                        targetContentDiv = messageDiv.querySelector(`#streaming-deepseek-thought-summary-${index}`);
-                        state.partialThoughtStreamContent += newCharOrFullChunk || "";
-                        streamContentToRender = state.partialThoughtStreamContent;
-                    } else {
-                        targetContentDiv = messageDiv.querySelector('.message-content');
-                        state.partialStreamContent += newCharOrFullChunk || "";
-                        streamContentToRender = state.partialStreamContent;
-                    }
+                let targetContentDiv;
+                let currentAccumulatedContent;
+                const selectedApiProvider = state.settings.apiProvider;
+                const streamSpeed = state.settings.streamingSpeed;
 
-                    if (targetContentDiv) {
+
+                if (isThoughtSummary && selectedApiProvider === 'gemini' && state.settings.includeThoughts) {
+                    targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
+                    currentAccumulatedContent = state.partialThoughtStreamContent;
+                } else if (isThoughtSummary && selectedApiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts) {
+                    targetContentDiv = messageDiv.querySelector(`#streaming-deepseek-thought-summary-${index}`);
+                    currentAccumulatedContent = state.partialThoughtStreamContent;
+                } else {
+                    targetContentDiv = messageDiv.querySelector('.message-content');
+                    currentAccumulatedContent = state.partialStreamContent;
+                }
+
+                if (targetContentDiv) {
+                    if (streamSpeed <= 0 || !chunkText) {
                         try {
-                            if (selectedApiProvider === 'deepseek' && isThoughtSummary && state.settings.includeDeepSeekThoughts && (targetContentDiv.id === `streaming-deepseek-thought-summary-${index}`)) {
+                            if (selectedApiProvider === 'deepseek' && isThoughtSummary && state.settings.includeDeepSeekThoughts && targetContentDiv.id === `streaming-deepseek-thought-summary-${index}`) {
                                 let currentPre = targetContentDiv.querySelector('pre');
                                 if (!currentPre) {
                                     currentPre = document.createElement('pre');
                                     targetContentDiv.innerHTML = '';
                                     targetContentDiv.appendChild(currentPre);
                                 }
-                                currentPre.textContent = streamContentToRender || '';
+                                currentPre.textContent = currentAccumulatedContent || '';
                             } else {
-                                const rawHtml = marked.parse(streamContentToRender || '');
+                                const rawHtml = marked.parse(currentAccumulatedContent || '');
                                 targetContentDiv.innerHTML = rawHtml;
                             }
-
                             if (!isThoughtSummary) {
                                 this.processInteractivePlaceholders(targetContentDiv);
                                 this.processInteractiveTitles(targetContentDiv);
                                 this.addCopyButtonsToCodeBlocks(targetContentDiv);
                             }
                         } catch (e) {
-                            targetContentDiv.textContent = streamContentToRender;
+                            targetContentDiv.textContent = currentAccumulatedContent;
+                        }
+                    } else {
+                        const previousContentForAnimation = currentAccumulatedContent.slice(0, currentAccumulatedContent.length - (chunkText ? chunkText.length : 0) );
+
+                        for (let i = 0; i < (chunkText ? chunkText.length : 0); i++) {
+                            if (state.abortController?.signal.aborted) break;
+                            const animatedContent = previousContentForAnimation + chunkText.substring(0, i + 1);
+
+                            try {
+                                if (selectedApiProvider === 'deepseek' && isThoughtSummary && state.settings.includeDeepSeekThoughts && targetContentDiv.id === `streaming-deepseek-thought-summary-${index}`) {
+                                    let currentPre = targetContentDiv.querySelector('pre');
+                                    if (!currentPre) {
+                                        currentPre = document.createElement('pre');
+                                        targetContentDiv.innerHTML = '';
+                                        targetContentDiv.appendChild(currentPre);
+                                    }
+                                    currentPre.textContent = animatedContent || '';
+                                } else {
+                                    const rawHtml = marked.parse(animatedContent || '');
+                                    targetContentDiv.innerHTML = rawHtml;
+                                }
+
+                                if (!isThoughtSummary) {
+                                    this.processInteractivePlaceholders(targetContentDiv);
+                                    this.processInteractiveTitles(targetContentDiv);
+                                    this.addCopyButtonsToCodeBlocks(targetContentDiv);
+                                }
+                            } catch (e) {
+                                targetContentDiv.textContent = animatedContent;
+                            }
+                            if (!isThoughtSummary && state.settings.autoScrollOnNewMessage) {
+                                this.scrollToBottom();
+                            }
+                            await sleep(streamSpeed);
                         }
                     }
-                    if (!isThoughtSummary && state.settings.autoScrollOnNewMessage) {
-                        this.scrollToBottom();
-                    }
+                }
+                if (!isThoughtSummary && state.settings.autoScrollOnNewMessage) {
+                    this.scrollToBottom();
                 }
             },
             finalizeStreamingMessage(index) {
@@ -5022,9 +5059,9 @@
                 if (messageDiv) {
                     const finalMessageData = state.currentMessages[index];
                     if (!finalMessageData) return;
-                    const selectedApiProvider = state.settings.apiProvider;
+                    const messageApiProvider = finalMessageData.generatedByApiProvider || state.settings.apiProvider;
 
-                    if (finalMessageData.thoughtSummary && selectedApiProvider === 'gemini' && state.settings.includeThoughts) {
+                    if (finalMessageData.thoughtSummary && messageApiProvider === 'gemini' && state.settings.includeThoughts) {
                         const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
                         if (thoughtContentDiv && typeof marked !== 'undefined') {
                             try {
@@ -5037,7 +5074,7 @@
                             thoughtContentDiv.textContent = finalMessageData.thoughtSummary || '';
                             thoughtContentDiv.removeAttribute('id');
                         }
-                    } else if (finalMessageData.deepSeekThoughtSummary && selectedApiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts) {
+                    } else if (finalMessageData.deepSeekThoughtSummary && messageApiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts) {
                         const thoughtContentDiv = messageDiv.querySelector(`#streaming-deepseek-thought-summary-${index}`) || messageDiv.querySelector('.thought-summary-details .thought-summary-content');
                         if (thoughtContentDiv) {
                             const pre = document.createElement('pre');
@@ -7636,6 +7673,7 @@
                             role: msg.role, content: msg.content, timestamp: msg.timestamp,
                             thoughtSummary: msg.thoughtSummary || null,
                             deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
+                            generatedByApiProvider: msg.generatedByApiProvider || null,
                             ...(msg.finishReason && { finishReason: msg.finishReason }),
                             ...(msg.safetyRatings && { safetyRatings: msg.safetyRatings }),
                             ...(msg.error && { error: msg.error }),
@@ -7796,7 +7834,6 @@
                             tempPlaceholderIndex = state.currentMessages.length;
                             uiUtils.appendMessage('model', '', tempPlaceholderIndex, true);
                         }
-                        const streamSpeed = state.settings.streamingSpeed;
 
                         for await (const streamData of responseStreamIterator) {
                             if (state.abortController?.signal.aborted) {
@@ -7809,23 +7846,15 @@
                                     if (isBackgroundProcess) {
                                         modelThoughtSummaryContent += streamData.thoughtText;
                                     } else {
-                                        for (const char of streamData.thoughtText) {
-                                            if (state.abortController?.signal.aborted) break;
-                                            state.partialThoughtStreamContent += char;
-                                            uiUtils.updateStreamingMessage(tempPlaceholderIndex, char, true);
-                                            if (streamSpeed > 0) await sleep(streamSpeed);
-                                        }
+                                        state.partialThoughtStreamContent += streamData.thoughtText;
+                                        uiUtils.updateStreamingMessage(tempPlaceholderIndex, streamData.thoughtText, true);
                                     }
                                 } else if (streamData.thoughtText && selectedApiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts) {
                                     if (isBackgroundProcess) {
                                         modelThoughtSummaryContent += streamData.thoughtText;
                                     } else {
-                                        for (const char of streamData.thoughtText) {
-                                            if (state.abortController?.signal.aborted) break;
-                                            state.partialThoughtStreamContent += char;
-                                            uiUtils.updateStreamingMessage(tempPlaceholderIndex, char, true);
-                                            if (streamSpeed > 0) await sleep(streamSpeed);
-                                        }
+                                        state.partialThoughtStreamContent += streamData.thoughtText;
+                                        uiUtils.updateStreamingMessage(tempPlaceholderIndex, streamData.thoughtText, true);
                                     }
                                 }
 
@@ -7833,12 +7862,8 @@
                                     if (isBackgroundProcess) {
                                         modelResponseRawContent += streamData.contentText;
                                     } else {
-                                        for (const char of streamData.contentText) {
-                                            if (state.abortController?.signal.aborted) break;
-                                            state.partialStreamContent += char;
-                                            uiUtils.updateStreamingMessage(tempPlaceholderIndex, char, false);
-                                            if (streamSpeed > 0) await sleep(streamSpeed);
-                                        }
+                                        state.partialStreamContent += streamData.contentText;
+                                        uiUtils.updateStreamingMessage(tempPlaceholderIndex, streamData.contentText, false);
                                     }
                                 }
                                 if (state.abortController?.signal.aborted) {
@@ -7872,6 +7897,7 @@
                         if (modelResponseMetadata.fullReasoningContent && selectedApiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts) {
                             modelThoughtSummaryContent = modelResponseMetadata.fullReasoningContent;
                         }
+
 
                          if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
                             throw new Error("リクエストがキャンセルされました。");
@@ -7944,7 +7970,8 @@
                                  role: 'model', content: modelResponseRawContent,
                                  timestamp: Date.now(),
                                  ...modelResponseMetadata,
-                                 usageMetadata: finalUsageMetadataFromStream
+                                 usageMetadata: finalUsageMetadataFromStream,
+                                 generatedByApiProvider: selectedApiProvider
                              };
                              if (selectedApiProvider === 'gemini') {
                                  bgModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
@@ -7959,6 +7986,7 @@
                                     role: msg.role, content: msg.content, timestamp: msg.timestamp,
                                     thoughtSummary: msg.thoughtSummary || null,
                                     deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
+                                    generatedByApiProvider: msg.generatedByApiProvider || null,
                                     ...(msg.finishReason && { finishReason: msg.finishReason }),
                                     ...(msg.safetyRatings && { safetyRatings: msg.safetyRatings }),
                                     ...(msg.error && { error: msg.error }),
@@ -7996,7 +8024,8 @@
                              role: 'model', content: modelResponseRawContent,
                              timestamp: Date.now(),
                              ...modelResponseMetadata,
-                             usageMetadata: finalUsageMetadataFromStream
+                             usageMetadata: finalUsageMetadataFromStream,
+                             generatedByApiProvider: selectedApiProvider
                          };
                         if (selectedApiProvider === 'gemini' && state.settings.includeThoughts) {
                              newModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
@@ -8061,7 +8090,8 @@
                              timestamp: Date.now(), error: true,
                              finishReason: isAbort ? 'ABORTED' : (modelResponseMetadata.finishReason || 'ERROR'),
                              ...(modelResponseMetadata.safetyRatings && { safetyRatings: modelResponseMetadata.safetyRatings }),
-                             usageMetadata: finalUsageMetadataFromStream
+                             usageMetadata: finalUsageMetadataFromStream,
+                             generatedByApiProvider: selectedApiProvider
                          };
                          if (selectedApiProvider === 'gemini') {
                              partialMessage.thoughtSummary = finalPartialThoughtValue;
@@ -8263,12 +8293,14 @@
                                 role: msg.role,
                                 content: msg.content,
                                 timestamp: msg.timestamp,
+                                generatedByApiProvider: msg.generatedByApiProvider || null,
                             };
                             if (msg.isCascaded !== undefined) messageExport.isCascaded = msg.isCascaded;
                             if (msg.isSelected !== undefined) messageExport.isSelected = msg.isSelected;
                             if (msg.siblingGroupId !== undefined) messageExport.siblingGroupId = msg.siblingGroupId;
                             if (msg.groundingMetadata) messageExport.groundingMetadata = msg.groundingMetadata;
                             if (msg.usageMetadata) messageExport.usageMetadata = msg.usageMetadata;
+                            if (msg.thoughtSummary) messageExport.thoughtSummary = msg.thoughtSummary;
                             if (msg.deepSeekThoughtSummary) messageExport.deepSeekThoughtSummary = msg.deepSeekThoughtSummary;
                             if (msg.attachments && msg.attachments.length > 0) {
                                 messageExport.attachments = msg.attachments.map(att => ({ name: att.name, mimeType: att.mimeType }));
@@ -8345,7 +8377,9 @@
                                     isCascaded: msg.isCascaded === true,
                                     isSelected: msg.isSelected === true,
                                     siblingGroupId: msg.siblingGroupId || undefined,
+                                    thoughtSummary: msg.thoughtSummary || undefined,
                                     deepSeekThoughtSummary: msg.deepSeekThoughtSummary || undefined,
+                                    generatedByApiProvider: msg.generatedByApiProvider || undefined,
                                     attachments: (msg.attachments || []).map(att => ({
                                         name: att.name || 'imported_file',
                                         mimeType: att.mimeType || 'application/octet-stream',
