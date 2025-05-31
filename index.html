@@ -3336,6 +3336,10 @@
                                <input type="checkbox" id="auto-scroll-on-new-message">
                                メッセージ送受信時に自動スクロールする
                            </label>
+                           <label class="checkbox-label">
+                               <input type="checkbox" id="auto-scroll-on-thought">
+                               思考プロセス受信時に自動スクロールする
+                           </label>
                            <p style="height:10px"></p>
                            <label class="checkbox-label">
                                <input type="checkbox" id="swipe-navigation-toggle">
@@ -3771,6 +3775,7 @@
             pseudoStreamingCheckbox: document.getElementById('pseudo-streaming'),
             enterToSendCheckbox: document.getElementById('enter-to-send'),
             autoScrollOnNewMessageCheckbox: document.getElementById('auto-scroll-on-new-message'),
+            autoScrollOnThoughtCheckbox: document.getElementById('auto-scroll-on-thought'),
             historySortOrderSelect: document.getElementById('history-sort-order'),
             themeSelect: document.getElementById('theme-select'),
             fontFamilyInput: document.getElementById('font-family-input'),
@@ -3932,6 +3937,7 @@
                 pseudoStreaming: false,
                 enterToSend: true,
                 autoScrollOnNewMessage: DEFAULT_AUTO_SCROLL_ON_NEW_MESSAGE,
+                autoScrollOnThought: false,
                 historySortOrder: 'updatedAt',
                 theme: 'light',
                 backgroundImageBlob: null,
@@ -4201,7 +4207,7 @@
                                            key === 'showTopCollapseButton' || key === 'showBottomCollapseButton' ||
                                            key === 'persistMessageCollapseState' ||
                                            key === 'streamingOutput' || key === 'pseudoStreaming' || key === 'enterToSend' ||
-                                           key === 'concatDummyModel' || key === 'autoScrollOnNewMessage' ||
+                                           key === 'concatDummyModel' || key === 'autoScrollOnNewMessage' || key === 'autoScrollOnThought' ||
                                            key === 'showUserNameBubble' || key === 'showAiNameBubble' ||
                                            key === 'userNameBubbleUseThemeColor' || key === 'aiNameBubbleUseThemeColor' ||
                                            key === 'enableSessionLinking' || key === 'includeThoughts' || key === 'expandThoughtsByDefault' ||
@@ -4975,80 +4981,48 @@
                 if (!messageDiv || typeof marked === 'undefined') return;
 
                 let targetContentDiv;
-                let accumulatedContentForDisplay;
-                let textToAnimateForDeepSeek = "";
-
-                const selectedApiProvider = state.settings.apiProvider;
-                const streamSpeed = state.settings.streamingSpeed;
-
                 if (isThoughtSummary) {
+                    const selectedApiProvider = state.settings.apiProvider;
                     if (selectedApiProvider === 'gemini' && state.settings.includeThoughts) {
                         targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
-                        accumulatedContentForDisplay = state.partialThoughtStreamContent;
                     } else if (selectedApiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts) {
                         targetContentDiv = messageDiv.querySelector(`#streaming-deepseek-thought-summary-${index}`);
-                        textToAnimateForDeepSeek = newCharOrChunk || "";
-                        accumulatedContentForDisplay = state.partialThoughtStreamContent;
                     } else {
                         return;
                     }
                 } else {
                     targetContentDiv = messageDiv.querySelector('.message-content');
-                    if (selectedApiProvider === 'gemini') {
-                        accumulatedContentForDisplay = state.partialStreamContent;
-                    } else {
-                        textToAnimateForDeepSeek = newCharOrChunk || "";
-                        accumulatedContentForDisplay = state.partialStreamContent;
-                    }
                 }
 
                 if (targetContentDiv) {
-                    const renderCurrentState = (contentToRender) => {
-                        try {
-                            if (selectedApiProvider === 'deepseek' && isThoughtSummary && targetContentDiv.id === `streaming-deepseek-thought-summary-${index}`) {
-                                let currentPre = targetContentDiv.querySelector('pre');
-                                if (!currentPre) {
-                                    currentPre = document.createElement('pre');
-                                    targetContentDiv.innerHTML = '';
-                                    targetContentDiv.appendChild(currentPre);
-                                }
-                                currentPre.textContent = contentToRender || '';
-                            } else {
-                                const rawHtml = marked.parse(contentToRender || '');
-                                targetContentDiv.innerHTML = rawHtml;
-                            }
-                            if (!isThoughtSummary) {
-                                this.processInteractivePlaceholders(targetContentDiv);
-                                this.processInteractiveTitles(targetContentDiv);
-                                this.addCopyButtonsToCodeBlocks(targetContentDiv);
-                            }
-                        } catch (e) {
-                            targetContentDiv.textContent = contentToRender;
+                    const contentToRender = isThoughtSummary ? state.partialThoughtStreamContent : state.partialStreamContent;
+                    try {
+                        if (isThoughtSummary && state.settings.apiProvider === 'deepseek' && targetContentDiv.id === `streaming-deepseek-thought-summary-${index}`) {
+                             let currentPre = targetContentDiv.querySelector('pre');
+                             if (!currentPre) {
+                                 currentPre = document.createElement('pre');
+                                 targetContentDiv.innerHTML = '';
+                                 targetContentDiv.appendChild(currentPre);
+                             }
+                             currentPre.textContent = contentToRender || '';
+                        } else {
+                            targetContentDiv.innerHTML = marked.parse(contentToRender || '');
                         }
-                    };
-                    if (selectedApiProvider === 'gemini' || streamSpeed <= 0 || !textToAnimateForDeepSeek) {
-                        renderCurrentState(accumulatedContentForDisplay);
-                    } else if (selectedApiProvider === 'deepseek' && textToAnimateForDeepSeek) {
-                        const baseContent = accumulatedContentForDisplay.slice(0, accumulatedContentForDisplay.length - textToAnimateForDeepSeek.length);
-                        let animatedContentSegment = "";
-
-                        for (let i = 0; i < textToAnimateForDeepSeek.length; i++) {
-                            if (state.abortController?.signal.aborted) break;
-                            animatedContentSegment += textToAnimateForDeepSeek[i];
-                            renderCurrentState(baseContent + animatedContentSegment);
-
-                            if (!isThoughtSummary && state.settings.autoScrollOnNewMessage) {
-                                this.scrollToBottom();
-                            }
-                            await sleep(streamSpeed);
+                        if (!isThoughtSummary) {
+                            this.processInteractivePlaceholders(targetContentDiv);
+                            this.processInteractiveTitles(targetContentDiv);
+                            this.addCopyButtonsToCodeBlocks(targetContentDiv);
                         }
-                        renderCurrentState(accumulatedContentForDisplay);
+                    } catch (e) {
+                        targetContentDiv.textContent = contentToRender;
                     }
                 }
 
-                if (!isThoughtSummary && state.settings.autoScrollOnNewMessage && streamSpeed > 0 && selectedApiProvider === 'gemini') {
-                     // Geminiは handleSend 内で sleep するので、ここでは不要
-                } else if (!isThoughtSummary && state.settings.autoScrollOnNewMessage) {
+                const autoScrollEnabledForThisContentType = isThoughtSummary
+                    ? state.settings.autoScrollOnThought
+                    : state.settings.autoScrollOnNewMessage;
+
+                if (autoScrollEnabledForThisContentType) {
                     this.scrollToBottom();
                 }
             },
@@ -5593,6 +5567,7 @@
                 elements.pseudoStreamingCheckbox.checked = state.settings.pseudoStreaming;
                 elements.enterToSendCheckbox.checked = state.settings.enterToSend;
                 elements.autoScrollOnNewMessageCheckbox.checked = state.settings.autoScrollOnNewMessage;
+                elements.autoScrollOnThoughtCheckbox.checked = state.settings.autoScrollOnThought;
                 elements.historySortOrderSelect.value = state.settings.historySortOrder || 'updatedAt';
                 if (elements.themeSelect) elements.themeSelect.value = state.settings.theme || 'light';
                 elements.enableSessionLinkingCheckbox.checked = state.settings.enableSessionLinking;
@@ -7530,6 +7505,44 @@
                     }
                 }
             },
+            async typeCharacterByCharacter(processedChunks, messageIndex, signal, prefix = '') {
+                const speed = state.settings.streamingSpeed;
+                let accumulatedRawContent = prefix;
+                state.partialStreamContent = prefix;
+                if (prefix) {
+                    uiUtils.updateStreamingMessage(messageIndex, '');
+                }
+
+                if (!speed || speed <= 0) {
+                    accumulatedRawContent = prefix + processedChunks.map(chunk => chunk === null ? '\n\n' : chunk).join('');
+                    state.partialStreamContent = accumulatedRawContent;
+                    uiUtils.updateStreamingMessage(messageIndex, '');
+                    return accumulatedRawContent;
+                }
+
+                for (const chunk of processedChunks) {
+                    if (signal.aborted) {
+                        return accumulatedRawContent;
+                    }
+                    if (chunk === null) {
+                        const separator = '\n\n';
+                        accumulatedRawContent += separator;
+                        state.partialStreamContent = accumulatedRawContent;
+                        uiUtils.updateStreamingMessage(messageIndex, '');
+                    } else if (typeof chunk === 'string') {
+                        for (const char of chunk) {
+                            if (signal.aborted) {
+                                return accumulatedRawContent;
+                            }
+                            accumulatedRawContent += char;
+                            state.partialStreamContent = accumulatedRawContent;
+                            uiUtils.updateStreamingMessage(messageIndex, char);
+                            await sleep(speed);
+                        }
+                    }
+                }
+                return accumulatedRawContent;
+            },
             async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
                 const isBackgroundProcess = !!sourceSessionContext;
                 let currentContextSessionId = isBackgroundProcess ? sourceSessionContext.sessionId : state.currentChatId;
@@ -7847,16 +7860,10 @@
                                     if (isBackgroundProcess) {
                                         modelThoughtSummaryContent += streamData.thoughtText;
                                     } else {
-                                        if (selectedApiProvider === 'gemini' && state.settings.includeThoughts) {
-                                            for (const char of streamData.thoughtText) {
-                                                if (state.abortController?.signal.aborted) break;
-                                                state.partialThoughtStreamContent += char;
-                                                uiUtils.updateStreamingMessage(tempPlaceholderIndex, char, true);
-                                                if (streamSpeed > 0) await sleep(streamSpeed);
-                                            }
-                                        } else if (selectedApiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts) {
-                                            state.partialThoughtStreamContent += streamData.thoughtText;
-                                            uiUtils.updateStreamingMessage(tempPlaceholderIndex, streamData.thoughtText, true);
+                                        state.partialThoughtStreamContent += streamData.thoughtText;
+                                        uiUtils.updateStreamingMessage(tempPlaceholderIndex, streamData.thoughtText, true);
+                                        if (streamSpeed > 0 && streamData.thoughtText && selectedApiProvider === 'gemini') {
+                                            await sleep(streamSpeed * streamData.thoughtText.length);
                                         }
                                     }
                                 }
@@ -7865,16 +7872,10 @@
                                     if (isBackgroundProcess) {
                                         modelResponseRawContent += streamData.contentText;
                                     } else {
-                                        if (selectedApiProvider === 'gemini') {
-                                            for (const char of streamData.contentText) {
-                                                if (state.abortController?.signal.aborted) break;
-                                                state.partialStreamContent += char;
-                                                uiUtils.updateStreamingMessage(tempPlaceholderIndex, char, false);
-                                                if (streamSpeed > 0) await sleep(streamSpeed);
-                                            }
-                                        } else {
-                                            state.partialStreamContent += streamData.contentText;
-                                            uiUtils.updateStreamingMessage(tempPlaceholderIndex, streamData.contentText, false);
+                                        state.partialStreamContent += streamData.contentText;
+                                        uiUtils.updateStreamingMessage(tempPlaceholderIndex, streamData.contentText, false);
+                                        if (streamSpeed > 0 && streamData.contentText && selectedApiProvider === 'gemini') {
+                                            await sleep(streamSpeed * streamData.contentText.length);
                                         }
                                     }
                                 }
@@ -8588,6 +8589,7 @@
                      pseudoStreaming: elements.pseudoStreamingCheckbox.checked,
                      enterToSend: elements.enterToSendCheckbox.checked,
                      autoScrollOnNewMessage: elements.autoScrollOnNewMessageCheckbox.checked,
+                     autoScrollOnThought: elements.autoScrollOnThoughtCheckbox.checked,
                      historySortOrder: elements.historySortOrderSelect.value,
                      theme: elements.themeSelect.value,
                      enableSessionLinking: elements.enableSessionLinkingCheckbox.checked,
@@ -8856,8 +8858,9 @@
                             pseudoStreaming: false,
                             enterToSend: true,
                             autoScrollOnNewMessage: DEFAULT_AUTO_SCROLL_ON_NEW_MESSAGE,
+                            autoScrollOnThought: false,
                             historySortOrder: 'updatedAt',
-                            theme: window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'dark' : 'light',
+                                                        theme: window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'dark' : 'light',
                             backgroundImageBlob: null,
                             fontFamily: '',
                             messageBodyFontSize: DEFAULT_MESSAGE_BODY_FONT_SIZE,
