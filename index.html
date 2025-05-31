@@ -4980,8 +4980,7 @@
                     } else if (isThoughtSummary && selectedApiProvider === 'deepseek' && state.settings.includeDeepSeekThoughts) {
                         targetContentDiv = messageDiv.querySelector(`#streaming-deepseek-thought-summary-${index}`);
                         streamContent = state.partialThoughtStreamContent;
-                    }
-                     else {
+                    } else {
                         targetContentDiv = messageDiv.querySelector('.message-content');
                         streamContent = state.partialStreamContent;
                     }
@@ -4999,12 +4998,11 @@
                             } else {
                                 const rawHtml = marked.parse(streamContent || '');
                                 targetContentDiv.innerHTML = rawHtml;
-                            }
-
-                            if (!isThoughtSummary) {
-                                this.processInteractivePlaceholders(targetContentDiv);
-                                this.processInteractiveTitles(targetContentDiv);
-                                this.addCopyButtonsToCodeBlocks(targetContentDiv);
+                                 if (!isThoughtSummary) {
+                                    this.processInteractivePlaceholders(targetContentDiv);
+                                    this.processInteractiveTitles(targetContentDiv);
+                                    this.addCopyButtonsToCodeBlocks(targetContentDiv);
+                                }
                             }
                         } catch (e) {
                             targetContentDiv.textContent = streamContent;
@@ -7826,12 +7824,9 @@
                                     if (isBackgroundProcess) {
                                         modelThoughtSummaryContent += streamData.thoughtText;
                                     } else {
-                                        for (const char of streamData.thoughtText) {
-                                            if (state.abortController?.signal.aborted) break;
-                                            state.partialThoughtStreamContent += char;
-                                            uiUtils.updateStreamingMessage(tempPlaceholderIndex, char, true);
-                                            if (streamSpeed > 0) await sleep(streamSpeed);
-                                        }
+                                        state.partialThoughtStreamContent += streamData.thoughtText;
+                                        uiUtils.updateStreamingMessage(tempPlaceholderIndex, null, true);
+                                        if (streamSpeed > 0 && streamData.thoughtText.length > 0) await sleep(streamSpeed * Math.min(streamData.thoughtText.length, 5));
                                     }
                                 }
 
@@ -7875,7 +7870,11 @@
                            modelThoughtSummaryContent = state.partialThoughtStreamContent;
                            modelResponseRawContent = state.partialStreamContent;
                         }
-                        if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
+                        if (modelResponseMetadata.fullReasoningContent && selectedApiProvider === 'deepseek' && !isBackgroundProcess) {
+                            modelThoughtSummaryContent = modelResponseMetadata.fullReasoningContent;
+                        }
+
+                         if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
                             throw new Error("リクエストがキャンセルされました。");
                         }
 
@@ -10189,49 +10188,53 @@
                                 try {
                                     const chunk = JSON.parse(jsonData);
                                     let contentTextChunk = null;
-                                    let reasoningTextChunk = null;
+                                    let reasoningTextChunkYield = null;
 
                                     if (chunk.choices && chunk.choices[0] && chunk.choices[0].delta) {
                                         const delta = chunk.choices[0].delta;
                                         let currentDeltaContent = delta.content || "";
 
-                                        let thinkStartPos, thinkEndPos;
+                                        let tempReasoningPart = "";
+                                        let tempContentPart = "";
 
-                                        do {
-                                            thinkStartPos = currentDeltaContent.indexOf("<think>");
-                                            thinkEndPos = currentDeltaContent.indexOf("</think>");
-
+                                        while (currentDeltaContent.length > 0) {
                                             if (inThinkBlock) {
-                                                if (thinkEndPos !== -1 && (thinkStartPos === -1 || thinkEndPos < thinkStartPos)) {
-                                                    const partBeforeEndTag = currentDeltaContent.substring(0, thinkEndPos);
-                                                    currentThinkContent += partBeforeEndTag;
-                                                    reasoningTextChunk = (reasoningTextChunk || "") + currentThinkContent;
-                                                    accumulatedReasoningContentForMetadata += currentThinkContent;
-                                                    currentThinkContent = "";
+                                                const thinkEndPos = currentDeltaContent.indexOf("</think>");
+                                                if (thinkEndPos !== -1) {
+                                                    const partInThink = currentDeltaContent.substring(0, thinkEndPos);
+                                                    tempReasoningPart += partInThink;
+                                                    accumulatedReasoningContentForMetadata += partInThink;
                                                     inThinkBlock = false;
                                                     currentDeltaContent = currentDeltaContent.substring(thinkEndPos + "</think>".length);
                                                 } else {
-                                                    currentThinkContent += currentDeltaContent;
-                                                    reasoningTextChunk = (reasoningTextChunk || "") + currentDeltaContent;
+                                                    tempReasoningPart += currentDeltaContent;
                                                     accumulatedReasoningContentForMetadata += currentDeltaContent;
                                                     currentDeltaContent = "";
                                                 }
                                             } else {
-                                                if (thinkStartPos !== -1 && (thinkEndPos === -1 || thinkStartPos < thinkEndPos)) {
-                                                    const partBeforeStartTag = currentDeltaContent.substring(0, thinkStartPos);
-                                                    if (partBeforeStartTag.length > 0) {
-                                                         contentTextChunk = (contentTextChunk || "") + partBeforeStartTag;
+                                                const thinkStartPos = currentDeltaContent.indexOf("<think>");
+                                                if (thinkStartPos !== -1) {
+                                                    const partBeforeThink = currentDeltaContent.substring(0, thinkStartPos);
+                                                    if (partBeforeThink.length > 0) {
+                                                         tempContentPart += partBeforeThink;
                                                     }
                                                     inThinkBlock = true;
                                                     currentDeltaContent = currentDeltaContent.substring(thinkStartPos + "<think>".length);
-                                                } else { // No <think> or </think> is before next <think>
+                                                } else {
                                                     if (currentDeltaContent.length > 0) {
-                                                        contentTextChunk = (contentTextChunk || "") + currentDeltaContent;
+                                                        tempContentPart += currentDeltaContent;
                                                     }
                                                     currentDeltaContent = "";
                                                 }
                                             }
-                                        } while (currentDeltaContent.length > 0);
+                                        }
+
+                                        if (tempContentPart.length > 0) {
+                                            contentTextChunk = tempContentPart;
+                                        }
+                                        if (tempReasoningPart.length > 0) {
+                                            reasoningTextChunkYield = tempReasoningPart;
+                                        }
                                     }
 
 
@@ -10242,8 +10245,8 @@
                                         finalUsage = chunk.usage;
                                     }
 
-                                    if (contentTextChunk !== null || reasoningTextChunk !== null) {
-                                        yield { type: 'chunk', contentText: contentTextChunk, thoughtText: reasoningTextChunk };
+                                    if (contentTextChunk !== null || reasoningTextChunkYield !== null) {
+                                        yield { type: 'chunk', contentText: contentTextChunk, thoughtText: reasoningTextChunkYield };
                                     }
                                 } catch (e) {
                                 }
@@ -10252,8 +10255,9 @@
                         }
                          if (finalFinishReason && finalFinishReason !== 'null') break;
                     }
-                    if (inThinkBlock && currentThinkContent) {
-                         accumulatedReasoningContentForMetadata += currentThinkContent;
+                    if (inThinkBlock && accumulatedReasoningContentForMetadata.length > 0 && !finalFinishReason) {
+                         // This might indicate an unterminated <think> block if the stream ends prematurely
+                         // For now, we pass on what was accumulated.
                     }
 
                     yield {
@@ -10281,4 +10285,3 @@
     </script>
 </body>
 </html>
-
