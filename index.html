@@ -152,7 +152,7 @@
             --default-user-name-bubble-custom-rgb: 255, 255, 255;
             --default-ai-name-bubble-custom-rgb: 255, 255, 255;
 
-            --thought-summary-opacity: 0.85;
+            --thought-summary-opacity: 0.65;
         }
 
         body.dark-mode {
@@ -3598,7 +3598,7 @@
                                     <label for="toggle-button-top-opacity">右上折りたたみボタンの透明度 (0.0-1.0):</label>
                                     <input type="number" id="toggle-button-top-opacity" min="0" max="1" step="0.05" placeholder="例: 0.6" aria-label="右上折りたたみボタンの透明度">
                                     <label for="thought-summary-opacity" style="margin-top:10px;">思考プロセス背景の透明度 (0.0-1.0):</label>
-                                    <input type="number" id="thought-summary-opacity" min="0" max="1" step="0.05" placeholder="例: 0.85" aria-label="思考プロセス背景の透明度">
+                                    <input type="number" id="thought-summary-opacity" min="0" max="1" step="0.05" placeholder="例: 0.65" aria-label="思考プロセス背景の透明度">
                                     <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px;">
                                       ※ 0.0で完全透明、1.0で不透明。
                                     </p>
@@ -3788,7 +3788,7 @@
         const DEFAULT_PERSIST_MESSAGE_COLLAPSE_STATE = true;
         const DEFAULT_DICE_MIN_VALUE = 1;
         const DEFAULT_DICE_MAX_VALUE = 100;
-        const DEFAULT_THOUGHT_SUMMARY_OPACITY = 0.85;
+        const DEFAULT_THOUGHT_SUMMARY_OPACITY = 0.65;
 
         const extensionToMimeTypeMap = {
             'pdf': 'application/pdf', 'js': 'text/javascript', 'py': 'text/x-python',
@@ -5163,7 +5163,9 @@
                                     currentPre.style.wordWrap = 'break-word';
                                     targetContentDiv.appendChild(currentPre);
                                 }
-                                currentPre.textContent = contentToRender || '';
+                                const tempDiv = document.createElement('div');
+                                tempDiv.textContent = contentToRender || '';
+                                currentPre.innerHTML = tempDiv.innerHTML.replace(/\n/g, '<br>'); // More robust newline handling
 
                             } else {
                                 const rawHtml = marked.parse(contentToRender || '');
@@ -5886,7 +5888,6 @@
 
                 elements.geminiGroundingParam.classList.toggle('hidden', !showGemini);
 
-
                 if (showGemini) {
                     elements.systemPromptDefaultTextarea.id = "gemini-system-prompt-default";
                     elements.enableSystemPromptDefaultCheckbox.id = "gemini-enable-system-prompt-default";
@@ -5897,10 +5898,6 @@
                     elements.presencePenaltyInput.id = "gemini-presence-penalty";
                     elements.frequencyPenaltyInput.id = "gemini-frequency-penalty";
                     elements.thinkingBudgetInput.id = "gemini-thinking-budget";
-                    elements.includeThoughtsToggle.id = "include-thoughts-toggle";
-                    elements.expandThoughtsByDefaultToggle.id = "expand-thoughts-by-default-toggle";
-                    elements.pseudoStreamingCheckbox.id = "pseudo-streaming";
-                    elements.enableGroundingToggle.id = "enable-grounding-toggle";
                 } else {
                     elements.deepSeekSystemPromptDefaultTextarea.id = "deepseek-system-prompt-default";
                     elements.deepSeekEnableSystemPromptDefaultCheckbox.id = "deepseek-enable-system-prompt-default";
@@ -5909,8 +5906,6 @@
                     elements.deepSeekTopPInput.id = "deepseek-top-p";
                     elements.deepSeekPresencePenaltyInput.id = "deepseek-presence-penalty";
                     elements.deepSeekFrequencyPenaltyInput.id = "deepseek-frequency-penalty";
-                    elements.includeDeepSeekThoughtsToggle.id = "include-deepseek-thoughts-toggle";
-                    elements.expandDeepSeekThoughtsByDefaultToggle.id = "expand-deepseek-thoughts-by-default-toggle";
                 }
             },
             updateChatScreenElementVisibility() {
@@ -6038,10 +6033,8 @@
             updateSystemPromptUI() {
                 const currentProvider = state.settings.apiProvider;
                 if (currentProvider === 'gemini') {
-                    state.currentSystemPrompt = state.settings.geminiSystemPrompt;
                     elements.systemPromptEditor.value = state.currentSystemPrompt;
                 } else if (currentProvider === 'deepseek') {
-                    state.currentSystemPrompt = state.settings.deepSeekSystemPrompt;
                     elements.systemPromptEditor.value = state.currentSystemPrompt;
                 } else {
                     elements.systemPromptEditor.value = state.currentSystemPrompt;
@@ -7476,15 +7469,17 @@
                             }
                         });
 
-                        const currentProvider = state.settings.apiProvider;
                         if (chat.systemPrompt !== undefined) {
                              state.currentSystemPrompt = chat.systemPrompt;
-                        } else if (currentProvider === 'gemini') {
-                            state.currentSystemPrompt = state.settings.geminiEnableSystemPromptDefault ? state.settings.geminiSystemPrompt : '';
-                        } else if (currentProvider === 'deepseek') {
-                            state.currentSystemPrompt = state.settings.deepSeekEnableSystemPromptDefault ? state.settings.deepSeekSystemPrompt : '';
                         } else {
-                            state.currentSystemPrompt = '';
+                            const currentProvider = state.settings.apiProvider;
+                            if (currentProvider === 'gemini') {
+                                state.currentSystemPrompt = state.settings.geminiEnableSystemPromptDefault ? state.settings.geminiSystemPrompt : '';
+                            } else if (currentProvider === 'deepseek') {
+                                state.currentSystemPrompt = state.settings.deepSeekEnableSystemPromptDefault ? state.settings.deepSeekSystemPrompt : '';
+                            } else {
+                                state.currentSystemPrompt = '';
+                            }
                         }
 
                         state.pendingAttachments = [];
@@ -9331,7 +9326,9 @@
                 if (newPrompt !== state.currentSystemPrompt) {
                     state.currentSystemPrompt = newPrompt;
                     try {
-                        await dbUtils.saveChat();
+                        if(state.currentChatId) {
+                             await dbUtils.saveChat();
+                        }
                     } catch (error) {
                         await uiUtils.showCustomAlert("システムプロンプトの保存に失敗しました。");
                     }
@@ -10095,13 +10092,13 @@
                          toggleButtons.forEach(button => {
                             let textCollapse;
                             if (button.classList.contains('top')) {
-                                textCollapse = state.settings.toggleButtonTopTextCollapse;
+                                                            textCollapse = state.settings.toggleButtonTopTextCollapse;
                             } else {
                                 textCollapse = state.settings.toggleButtonBottomTextCollapse;
                             }
                             button.textContent = textCollapse;
                             button.title = 'メッセージを折りたたむ';
-                                                        button.setAttribute('aria-label', 'メッセージを折りたたむ');
+                            button.setAttribute('aria-label', 'メッセージを折りたたむ');
                          });
                      }
                  }
