@@ -3282,10 +3282,10 @@
                        </label>
                        <label for="deepseek-streaming-speed">文字送り速度 (ミリ秒/文字):</label>
                        <input type="number" id="deepseek-streaming-speed" min="0" step="1" placeholder="例: 30 (0で無効)" aria-label="DeepSeek 文字送り速度">
-                       <label for="deepseek-streaming-buffer-delay" style="margin-top: 10px;">ストリーミングバッファ遅延 (ミリ秒):</label>
-                       <input type="number" id="deepseek-streaming-buffer-delay" min="0" step="10" placeholder="例: 50 (0で無効)">
+                       <label for="deepseek-streaming-buffer-delay" style="margin-top: 10px;">ストリーミング表示遅延 (ミリ秒):</label>
+                       <input type="number" id="deepseek-streaming-buffer-delay" min="0" step="10" placeholder="例: 50 (0で遅延なし)">
                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                           ※ DeepSeekストリーミング時、応答をまとめて表示するまでの遅延時間。値を大きくするとチラつきが減る可能性がありますが、応答表示が少し遅れます。0で遅延なし。
+                           ※DeepSeekストリーミング時に1文字ずつ表示する際の間隔。0でチャンク毎の即時表示に近い動作。
                        </p>
                     </div>
                 </details>
@@ -4682,7 +4682,8 @@
         let deepSeekThoughtBuffer = "";
         let deepSeekTargetContentDiv = null;
         let deepSeekTargetThoughtDiv = null;
-        let deepSeekLastMessageIndex = -1;
+        let deepSeekLastMessageIndexForCharDisplay = -1;
+        let deepSeekCharacterDisplayInterval = null;
 
         const uiUtils = {
             renderChatMessages(maintainScroll = false) {
@@ -5173,157 +5174,128 @@
                 const messageDiv = document.getElementById(`streaming-message-${index}`);
                 if (!messageDiv || typeof marked === 'undefined') return;
 
-                let targetContentDiv;
-                let accumulatedContentForDisplay;
-                let textToAnimate = "";
+                let targetDiv;
+                let currentBufferProperty;
+                let isThoughtPre = false;
 
                 const selectedApiProvider = state.settings.apiProvider;
                 const streamSpeed = selectedApiProvider === 'gemini' ? state.settings.geminiStreamingSpeed : state.settings.deepSeekStreamingSpeed;
-                const deepSeekBufferDelay = state.settings.deepSeekStreamingBufferDelay;
 
                 if (isThoughtSummary) {
                     if (selectedApiProvider === 'gemini' && state.settings.geminiIncludeThoughts) {
-                        targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
-                        accumulatedContentForDisplay = state.partialThoughtStreamContent;
-                        textToAnimate = newCharOrChunk || "";
+                        targetDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
+                        currentBufferProperty = 'partialThoughtStreamContent';
                     } else if (selectedApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) {
-                        targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
-                        textToAnimate = newCharOrChunk || "";
-                        accumulatedContentForDisplay = state.partialThoughtStreamContent;
-                        deepSeekTargetThoughtDiv = targetContentDiv;
+                        targetDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
+                        currentBufferProperty = 'partialThoughtStreamContent';
+                        isThoughtPre = true;
                     } else {
                         return;
                     }
                 } else {
-                    targetContentDiv = messageDiv.querySelector('.message-content');
-                    if (selectedApiProvider === 'gemini') {
-                        accumulatedContentForDisplay = state.partialStreamContent;
-                        textToAnimate = newCharOrChunk || "";
-                    } else {
-                        textToAnimate = newCharOrChunk || "";
-                        accumulatedContentForDisplay = state.partialStreamContent;
-                        deepSeekTargetContentDiv = targetContentDiv;
-                    }
+                    targetDiv = messageDiv.querySelector('.message-content');
+                    currentBufferProperty = 'partialStreamContent';
                 }
 
-                if (deepSeekLastMessageIndex !== index && selectedApiProvider === 'deepseek') {
-                    deepSeekContentBuffer = "";
-                    deepSeekThoughtBuffer = "";
-                    deepSeekLastMessageIndex = index;
-                }
+                if (!targetDiv) return;
 
-                const renderContent = (div, content, isThoughtPre = false) => {
+                const renderContent = (div, content, isPre) => {
                     try {
-                        if (isThoughtPre) {
-                            let currentPre = div.querySelector('pre');
-                            if (!currentPre) {
-                                currentPre = document.createElement('pre');
+                        if (isPre) {
+                            let preElement = div.querySelector('pre');
+                            if (!preElement) {
+                                preElement = document.createElement('pre');
                                 div.innerHTML = '';
-                                div.appendChild(currentPre);
+                                div.appendChild(preElement);
                             }
-                            currentPre.textContent = content || '';
+                            preElement.textContent = content || '';
                         } else {
-                            const rawHtml = marked.parse(content || '');
-                            div.innerHTML = rawHtml;
+                            div.innerHTML = marked.parse(content || '');
                         }
-                        if (!isThoughtSummary && !isThoughtPre) {
+                        if (!isThoughtSummary && !isPre) {
                             this.processInteractivePlaceholders(div);
                             this.processInteractiveTitles(div);
-                            this.addCopyButtonsToCodeBlocks(div);
                         }
                     } catch (e) {
                         div.textContent = content;
                     }
                 };
 
-                if (selectedApiProvider === 'gemini' || streamSpeed <= 0) {
-                    renderContent(targetContentDiv, accumulatedContentForDisplay, (selectedApiProvider === 'deepseek' && isThoughtSummary));
-                } else if (selectedApiProvider === 'deepseek' && textToAnimate) {
-                    if (isThoughtSummary) {
-                        deepSeekThoughtBuffer += textToAnimate;
-                    } else {
-                        deepSeekContentBuffer += textToAnimate;
-                    }
-
-                    clearTimeout(deepSeekUpdateTimer);
-                    deepSeekUpdateTimer = setTimeout(() => {
-                        if (deepSeekTargetThoughtDiv && deepSeekThoughtBuffer) {
-                            renderContent(deepSeekTargetThoughtDiv, deepSeekThoughtBuffer, true);
-                        }
-                        if (deepSeekTargetContentDiv && deepSeekContentBuffer) {
-                            renderContent(deepSeekTargetContentDiv, deepSeekContentBuffer, false);
-                        }
-                        const autoScrollNow = isThoughtSummary
-                            ? state.settings.autoScrollOnThought
-                            : state.settings.autoScrollOnNewMessage;
-                        if (autoScrollNow) {
-                            this.scrollToBottom();
-                        }
-                    }, deepSeekBufferDelay);
-                    return;
+                if (deepSeekLastMessageIndexForCharDisplay !== index) {
+                    clearInterval(deepSeekCharacterDisplayInterval);
+                    deepSeekCharacterDisplayInterval = null;
+                    deepSeekPresentationBuffer = "";
+                    deepSeekLastMessageIndexForCharDisplay = index;
                 }
 
-                if (selectedApiProvider === 'gemini' && textToAnimate && streamSpeed > 0) {
-                    const baseContent = accumulatedContentForDisplay.slice(0, accumulatedContentForDisplay.length - textToAnimate.length);
-                    let animatedContentSegment = "";
-                    for (let i = 0; i < textToAnimate.length; i++) {
-                        if (state.abortController?.signal.aborted) break;
-                        animatedContentSegment += textToAnimate[i];
-                        renderContent(targetContentDiv, baseContent + animatedContentSegment, isThoughtSummary && selectedApiProvider === 'deepseek');
+                if (streamSpeed <= 0) {
+                    renderContent(targetDiv, state[currentBufferProperty], isThoughtPre);
+                } else {
+                    deepSeekPresentationBuffer += newCharOrChunk || "";
+                    state[currentBufferProperty] += newCharOrChunk || "";
 
-                        const autoScrollForThisChar = isThoughtSummary
-                            ? state.settings.autoScrollOnThought
-                            : state.settings.autoScrollOnNewMessage;
-                        if (autoScrollForThisChar) {
-                            this.scrollToBottom();
-                        }
-                        await sleep(streamSpeed);
+                    if (!deepSeekCharacterDisplayInterval) {
+                        deepSeekCharacterDisplayInterval = setInterval(() => {
+                            if (deepSeekPresentationBuffer.length > 0) {
+                                const charToRender = deepSeekPresentationBuffer[0];
+                                deepSeekPresentationBuffer = deepSeekPresentationBuffer.substring(1);
+
+                                let fullContentForRender = "";
+                                if (currentBufferProperty === 'partialStreamContent') {
+                                    fullContentForRender = state.partialStreamContent.substring(0, state.partialStreamContent.length - deepSeekPresentationBuffer.length);
+                                } else if (currentBufferProperty === 'partialThoughtStreamContent') {
+                                    fullContentForRender = state.partialThoughtStreamContent.substring(0, state.partialThoughtStreamContent.length - deepSeekPresentationBuffer.length);
+                                }
+
+                                renderContent(targetDiv, fullContentForRender, isThoughtPre);
+
+                                const autoScrollNow = isThoughtSummary
+                                    ? state.settings.autoScrollOnThought
+                                    : state.settings.autoScrollOnNewMessage;
+                                if (autoScrollNow) {
+                                    this.scrollToBottom();
+                                }
+                            } else {
+                                clearInterval(deepSeekCharacterDisplayInterval);
+                                deepSeekCharacterDisplayInterval = null;
+                                if (targetDiv && !isThoughtSummary && !isThoughtPre) {
+                                    this.addCopyButtonsToCodeBlocks(targetDiv);
+                                }
+                                if (targetDiv && isThoughtSummary && isThoughtPre){
+                                }
+                            }
+                        }, streamSpeed);
                     }
-                    renderContent(targetContentDiv, accumulatedContentForDisplay, isThoughtSummary && selectedApiProvider === 'deepseek');
                 }
 
                 const autoScrollEnabledForThisContentType = isThoughtSummary
                     ? state.settings.autoScrollOnThought
                     : state.settings.autoScrollOnNewMessage;
 
-                if (autoScrollEnabledForThisContentType && selectedApiProvider !== 'deepseek') {
-                    this.scrollToBottom();
+                if (autoScrollEnabledForThisContentType && streamSpeed <= 0) {
+                     this.scrollToBottom();
                 }
             },
             finalizeStreamingMessage(index) {
+                clearInterval(deepSeekCharacterDisplayInterval);
+                deepSeekCharacterDisplayInterval = null;
+                deepSeekPresentationBuffer = "";
+                deepSeekTargetContentDiv = null;
+                deepSeekTargetThoughtDiv = null;
+                deepSeekLastMessageIndexForCharDisplay = -1;
+
                 const messageDiv = document.getElementById(`streaming-message-${index}`);
                 if (messageDiv) {
                     const finalMessageData = state.currentMessages[index];
                     if (!finalMessageData) return;
                     const messageApiProvider = finalMessageData.generatedByApiProvider || state.settings.apiProvider;
 
-                    if (messageApiProvider === 'deepseek') {
-                        clearInterval(deepSeekCharacterDisplayInterval);
-                        deepSeekCharacterDisplayInterval = null;
-                        if (deepSeekCurrentThoughtTargetDiv && state.partialThoughtStreamContent) {
-                            //
-                        }
-                        if (deepSeekCurrentTargetDiv && state.partialStreamContent) {
-                            const contentDiv = messageDiv.querySelector('.message-content');
-                            try {
-                                contentDiv.innerHTML = marked.parse(state.partialStreamContent || '');
-                                this.processInteractivePlaceholders(contentDiv);
-                                this.processInteractiveTitles(contentDiv);
-                                this.addCopyButtonsToCodeBlocks(contentDiv);
-                            } catch (e) {
-                                contentDiv.textContent = state.partialStreamContent || '';
-                            }
-                        }
-                        deepSeekPresentationBuffer = "";
-                        deepSeekCurrentTargetDiv = null;
-                        deepSeekCurrentThoughtTargetDiv = null;
-                    }
-
                     if (finalMessageData.thoughtSummary && messageApiProvider === 'gemini' && state.settings.geminiIncludeThoughts) {
                         const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
                         if (thoughtContentDiv && typeof marked !== 'undefined') {
                             try {
                                 thoughtContentDiv.innerHTML = marked.parse(finalMessageData.thoughtSummary || '');
+                                this.addCopyButtonsToCodeBlocks(thoughtContentDiv);
                             } catch (e) {
                                 thoughtContentDiv.textContent = finalMessageData.thoughtSummary || '';
                             }
@@ -8275,17 +8247,17 @@
                                     if (isBackgroundProcess) {
                                         modelResponseRawContent += streamData.contentText;
                                     } else {
-                                        if (selectedApiProvider === 'gemini') {
+                                        // if (selectedApiProvider === 'gemini') { // GeminiもDeepSeekも同じ1文字処理に変更
                                             for (const char of streamData.contentText) {
                                                 if (state.abortController?.signal.aborted) break;
                                                 state.partialStreamContent += char;
                                                 uiUtils.updateStreamingMessage(tempPlaceholderIndex, char, false);
                                                 if (currentContextStreamSpeed > 0) await sleep(currentContextStreamSpeed);
                                             }
-                                        } else {
-                                            state.partialStreamContent += streamData.contentText;
-                                            uiUtils.updateStreamingMessage(tempPlaceholderIndex, streamData.contentText, false);
-                                        }
+                                        // } else { // DeepSeekの場合も1文字ずつ処理する
+                                        //     state.partialStreamContent += streamData.contentText;
+                                        //     uiUtils.updateStreamingMessage(tempPlaceholderIndex, streamData.contentText, false);
+                                        // }
                                     }
                                 }
                                 if (state.abortController?.signal.aborted) {
@@ -10103,7 +10075,7 @@
                 uiUtils.updateAttachmentBadgeVisibility();
             },
             toggleMessageCollapse(index) {
-                            const messageElement = elements.messageContainer.querySelector(`.message[data-index="${index}"]`);
+                const messageElement = elements.messageContainer.querySelector(`.message[data-index="${index}"]`);
                 const contentDiv = messageElement?.querySelector('.message-content');
                 const toggleButtons = messageElement?.querySelectorAll('.message-toggle-button[data-action="toggle-collapse"]');
 
@@ -10133,7 +10105,7 @@
             },
             uncollapseMessage(index, messageElement = null) {
                  if (!messageElement) {
-                     messageElement = elements.messageContainer.querySelector(`.message[data-index="${index}"]`);
+                                      messageElement = elements.messageContainer.querySelector(`.message[data-index="${index}"]`);
                  }
                  const contentDiv = messageElement?.querySelector('.message-content');
                  const toggleButtons = messageElement?.querySelectorAll('.message-toggle-button[data-action="toggle-collapse"]');
@@ -10743,3 +10715,4 @@
     </script>
 </body>
 </html>
+ 
