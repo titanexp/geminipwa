@@ -3256,7 +3256,7 @@
                         ※ 推論モデルは推論内で検索する場合があり、引用データが帰らない場合がある。
                     </p>
                 </div>
-                 <details class="settings-group">
+                <details class="settings-group">
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">AI間会話モード（セッション間リンク）</summary>
                     <div style="margin-top:15px;">
                         <label class="checkbox-label">
@@ -5154,6 +5154,17 @@
                                     targetContentDiv.appendChild(currentPre);
                                 }
                                 currentPre.textContent = contentToRender || '';
+                            } else if (selectedApiProvider === 'deepseek' && !isThoughtSummary && targetContentDiv) {
+                                let currentPre = targetContentDiv.querySelector('pre');
+                                if (!currentPre) {
+                                    currentPre = document.createElement('pre');
+                                    targetContentDiv.innerHTML = '';
+                                    currentPre.style.whiteSpace = 'pre-wrap';
+                                    currentPre.style.wordWrap = 'break-word';
+                                    targetContentDiv.appendChild(currentPre);
+                                }
+                                currentPre.textContent = contentToRender || '';
+
                             } else {
                                 const rawHtml = marked.parse(contentToRender || '');
                                 targetContentDiv.innerHTML = rawHtml;
@@ -5875,6 +5886,7 @@
 
                 elements.geminiGroundingParam.classList.toggle('hidden', !showGemini);
 
+
                 if (showGemini) {
                     elements.systemPromptDefaultTextarea.id = "gemini-system-prompt-default";
                     elements.enableSystemPromptDefaultCheckbox.id = "gemini-enable-system-prompt-default";
@@ -5885,6 +5897,10 @@
                     elements.presencePenaltyInput.id = "gemini-presence-penalty";
                     elements.frequencyPenaltyInput.id = "gemini-frequency-penalty";
                     elements.thinkingBudgetInput.id = "gemini-thinking-budget";
+                    elements.includeThoughtsToggle.id = "include-thoughts-toggle";
+                    elements.expandThoughtsByDefaultToggle.id = "expand-thoughts-by-default-toggle";
+                    elements.pseudoStreamingCheckbox.id = "pseudo-streaming";
+                    elements.enableGroundingToggle.id = "enable-grounding-toggle";
                 } else {
                     elements.deepSeekSystemPromptDefaultTextarea.id = "deepseek-system-prompt-default";
                     elements.deepSeekEnableSystemPromptDefaultCheckbox.id = "deepseek-enable-system-prompt-default";
@@ -5893,6 +5909,8 @@
                     elements.deepSeekTopPInput.id = "deepseek-top-p";
                     elements.deepSeekPresencePenaltyInput.id = "deepseek-presence-penalty";
                     elements.deepSeekFrequencyPenaltyInput.id = "deepseek-frequency-penalty";
+                    elements.includeDeepSeekThoughtsToggle.id = "include-deepseek-thoughts-toggle";
+                    elements.expandDeepSeekThoughtsByDefaultToggle.id = "expand-deepseek-thoughts-by-default-toggle";
                 }
             },
             updateChatScreenElementVisibility() {
@@ -6020,9 +6038,11 @@
             updateSystemPromptUI() {
                 const currentProvider = state.settings.apiProvider;
                 if (currentProvider === 'gemini') {
-                    elements.systemPromptEditor.value = state.currentSystemPrompt || state.settings.geminiSystemPrompt;
+                    state.currentSystemPrompt = state.settings.geminiSystemPrompt;
+                    elements.systemPromptEditor.value = state.currentSystemPrompt;
                 } else if (currentProvider === 'deepseek') {
-                    elements.systemPromptEditor.value = state.currentSystemPrompt || state.settings.deepSeekSystemPrompt;
+                    state.currentSystemPrompt = state.settings.deepSeekSystemPrompt;
+                    elements.systemPromptEditor.value = state.currentSystemPrompt;
                 } else {
                     elements.systemPromptEditor.value = state.currentSystemPrompt;
                 }
@@ -9171,6 +9191,7 @@
                         defaultSettingsCopy.deepSeekAdditionalModels = '';
                         defaultSettingsCopy.deepSeekApiEndpoint = '';
                         defaultSettingsCopy.apiProvider = 'gemini';
+                        defaultSettingsCopy.deepSeekStreamingOutput = true;
                         defaultSettingsCopy.enterToSend = true;
                         defaultSettingsCopy.autoScrollOnNewMessage = DEFAULT_AUTO_SCROLL_ON_NEW_MESSAGE;
                         defaultSettingsCopy.autoScrollOnThought = false;
@@ -10080,7 +10101,7 @@
                             }
                             button.textContent = textCollapse;
                             button.title = 'メッセージを折りたたむ';
-                            button.setAttribute('aria-label', 'メッセージを折りたたむ');
+                                                        button.setAttribute('aria-label', 'メッセージを折りたたむ');
                          });
                      }
                  }
