@@ -7809,7 +7809,13 @@
                 if (isBackgroundProcess) {
                     currentContextSystemPrompt = sourceSessionContext.systemPrompt;
                 } else {
-                    currentContextSystemPrompt = state.currentSystemPrompt;
+                    if (selectedApiProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
+                        currentContextSystemPrompt = state.settings.geminiSystemPrompt || '';
+                    } else if (selectedApiProvider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
+                        currentContextSystemPrompt = state.settings.deepSeekSystemPrompt || '';
+                    } else {
+                         currentContextSystemPrompt = state.currentSystemPrompt;
+                    }
                 }
 
                 let contextTemperature, contextMaxTokens, contextTopP,
@@ -8140,7 +8146,7 @@
 
 
                 let systemInstructionForProvider = null;
-                const systemPromptTextToUseForApi = currentContextSystemPrompt?.trim() ? currentContextSystemPrompt.trim() : null;
+                const systemPromptTextToUseForApi = currentContextEnableSystemPromptDefault && currentContextSystemPrompt?.trim() ? currentContextSystemPrompt.trim() : null;
 
 
                 if (systemPromptTextToUseForApi) {
@@ -8158,7 +8164,7 @@
                 let currentGroundingMetadata = null;
                 let finalUsageMetadataFromStream = null;
 
-                let useStreamingForThisCall = isBackgroundProcess ? false : contextStreamingOutput;
+                let useStreamingForThisCall = isBackgroundProcess ? false : (selectedApiProvider === 'gemini' ? contextStreamingOutput : state.settings.deepSeekStreamingOutput);
                 let usePseudoForThisCall = isBackgroundProcess ? false : (selectedApiProvider === 'gemini' && contextGeminiPseudoStreaming);
 
                 try {
@@ -8190,7 +8196,7 @@
                             tempPlaceholderIndex = state.currentMessages.length;
                             uiUtils.appendMessage('model', '', tempPlaceholderIndex, true);
                         }
-                        const currentContextStreamSpeed = contextStreamingSpeed;
+                        const currentContextStreamSpeed = selectedApiProvider === 'gemini' ? contextStreamingSpeed : state.settings.deepSeekStreamingSpeed;
 
 
                         for await (const streamData of responseStreamIterator) {
@@ -8389,9 +8395,15 @@
                                 request.onsuccess = () => resolve();
                                 request.onerror = (event) => reject(`チャット保存putエラー(BG): ${event.target.error.name} - ${event.target.error.message}`);
                              });
-                             return { content: modelResponseRawContent, metadata: modelResponseMetadata };
+                             return {
+                                 content: modelResponseRawContent,
+                                 metadata: modelResponseMetadata,
+                                 thoughtContent: (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) ? modelThoughtSummaryContent
+                                               : (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) ? modelThoughtSummaryContent
+                                               : null
+                             };
                         }
-                        return { content: "", metadata: modelResponseMetadata };
+                        return { content: "", metadata: modelResponseMetadata, thoughtContent: null };
                     }
 
 
@@ -10094,7 +10106,7 @@
                         });
                     } catch (error) {
                         encodingError = true;
-                                                await uiUtils.showCustomAlert(`ファイル "${item.file.name}" の処理中にエラーが発生しました。`);
+                        await uiUtils.showCustomAlert(`ファイル "${item.file.name}" の処理中にエラーが発生しました。`);
                         break;
                     }
                 }
@@ -10327,10 +10339,15 @@
 
                     const responseFromB = await this.handleSend(false, -1, contextForB);
                     if (responseFromB === "APIキー未設定") throw new Error("APIキーが設定されていません。");
-                    if (!responseFromB || !responseFromB.content) {
-                        throw new Error(`セッションB (${sessionB_Id}) からの応答がありませんでした。`);
+
+                    let inputForA = responseFromB.content;
+                    if (!inputForA && providerForSettingsB === 'deepseek' && contextForB.includeThoughts && responseFromB.thoughtContent) {
+                        inputForA = responseFromB.thoughtContent;
                     }
-                    const inputForA = responseFromB.content;
+
+                    if (!inputForA) {
+                        throw new Error(`セッションB (${sessionB_Id}) からの応答がありませんでした。(${responseFromB.metadata?.finishReason || '理由不明'})`);
+                    }
 
                     uiUtils.setAiToAiProcessingState(true, "AI間会話処理中 (ステップ2/2)...");
 
@@ -10663,28 +10680,27 @@
                 let finalFinishReason = null;
                 let isCancelled = false;
                 let accumulatedFullReasoningContent = "";
+                let streamExplicitlyDone = false;
 
                 try {
                     while (true) {
                         if (state.abortController?.signal.aborted && !isCancelled) {
                             isCancelled = true;
-                            await reader.cancel("User aborted");
+                            try { await reader.cancel("User aborted"); } catch(e) {}
                             throw new Error("リクエストがキャンセルされました。");
                         }
+                         if (streamExplicitlyDone) break;
 
                         const { value, done } = await reader.read();
-                        if (done) break;
+
+                        if (done) {
+                            streamExplicitlyDone = true;
+                            break;
+                        }
 
                         buffer += value;
                         let eolIndex;
-                        let processingBuffer = true;
-                        while (processingBuffer) {
-                            eolIndex = buffer.indexOf('\n');
-                            if (eolIndex === -1) {
-                                processingBuffer = false;
-                                continue;
-                            }
-
+                        while ((eolIndex = buffer.indexOf('\n')) !== -1) {
                             const line = buffer.substring(0, eolIndex).trim();
                             buffer = buffer.substring(eolIndex + 1);
 
@@ -10692,7 +10708,7 @@
                                 const jsonData = line.substring(6);
                                 if (jsonData.trim() === '[DONE]') {
                                     finalFinishReason = finalFinishReason || 'stop';
-                                    processingBuffer = false;
+                                    streamExplicitlyDone = true;
                                     break;
                                 }
                                 try {
@@ -10723,10 +10739,31 @@
                                 } catch (e) {
                                 }
                             }
-                            if (finalFinishReason && finalFinishReason !== 'null' && processingBuffer) break;
+                             if (streamExplicitlyDone) break;
                         }
-                         if (finalFinishReason && finalFinishReason !== 'null') break;
+                         if (streamExplicitlyDone) break;
                     }
+
+                    if (buffer.trim().startsWith('data: ')) {
+                        const jsonData = buffer.trim().substring(6);
+                        try {
+                            const chunk = JSON.parse(jsonData);
+                            if (chunk.choices && chunk.choices[0] && chunk.choices[0].delta) {
+                                const delta = chunk.choices[0].delta;
+                                if (delta.reasoning_content) {
+                                    accumulatedFullReasoningContent += delta.reasoning_content;
+                                    yield { type: 'chunk', contentText: null, thoughtText: delta.reasoning_content };
+                                } else if (delta.content) {
+                                    yield { type: 'chunk', contentText: delta.content, thoughtText: null };
+                                }
+                            }
+                            if (chunk.choices && chunk.choices[0] && chunk.choices[0].finish_reason) {
+                                finalFinishReason = chunk.choices[0].finish_reason;
+                            }
+                            if (chunk.usage) finalUsage = chunk.usage;
+                        } catch(e) {}
+                    }
+
 
                     yield {
                         type: 'metadata',
@@ -10740,7 +10777,11 @@
                         fullReasoningContent: accumulatedFullReasoningContent || null
                     };
                 } catch (error) {
-                    yield { type: 'error', error: { message: error.message }, message: error.message };
+                    if (isCancelled) {
+                        yield { type: 'metadata', finishReason: 'ABORTED', safetyRatings: null, groundingMetadata: null, usageMetadata: null, fullReasoningContent: accumulatedFullReasoningContent || null };
+                    } else {
+                        yield { type: 'error', error: { message: error.message, name: error.name }, message: error.message };
+                    }
                 } finally {
                     if (!reader.closed && !isCancelled) {
                         try { await reader.cancel("Stream processing ended."); } catch (e) { }
