@@ -4722,7 +4722,7 @@
                                                  (messageApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts);
                 let expandThoughtsForProvider = (messageApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) ||
                                                   (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault);
-                
+
                 if (messageData && messageData.thoughtSummaryOpen !== undefined) {
                     expandThoughtsForProvider = messageData.thoughtSummaryOpen;
                 }
@@ -4731,11 +4731,12 @@
                 if (role === 'model' && includeThoughtsForProvider && (messageData?.thoughtSummary || messageData?.deepSeekThoughtSummary || isStreamingPlaceholder)) {
                     const thoughtDetails = document.createElement('details');
                     thoughtDetails.classList.add('thought-summary-details');
+                    thoughtDetails.dataset.messageIndex = index;
                     if (expandThoughtsForProvider) {
                         thoughtDetails.open = true;
                     }
                     thoughtDetails.addEventListener('toggle', (event) => {
-                        if(state.currentMessages[index]) {
+                         if (state.currentMessages[index]) {
                             state.currentMessages[index].thoughtSummaryOpen = event.target.open;
                              if(!state.isSending && !state.isAiToAiChatProcessing) {
                                 dbUtils.saveChat();
@@ -4794,6 +4795,10 @@
 
                 const contentDiv = document.createElement('div');
                 contentDiv.classList.add('message-content');
+                if (isStreamingPlaceholder) {
+                    contentDiv.id = `streaming-content-${index}`;
+                }
+
 
                 if (isCurrentlyCollapsed) {
                     contentDiv.classList.add('collapsed');
@@ -4851,123 +4856,13 @@
                 }
                 messageDiv.appendChild(contentDiv);
 
-                if (role === 'model' && messageApiProvider === 'gemini' && messageData && messageData.groundingMetadata &&
-                    ( (messageData.groundingMetadata.groundingChunks && messageData.groundingMetadata.groundingChunks.length > 0) ||
-                      (messageData.groundingMetadata.webSearchQueries && messageData.groundingMetadata.webSearchQueries.length > 0) )
-                   )
-                {
-                    try {
-                        const details = document.createElement('details');
-                        details.classList.add('citation-details');
-                        const summary = document.createElement('summary');
-                        summary.textContent = '引用元/検索クエリ';
-                        details.appendChild(summary);
-                        let detailsHasContent = false;
-
-                        if (messageData.groundingMetadata.groundingChunks && messageData.groundingMetadata.groundingChunks.length > 0) {
-                            const citationList = document.createElement('ul');
-                            citationList.classList.add('citation-list');
-
-                            const citationMap = new Map();
-                            let displayIndexCounter = 1;
-
-                            if (messageData.groundingMetadata.groundingSupports) {
-                                messageData.groundingMetadata.groundingSupports.forEach(support => {
-                                    if (support.groundingChunkIndices) {
-                                        support.groundingChunkIndices.forEach(chunkIndex => {
-                                            if (!citationMap.has(chunkIndex) && chunkIndex >= 0 && chunkIndex < messageData.groundingMetadata.groundingChunks.length) {
-                                                const chunk = messageData.groundingMetadata.groundingChunks[chunkIndex];
-                                                if (chunk?.web?.uri) {
-                                                    citationMap.set(chunkIndex, {
-                                                        uri: chunk.web.uri,
-                                                        title: chunk.web.title || 'タイトル不明',
-                                                        displayIndex: displayIndexCounter++
-                                                    });
-                                                }
-                                            }
-                                        });
-                                    }
-                                });
-                            }
-
-                            const sortedCitations = Array.from(citationMap.entries())
-                                                        .sort(([, a], [, b]) => a.displayIndex - b.displayIndex);
-
-                            sortedCitations.forEach(([chunkIndex, citationInfo]) => {
-                                const listItem = document.createElement('li');
-                                const link = document.createElement('a');
-                                link.href = citationInfo.uri;
-                                link.textContent = `[${citationInfo.displayIndex}] ${citationInfo.title}`;
-                                link.title = citationInfo.title;
-                                link.target = '_blank';
-                                link.rel = 'noopener noreferrer';
-                                listItem.appendChild(link);
-                                citationList.appendChild(listItem);
-                            });
-
-                            if (sortedCitations.length === 0) {
-                                 messageData.groundingMetadata.groundingChunks.forEach((chunk, idx) => {
-                                     if (chunk?.web?.uri) {
-                                         const listItem = document.createElement('li');
-                                         const link = document.createElement('a');
-                                         link.href = chunk.web.uri;
-                                         link.textContent = chunk.web.title || `ソース ${idx + 1}`;
-                                         link.title = chunk.web.title || 'タイトル不明';
-                                         link.target = '_blank';
-                                         link.rel = 'noopener noreferrer';
-                                         listItem.appendChild(link);
-                                         citationList.appendChild(listItem);
-                                     }
-                                 });
-                            }
-
-                            if (citationList.hasChildNodes()) {
-                                details.appendChild(citationList);
-                                detailsHasContent = true;
-                            }
-                        }
-
-                        if (messageData.groundingMetadata.webSearchQueries && messageData.groundingMetadata.webSearchQueries.length > 0) {
-                            if (detailsHasContent) {
-                                const separator = document.createElement('hr');
-                                separator.style.marginTop = '10px';
-                                separator.style.marginBottom = '8px';
-                                separator.style.border = 'none';
-                                separator.style.borderTop = '1px dashed var(--border-tertiary)';
-                                details.appendChild(separator);
-                            }
-                            const queryHeader = document.createElement('div');
-                            queryHeader.textContent = '検索に使用されたクエリ:';
-                            queryHeader.style.fontWeight = '500';
-                            queryHeader.style.marginTop = detailsHasContent ? '0' : '8px';
-                            queryHeader.style.marginBottom = '4px';
-                            queryHeader.style.fontSize = '11px';
-                            queryHeader.style.color = 'var(--text-secondary)';
-                            details.appendChild(queryHeader);
-
-                            const queryList = document.createElement('ul');
-                            queryList.classList.add('search-query-list');
-                            queryList.style.listStyle = 'none';
-                            queryList.style.paddingLeft = '0';
-                            queryList.style.margin = '0';
-                            queryList.style.fontSize = '11px';
-                            queryList.style.color = 'var(--text-secondary)';
-                            messageData.groundingMetadata.webSearchQueries.forEach(query => {
-                                const queryItem = document.createElement('li');
-                                queryItem.textContent = `• ${query}`;
-                                queryItem.style.marginBottom = '3px';
-                                queryList.appendChild(queryItem);
-                            });
-                            details.appendChild(queryList);
-                            detailsHasContent = true;
-                        }
-
-                        if (detailsHasContent) {
-                            contentDiv.appendChild(details);
-                        }
-                    } catch (e) {
-                    }
+                const citationDetailsDiv = document.createElement('div');
+                citationDetailsDiv.classList.add('citation-details-container');
+                if (isStreamingPlaceholder) {
+                    citationDetailsDiv.id = `streaming-citations-${index}`;
                 }
+                messageDiv.appendChild(citationDetailsDiv);
+                this.renderCitations(messageData, citationDetailsDiv);
 
 
                 const editArea = document.createElement('div');
@@ -5089,6 +4984,118 @@
                 }
                 elements.messageContainer.appendChild(messageDiv);
             },
+            renderCitations(messageData, containerDiv) {
+                if (!containerDiv) return;
+                containerDiv.innerHTML = ''; // Clear previous citations
+
+                const messageApiProvider = messageData?.generatedByApiProvider || state.settings.apiProvider;
+                if (messageApiProvider === 'gemini' && messageData && messageData.groundingMetadata &&
+                    ((messageData.groundingMetadata.groundingChunks && messageData.groundingMetadata.groundingChunks.length > 0) ||
+                     (messageData.groundingMetadata.webSearchQueries && messageData.groundingMetadata.webSearchQueries.length > 0)))
+                {
+                    const details = document.createElement('details');
+                    details.classList.add('citation-details');
+                    const summary = document.createElement('summary');
+                    summary.textContent = '引用元/検索クエリ';
+                    details.appendChild(summary);
+                    let detailsHasContent = false;
+
+                    if (messageData.groundingMetadata.groundingChunks && messageData.groundingMetadata.groundingChunks.length > 0) {
+                        const citationList = document.createElement('ul');
+                        citationList.classList.add('citation-list');
+                        const citationMap = new Map();
+                        let displayIndexCounter = 1;
+
+                        if (messageData.groundingMetadata.groundingSupports) {
+                            messageData.groundingMetadata.groundingSupports.forEach(support => {
+                                if (support.groundingChunkIndices) {
+                                    support.groundingChunkIndices.forEach(chunkIndex => {
+                                        if (!citationMap.has(chunkIndex) && chunkIndex >= 0 && chunkIndex < messageData.groundingMetadata.groundingChunks.length) {
+                                            const chunk = messageData.groundingMetadata.groundingChunks[chunkIndex];
+                                            if (chunk?.web?.uri) {
+                                                citationMap.set(chunkIndex, {
+                                                    uri: chunk.web.uri,
+                                                    title: chunk.web.title || 'タイトル不明',
+                                                    displayIndex: displayIndexCounter++
+                                                });
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                        const sortedCitations = Array.from(citationMap.entries()).sort(([, a], [, b]) => a.displayIndex - b.displayIndex);
+                        sortedCitations.forEach(([chunkIndex, citationInfo]) => {
+                            const listItem = document.createElement('li');
+                            const link = document.createElement('a');
+                            link.href = citationInfo.uri;
+                            link.textContent = `[${citationInfo.displayIndex}] ${citationInfo.title}`;
+                            link.title = citationInfo.title;
+                            link.target = '_blank';
+                            link.rel = 'noopener noreferrer';
+                            listItem.appendChild(link);
+                            citationList.appendChild(listItem);
+                        });
+                        if (sortedCitations.length === 0) {
+                             messageData.groundingMetadata.groundingChunks.forEach((chunk, idx) => {
+                                 if (chunk?.web?.uri) {
+                                     const listItem = document.createElement('li');
+                                     const link = document.createElement('a');
+                                     link.href = chunk.web.uri;
+                                     link.textContent = chunk.web.title || `ソース ${idx + 1}`;
+                                     link.title = chunk.web.title || 'タイトル不明';
+                                     link.target = '_blank';
+                                     link.rel = 'noopener noreferrer';
+                                     listItem.appendChild(link);
+                                     citationList.appendChild(listItem);
+                                 }
+                             });
+                        }
+                        if (citationList.hasChildNodes()) {
+                            details.appendChild(citationList);
+                            detailsHasContent = true;
+                        }
+                    }
+
+                    if (messageData.groundingMetadata.webSearchQueries && messageData.groundingMetadata.webSearchQueries.length > 0) {
+                        if (detailsHasContent) {
+                            const separator = document.createElement('hr');
+                            separator.style.marginTop = '10px';
+                            separator.style.marginBottom = '8px';
+                            separator.style.border = 'none';
+                            separator.style.borderTop = '1px dashed var(--border-tertiary)';
+                            details.appendChild(separator);
+                        }
+                        const queryHeader = document.createElement('div');
+                        queryHeader.textContent = '検索に使用されたクエリ:';
+                        queryHeader.style.fontWeight = '500';
+                        queryHeader.style.marginTop = detailsHasContent ? '0' : '8px';
+                        queryHeader.style.marginBottom = '4px';
+                        queryHeader.style.fontSize = '11px';
+                        queryHeader.style.color = 'var(--text-secondary)';
+                        details.appendChild(queryHeader);
+
+                        const queryList = document.createElement('ul');
+                        queryList.classList.add('search-query-list');
+                        queryList.style.listStyle = 'none';
+                        queryList.style.paddingLeft = '0';
+                        queryList.style.margin = '0';
+                        queryList.style.fontSize = '11px';
+                        queryList.style.color = 'var(--text-secondary)';
+                        messageData.groundingMetadata.webSearchQueries.forEach(query => {
+                            const queryItem = document.createElement('li');
+                            queryItem.textContent = `• ${query}`;
+                            queryItem.style.marginBottom = '3px';
+                            queryList.appendChild(queryItem);
+                        });
+                        details.appendChild(queryList);
+                        detailsHasContent = true;
+                    }
+                    if (detailsHasContent) {
+                        containerDiv.appendChild(details);
+                    }
+                }
+            },
             addCopyButtonsToCodeBlocks(contentDiv) {
                 const codeBlocks = contentDiv.querySelectorAll('pre');
                 codeBlocks.forEach(preElement => {
@@ -5148,7 +5155,7 @@
                         return;
                     }
                 } else {
-                    targetContentDiv = messageDiv.querySelector('.message-content');
+                    targetContentDiv = messageDiv.querySelector(`#streaming-content-${index}`);
                     if (selectedApiProvider === 'gemini') {
                         accumulatedContentForDisplay = state.partialStreamContent;
                     } else {
@@ -5200,6 +5207,13 @@
                         renderCurrentState(accumulatedContentForDisplay);
                     }
                 }
+                if (!isThoughtSummary && state.currentMessages[index]?.groundingMetadata && selectedApiProvider === 'gemini') {
+                    const citationContainer = messageDiv.querySelector(`#streaming-citations-${index}`);
+                    if (citationContainer) {
+                        this.renderCitations(state.currentMessages[index], citationContainer);
+                    }
+                }
+
 
                 const autoScrollEnabledForThisContentType = isThoughtSummary
                     ? state.settings.autoScrollOnThought
@@ -5243,7 +5257,7 @@
                     }
 
 
-                    const contentDiv = messageDiv.querySelector('.message-content');
+                    const contentDiv = messageDiv.querySelector(`#streaming-content-${index}`);
                     const finalRawContent = finalMessageData.content || '';
                     if (contentDiv && typeof marked !== 'undefined') {
                          try {
@@ -5258,12 +5272,16 @@
                     } else if (contentDiv) {
                         contentDiv.textContent = finalRawContent;
                     }
-                    messageDiv.removeAttribute('id');
+                    if(contentDiv) contentDiv.removeAttribute('id');
 
-                    if (role === 'model' && messageApiProvider === 'gemini' && finalMessageData.groundingMetadata) {
-                         this.appendMessage(finalMessageData.role, finalMessageData.content, index, false, null, finalMessageData.attachments);
+                    const citationContainer = messageDiv.querySelector(`#streaming-citations-${index}`);
+                    if (citationContainer) {
+                        this.renderCitations(finalMessageData, citationContainer);
+                        citationContainer.removeAttribute('id');
                     }
 
+
+                    messageDiv.removeAttribute('id');
 
                     const msgData = state.currentMessages[index];
                     if (msgData && msgData.role === 'model' && msgData.isCascaded) {
@@ -5782,6 +5800,7 @@
                 elements.deepSeekDummyModelInput.value = state.settings.deepSeekDummyModel || '';
                 elements.deepSeekEnableDummyModelCheckbox.checked = state.settings.deepSeekEnableDummyModel;
                 elements.deepSeekConcatDummyModelCheckbox.checked = state.settings.deepSeekConcatDummyModel;
+
 
                 elements.enterToSendCheckbox.checked = state.settings.enterToSend;
                 elements.autoScrollOnNewMessageCheckbox.checked = state.settings.autoScrollOnNewMessage;
@@ -8212,7 +8231,12 @@
                                     modelResponseMetadata.finishReason = 'ABORTED';
                                     throw new Error("リクエストがキャンセルされました。");
                                 }
-                                if (streamData.groundingMetadata && selectedApiProvider === 'gemini') currentGroundingMetadata = streamData.groundingMetadata;
+                                if (streamData.groundingMetadata && selectedApiProvider === 'gemini') {
+                                    currentGroundingMetadata = streamData.groundingMetadata;
+                                    if (!isBackgroundProcess && state.currentMessages[tempPlaceholderIndex]) {
+                                        state.currentMessages[tempPlaceholderIndex].groundingMetadata = currentGroundingMetadata;
+                                    }
+                                }
                                 if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
 
                             } else if (streamData.type === 'metadata') {
@@ -9079,7 +9103,6 @@
                  if (newSettings.diceMinValue !== null && newSettings.diceMaxValue !== null && newSettings.diceMinValue > newSettings.diceMaxValue) {
                     newSettings.diceMaxValue = newSettings.diceMinValue;
                  }
-
                  document.querySelectorAll('#settings-screen details[id]').forEach(details => {
                     newSettings.settingsUIDetailsOpenStates[details.id] = details.open;
                  });
@@ -9188,7 +9211,7 @@
                                 if(key.toLowerCase().includes('systemprompt')) defaultSettingsCopy[key] = '';
                                 else if(key.toLowerCase().includes('enablesystempromptdefault')) defaultSettingsCopy[key] = true;
                                 else if(key.toLowerCase().includes('temperature') || key.toLowerCase().includes('maxtokens') || key.toLowerCase().includes('topk') || key.toLowerCase().includes('topp') || key.toLowerCase().includes('penalty') || key.toLowerCase().includes('budget')) defaultSettingsCopy[key] = null;
-                                                                else if(key.toLowerCase().includes('streamingoutput')) defaultSettingsCopy[key] = true;
+                                else if(key.toLowerCase().includes('streamingoutput')) defaultSettingsCopy[key] = true;
                                 else if(key.toLowerCase().includes('streamingspeed')) defaultSettingsCopy[key] = DEFAULT_STREAMING_SPEED;
                                 else if(key.toLowerCase().includes('dummyuser') || key.toLowerCase().includes('dummymodel')) defaultSettingsCopy[key] = '';
                                 else if(key.toLowerCase().includes('enabledummyuser') || key.toLowerCase().includes('enabledummymodel')) defaultSettingsCopy[key] = true;
@@ -10058,7 +10081,7 @@
                         });
                     } catch (error) {
                         encodingError = true;
-                        await uiUtils.showCustomAlert(`ファイル "${item.file.name}" の処理中にエラーが発生しました。`);
+                                                await uiUtils.showCustomAlert(`ファイル "${item.file.name}" の処理中にエラーが発生しました。`);
                         break;
                     }
                 }
@@ -10717,3 +10740,4 @@
     </script>
 </body>
 </html>
+                       
