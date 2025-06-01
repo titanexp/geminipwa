@@ -3149,7 +3149,7 @@
                                     <input type="number" id="deepseek-frequency-penalty" step="0.1" min="-2.0" max="2.0" placeholder="例:0.0 (-2.0～2.0)" aria-label="DeepSeek Frequency Penalty">
                                 </div>
                             </div>
-                             <div id="deepseek-thoughts-param">
+                             <div id="deepseek-thoughts-param-inner">
                                <h3 style="margin-top:15px; margin-bottom:10px; font-size:14px; border:0; padding:0;">思考プロセス</h3>
                                <label class="checkbox-label">
                                    <input type="checkbox" id="deepseek-include-thoughts-toggle">
@@ -3198,7 +3198,7 @@
                        </label>
                        <label for="gemini-streaming-speed">文字送り速度 (ミリ秒/文字):</label>
                        <input type="number" id="gemini-streaming-speed" min="0" step="1" placeholder="例: 30 (0で無効)" aria-label="Gemini 文字送り速度">
-                       <div id="gemini-pseudo-streaming-param">
+                       <div id="gemini-pseudo-streaming-param-inner">
                            <label class="checkbox-label" style="margin-top: 10px;">
                                <input type="checkbox" id="gemini-pseudo-streaming">
                                疑似ストリーミングを使用 (ストリーミングON時のみ有効)
@@ -3245,7 +3245,7 @@
                 </details>
 
 
-                <div id="gemini-grounding-param" class="settings-group">
+                <div id="gemini-grounding-param-outer" class="settings-group">
                     <h3>検索 (Gemini)</h3>
                     <label class="checkbox-label">
                         <input type="checkbox" id="gemini-enable-grounding-toggle">
@@ -4013,10 +4013,7 @@
             toggleButtonBottomTextCollapseInput: document.getElementById('toggle-button-bottom-text-collapse'),
             toggleButtonBottomTextExpandInput: document.getElementById('toggle-button-bottom-text-expand'),
             toggleButtonTopOpacityInput: document.getElementById('toggle-button-top-opacity'),
-            geminiGroundingParam: document.getElementById('gemini-grounding-param'),
-            geminiThoughtsParam: document.getElementById('gemini-thoughts-param'),
-            geminiPseudoStreamingParam: document.getElementById('gemini-pseudo-streaming-param'),
-            deepSeekThoughtsParam: document.getElementById('deepseek-thoughts-param'),
+            geminiGroundingParamOuter: document.getElementById('gemini-grounding-param-outer'),
             disableSaveSettingsConfirmationToggle: document.getElementById('disable-save-settings-confirmation-toggle'),
         };
 
@@ -5926,7 +5923,7 @@
                 elements.geminiAdvancedGroup.classList.toggle('hidden', !showGemini);
                 elements.deepseekAdvancedGroup.classList.toggle('hidden', showGemini);
 
-                elements.geminiGroundingParam.classList.toggle('hidden', !showGemini);
+                elements.geminiGroundingParamOuter.classList.toggle('hidden', !showGemini);
             },
             updateChatScreenElementVisibility() {
                 if (elements.chatTitle) {
@@ -7498,14 +7495,7 @@
                         if (chat.systemPrompt !== undefined) {
                              state.currentSystemPrompt = chat.systemPrompt;
                         } else {
-                            const currentProvider = state.settings.apiProvider;
-                             if (currentProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
-                                state.currentSystemPrompt = state.settings.geminiSystemPrompt || '';
-                            } else if (currentProvider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
-                                state.currentSystemPrompt = state.settings.deepSeekSystemPrompt || '';
-                            } else {
-                                state.currentSystemPrompt = '';
-                            }
+                            state.currentSystemPrompt = '';
                         }
 
                         state.pendingAttachments = [];
@@ -7816,11 +7806,7 @@
                 if (isBackgroundProcess) {
                     currentContextSystemPrompt = sourceSessionContext.systemPrompt;
                 } else {
-                    if (selectedApiProvider === 'gemini') {
-                        currentContextSystemPrompt = state.settings.geminiEnableSystemPromptDefault ? state.settings.geminiSystemPrompt : state.currentSystemPrompt;
-                    } else if (selectedApiProvider === 'deepseek') {
-                        currentContextSystemPrompt = state.settings.deepSeekEnableSystemPromptDefault ? state.settings.deepSeekSystemPrompt : state.currentSystemPrompt;
-                    }
+                    currentContextSystemPrompt = state.currentSystemPrompt;
                 }
 
                 let contextTemperature, contextMaxTokens, contextTopP,
@@ -7855,7 +7841,7 @@
                         contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.geminiConcatDummyModel;
                         contextGeminiPseudoStreaming = sourceSessionContext.pseudoStreaming ?? state.settings.geminiPseudoStreaming;
                         contextGeminiEnableGrounding = sourceSessionContext.enableGrounding ?? state.settings.geminiEnableGrounding;
-                    } else {
+                    } else { // deepseek
                         contextTemperature = sourceSessionContext.temperature ?? state.settings.deepSeekTemperature;
                         contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.deepSeekMaxTokens;
                         contextTopP = sourceSessionContext.topP ?? state.settings.deepSeekTopP;
@@ -7889,7 +7875,7 @@
                         contextConcatDummyModel = state.settings.geminiConcatDummyModel;
                         contextGeminiPseudoStreaming = state.settings.geminiPseudoStreaming;
                         contextGeminiEnableGrounding = state.settings.geminiEnableGrounding;
-                    } else {
+                    } else { // deepseek
                         contextTemperature = state.settings.deepSeekTemperature;
                         contextMaxTokens = state.settings.deepSeekMaxTokens;
                         contextTopP = state.settings.deepSeekTopP;
@@ -8169,7 +8155,7 @@
                 let currentGroundingMetadata = null;
                 let finalUsageMetadataFromStream = null;
 
-                let useStreamingForThisCall = isBackgroundProcess ? false : (selectedApiProvider === 'gemini' ? contextGeminiStreamingOutput : contextDeepSeekStreamingOutput);
+                let useStreamingForThisCall = isBackgroundProcess ? false : contextStreamingOutput;
                 let usePseudoForThisCall = isBackgroundProcess ? false : (selectedApiProvider === 'gemini' && contextGeminiPseudoStreaming);
 
                 try {
@@ -8201,7 +8187,7 @@
                             tempPlaceholderIndex = state.currentMessages.length;
                             uiUtils.appendMessage('model', '', tempPlaceholderIndex, true);
                         }
-                        const currentContextStreamSpeed = selectedApiProvider === 'gemini' ? contextGeminiStreamingSpeed : contextDeepSeekStreamingSpeed;
+                        const currentContextStreamSpeed = contextStreamingSpeed;
 
 
                         for await (const streamData of responseStreamIterator) {
@@ -8349,24 +8335,9 @@
                     }
 
                     if (isBackgroundProcess) {
-                        let returnContent = modelResponseRawContent;
-                        const providerForBgSettings = sourceSessionContext.apiProvider || state.settings.apiProvider;
-                        const includeThoughtsForCurrentProvider =
-                            (providerForBgSettings === 'gemini' && (sourceSessionContext.includeThoughts ?? state.settings.geminiIncludeThoughts)) ||
-                            (providerForBgSettings === 'deepseek' && (sourceSessionContext.includeDeepSeekThoughts ?? state.settings.deepSeekIncludeDeepSeekThoughts));
-
-                        if (providerForBgSettings === 'deepseek' &&
-                            includeThoughtsForCurrentProvider &&
-                            modelThoughtSummaryContent &&
-                            (!modelResponseRawContent || modelResponseRawContent.trim() === '')
-                           ) {
-                            returnContent = modelThoughtSummaryContent;
-                        }
-
                         if (modelResponseRawContent || modelThoughtSummaryContent || modelResponseMetadata.finishReason) {
                              const bgModelMessage = {
-                                 role: 'model',
-                                 content: returnContent,
+                                 role: 'model', content: modelResponseRawContent,
                                  timestamp: Date.now(),
                                  ...modelResponseMetadata,
                                  usageMetadata: finalUsageMetadataFromStream,
@@ -8379,6 +8350,7 @@
                                  bgModelMessage.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                              }
                               bgModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault);
+
 
                              currentContextMessages.push(bgModelMessage);
                              const chatToSaveBg = {
@@ -8414,7 +8386,7 @@
                                 request.onsuccess = () => resolve();
                                 request.onerror = (event) => reject(`チャット保存putエラー(BG): ${event.target.error.name} - ${event.target.error.message}`);
                              });
-                             return { content: returnContent, metadata: modelResponseMetadata };
+                             return { content: modelResponseRawContent, metadata: modelResponseMetadata };
                         }
                         return { content: "", metadata: modelResponseMetadata };
                     }
@@ -10217,7 +10189,7 @@
 
                 const messages = elements.messageContainer.querySelectorAll('.message:not(.message-error)');
                 messages.forEach(msgElement => {
-                    if (msgElement.id && msgElement.id.startsWith('streaming-message-')) {
+                                    if (msgElement.id && msgElement.id.startsWith('streaming-message-')) {
                         msgElement.classList.remove('message-hidden-by-toggle');
                         return;
                     }
@@ -10255,12 +10227,18 @@
                     await uiUtils.showCustomAlert("AI間会話を実行するには、現在のチャットを含む2つのセッションをリンクしてください。");
                     return;
                 }
-                const selectedApiProvider = state.settings.apiProvider;
-                 if ((selectedApiProvider === 'gemini' && !state.settings.apiKey) || (selectedApiProvider === 'deepseek' && !state.settings.deepSeekApiKey)) {
-                    await uiUtils.showCustomAlert("選択中のAPIプロバイダーのAPIキーが設定されていません。");
+
+                const currentProvider = state.settings.apiProvider;
+                if (currentProvider === 'gemini' && !state.settings.apiKey) {
+                    await uiUtils.showCustomAlert("Gemini APIキーが設定されていません。");
+                    uiUtils.showScreen('settings');
+                    return;
+                } else if (currentProvider === 'deepseek' && !state.settings.deepSeekApiKey) {
+                    await uiUtils.showCustomAlert("DeepSeek APIキーが設定されていません。");
                     uiUtils.showScreen('settings');
                     return;
                 }
+
 
                 uiUtils.setAiToAiProcessingState(true, "AI間会話処理中 (ステップ1/2)...");
 
@@ -10284,72 +10262,52 @@
                         throw new Error(`セッションB (${sessionB_Id}) のデータが取得できませんでした。`);
                     }
 
-                    let providerForSettingsB, systemPromptB, enableSystemPromptDefaultB, dummyUserB, enableDummyUserB, dummyModelB, enableDummyModelB,
-                        temperatureB, maxTokensB, topPB, presencePenaltyB, frequencyPenaltyB,
-                        streamingOutputB, streamingSpeedB, concatDummyModelB,
-                        geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
-                        deepSeekIncludeThoughtsB;
-
-                        providerForSettingsB = state.settings.apiProvider;
-                        if (providerForSettingsB === 'gemini') {
-                            systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
-                            enableSystemPromptDefaultB = state.settings.geminiEnableSystemPromptDefault;
-                            temperatureB = state.settings.geminiTemperature;
-                            maxTokensB = state.settings.geminiMaxTokens;
-                            geminiTopKB = state.settings.geminiTopK;
-                            topPB = state.settings.geminiTopP;
-                            presencePenaltyB = state.settings.geminiPresencePenalty;
-                            frequencyPenaltyB = state.settings.geminiFrequencyPenalty;
-                            geminiThinkingBudgetB = state.settings.geminiThinkingBudget;
-                            geminiIncludeThoughtsB = state.settings.geminiIncludeThoughts;
-                            streamingOutputB = state.settings.geminiStreamingOutput;
-                            streamingSpeedB = state.settings.geminiStreamingSpeed;
-                            dummyUserB = state.settings.geminiDummyUser;
-                            enableDummyUserB = state.settings.geminiEnableDummyUser;
-                            dummyModelB = state.settings.geminiDummyModel;
-                            enableDummyModelB = state.settings.geminiEnableDummyModel;
-                            concatDummyModelB = state.settings.geminiConcatDummyModel;
-                            geminiPseudoStreamingB = state.settings.geminiPseudoStreaming;
-                            geminiEnableGroundingB = state.settings.geminiEnableGrounding;
-                        } else {
-                            systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.deepSeekSystemPrompt;
-                            enableSystemPromptDefaultB = state.settings.deepSeekEnableSystemPromptDefault;
-                            temperatureB = state.settings.deepSeekTemperature;
-                            maxTokensB = state.settings.deepSeekMaxTokens;
-                            topPB = state.settings.deepSeekTopP;
-                            presencePenaltyB = state.settings.deepSeekPresencePenalty;
-                            frequencyPenaltyB = state.settings.deepSeekFrequencyPenalty;
-                            deepSeekIncludeThoughtsB = state.settings.deepSeekIncludeDeepSeekThoughts;
-                            streamingOutputB = state.settings.deepSeekStreamingOutput;
-                            streamingSpeedB = state.settings.deepSeekStreamingSpeed;
-                            dummyUserB = state.settings.deepSeekDummyUser;
-                            enableDummyUserB = state.settings.deepSeekEnableDummyUser;
-                            dummyModelB = state.settings.deepSeekDummyModel;
-                            enableDummyModelB = state.settings.deepSeekEnableDummyModel;
-                            concatDummyModelB = state.settings.deepSeekConcatDummyModel;
-                        }
-
-
                     const contextForB = {
                         sessionId: sessionB_Id,
                         messages: sessionB_Data.messages ? [...sessionB_Data.messages] : [],
-                        systemPrompt: systemPromptB,
-                        enableSystemPromptDefault: enableSystemPromptDefaultB,
-                        temperature: temperatureB, maxTokens: maxTokensB, topP: topPB,
-                        presencePenalty: presencePenaltyB, frequencyPenalty: frequencyPenaltyB,
-                        streamingOutput: streamingOutputB, streamingSpeed: streamingSpeedB,
-                        dummyUser: dummyUserB, enableDummyUser: enableDummyUserB,
-                        dummyModel: dummyModelB, enableDummyModel: enableDummyModelB, concatDummyModel: concatDummyModelB,
-                        topK: providerForSettingsB === 'gemini' ? geminiTopKB : undefined,
-                        thinkingBudget: providerForSettingsB === 'gemini' ? geminiThinkingBudgetB : undefined,
-                        includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : undefined,
-                        includeDeepSeekThoughts: providerForSettingsB === 'deepseek' ? deepSeekIncludeThoughtsB : undefined,
-                        pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
-                        enableGrounding: providerForSettingsB === 'gemini' ? geminiEnableGroundingB : undefined,
                         inputText: inputForB,
                         attachments: [],
-                        apiProvider: providerForSettingsB
+                        apiProvider: state.settings.apiProvider
                     };
+
+                    if (state.settings.apiProvider === 'gemini') {
+                        contextForB.systemPrompt = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
+                        contextForB.enableSystemPromptDefault = state.settings.geminiEnableSystemPromptDefault;
+                        contextForB.temperature = state.settings.geminiTemperature;
+                        contextForB.maxTokens = state.settings.geminiMaxTokens;
+                        contextForB.topK = state.settings.geminiTopK;
+                        contextForB.topP = state.settings.geminiTopP;
+                        contextForB.presencePenalty = state.settings.geminiPresencePenalty;
+                        contextForB.frequencyPenalty = state.settings.geminiFrequencyPenalty;
+                        contextForB.thinkingBudget = state.settings.geminiThinkingBudget;
+                        contextForB.includeThoughts = state.settings.geminiIncludeThoughts;
+                        contextForB.streamingOutput = state.settings.geminiStreamingOutput;
+                        contextForB.streamingSpeed = state.settings.geminiStreamingSpeed;
+                        contextForB.dummyUser = state.settings.geminiDummyUser;
+                        contextForB.enableDummyUser = state.settings.geminiEnableDummyUser;
+                        contextForB.dummyModel = state.settings.geminiDummyModel;
+                        contextForB.enableDummyModel = state.settings.geminiEnableDummyModel;
+                        contextForB.concatDummyModel = state.settings.geminiConcatDummyModel;
+                        contextForB.pseudoStreaming = state.settings.geminiPseudoStreaming;
+                        contextForB.enableGrounding = state.settings.geminiEnableGrounding;
+                    } else { // deepseek
+                        contextForB.systemPrompt = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.deepSeekSystemPrompt;
+                        contextForB.enableSystemPromptDefault = state.settings.deepSeekEnableSystemPromptDefault;
+                        contextForB.temperature = state.settings.deepSeekTemperature;
+                        contextForB.maxTokens = state.settings.deepSeekMaxTokens;
+                        contextForB.topP = state.settings.deepSeekTopP;
+                        contextForB.presencePenalty = state.settings.deepSeekPresencePenalty;
+                        contextForB.frequencyPenalty = state.settings.deepSeekFrequencyPenalty;
+                        contextForB.includeDeepSeekThoughts = state.settings.deepSeekIncludeDeepSeekThoughts;
+                        contextForB.streamingOutput = state.settings.deepSeekStreamingOutput;
+                        contextForB.streamingSpeed = state.settings.deepSeekStreamingSpeed;
+                        contextForB.dummyUser = state.settings.deepSeekDummyUser;
+                        contextForB.enableDummyUser = state.settings.deepSeekEnableDummyUser;
+                        contextForB.dummyModel = state.settings.deepSeekDummyModel;
+                        contextForB.enableDummyModel = state.settings.deepSeekEnableDummyModel;
+                        contextForB.concatDummyModel = state.settings.deepSeekConcatDummyModel;
+                    }
+
 
                     const responseFromB = await this.handleSend(false, -1, contextForB);
                     if (responseFromB === "APIキー未設定") throw new Error("APIキーが設定されていません。");
@@ -10398,18 +10356,6 @@
                 const endpoint = `${GEMINI_API_BASE_URL}${model}:${endpointMethod}key=${apiKey}`;
 
                 const finalGenerationConfig = { ...generationConfig };
-
-                if (state.settings.geminiThinkingBudget !== null || state.settings.geminiIncludeThoughts) {
-                    finalGenerationConfig.thinkingConfig = finalGenerationConfig.thinkingConfig || {};
-                    if (state.settings.geminiThinkingBudget !== null && Number.isInteger(state.settings.geminiThinkingBudget) && state.settings.geminiThinkingBudget >= 0) {
-                        finalGenerationConfig.thinkingConfig.thinkingBudget = state.settings.geminiThinkingBudget;
-                    }
-                    if (state.settings.geminiIncludeThoughts) {
-                        finalGenerationConfig.thinkingConfig.includeThoughts = true;
-                    }
-                     if (Object.keys(finalGenerationConfig.thinkingConfig).length === 0) delete finalGenerationConfig.thinkingConfig;
-                }
-
 
                 const requestBody = {
                     contents: messagesForApi,
