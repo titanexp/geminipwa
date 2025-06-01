@@ -3614,10 +3614,13 @@
                      </p>
                      <details id="settings-group-danger-zone-details">
                          <summary style="cursor: pointer; font-weight: normal; font-size: 14px; color: var(--text-link); margin-bottom: 10px; list-style: revert;">※取り扱い注意項目※</summary>
-                         <label class="checkbox-label" style="margin-top: 10px;">
-                            <input type="checkbox" id="disable-save-settings-confirmation-toggle">
-                            「設定を保存」時の確認ダイアログを無効にする (非推奨)
+                         <label class="checkbox-label" style="margin-top: 10px; margin-bottom: 5px;">
+                             <input type="checkbox" id="disable-save-settings-confirmation-toggle">
+                             「設定を保存しました」通知を無効にする
                          </label>
+                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                             ※ 設定保存時の確認ダイアログを表示しません。
+                         </p>
                          <button id="clear-history-btn" class="orange-button">全履歴削除</button>
                          <p style="font-size: 11px; color: var(--text-secondary); margin-top:5px; margin-bottom: 10px;">
                              ※ ブラウザに保存されているチャット履歴を全て削除します。設定は保持されます。<BR>
@@ -5194,9 +5197,7 @@
                             targetContentDiv.textContent = contentToRender;
                         }
                     };
-                    if (selectedApiProvider === 'gemini') {
-                        renderCurrentState(accumulatedContentForDisplay);
-                    } else if (streamSpeed <= 0 || !textToAnimateForDeepSeek) {
+                    if (selectedApiProvider === 'gemini' || streamSpeed <= 0 || !textToAnimateForDeepSeek) {
                         renderCurrentState(accumulatedContentForDisplay);
                     } else if (selectedApiProvider === 'deepseek' && textToAnimateForDeepSeek) {
                         const baseContent = accumulatedContentForDisplay.slice(0, accumulatedContentForDisplay.length - textToAnimateForDeepSeek.length);
@@ -8035,9 +8036,7 @@
                             ...(msg.isSelected !== undefined && { isSelected: msg.isSelected }),
                             ...(msg.siblingGroupId !== undefined && { siblingGroupId: msg.siblingGroupId }),
                             ...(msg.groundingMetadata && { groundingMetadata: msg.groundingMetadata }),
-                            ...(msg.attachments && msg.attachments.length > 0 && { attachments: msg.attachments.map(att => ({
-                                name: att.name, mimeType: att.mimeType
-                            })) }),
+                            ...(msg.attachments && msg.attachments.length > 0 && { attachments: msg.attachments.map(att => ({ name: att.name, mimeType: att.mimeType })) }),
                             ...(msg.usageMetadata && { usageMetadata: msg.usageMetadata }),
                             ...(msg.thoughtSummaryOpen !== undefined && { thoughtSummaryOpen: msg.thoughtSummaryOpen }),
                         })),
@@ -9117,69 +9116,66 @@
                     newSettings.settingsUIDetailsOpenStates[details.id] = details.open;
                  });
 
-                 let confirmedSave = true;
-                 if (!newSettings.disableSaveSettingsConfirmation) {
-                    confirmedSave = await uiUtils.showCustomConfirm("設定を保存しますか？");
-                 }
 
-                 if (confirmedSave) {
-                     try {
-                         const oldSortOrder = state.settings.historySortOrder;
-                         const { backgroundImageBlob, userIconBlob, aiIconBlob, ...settingsToSave } = newSettings;
+                 try {
+                     const oldSortOrder = state.settings.historySortOrder;
+                     const { backgroundImageBlob, userIconBlob, aiIconBlob, ...settingsToSave } = newSettings;
 
-                         const promises = Object.entries(settingsToSave).map(([key, value]) =>
-                             dbUtils.saveSetting(key, value)
-                         );
+                     const promises = Object.entries(settingsToSave).map(([key, value]) =>
+                         dbUtils.saveSetting(key, value)
+                     );
 
-                         const currentSettingsFromDB = await dbUtils.loadSettings();
-                         if (state.settings.backgroundImageBlob !== currentSettingsFromDB.backgroundImageBlob) {
-                             promises.push(dbUtils.saveSetting('backgroundImageBlob', state.settings.backgroundImageBlob));
-                         }
-                         if (state.settings.userIconBlob !== currentSettingsFromDB.userIconBlob) {
-                             promises.push(dbUtils.saveSetting('userIconBlob', state.settings.userIconBlob));
-                         }
-                          if (state.settings.aiIconBlob !== currentSettingsFromDB.aiIconBlob) {
-                             promises.push(dbUtils.saveSetting('aiIconBlob', state.settings.aiIconBlob));
-                         }
-
-                         await Promise.all(promises);
-
-                         const currentBgBlob = state.settings.backgroundImageBlob;
-                         const currentUserIconBlob = state.settings.userIconBlob;
-                         const currentAiIconBlob = state.settings.aiIconBlob;
-
-                         state.settings = { ...state.settings, ...settingsToSave };
-
-                         state.settings.backgroundImageBlob = currentBgBlob;
-                         state.settings.userIconBlob = currentUserIconBlob;
-                         state.settings.aiIconBlob = currentAiIconBlob;
-
-                         if (!newSettings.enableSessionLinking) {
-                             state.linkedSessionIds = [];
-                         }
-
-                        if (!state.isSending && !state.isAiToAiChatProcessing) {
-                            uiUtils.applySettingsToUI();
-                            uiUtils.renderChatMessages(true);
-                        } else {
-                            uiUtils.applyTheme();
-                            uiUtils.applyFontFamily();
-                            uiUtils.applySidePanelSettingsToUI();
-                            uiUtils.updateChatScreenElementVisibility();
-                            uiUtils.updateHistoryHeaderButtonVisibility();
-                            uiUtils.toggleApiSettingsVisibility(state.settings.apiProvider);
-                            uiUtils.applySettingsUIDetailsOpenStates();
-                        }
-
-
-                         await uiUtils.showCustomAlert("設定を保存しました。");
-
-                         if (newSettings.historySortOrder !== oldSortOrder && state.currentScreen === 'history') {
-                             uiUtils.renderHistoryList();
-                         }
-                     } catch (error) {
-                         await uiUtils.showCustomAlert(`設定の保存中にエラーが発生しました: ${error}`);
+                     const currentSettingsFromDB = await dbUtils.loadSettings();
+                     if (state.settings.backgroundImageBlob !== currentSettingsFromDB.backgroundImageBlob) {
+                         promises.push(dbUtils.saveSetting('backgroundImageBlob', state.settings.backgroundImageBlob));
                      }
+                     if (state.settings.userIconBlob !== currentSettingsFromDB.userIconBlob) {
+                         promises.push(dbUtils.saveSetting('userIconBlob', state.settings.userIconBlob));
+                     }
+                      if (state.settings.aiIconBlob !== currentSettingsFromDB.aiIconBlob) {
+                         promises.push(dbUtils.saveSetting('aiIconBlob', state.settings.aiIconBlob));
+                     }
+
+                     await Promise.all(promises);
+
+                     const currentBgBlob = state.settings.backgroundImageBlob;
+                     const currentUserIconBlob = state.settings.userIconBlob;
+                     const currentAiIconBlob = state.settings.aiIconBlob;
+
+                     state.settings = { ...state.settings, ...settingsToSave };
+
+                     state.settings.backgroundImageBlob = currentBgBlob;
+                     state.settings.userIconBlob = currentUserIconBlob;
+                     state.settings.aiIconBlob = currentAiIconBlob;
+                     state.settings.disableSaveSettingsConfirmation = newSettings.disableSaveSettingsConfirmation;
+
+
+                     if (!newSettings.enableSessionLinking) {
+                         state.linkedSessionIds = [];
+                     }
+
+                    if (!state.isSending && !state.isAiToAiChatProcessing) {
+                        uiUtils.applySettingsToUI();
+                        uiUtils.renderChatMessages(true);
+                    } else {
+                        uiUtils.applyTheme();
+                        uiUtils.applyFontFamily();
+                        uiUtils.applySidePanelSettingsToUI();
+                        uiUtils.updateChatScreenElementVisibility();
+                        uiUtils.updateHistoryHeaderButtonVisibility();
+                        uiUtils.toggleApiSettingsVisibility(state.settings.apiProvider);
+                        uiUtils.applySettingsUIDetailsOpenStates();
+                    }
+
+                    if (!state.settings.disableSaveSettingsConfirmation) {
+                        await uiUtils.showCustomAlert("設定を保存しました。");
+                    }
+
+                     if (newSettings.historySortOrder !== oldSortOrder && state.currentScreen === 'history') {
+                         uiUtils.renderHistoryList();
+                     }
+                 } catch (error) {
+                     await uiUtils.showCustomAlert(`設定の保存中にエラーが発生しました: ${error}`);
                  }
             },
             async updateApp() {
@@ -10098,7 +10094,7 @@
                         });
                     } catch (error) {
                         encodingError = true;
-                        await uiUtils.showCustomAlert(`ファイル "${item.file.name}" の処理中にエラーが発生しました。`);
+                                                await uiUtils.showCustomAlert(`ファイル "${item.file.name}" の処理中にエラーが発生しました。`);
                         break;
                     }
                 }
@@ -10757,4 +10753,3 @@
     </script>
 </body>
 </html>
-
