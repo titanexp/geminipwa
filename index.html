@@ -4122,6 +4122,7 @@
                 disableRetryConfirmation: false,
                 disableLoadChatConfirmationWhileSending: false,
                 disableDeleteMessageConfirmation: false,
+                disableSaveSettingsConfirmation: false,
                 showTopCollapseButton: true,
                 showBottomCollapseButton: true,
                 persistMessageCollapseState: DEFAULT_PERSIST_MESSAGE_COLLAPSE_STATE,
@@ -4141,7 +4142,6 @@
                 apiProvider: 'gemini',
                 thoughtSummaryOpacity: DEFAULT_THOUGHT_SUMMARY_OPACITY,
                 settingsUIDetailsOpenStates: {},
-                disableSaveSettingsConfirmation: false,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -5238,6 +5238,7 @@
                     const finalMessageData = state.currentMessages[index];
                     if (!finalMessageData) return;
                     const messageApiProvider = finalMessageData.generatedByApiProvider || state.settings.apiProvider;
+                    const thoughtDetailsElement = messageDiv.querySelector('.thought-summary-details');
 
                     if (finalMessageData.thoughtSummary && messageApiProvider === 'gemini' && state.settings.geminiIncludeThoughts) {
                         const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
@@ -5252,6 +5253,9 @@
                             thoughtContentDiv.textContent = finalMessageData.thoughtSummary || '';
                             thoughtContentDiv.removeAttribute('id');
                         }
+                        if (thoughtDetailsElement && finalMessageData.thoughtSummaryOpen !== undefined) {
+                           thoughtDetailsElement.open = finalMessageData.thoughtSummaryOpen;
+                        }
                     } else if (finalMessageData.deepSeekThoughtSummary && messageApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) {
                         const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`) || messageDiv.querySelector('.thought-summary-details .thought-summary-content');
                         if (thoughtContentDiv) {
@@ -5263,6 +5267,11 @@
                                 thoughtContentDiv.removeAttribute('id');
                             }
                         }
+                        if (thoughtDetailsElement && finalMessageData.thoughtSummaryOpen !== undefined) {
+                           thoughtDetailsElement.open = finalMessageData.thoughtSummaryOpen;
+                        }
+                    } else if (thoughtDetailsElement) {
+                        thoughtDetailsElement.classList.add('hidden');
                     }
 
 
@@ -5842,6 +5851,7 @@
                 elements.headerFooterOpacityInput.value = state.settings.headerFooterOpacity ?? DEFAULT_HEADER_FOOTER_OPACITY;
                 elements.messageActionsBackgroundOpacityInput.value = state.settings.messageActionsBackgroundOpacity ?? DEFAULT_MESSAGE_ACTIONS_BACKGROUND_OPACITY;
                 elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity ?? DEFAULT_THOUGHT_SUMMARY_OPACITY;
+                elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
 
                 elements.showMemoButtonToggle.checked = state.settings.showMemoButton;
                 elements.memoHeightInput.value = state.settings.memoHeight || '';
@@ -5869,7 +5879,6 @@
                 elements.disableRetryConfirmationToggle.checked = state.settings.disableRetryConfirmation;
                 elements.disableLoadChatConfirmationWhileSendingToggle.checked = state.settings.disableLoadChatConfirmationWhileSending;
                 elements.disableDeleteMessageConfirmationToggle.checked = state.settings.disableDeleteMessageConfirmation;
-                elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
                 elements.showBottomCollapseButtonToggle.checked = state.settings.showBottomCollapseButton;
                 elements.persistMessageCollapseStateCheckbox.checked = state.settings.persistMessageCollapseState;
@@ -7478,7 +7487,9 @@
                         state.currentMessages = chat.messages?.map(msg => ({
                             ...msg,
                             attachments: msg.attachments || [],
-                            thoughtSummaryOpen: msg.thoughtSummaryOpen || false,
+                            thoughtSummaryOpen: msg.thoughtSummaryOpen === undefined ?
+                                ((msg.generatedByApiProvider || state.settings.apiProvider) === 'gemini' ? state.settings.geminiExpandThoughtsByDefault : state.settings.deepSeekExpandDeepSeekThoughtsByDefault)
+                                : msg.thoughtSummaryOpen,
                         })) || [];
 
                         let needsSave = false;
@@ -8409,7 +8420,12 @@
                         } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
                              newModelMessage.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                         }
-                        newModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault);
+
+                        const messageIndexForOpenState = state.currentMessages.length;
+                        newModelMessage.thoughtSummaryOpen = state.thoughtSummaryOpenStates.get(messageIndexForOpenState) ??
+                                                         ((selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) ||
+                                                          (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault));
+
 
 
                          const targetUserIndexForCascade = userMessageIndex;
@@ -8479,7 +8495,10 @@
                          } else if (selectedApiProvider === 'deepseek') {
                              partialMessage.deepSeekThoughtSummary = finalPartialThoughtValue;
                          }
-                         partialMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault);
+                         const messageIndexForOpenStateOnError = state.currentMessages.length;
+                         partialMessage.thoughtSummaryOpen = state.thoughtSummaryOpenStates.get(messageIndexForOpenStateOnError) ??
+                                                       ((selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) ||
+                                                        (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault));
 
 
                          if (isRetry && isAbort) {
