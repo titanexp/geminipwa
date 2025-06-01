@@ -7498,7 +7498,14 @@
                         if (chat.systemPrompt !== undefined) {
                              state.currentSystemPrompt = chat.systemPrompt;
                         } else {
-                            state.currentSystemPrompt = '';
+                            const currentProvider = state.settings.apiProvider;
+                             if (currentProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
+                                state.currentSystemPrompt = state.settings.geminiSystemPrompt || '';
+                            } else if (currentProvider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
+                                state.currentSystemPrompt = state.settings.deepSeekSystemPrompt || '';
+                            } else {
+                                state.currentSystemPrompt = '';
+                            }
                         }
 
                         state.pendingAttachments = [];
@@ -7809,12 +7816,10 @@
                 if (isBackgroundProcess) {
                     currentContextSystemPrompt = sourceSessionContext.systemPrompt;
                 } else {
-                    if (selectedApiProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
-                        currentContextSystemPrompt = state.settings.geminiSystemPrompt || '';
-                    } else if (selectedApiProvider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
-                        currentContextSystemPrompt = state.settings.deepSeekSystemPrompt || '';
-                    } else {
-                         currentContextSystemPrompt = state.currentSystemPrompt;
+                    if (selectedApiProvider === 'gemini') {
+                        currentContextSystemPrompt = state.settings.geminiEnableSystemPromptDefault ? state.settings.geminiSystemPrompt : state.currentSystemPrompt;
+                    } else if (selectedApiProvider === 'deepseek') {
+                        currentContextSystemPrompt = state.settings.deepSeekEnableSystemPromptDefault ? state.settings.deepSeekSystemPrompt : state.currentSystemPrompt;
                     }
                 }
 
@@ -8146,7 +8151,7 @@
 
 
                 let systemInstructionForProvider = null;
-                const systemPromptTextToUseForApi = currentContextEnableSystemPromptDefault && currentContextSystemPrompt?.trim() ? currentContextSystemPrompt.trim() : null;
+                const systemPromptTextToUseForApi = currentContextSystemPrompt?.trim() ? currentContextSystemPrompt.trim() : null;
 
 
                 if (systemPromptTextToUseForApi) {
@@ -8164,7 +8169,7 @@
                 let currentGroundingMetadata = null;
                 let finalUsageMetadataFromStream = null;
 
-                let useStreamingForThisCall = isBackgroundProcess ? false : (selectedApiProvider === 'gemini' ? contextStreamingOutput : state.settings.deepSeekStreamingOutput);
+                let useStreamingForThisCall = isBackgroundProcess ? false : (selectedApiProvider === 'gemini' ? contextGeminiStreamingOutput : contextDeepSeekStreamingOutput);
                 let usePseudoForThisCall = isBackgroundProcess ? false : (selectedApiProvider === 'gemini' && contextGeminiPseudoStreaming);
 
                 try {
@@ -8196,7 +8201,7 @@
                             tempPlaceholderIndex = state.currentMessages.length;
                             uiUtils.appendMessage('model', '', tempPlaceholderIndex, true);
                         }
-                        const currentContextStreamSpeed = selectedApiProvider === 'gemini' ? contextStreamingSpeed : state.settings.deepSeekStreamingSpeed;
+                        const currentContextStreamSpeed = selectedApiProvider === 'gemini' ? contextGeminiStreamingSpeed : contextDeepSeekStreamingSpeed;
 
 
                         for await (const streamData of responseStreamIterator) {
@@ -8344,9 +8349,24 @@
                     }
 
                     if (isBackgroundProcess) {
+                        let returnContent = modelResponseRawContent;
+                        const providerForBgSettings = sourceSessionContext.apiProvider || state.settings.apiProvider;
+                        const includeThoughtsForCurrentProvider =
+                            (providerForBgSettings === 'gemini' && (sourceSessionContext.includeThoughts ?? state.settings.geminiIncludeThoughts)) ||
+                            (providerForBgSettings === 'deepseek' && (sourceSessionContext.includeDeepSeekThoughts ?? state.settings.deepSeekIncludeDeepSeekThoughts));
+
+                        if (providerForBgSettings === 'deepseek' &&
+                            includeThoughtsForCurrentProvider &&
+                            modelThoughtSummaryContent &&
+                            (!modelResponseRawContent || modelResponseRawContent.trim() === '')
+                           ) {
+                            returnContent = modelThoughtSummaryContent;
+                        }
+
                         if (modelResponseRawContent || modelThoughtSummaryContent || modelResponseMetadata.finishReason) {
                              const bgModelMessage = {
-                                 role: 'model', content: modelResponseRawContent,
+                                 role: 'model',
+                                 content: returnContent,
                                  timestamp: Date.now(),
                                  ...modelResponseMetadata,
                                  usageMetadata: finalUsageMetadataFromStream,
@@ -8359,7 +8379,6 @@
                                  bgModelMessage.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                              }
                               bgModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault);
-
 
                              currentContextMessages.push(bgModelMessage);
                              const chatToSaveBg = {
@@ -8395,15 +8414,9 @@
                                 request.onsuccess = () => resolve();
                                 request.onerror = (event) => reject(`チャット保存putエラー(BG): ${event.target.error.name} - ${event.target.error.message}`);
                              });
-                             return {
-                                 content: modelResponseRawContent,
-                                 metadata: modelResponseMetadata,
-                                 thoughtContent: (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) ? modelThoughtSummaryContent
-                                               : (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) ? modelThoughtSummaryContent
-                                               : null
-                             };
+                             return { content: returnContent, metadata: modelResponseMetadata };
                         }
-                        return { content: "", metadata: modelResponseMetadata, thoughtContent: null };
+                        return { content: "", metadata: modelResponseMetadata };
                     }
 
 
@@ -10204,7 +10217,7 @@
 
                 const messages = elements.messageContainer.querySelectorAll('.message:not(.message-error)');
                 messages.forEach(msgElement => {
-                                    if (msgElement.id && msgElement.id.startsWith('streaming-message-')) {
+                    if (msgElement.id && msgElement.id.startsWith('streaming-message-')) {
                         msgElement.classList.remove('message-hidden-by-toggle');
                         return;
                     }
@@ -10271,50 +10284,50 @@
                         throw new Error(`セッションB (${sessionB_Id}) のデータが取得できませんでした。`);
                     }
 
-                    let providerForSettingsB = state.settings.apiProvider;
-                    let systemPromptB, enableSystemPromptDefaultB, dummyUserB, enableDummyUserB, dummyModelB, enableDummyModelB,
+                    let providerForSettingsB, systemPromptB, enableSystemPromptDefaultB, dummyUserB, enableDummyUserB, dummyModelB, enableDummyModelB,
                         temperatureB, maxTokensB, topPB, presencePenaltyB, frequencyPenaltyB,
                         streamingOutputB, streamingSpeedB, concatDummyModelB,
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
                         deepSeekIncludeThoughtsB;
 
-                    if (providerForSettingsB === 'gemini') {
-                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
-                        enableSystemPromptDefaultB = state.settings.geminiEnableSystemPromptDefault;
-                        temperatureB = state.settings.geminiTemperature;
-                        maxTokensB = state.settings.geminiMaxTokens;
-                        geminiTopKB = state.settings.geminiTopK;
-                        topPB = state.settings.geminiTopP;
-                        presencePenaltyB = state.settings.geminiPresencePenalty;
-                        frequencyPenaltyB = state.settings.geminiFrequencyPenalty;
-                        geminiThinkingBudgetB = state.settings.geminiThinkingBudget;
-                        geminiIncludeThoughtsB = state.settings.geminiIncludeThoughts;
-                        streamingOutputB = state.settings.geminiStreamingOutput;
-                        streamingSpeedB = state.settings.geminiStreamingSpeed;
-                        dummyUserB = state.settings.geminiDummyUser;
-                        enableDummyUserB = state.settings.geminiEnableDummyUser;
-                        dummyModelB = state.settings.geminiDummyModel;
-                        enableDummyModelB = state.settings.geminiEnableDummyModel;
-                        concatDummyModelB = state.settings.geminiConcatDummyModel;
-                        geminiPseudoStreamingB = state.settings.geminiPseudoStreaming;
-                        geminiEnableGroundingB = state.settings.geminiEnableGrounding;
-                    } else {
-                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.deepSeekSystemPrompt;
-                        enableSystemPromptDefaultB = state.settings.deepSeekEnableSystemPromptDefault;
-                        temperatureB = state.settings.deepSeekTemperature;
-                        maxTokensB = state.settings.deepSeekMaxTokens;
-                        topPB = state.settings.deepSeekTopP;
-                        presencePenaltyB = state.settings.deepSeekPresencePenalty;
-                        frequencyPenaltyB = state.settings.deepSeekFrequencyPenalty;
-                        deepSeekIncludeThoughtsB = state.settings.deepSeekIncludeDeepSeekThoughts;
-                        streamingOutputB = state.settings.deepSeekStreamingOutput;
-                        streamingSpeedB = state.settings.deepSeekStreamingSpeed;
-                        dummyUserB = state.settings.deepSeekDummyUser;
-                        enableDummyUserB = state.settings.deepSeekEnableDummyUser;
-                        dummyModelB = state.settings.deepSeekDummyModel;
-                        enableDummyModelB = state.settings.deepSeekEnableDummyModel;
-                        concatDummyModelB = state.settings.deepSeekConcatDummyModel;
-                    }
+                        providerForSettingsB = state.settings.apiProvider;
+                        if (providerForSettingsB === 'gemini') {
+                            systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
+                            enableSystemPromptDefaultB = state.settings.geminiEnableSystemPromptDefault;
+                            temperatureB = state.settings.geminiTemperature;
+                            maxTokensB = state.settings.geminiMaxTokens;
+                            geminiTopKB = state.settings.geminiTopK;
+                            topPB = state.settings.geminiTopP;
+                            presencePenaltyB = state.settings.geminiPresencePenalty;
+                            frequencyPenaltyB = state.settings.geminiFrequencyPenalty;
+                            geminiThinkingBudgetB = state.settings.geminiThinkingBudget;
+                            geminiIncludeThoughtsB = state.settings.geminiIncludeThoughts;
+                            streamingOutputB = state.settings.geminiStreamingOutput;
+                            streamingSpeedB = state.settings.geminiStreamingSpeed;
+                            dummyUserB = state.settings.geminiDummyUser;
+                            enableDummyUserB = state.settings.geminiEnableDummyUser;
+                            dummyModelB = state.settings.geminiDummyModel;
+                            enableDummyModelB = state.settings.geminiEnableDummyModel;
+                            concatDummyModelB = state.settings.geminiConcatDummyModel;
+                            geminiPseudoStreamingB = state.settings.geminiPseudoStreaming;
+                            geminiEnableGroundingB = state.settings.geminiEnableGrounding;
+                        } else {
+                            systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.deepSeekSystemPrompt;
+                            enableSystemPromptDefaultB = state.settings.deepSeekEnableSystemPromptDefault;
+                            temperatureB = state.settings.deepSeekTemperature;
+                            maxTokensB = state.settings.deepSeekMaxTokens;
+                            topPB = state.settings.deepSeekTopP;
+                            presencePenaltyB = state.settings.deepSeekPresencePenalty;
+                            frequencyPenaltyB = state.settings.deepSeekFrequencyPenalty;
+                            deepSeekIncludeThoughtsB = state.settings.deepSeekIncludeDeepSeekThoughts;
+                            streamingOutputB = state.settings.deepSeekStreamingOutput;
+                            streamingSpeedB = state.settings.deepSeekStreamingSpeed;
+                            dummyUserB = state.settings.deepSeekDummyUser;
+                            enableDummyUserB = state.settings.deepSeekEnableDummyUser;
+                            dummyModelB = state.settings.deepSeekDummyModel;
+                            enableDummyModelB = state.settings.deepSeekEnableDummyModel;
+                            concatDummyModelB = state.settings.deepSeekConcatDummyModel;
+                        }
 
 
                     const contextForB = {
@@ -10329,7 +10342,8 @@
                         dummyModel: dummyModelB, enableDummyModel: enableDummyModelB, concatDummyModel: concatDummyModelB,
                         topK: providerForSettingsB === 'gemini' ? geminiTopKB : undefined,
                         thinkingBudget: providerForSettingsB === 'gemini' ? geminiThinkingBudgetB : undefined,
-                        includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : deepSeekIncludeThoughtsB,
+                        includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : undefined,
+                        includeDeepSeekThoughts: providerForSettingsB === 'deepseek' ? deepSeekIncludeThoughtsB : undefined,
                         pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
                         enableGrounding: providerForSettingsB === 'gemini' ? geminiEnableGroundingB : undefined,
                         inputText: inputForB,
@@ -10339,15 +10353,10 @@
 
                     const responseFromB = await this.handleSend(false, -1, contextForB);
                     if (responseFromB === "APIキー未設定") throw new Error("APIキーが設定されていません。");
-
-                    let inputForA = responseFromB.content;
-                    if (!inputForA && providerForSettingsB === 'deepseek' && contextForB.includeThoughts && responseFromB.thoughtContent) {
-                        inputForA = responseFromB.thoughtContent;
+                    if (!responseFromB || !responseFromB.content) {
+                        throw new Error(`セッションB (${sessionB_Id}) からの応答がありませんでした。`);
                     }
-
-                    if (!inputForA) {
-                        throw new Error(`セッションB (${sessionB_Id}) からの応答がありませんでした。(${responseFromB.metadata?.finishReason || '理由不明'})`);
-                    }
+                    const inputForA = responseFromB.content;
 
                     uiUtils.setAiToAiProcessingState(true, "AI間会話処理中 (ステップ2/2)...");
 
@@ -10680,27 +10689,28 @@
                 let finalFinishReason = null;
                 let isCancelled = false;
                 let accumulatedFullReasoningContent = "";
-                let streamExplicitlyDone = false;
 
                 try {
                     while (true) {
                         if (state.abortController?.signal.aborted && !isCancelled) {
                             isCancelled = true;
-                            try { await reader.cancel("User aborted"); } catch(e) {}
+                            await reader.cancel("User aborted");
                             throw new Error("リクエストがキャンセルされました。");
                         }
-                         if (streamExplicitlyDone) break;
 
                         const { value, done } = await reader.read();
-
-                        if (done) {
-                            streamExplicitlyDone = true;
-                            break;
-                        }
+                        if (done) break;
 
                         buffer += value;
                         let eolIndex;
-                        while ((eolIndex = buffer.indexOf('\n')) !== -1) {
+                        let processingBuffer = true;
+                        while (processingBuffer) {
+                            eolIndex = buffer.indexOf('\n');
+                            if (eolIndex === -1) {
+                                processingBuffer = false;
+                                continue;
+                            }
+
                             const line = buffer.substring(0, eolIndex).trim();
                             buffer = buffer.substring(eolIndex + 1);
 
@@ -10708,7 +10718,7 @@
                                 const jsonData = line.substring(6);
                                 if (jsonData.trim() === '[DONE]') {
                                     finalFinishReason = finalFinishReason || 'stop';
-                                    streamExplicitlyDone = true;
+                                    processingBuffer = false;
                                     break;
                                 }
                                 try {
@@ -10739,31 +10749,10 @@
                                 } catch (e) {
                                 }
                             }
-                             if (streamExplicitlyDone) break;
+                            if (finalFinishReason && finalFinishReason !== 'null' && processingBuffer) break;
                         }
-                         if (streamExplicitlyDone) break;
+                         if (finalFinishReason && finalFinishReason !== 'null') break;
                     }
-
-                    if (buffer.trim().startsWith('data: ')) {
-                        const jsonData = buffer.trim().substring(6);
-                        try {
-                            const chunk = JSON.parse(jsonData);
-                            if (chunk.choices && chunk.choices[0] && chunk.choices[0].delta) {
-                                const delta = chunk.choices[0].delta;
-                                if (delta.reasoning_content) {
-                                    accumulatedFullReasoningContent += delta.reasoning_content;
-                                    yield { type: 'chunk', contentText: null, thoughtText: delta.reasoning_content };
-                                } else if (delta.content) {
-                                    yield { type: 'chunk', contentText: delta.content, thoughtText: null };
-                                }
-                            }
-                            if (chunk.choices && chunk.choices[0] && chunk.choices[0].finish_reason) {
-                                finalFinishReason = chunk.choices[0].finish_reason;
-                            }
-                            if (chunk.usage) finalUsage = chunk.usage;
-                        } catch(e) {}
-                    }
-
 
                     yield {
                         type: 'metadata',
@@ -10777,11 +10766,7 @@
                         fullReasoningContent: accumulatedFullReasoningContent || null
                     };
                 } catch (error) {
-                    if (isCancelled) {
-                        yield { type: 'metadata', finishReason: 'ABORTED', safetyRatings: null, groundingMetadata: null, usageMetadata: null, fullReasoningContent: accumulatedFullReasoningContent || null };
-                    } else {
-                        yield { type: 'error', error: { message: error.message, name: error.name }, message: error.message };
-                    }
+                    yield { type: 'error', error: { message: error.message }, message: error.message };
                 } finally {
                     if (!reader.closed && !isCancelled) {
                         try { await reader.cancel("Stream processing ended."); } catch (e) { }
