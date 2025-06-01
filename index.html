@@ -3030,8 +3030,7 @@
                         <label for="deepseek-api-endpoint" style="margin-top:10px;">DeepSeek APIエンドポイント (オプション):</label>
                         <input type="text" id="deepseek-api-endpoint" placeholder="例: https://api.deepseek.com" aria-label="DeepSeek APIエンドポイント">
                          <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                           ※ 空欄の場合はデフォルト (https://api.deepseek.com) を使用し、パスは `/chat/completions` です。
-                           ※ 形式的な実装であり、デバッグしておりません。
+                           ※ 空欄の場合はデフォルト (https://api.deepseek.com) を使用し、パスは `/chat/completions` です。 形式的な実装であり、デバッグしておりません。
                          </p>
                     </div>
                 </details>
@@ -3241,7 +3240,7 @@
                        </label>
                        <label for="deepseek-streaming-speed">文字送り速度 (ミリ秒/文字):</label>
                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                           ※無効。
+                           ※非推奨。
                        <input type="number" id="deepseek-streaming-speed" min="0" step="1" placeholder="例: 30 (0で無効)" aria-label="DeepSeek 文字送り速度">
                     </div>
                 </details>
@@ -3594,7 +3593,7 @@
                             セッション間リンク機能を有効にする
                         </label>
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                            ※ 有効にすると、履歴画面で2つのセッションをリンクし、AI同士の会話をステップ実行できます。（👥ボタンを用いた入出力のみ。）
+                            ※ 有効にすると、履歴画面で2つのセッションをリンクし、AI同士の会話をステップ実行できます。（👥ボタンを用いた入出力のみ。）<br>
                             ※ Max Tokensが足りないと失敗します。
                         </p>
                                <p style="height:10px"></p>
@@ -5152,8 +5151,8 @@
                 if (!messageDiv || typeof marked === 'undefined') return;
 
                 let targetContentDiv;
-                let accumulatedContentStateProperty;
-                let textToAnimate = newCharOrChunk || "";
+                let accumulatedContentForDisplay;
+                let textToAnimateForDeepSeek = "";
 
                 const selectedApiProvider = state.settings.apiProvider;
                 const streamSpeed = selectedApiProvider === 'gemini' ? state.settings.geminiStreamingSpeed : state.settings.deepSeekStreamingSpeed;
@@ -5162,16 +5161,22 @@
                 if (isThoughtSummary) {
                     if (selectedApiProvider === 'gemini' && state.settings.geminiIncludeThoughts) {
                         targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
-                        accumulatedContentStateProperty = 'partialThoughtStreamContent';
+                        accumulatedContentForDisplay = state.partialThoughtStreamContent;
                     } else if (selectedApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) {
                         targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
-                        accumulatedContentStateProperty = 'partialThoughtStreamContent';
+                        textToAnimateForDeepSeek = newCharOrChunk || "";
+                        accumulatedContentForDisplay = state.partialThoughtStreamContent;
                     } else {
                         return;
                     }
                 } else {
                     targetContentDiv = messageDiv.querySelector(`#streaming-content-${index}`);
-                    accumulatedContentStateProperty = 'partialStreamContent';
+                    if (selectedApiProvider === 'gemini') {
+                        accumulatedContentForDisplay = state.partialStreamContent;
+                    } else {
+                        textToAnimateForDeepSeek = newCharOrChunk || "";
+                        accumulatedContentForDisplay = state.partialStreamContent;
+                    }
                 }
 
                 if (targetContentDiv) {
@@ -5198,22 +5203,23 @@
                             targetContentDiv.textContent = contentToRender;
                         }
                     };
-                    if (selectedApiProvider === 'gemini') {
-                        renderCurrentState(state[accumulatedContentStateProperty]);
-                    } else if (selectedApiProvider === 'deepseek' && textToAnimate) {
-                        for (let i = 0; i < textToAnimate.length; i++) {
+                    if (selectedApiProvider === 'gemini' || streamSpeed <= 0 || !textToAnimateForDeepSeek) {
+                        renderCurrentState(accumulatedContentForDisplay);
+                    } else if (selectedApiProvider === 'deepseek' && textToAnimateForDeepSeek) {
+                        const baseContent = accumulatedContentForDisplay.slice(0, accumulatedContentForDisplay.length - textToAnimateForDeepSeek.length);
+                        let animatedContentSegment = "";
+
+                        for (let i = 0; i < textToAnimateForDeepSeek.length; i++) {
                             if (state.abortController?.signal.aborted) break;
-                            state[accumulatedContentStateProperty] += textToAnimate[i];
-                            renderCurrentState(state[accumulatedContentStateProperty]);
+                            animatedContentSegment += textToAnimateForDeepSeek[i];
+                            renderCurrentState(baseContent + animatedContentSegment);
 
                             if (!isThoughtSummary && state.settings.autoScrollOnNewMessage) {
                                 this.scrollToBottom();
                             }
-                            if (streamSpeed > 0) {
-                                await sleep(streamSpeed);
-                            }
+                            await sleep(streamSpeed);
                         }
-                        renderCurrentState(state[accumulatedContentStateProperty]);
+                        renderCurrentState(accumulatedContentForDisplay);
                     }
                 }
                 if (!isThoughtSummary && state.currentMessages[index]?.groundingMetadata && selectedApiProvider === 'gemini') {
@@ -8249,6 +8255,7 @@
                                                 if (currentContextStreamSpeed > 0) await sleep(currentContextStreamSpeed);
                                             }
                                         } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
+                                            state.partialThoughtStreamContent += streamData.thoughtText;
                                             uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, streamData.thoughtText, true);
                                         }
                                     }
@@ -8266,6 +8273,7 @@
                                                 if (currentContextStreamSpeed > 0) await sleep(currentContextStreamSpeed);
                                             }
                                         } else {
+                                            state.partialStreamContent += streamData.contentText;
                                             uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, streamData.contentText, false);
                                         }
                                     }
