@@ -4288,6 +4288,7 @@
                         const defaultSettings = { ...state.settings };
                         state.settings = { ...defaultSettings };
 
+
                         if (loadedSettings.hasOwnProperty('darkMode') && !loadedSettings.hasOwnProperty('theme')) {
                             state.settings.theme = loadedSettings.darkMode === true ? 'dark' : 'light';
                         }
@@ -5763,6 +5764,7 @@
                 elements.deepSeekEnableDummyModelCheckbox.checked = state.settings.deepSeekEnableDummyModel;
                 elements.deepSeekConcatDummyModelCheckbox.checked = state.settings.deepSeekConcatDummyModel;
 
+
                 elements.enterToSendCheckbox.checked = state.settings.enterToSend;
                 elements.autoScrollOnNewMessageCheckbox.checked = state.settings.autoScrollOnNewMessage;
                 elements.autoScrollOnThoughtCheckbox.checked = state.settings.autoScrollOnThought;
@@ -5843,6 +5845,7 @@
                 document.documentElement.style.setProperty('--message-toggle-button-top-opacity', state.settings.toggleButtonTopOpacity);
                 document.documentElement.style.setProperty('--message-toggle-button-bottom-font-size', `${state.settings.toggleButtonBottomFontSize || DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--thought-summary-opacity', state.settings.thoughtSummaryOpacity || DEFAULT_THOUGHT_SUMMARY_OPACITY);
+
 
                 this.updateChatScreenElementVisibility();
                 this.updateHistoryHeaderButtonVisibility();
@@ -5967,6 +5970,7 @@
                 if (additionalModels.length > 0) {
                     let optgroup = document.createElement('optgroup');
                     optgroup.label = 'ユーザー指定 (DeepSeek)';
+                    optgroup.id = 'deepseek-user-defined-models-group';
                     additionalModels.forEach(modelId => {
                         const option = document.createElement('option');
                         option.value = modelId;
@@ -7724,10 +7728,7 @@
                 const selectedApiProvider = isBackgroundProcess ? (sourceSessionContext.apiProvider || state.settings.apiProvider) : state.settings.apiProvider;
 
                 if (isBackgroundProcess) {
-                    currentContextSystemPrompt = sourceSessionContext.systemPrompt !== undefined ? sourceSessionContext.systemPrompt :
-                        (selectedApiProvider === 'gemini' && sourceSessionContext.enableSystemPromptDefault !== undefined ? sourceSessionContext.enableSystemPromptDefault : state.settings.geminiEnableSystemPromptDefault)
-                            ? (selectedApiProvider === 'gemini' ? (sourceSessionContext.systemPrompt || state.settings.geminiSystemPrompt) : (sourceSessionContext.systemPrompt || state.settings.deepSeekSystemPrompt) )
-                            : '';
+                    currentContextSystemPrompt = sourceSessionContext.systemPrompt;
                 } else {
                     currentContextSystemPrompt = state.currentSystemPrompt;
                 }
@@ -9051,13 +9052,23 @@
                          state.linkedSessionIds = [];
                      }
 
-                     uiUtils.applySettingsToUI();
+                    if (!state.isSending && !state.isAiToAiChatProcessing) {
+                        uiUtils.applySettingsToUI();
+                        uiUtils.renderChatMessages(true);
+                    } else {
+                        uiUtils.applyTheme();
+                        uiUtils.applyFontFamily();
+                        uiUtils.applySidePanelSettingsToUI();
+                        uiUtils.updateChatScreenElementVisibility();
+                        uiUtils.updateHistoryHeaderButtonVisibility();
+                        uiUtils.toggleApiSettingsVisibility(state.settings.apiProvider);
+                    }
+
                      await uiUtils.showCustomAlert("設定を保存しました。");
 
                      if (newSettings.historySortOrder !== oldSortOrder && state.currentScreen === 'history') {
                          uiUtils.renderHistoryList();
                      }
-                     uiUtils.renderChatMessages(true);
                  } catch (error) {
                      await uiUtils.showCustomAlert(`設定の保存中にエラーが発生しました: ${error}`);
                  }
