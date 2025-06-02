@@ -1106,6 +1106,10 @@
             z-index: 1;
             touch-action: pan-y;
         }
+        #chat-screen > .main-content {
+            padding-top: 0;
+        }
+
 
         .screen {
             position: absolute;
@@ -1158,7 +1162,7 @@
             touch-action: pan-x pan-y pinch-zoom;
             flex-grow: 1;
         }
-        #chat-screen .app-header { z-index: 2; }
+        #chat-screen .app-header { z-index: 6; }
         #chat-screen .chat-input-area {
             z-index: 2;
             background-color: rgba(var(--bg-secondary-rgb, 240, 242, 245), var(--header-footer-opacity, 1));
@@ -1331,41 +1335,48 @@
             transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, opacity 0.3s ease, visibility 0.3s ease, max-height 0.3s ease, padding-top 0.3s ease, padding-bottom 0.3s ease, margin-bottom 0.3s ease, border-width 0.3s ease;
             position: relative;
             z-index: 1;
-            overflow: hidden;
-            max-height: 500px;
-        }
-        .system-prompt-area.pinned-to-header {
-            position: relative; /* Changed from sticky/fixed to relative for now for layout flow */
-            /* top: 0; If using sticky/fixed this would be needed */
-            z-index: 3; /* Lower than memo/clipboard, higher than content */
-            width: 100%;
-            min-height: 80px; /* Similar to memo/clipboard */
-            max-height: var(--system-prompt-header-height, 300px); /* Use a variable for consistency */
-            border-bottom: 1px solid var(--border-secondary);
-            box-shadow: 0 1px 3px var(--shadow-primary);
             overflow: auto;
+            max-height: 500px;
             display: flex;
             flex-direction: column;
+        }
+        .system-prompt-area.pinned-to-header {
+            z-index: 3;
+            width: 100%;
+            min-height: 80px;
+            max-height: var(--system-prompt-header-height, 300px);
+            border-bottom: 1px solid var(--border-secondary);
+            box-shadow: 0 1px 3px var(--shadow-primary);
             resize: vertical;
-            margin-bottom: 0; /* Remove bottom margin when pinned */
-            border-radius: 0; /* Remove radius when pinned if it looks better */
+            margin-bottom: 0;
+            border-radius: 0;
             border-top: none;
             border-left: none;
             border-right: none;
+            position: relative;
         }
         .system-prompt-area.hidden {
-            padding-top: 0;
-            padding-bottom: 0;
-            margin-bottom: 0;
-            border-width: 0;
-            max-height: 0;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            margin-bottom: 0 !important;
+            border-width: 0 !important;
+            max-height: 0 !important;
+            min-height: 0 !important;
             opacity: 0;
             visibility: hidden;
-            min-height: 0 !important;
+            overflow: hidden;
         }
         .system-prompt-area details {
             width: 100%;
+             display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            min-height: 0;
         }
+        .system-prompt-area.pinned-to-header details {
+            height: 100%;
+        }
+
         .system-prompt-area summary {
             font-weight: bold;
             cursor: pointer;
@@ -1381,6 +1392,7 @@
             -ms-user-select: none;
             outline: none;
             -webkit-tap-highlight-color: transparent;
+            flex-shrink: 0;
         }
         .system-prompt-area summary::-webkit-details-marker { display: none; }
         .system-prompt-area summary::marker { display: none; }
@@ -1395,6 +1407,11 @@
         }
         .system-prompt-content {
             margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            min-height: 0;
+            overflow: auto;
         }
         .system-prompt-content textarea {
             width: 100%;
@@ -1407,12 +1424,14 @@
             border-color: var(--border-primary);
         }
         .system-prompt-area.pinned-to-header .system-prompt-content textarea {
-            flex-grow: 1; /* Allow textarea to fill space in pinned mode */
+            flex-grow: 1;
+            max-height: none;
         }
         .system-prompt-actions {
             display: flex;
             justify-content: flex-end;
             gap: 8px;
+            flex-shrink: 0;
         }
         .system-prompt-actions button {
             padding: 4px 10px;
@@ -5210,7 +5229,7 @@
                         accumulatedContentForDisplay = state.partialThoughtStreamContent;
                     } else if (selectedApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) {
                         targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
-                        accumulatedContentForDisplay = state.partialThoughtStreamContent;
+                        accumulatedContentForDisplay = state.deepSeekThoughtRawTextBuffer;
                     } else {
                         return;
                     }
@@ -5227,19 +5246,11 @@
                         }
                         try {
                             if (selectedApiProvider === 'deepseek' && isThoughtSummary && targetContentDiv.id === `streaming-thought-summary-${index}`) {
-                                let currentPre = targetContentDiv.querySelector('pre');
-                                if (!currentPre) {
-                                    currentPre = document.createElement('pre');
-                                    targetContentDiv.innerHTML = '';
-                                    targetContentDiv.appendChild(currentPre);
-                                }
-                            } else if (selectedApiProvider === 'deepseek' && !isThoughtSummary) {
-                            }
-                             else {
+                            } else {
                                 const rawHtml = marked.parse(contentToRender || '');
                                 targetContentDiv.innerHTML = rawHtml;
                             }
-                            if (!isThoughtSummary && selectedApiProvider !== 'deepseek') {
+                            if (!isThoughtSummary ) {
                                 this.processInteractivePlaceholders(targetContentDiv);
                                 this.processInteractiveTitles(targetContentDiv);
                                 this.addCopyButtonsToCodeBlocks(targetContentDiv);
@@ -5252,9 +5263,6 @@
                     if (selectedApiProvider === 'gemini' || streamSpeed <= 0) {
                         renderCurrentState(accumulatedContentForDisplay);
                     } else if (selectedApiProvider === 'deepseek') {
-                        if (isThoughtSummary) {
-                        } else {
-                        }
                     }
                 }
                 if (!isThoughtSummary && state.currentMessages[index]?.groundingMetadata && selectedApiProvider === 'gemini') {
@@ -5310,8 +5318,17 @@
                         const textToShow = state[bufferKey].substring(0, displayedLength);
                         if (isThoughtProcess && preElement) {
                             preElement.textContent = textToShow;
+                        } else if (!isThoughtProcess && typeof marked !== 'undefined') {
+                             try {
+                                targetContentDiv.innerHTML = marked.parse(textToShow || '');
+                                this.processInteractivePlaceholders(targetContentDiv);
+                                this.processInteractiveTitles(targetContentDiv);
+                                this.addCopyButtonsToCodeBlocks(targetContentDiv);
+                            } catch(e) {
+                                targetContentDiv.textContent = textToShow || '';
+                            }
                         } else if (!isThoughtProcess) {
-                             targetContentDiv.textContent = textToShow;
+                            targetContentDiv.textContent = textToShow || '';
                         }
 
 
@@ -5339,8 +5356,17 @@
                 } else {
                      if (isThoughtProcess && preElement) {
                         preElement.textContent = state[bufferKey];
+                    } else if (!isThoughtProcess && typeof marked !== 'undefined') {
+                         try {
+                            targetContentDiv.innerHTML = marked.parse(state[bufferKey] || '');
+                            this.processInteractivePlaceholders(targetContentDiv);
+                            this.processInteractiveTitles(targetContentDiv);
+                            this.addCopyButtonsToCodeBlocks(targetContentDiv);
+                        } catch(e) {
+                            targetContentDiv.textContent = state[bufferKey] || '';
+                        }
                     } else if (!isThoughtProcess) {
-                        targetContentDiv.textContent = state[bufferKey];
+                        targetContentDiv.textContent = state[bufferKey] || '';
                     }
                     this.finalizeStreamingMessage(index);
                 }
@@ -5606,14 +5632,15 @@
                 if (elements.toggleMemoBtn) {
                     elements.toggleMemoBtn.classList.toggle('hidden', !state.settings.showMemoButton);
                 }
-                document.documentElement.style.setProperty('--memo-height', state.settings.memoHeight || DEFAULT_MEMO_HEIGHT);
+                const panelHeight = state.settings.memoHeight || DEFAULT_MEMO_HEIGHT;
+                document.documentElement.style.setProperty('--memo-height', panelHeight);
+                document.documentElement.style.setProperty('--clipboard-stack-height', panelHeight);
+                document.documentElement.style.setProperty('--system-prompt-header-height', panelHeight);
+
 
                 if (elements.toggleClipboardStackBtn) {
                     elements.toggleClipboardStackBtn.classList.toggle('hidden', !state.settings.showClipboardStackButton);
                 }
-                document.documentElement.style.setProperty('--clipboard-stack-height', state.settings.clipboardStackHeight || DEFAULT_CLIPBOARD_STACK_HEIGHT);
-                document.documentElement.style.setProperty('--system-prompt-header-height', state.settings.systemPromptHeaderHeight || DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT);
-
                 document.documentElement.style.setProperty('--message-icon-size', `${state.settings.messageIconSize || DEFAULT_MESSAGE_ICON_SIZE}px`);
                 document.documentElement.style.setProperty('--message-icon-offset-y', `${state.settings.messageIconOffsetY || DEFAULT_MESSAGE_ICON_OFFSET_Y}px`);
                 document.documentElement.style.setProperty('--icon-name-font-size', `${state.settings.iconNameFontSize || DEFAULT_ICON_NAME_FONT_SIZE}px`);
@@ -5940,12 +5967,12 @@
                 elements.autoScrollOnThoughtCheckbox.checked = state.settings.autoScrollOnThought;
                 elements.historySortOrderSelect.value = state.settings.historySortOrder || 'updatedAt';
                 if (elements.themeSelect) elements.themeSelect.value = state.settings.theme || 'light';
+                elements.pinSystemPromptToggle.checked = state.settings.pinSystemPromptToHeader;
                 elements.enableSessionLinkingCheckbox.checked = state.settings.enableSessionLinking;
                 elements.fontFamilyInput.value = state.settings.fontFamily || '';
                 elements.messageBodyFontSizeInput.value = state.settings.messageBodyFontSize ?? '';
                 elements.codeBlockFontSizeInput.value = state.settings.codeBlockFontSize ?? '';
                 elements.thoughtSummaryFontSizeInput.value = state.settings.thoughtSummaryFontSize ?? '';
-                elements.pinSystemPromptToggle.checked = state.settings.pinSystemPromptToHeader;
                 elements.hideSystemPromptToggle.checked = state.settings.hideSystemPromptInChat;
                 elements.swipeNavigationToggle.checked = state.settings.enableSwipeNavigation;
                 elements.preventZoomToggle.checked = state.settings.preventZoom;
@@ -6187,32 +6214,37 @@
                 this.adjustTextareaHeight(elements.systemPromptEditor, 200);
                 this.toggleSystemPromptVisibility(false);
             },
-            toggleSystemPromptVisibility(isInitialLoad = false) {
+            toggleSystemPromptVisibility(isInitialLoadOrSettingsChange = false) {
                 const shouldHide = state.settings.hideSystemPromptInChat;
                 const shouldPin = state.settings.pinSystemPromptToHeader;
                 const chatScreen = elements.chatScreen;
                 const header = chatScreen.querySelector('.app-header');
                 const mainContent = chatScreen.querySelector('.main-content');
 
-                elements.systemPromptArea.classList.toggle('hidden', shouldHide);
-                elements.systemPromptArea.classList.toggle('pinned-to-header', !shouldHide && shouldPin);
+                const systemPromptAreaIsCurrentlyPinned = elements.systemPromptArea.classList.contains('pinned-to-header');
+                state.isSystemPromptPinned = !shouldHide && shouldPin;
 
-                if (!shouldHide && shouldPin) {
-                    if (elements.systemPromptArea.parentNode !== header.parentNode) {
-                        header.parentNode.insertBefore(elements.systemPromptArea, header.nextSibling);
+                elements.systemPromptArea.classList.toggle('hidden', shouldHide || !state.isSystemPromptPinned && state.currentScreen !== 'chat');
+                elements.systemPromptArea.classList.toggle('pinned-to-header', state.isSystemPromptPinned);
+
+
+                if (state.isSystemPromptPinned) {
+                    if (elements.systemPromptArea.parentNode !== elements.chatScreen || elements.systemPromptArea.nextSibling !== elements.memoArea) {
+                        elements.chatScreen.insertBefore(elements.systemPromptArea, elements.memoArea);
                     }
                     elements.systemPromptArea.style.maxHeight = state.settings.systemPromptHeaderHeight || DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT;
                 } else {
                     if (elements.systemPromptArea.parentNode !== mainContent || elements.systemPromptArea.nextSibling !== elements.messageContainer) {
-                       if (mainContent.firstChild && mainContent.firstChild.id !== 'message-container') {
-                            mainContent.insertBefore(elements.systemPromptArea, mainContent.firstChild);
-                       } else {
-                            mainContent.prepend(elements.systemPromptArea);
-                       }
+                        const firstContentChild = mainContent.firstChild;
+                        if (firstContentChild) {
+                            mainContent.insertBefore(elements.systemPromptArea, firstContentChild);
+                        } else {
+                            mainContent.appendChild(elements.systemPromptArea);
+                        }
                     }
                     elements.systemPromptArea.style.maxHeight = '500px';
                 }
-                 if (isInitialLoad) {
+                 if (isInitialLoadOrSettingsChange) {
                     appLogic.updatePanelVisibilityAndLayout();
                 }
             },
@@ -6228,6 +6260,9 @@
                 if (state.isEditingSystemPrompt) {
                     appLogic.cancelEditSystemPrompt();
                 }
+
+                const currentPanelsVisible = state.isMemoVisible || state.isClipboardStackVisible || (state.settings.pinSystemPromptToHeader && !state.settings.hideSystemPromptInChat && state.currentScreen === 'chat');
+
                 if (state.isMemoVisible && screenName !== 'chat') {
                      elements.memoArea.classList.add('hidden');
                      state.isMemoVisible = false;
@@ -6236,7 +6271,7 @@
                      elements.clipboardStackArea.classList.add('hidden');
                      state.isClipboardStackVisible = false;
                 }
-                if (state.isSystemPromptPinned && screenName !== 'chat') {
+                if (state.settings.pinSystemPromptToHeader && !state.settings.hideSystemPromptInChat && state.currentScreen === 'chat' && screenName !== 'chat') {
                 }
 
 
@@ -6296,6 +6331,11 @@
                     if (activeScreen) {
                         activeScreen.inert = false;
                         activeScreen.classList.add('active');
+                    }
+                     if (currentPanelsVisible && screenName !== 'chat') {
+                        elements.chatScreen.querySelector('.main-content').style.paddingTop = '0px';
+                    } else if (screenName === 'chat') {
+                        appLogic.updatePanelVisibilityAndLayout();
                     }
                 });
                 state.currentScreen = screenName;
@@ -6941,10 +6981,12 @@
                 elements.pinSystemPromptToggle.addEventListener('change', () => {
                     state.settings.pinSystemPromptToHeader = elements.pinSystemPromptToggle.checked;
                     uiUtils.toggleSystemPromptVisibility(true);
+                    this.updatePanelVisibilityAndLayout();
                 });
                 elements.hideSystemPromptToggle.addEventListener('change', () => {
                     state.settings.hideSystemPromptInChat = elements.hideSystemPromptToggle.checked;
                     uiUtils.toggleSystemPromptVisibility(true);
+                    this.updatePanelVisibilityAndLayout();
                 });
                 elements.showChatTitleToggle.addEventListener('change', () => {
                     state.settings.showChatTitle = elements.showChatTitleToggle.checked;
@@ -7121,6 +7163,7 @@
                     if (!elements.messageContainer.contains(event.target) &&
                         !elements.memoArea.contains(event.target) &&
                         !elements.clipboardStackArea.contains(event.target) &&
+                        !elements.systemPromptArea.contains(event.target) &&
                         !event.target.closest('.custom-dialog')) {
                         const currentlyShown = elements.messageContainer.querySelector('.message.show-actions');
                         if (currentlyShown) {
@@ -7254,7 +7297,7 @@
                      uiUtils.showCustomAlert("メッセージ編集中はメモを開閉できません。");
                      return;
                  }
-                 if (state.isEditingSystemPrompt) {
+                 if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
                      uiUtils.showCustomAlert("システムプロンプト編集中はメモを開閉できません。");
                      return;
                  }
@@ -7354,7 +7397,7 @@
                      uiUtils.showCustomAlert("メッセージ編集中はクリップボードスタックを開閉できません。");
                      return;
                  }
-                 if (state.isEditingSystemPrompt) {
+                 if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
                      uiUtils.showCustomAlert("システムプロンプト編集中はクリップボードスタックを開閉できません。");
                      return;
                  }
@@ -7369,46 +7412,56 @@
                 }
             },
             updatePanelVisibilityAndLayout() {
-                const systemPromptPinned = state.settings.pinSystemPromptToHeader && !state.settings.hideSystemPromptInChat;
+                const systemPromptVisibleAndPinned = state.settings.pinSystemPromptToHeader && !state.settings.hideSystemPromptInChat;
                 const memoVisible = state.isMemoVisible;
                 const clipboardStackVisible = state.isClipboardStackVisible;
 
-                elements.systemPromptArea.classList.toggle('hidden', state.settings.hideSystemPromptInChat || (!systemPromptPinned && state.currentScreen !== 'chat'));
-                elements.systemPromptArea.classList.toggle('pinned-to-header', systemPromptPinned && !state.settings.hideSystemPromptInChat);
+                elements.systemPromptArea.classList.toggle('hidden', state.settings.hideSystemPromptInChat || (!systemPromptVisibleAndPinned && state.currentScreen !== 'chat'));
+                elements.systemPromptArea.classList.toggle('pinned-to-header', systemPromptVisibleAndPinned);
+
 
                 elements.memoArea.classList.toggle('hidden', !memoVisible);
                 elements.clipboardStackArea.classList.toggle('hidden', !clipboardStackVisible);
 
                 let topOffset = 0;
                 const mainContent = elements.chatScreen.querySelector('.main-content');
+                const chatScreen = elements.chatScreen;
+                const header = chatScreen.querySelector('.app-header');
 
-                if (systemPromptPinned && !state.settings.hideSystemPromptInChat) {
+
+                if (systemPromptVisibleAndPinned) {
+                     if (elements.systemPromptArea.parentNode !== chatScreen || elements.systemPromptArea.nextSibling !== elements.memoArea) {
+                        chatScreen.insertBefore(elements.systemPromptArea, header.nextSibling);
+                    }
                     elements.systemPromptArea.style.top = `${topOffset}px`;
                     topOffset += elements.systemPromptArea.offsetHeight;
+                    elements.systemPromptArea.style.maxHeight = state.settings.systemPromptHeaderHeight || DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT;
+                } else {
+                     if (elements.systemPromptArea.parentNode !== mainContent) {
+                        const firstContentChild = mainContent.firstChild;
+                        mainContent.insertBefore(elements.systemPromptArea, firstContentChild);
+                     }
+                     elements.systemPromptArea.style.maxHeight = '500px';
                 }
+
                 if (memoVisible) {
+                     if (elements.memoArea.parentNode !== chatScreen) {
+                        chatScreen.insertBefore(elements.memoArea, elements.systemPromptArea.nextSibling);
+                     }
                     elements.memoArea.style.top = `${topOffset}px`;
                     topOffset += elements.memoArea.offsetHeight;
                 }
                 if (clipboardStackVisible) {
+                    if (elements.clipboardStackArea.parentNode !== chatScreen) {
+                        chatScreen.insertBefore(elements.clipboardStackArea, elements.memoArea.nextSibling);
+                    }
                     elements.clipboardStackArea.style.top = `${topOffset}px`;
                     topOffset += elements.clipboardStackArea.offsetHeight;
                 }
+
                 if (mainContent) {
                   mainContent.style.paddingTop = `${topOffset}px`;
                 }
-
-                if (elements.systemPromptArea.classList.contains('pinned-to-header')) {
-                     if (elements.systemPromptArea.parentNode !== elements.chatScreen) {
-                         elements.chatScreen.insertBefore(elements.systemPromptArea, elements.memoArea);
-                     }
-                 } else {
-                     if (elements.systemPromptArea.parentNode !== mainContent || elements.systemPromptArea.nextSibling !== elements.messageContainer) {
-                         const firstChildInMain = mainContent.firstChild;
-                         mainContent.insertBefore(elements.systemPromptArea, firstChildInMain);
-                     }
-                 }
-
             },
             async copyClipboardStackText() {
                 const stackText = elements.clipboardStackEditor.value;
@@ -7800,6 +7853,7 @@
                                 m.isSelected = (idx === siblings.length - 1);
                             });
                         });
+
                         const newChatData = {
                             messages: duplicatedMessages,
                             systemPrompt: chat.systemPrompt || '',
@@ -8673,8 +8727,8 @@
                                 } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                                 }
-                                if (selectedApiProvider !== 'deepseek' || state.deepSeekDisplayTimer === null) {
-                                    uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
+                                if (state.deepSeekDisplayTimer === null && state.deepSeekThoughtDisplayTimer === null) {
+                                   uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
                                 }
                                 await dbUtils.saveChat();
                             }
@@ -8731,6 +8785,7 @@
 
                     let partialThoughtContentOnError = selectedApiProvider === 'deepseek' ? state.deepSeekThoughtRawTextBuffer : state.partialThoughtStreamContent;
                     let partialContentOnError = selectedApiProvider === 'deepseek' ? state.deepSeekRawTextBuffer : state.partialStreamContent;
+
 
                     if (isBackgroundProcess) {
                          throw error;
@@ -9501,6 +9556,7 @@
                         state.isClipboardStackVisible = false;
                         elements.clipboardStackArea.classList.add('hidden');
                         state.clipboardStackContent = '';
+                        state.isSystemPromptPinned = false;
                         state.linkedSessionIds = [];
 
                         const defaultSettingsCopy = JSON.parse(JSON.stringify(state.settings));
@@ -9638,6 +9694,7 @@
                         state.isClipboardStackVisible = false;
                         elements.clipboardStackArea.classList.add('hidden');
                         state.clipboardStackContent = '';
+                        state.isSystemPromptPinned = false;
                         state.areAllMessagesHidden = false;
                         uiUtils.updateToggleAllContentButton();
                         state.messageCollapsedStates.clear();
@@ -9690,7 +9747,7 @@
                      await uiUtils.showCustomAlert("他のメッセージを編集中です。");
                      return;
                  }
-                 if (state.isEditingSystemPrompt) {
+                 if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
                      await uiUtils.showCustomAlert("システムプロンプト編集中です。");
                      return;
                  }
@@ -9956,7 +10013,7 @@
                     await uiUtils.showCustomAlert("送信中は削除できません。");
                     return;
                 }
-                if (state.isEditingSystemPrompt) {
+                if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
                     await uiUtils.showCustomAlert("システムプロンプト編集中は削除できません。");
                     return;
                 }
@@ -10063,7 +10120,7 @@
                     await uiUtils.showCustomAlert("送信中です。");
                     return;
                 }
-                if (state.isEditingSystemPrompt) {
+                 if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
                     await uiUtils.showCustomAlert("システムプロンプト編集中はリトライできません。");
                     return;
                 }
@@ -10203,7 +10260,7 @@
                 }
                 if (state.editingMessageIndex !== null) { await uiUtils.showCustomAlert("編集中は削除できません。"); return; }
                 if (state.isSending) { await uiUtils.showCustomAlert("送信中は削除できません。"); return; }
-                if (state.isEditingSystemPrompt) { await uiUtils.showCustomAlert("システムプロンプト編集中は削除できません。"); return; }
+                if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) { await uiUtils.showCustomAlert("システムプロンプト編集中は削除できません。"); return; }
 
                 const siblings = this.getCascadedSiblings(indexToDelete, true);
                 const currentIndexInGroup = siblings.findIndex(m => m === msgToDelete) + 1;
@@ -10423,7 +10480,7 @@
                             textExpand = state.settings.toggleButtonTopTextExpand;
                         } else {
                             textCollapse = state.settings.toggleButtonBottomTextCollapse;
-                                                        textExpand = state.settings.toggleButtonBottomTextExpand;
+                            textExpand = state.settings.toggleButtonBottomTextExpand;
                         }
                         baseTitle = isCollapsed ? 'メッセージを展開' : 'メッセージを折りたたむ';
                         button.textContent = isCollapsed ? textExpand : textCollapse;
@@ -10471,7 +10528,7 @@
                      uiUtils.showCustomAlert("メッセージ編集中は操作できません。");
                      return;
                  }
-                 if (state.isEditingSystemPrompt) {
+                 if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
                      uiUtils.showCustomAlert("システムプロンプト編集中は操作できません。");
                      return;
                  }
