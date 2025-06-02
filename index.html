@@ -4894,8 +4894,6 @@
                         toggleButtonTopElement.setAttribute('aria-label', 'メッセージを展開');
                     }
                 }
-
-
                 if (role === 'user' && attachments && attachments.length > 0) {
                     const details = document.createElement('details');
                     details.classList.add('attachment-details');
@@ -5249,12 +5247,12 @@
                             return;
                         }
                         try {
-                            if (selectedApiProvider === 'deepseek' && isThoughtSummary && targetContentDiv.id === `streaming-thought-summary-${index}`) {
+                             if (isThoughtSummary && selectedApiProvider === 'deepseek' && targetContentDiv.id === `streaming-thought-summary-${index}`) {
                             } else {
                                 const rawHtml = marked.parse(contentToRender || '');
                                 targetContentDiv.innerHTML = rawHtml;
                             }
-                            if (!isThoughtSummary ) {
+                            if (!isThoughtSummary || (isThoughtSummary && selectedApiProvider === 'gemini')) {
                                 this.processInteractivePlaceholders(targetContentDiv);
                                 this.processInteractiveTitles(targetContentDiv);
                                 this.addCopyButtonsToCodeBlocks(targetContentDiv);
@@ -5267,9 +5265,6 @@
                     if (selectedApiProvider === 'gemini' || streamSpeed <= 0) {
                         renderCurrentState(accumulatedContentForDisplay);
                     } else if (selectedApiProvider === 'deepseek') {
-                         if (isThoughtSummary) {
-                        } else {
-                        }
                     }
                 }
                 if (!isThoughtSummary && state.currentMessages[index]?.groundingMetadata && selectedApiProvider === 'gemini') {
@@ -6231,13 +6226,17 @@
                 const systemPromptAreaIsCurrentlyPinned = elements.systemPromptArea.classList.contains('pinned-to-header');
                 state.isSystemPromptPinned = !shouldHide && shouldPin;
 
-                elements.systemPromptArea.classList.toggle('hidden', shouldHide || (!state.isSystemPromptPinned && state.currentScreen !== 'chat'));
+                elements.systemPromptArea.classList.toggle('hidden', shouldHide || !state.isSystemPromptPinned && state.currentScreen !== 'chat');
                 elements.systemPromptArea.classList.toggle('pinned-to-header', state.isSystemPromptPinned);
 
 
                 if (state.isSystemPromptPinned) {
-                     if (elements.systemPromptArea.parentNode !== elements.chatScreen || elements.systemPromptArea.nextSibling !== elements.memoArea) {
-                        elements.chatScreen.insertBefore(elements.systemPromptArea, header.nextSibling);
+                    if (elements.systemPromptArea.parentNode !== elements.chatScreen || elements.systemPromptArea.nextSibling !== elements.memoArea) {
+                         if (elements.memoArea.parentNode === elements.chatScreen) {
+                            elements.chatScreen.insertBefore(elements.systemPromptArea, elements.memoArea);
+                         } else {
+                             elements.chatScreen.insertBefore(elements.systemPromptArea, header.nextSibling?.nextSibling || null);
+                         }
                     }
                     elements.systemPromptArea.style.maxHeight = state.settings.systemPromptHeaderHeight || DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT;
                 } else {
@@ -7433,9 +7432,9 @@
 
 
                 if (systemPromptVisibleAndPinned) {
-                     if (elements.systemPromptArea.parentNode !== elements.chatScreen || elements.systemPromptArea.nextSibling !== elements.memoArea) {
-                        chatScreen.insertBefore(elements.systemPromptArea, header.nextSibling);
-                    }
+                     if (elements.systemPromptArea.parentNode !== chatScreen || elements.systemPromptArea.nextSibling !== elements.memoArea) {
+                        chatScreen.insertBefore(elements.systemPromptArea, elements.memoArea.previousSibling === header ? header.nextSibling : elements.memoArea);
+                     }
                     elements.systemPromptArea.style.top = `${topOffset}px`;
                     topOffset += elements.systemPromptArea.offsetHeight;
                     elements.systemPromptArea.style.maxHeight = state.settings.systemPromptHeaderHeight || DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT;
@@ -7448,17 +7447,15 @@
                 }
 
                 if (memoVisible) {
-                     if (elements.memoArea.parentNode !== chatScreen) {
-                        chatScreen.insertBefore(elements.memoArea, elements.clipboardStackArea.previousSibling === elements.systemPromptArea ? elements.systemPromptArea.nextSibling : elements.systemPromptArea);
+                     if (elements.memoArea.parentNode !== chatScreen ) {
+                         chatScreen.insertBefore(elements.memoArea, (systemPromptVisibleAndPinned ? elements.systemPromptArea.nextSibling : header.nextSibling) );
                      }
                     elements.memoArea.style.top = `${topOffset}px`;
                     topOffset += elements.memoArea.offsetHeight;
                 }
                 if (clipboardStackVisible) {
-                    if (elements.clipboardStackArea.parentNode !== chatScreen) {
-                         let referenceNode = elements.memoArea.classList.contains('hidden') ? elements.systemPromptArea : elements.memoArea;
-                         if (referenceNode.parentNode !== chatScreen) referenceNode = header;
-                         chatScreen.insertBefore(elements.clipboardStackArea, referenceNode.nextSibling);
+                    if (elements.clipboardStackArea.parentNode !== chatScreen ) {
+                         chatScreen.insertBefore(elements.clipboardStackArea, (memoVisible ? elements.memoArea.nextSibling : (systemPromptVisibleAndPinned ? elements.systemPromptArea.nextSibling : header.nextSibling) ) );
                     }
                     elements.clipboardStackArea.style.top = `${topOffset}px`;
                     topOffset += elements.clipboardStackArea.offsetHeight;
@@ -7467,7 +7464,6 @@
                 if (mainContent) {
                   mainContent.style.paddingTop = `${topOffset}px`;
                 }
-
             },
             async copyClipboardStackText() {
                 const stackText = elements.clipboardStackEditor.value;
@@ -7696,6 +7692,7 @@
                 state.pendingAttachments = [];
                 state.isMemoVisible = false;
                 state.isClipboardStackVisible = false;
+                state.isSystemPromptPinned = state.settings.pinSystemPromptToHeader;
                 state.clipboardStackContent = '';
                 state.areAllMessagesHidden = false;
                 uiUtils.updateToggleAllContentButton();
@@ -7728,7 +7725,7 @@
                     const msgEl = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`);
                     this.cancelEditMessage(state.editingMessageIndex, msgEl);
                 }
-                 if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
+                if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
                     const confirmed = await uiUtils.showCustomConfirm("システムプロンプト編集中です。変更を破棄して別のチャットを読み込みますか？");
                     if (!confirmed) return;
                     this.cancelEditSystemPrompt();
@@ -8578,6 +8575,7 @@
                                 if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
                                 if (streamData.fullReasoningContent && selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
                                     modelThoughtSummaryContent = (modelThoughtSummaryContent || "") + streamData.fullReasoningContent;
+                                    state.deepSeekThoughtRawTextBuffer = modelThoughtSummaryContent;
                                 }
                                 break;
                             } else if (streamData.type === 'error') {
@@ -8592,6 +8590,7 @@
                         }
                         if (modelResponseMetadata.fullReasoningContent && selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
                             modelThoughtSummaryContent = modelResponseMetadata.fullReasoningContent;
+                            state.deepSeekThoughtRawTextBuffer = modelThoughtSummaryContent;
                         }
 
                          if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
@@ -8733,10 +8732,9 @@
                                 } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                                 }
-                                if ( (selectedApiProvider !== 'deepseek') ||
-                                     (selectedApiProvider === 'deepseek' && state.deepSeekDisplayTimer === null && state.deepSeekThoughtDisplayTimer === null )
-                                    ) {
-                                   uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
+
+                                if (selectedApiProvider !== 'deepseek' || (state.deepSeekDisplayTimer === null && state.deepSeekThoughtDisplayTimer === null)) {
+                                    uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
                                 }
                                 await dbUtils.saveChat();
                             }
@@ -8859,6 +8857,9 @@
                         if(state.deepSeekThoughtDisplayTimer) {
                             clearInterval(state.deepSeekThoughtDisplayTimer);
                             state.deepSeekThoughtDisplayTimer = null;
+                        }
+                        if (modelMessageObjectForStream && state.currentMessages.includes(modelMessageObjectForStream)) {
+                             uiUtils.finalizeStreamingMessage(state.currentMessages.indexOf(modelMessageObjectForStream));
                         }
                         if (state.settings.autoScrollOnNewMessage) {
                             uiUtils.scrollToBottom();
@@ -10004,7 +10005,7 @@
                     setTimeout(() => {
                         buttonElement.textContent = originalText;
                         buttonElement.disabled = false;
-                    }, 2000);
+                                            }, 2000);
                 }
 
                 const currentStackContent = elements.clipboardStackEditor.value;
@@ -11081,21 +11082,22 @@
                         }
                          if (finalFinishReason && finalFinishReason !== 'null') break;
                     }
-
-                    yield {
-                        type: 'metadata',
-                        finishReason: isCancelled ? 'ABORTED' : finalFinishReason || 'stop',
-                        safetyRatings: null,
-                        groundingMetadata: null,
-                        usageMetadata: finalUsage ? {
-                            candidatesTokenCount: finalUsage.completion_tokens,
-                            totalTokenCount: finalUsage.total_tokens,
-                        } : null,
-                        fullReasoningContent: accumulatedFullReasoningContent || null
-                    };
                 } catch (error) {
-                    yield { type: 'error', error: { message: error.message }, message: error.message };
+                     yield { type: 'error', error: { message: error.message }, message: error.message };
                 } finally {
+                     if (!isCancelled) {
+                        yield {
+                            type: 'metadata',
+                            finishReason: isCancelled ? 'ABORTED' : finalFinishReason || 'stop',
+                            safetyRatings: null,
+                            groundingMetadata: null,
+                            usageMetadata: finalUsage ? {
+                                candidatesTokenCount: finalUsage.completion_tokens,
+                                totalTokenCount: finalUsage.total_tokens,
+                            } : null,
+                            fullReasoningContent: accumulatedFullReasoningContent || null
+                        };
+                    }
                     if (!reader.closed && !isCancelled) {
                         try { await reader.cancel("Stream processing ended."); } catch (e) { }
                     }
