@@ -5158,60 +5158,102 @@
                     }
                 });
             },
-            async updateStreamingMessage(index, mainContentToDisplay, thoughtSummaryToDisplay) {
+            async updateStreamingMessage(index, newTextChunk, isThoughtSummary = false) {
                 const messageDiv = document.getElementById(`streaming-message-${index}`);
                 if (!messageDiv || typeof marked === 'undefined') return;
 
-                const messageData = state.currentMessages[index];
-                const selectedApiProvider = messageData?.generatedByApiProvider || state.settings.apiProvider;
+                let targetContentDiv;
+                let accumulatedContent;
 
-                if (thoughtSummaryToDisplay !== undefined) {
-                    const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
-                    if (thoughtContentDiv) {
-                        if (selectedApiProvider === 'gemini' && state.settings.geminiIncludeThoughts) {
-                            try {
-                                thoughtContentDiv.innerHTML = marked.parse(thoughtSummaryToDisplay || '');
-                            } catch (e) {
-                                thoughtContentDiv.textContent = thoughtSummaryToDisplay || '';
-                            }
-                        } else if (selectedApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) {
-                            let currentPre = thoughtContentDiv.querySelector('pre');
-                            if (!currentPre) {
-                                currentPre = document.createElement('pre');
-                                thoughtContentDiv.innerHTML = '';
-                                thoughtContentDiv.appendChild(currentPre);
-                            }
-                            currentPre.textContent = thoughtSummaryToDisplay || '';
-                        }
+                const messageDataForProvider = state.currentMessages[index];
+                const providerForThisMessage = messageDataForProvider?.generatedByApiProvider || state.settings.apiProvider;
+                const streamSpeed = providerForThisMessage === 'gemini'
+                    ? state.settings.geminiStreamingSpeed
+                    : state.settings.deepSeekStreamingSpeed;
+
+                if (isThoughtSummary) {
+                    if (providerForThisMessage === 'gemini' && state.settings.geminiIncludeThoughts) {
+                        targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
+                        accumulatedContent = state.partialThoughtStreamContent;
+                    } else if (providerForThisMessage === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) {
+                        targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
+                        accumulatedContent = state.partialThoughtStreamContent;
+                    } else {
+                        return;
                     }
+                } else {
+                    targetContentDiv = messageDiv.querySelector(`#streaming-content-${index}`);
+                    accumulatedContent = state.partialStreamContent;
                 }
 
-                if (mainContentToDisplay !== undefined) {
-                    const contentDiv = messageDiv.querySelector(`#streaming-content-${index}`);
-                    if (contentDiv) {
+                if (targetContentDiv) {
+                    const renderCurrentState = (contentToRender) => {
                         try {
-                            const rawHtml = marked.parse(mainContentToDisplay || '');
-                            contentDiv.innerHTML = rawHtml;
-                            this.processInteractivePlaceholders(contentDiv);
-                            this.processInteractiveTitles(contentDiv);
-                            this.addCopyButtonsToCodeBlocks(contentDiv);
+                            if (providerForThisMessage === 'deepseek' && isThoughtSummary && targetContentDiv.id && targetContentDiv.id.startsWith('streaming-thought-summary-')) {
+                                let currentPre = targetContentDiv.querySelector('pre');
+                                if (!currentPre) {
+                                    currentPre = document.createElement('pre');
+                                    targetContentDiv.innerHTML = '';
+                                    targetContentDiv.appendChild(currentPre);
+                                }
+                                currentPre.textContent = contentToRender || '';
+                            } else {
+                                const rawHtml = marked.parse(contentToRender || '');
+                                targetContentDiv.innerHTML = rawHtml;
+                            }
+                            if (!isThoughtSummary) {
+                                this.processInteractivePlaceholders(targetContentDiv);
+                                this.processInteractiveTitles(targetContentDiv);
+                                this.addCopyButtonsToCodeBlocks(targetContentDiv);
+                            }
                         } catch (e) {
-                            contentDiv.textContent = mainContentToDisplay;
+                            targetContentDiv.textContent = contentToRender;
                         }
+                    };
+
+                    const isCurrentlyBackgroundProcess = typeof isBackgroundProcess !== 'undefined' && isBackgroundProcess;
+
+                    if (streamSpeed > 0 && newTextChunk && typeof newTextChunk === 'string' && newTextChunk.length > 0 && !isCurrentlyBackgroundProcess) {
+                        const isGeminiThoughtCharByChar = isThoughtSummary && providerForThisMessage === 'gemini' && newTextChunk.length === 1 && state.settings.geminiStreamingSpeed > 0;
+                        const baseContentLength = accumulatedContent.length - newTextChunk.length;
+                        const baseContent = accumulatedContent.substring(0, baseContentLength);
+                        let animatedSegment = "";
+
+                        for (let i = 0; i < newTextChunk.length; i++) {
+                            if (state.abortController?.signal.aborted) break;
+                            animatedSegment += newTextChunk[i];
+                            renderCurrentState(baseContent + animatedSegment);
+
+                            const autoScrollEnabledForThisContentType = isThoughtSummary
+                                ? state.settings.autoScrollOnThought
+                                : state.settings.autoScrollOnNewMessage;
+
+                            if (autoScrollEnabledForThisContentType) {
+                                this.scrollToBottom();
+                            }
+                            if (!isGeminiThoughtCharByChar) {
+                                await sleep(streamSpeed);
+                            }
+                        }
+                        renderCurrentState(accumulatedContent);
+                    } else {
+                        renderCurrentState(accumulatedContent);
                     }
                 }
 
-                if (selectedApiProvider === 'gemini' && state.currentMessages[index]?.groundingMetadata) {
+                if (!isThoughtSummary && state.currentMessages[index]?.groundingMetadata && providerForThisMessage === 'gemini') {
                     const citationContainer = messageDiv.querySelector(`#streaming-citations-${index}`);
                     if (citationContainer) {
                         this.renderCitations(state.currentMessages[index], citationContainer);
                     }
                 }
 
-                const autoScrollEnabledForThisContentType = (thoughtSummaryToDisplay !== undefined && state.settings.autoScrollOnThought) ||
-                                                         (mainContentToDisplay !== undefined && state.settings.autoScrollOnNewMessage);
-
-                if (autoScrollEnabledForThisContentType) {
+                const autoScrollEnabledForThisContentType = isThoughtSummary
+                    ? state.settings.autoScrollOnThought
+                    : state.settings.autoScrollOnNewMessage;
+                const isCurrentlyBackgroundProcess = typeof isBackgroundProcess !== 'undefined' && isBackgroundProcess;
+                const noAnimationExecuted = !(streamSpeed > 0 && newTextChunk && typeof newTextChunk === 'string' && newTextChunk.length > 0 && !isCurrentlyBackgroundProcess);
+                if (autoScrollEnabledForThisContentType && noAnimationExecuted) {
                     this.scrollToBottom();
                 }
             },
@@ -7930,8 +7972,7 @@
 
 
                 if (!isBackgroundProcess) uiUtils.setSendingState(true);
-                const dummyModelPrefixForDisplay = (contextConcatDummyModel && dummyModelTextToUse) ? dummyModelTextToUse : '';
-                state.partialStreamContent = dummyModelPrefixForDisplay;
+                state.partialStreamContent = '';
                 state.partialThoughtStreamContent = '';
 
 
@@ -8170,9 +8211,9 @@
                         throw new Error("不明なAPIプロバイダーが選択されています。");
                     }
 
-
-                    if (!isBackgroundProcess) {
-                        state.partialStreamContent = dummyModelPrefixForDisplay;
+                    const dummyModelPrefix = (contextConcatDummyModel && dummyModelTextToUse) ? dummyModelTextToUse : '';
+                     if (!isBackgroundProcess) {
+                        state.partialStreamContent = dummyModelPrefix;
                         state.partialThoughtStreamContent = '';
                     }
 
@@ -8218,151 +8259,83 @@
                             responseStreamIterator = apiUtils.handleDeepSeekStreamingResponse(apiResponseObject);
                         }
 
-                        const currentContextStreamSpeed = selectedApiProvider === 'gemini' ? contextStreamingSpeed : state.settings.deepSeekStreamingSpeed;
+                        const currentContextStreamSpeed = (selectedApiProvider === 'gemini')
+                            ? contextStreamingSpeed
+                            : contextStreamingSpeed;
 
-                        if (selectedApiProvider === 'deepseek') {
-                            for await (const streamData of responseStreamIterator) {
-                                if (state.abortController?.signal.aborted) {
-                                    modelResponseMetadata.finishReason = 'ABORTED';
-                                    throw new Error("リクエストがキャンセルされました。");
-                                }
-                                if (streamData.type === 'chunk') {
-                                    if (streamData.thoughtText && contextDeepSeekIncludeThoughts) {
-                                        state.partialThoughtStreamContent += streamData.thoughtText;
-                                    }
-                                    if (streamData.contentText) {
-                                        state.partialStreamContent += streamData.contentText;
-                                    }
-                                    if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
-                                } else if (streamData.type === 'metadata') {
-                                    modelResponseMetadata = {
-                                        finishReason: streamData.finishReason,
-                                        safetyRatings: streamData.safetyRatings,
-                                    };
-                                    modelResponseRawContent = state.partialStreamContent;
-                                    modelThoughtSummaryContent = state.partialThoughtStreamContent;
-                                    if (streamData.fullReasoningContent && contextDeepSeekIncludeThoughts) {
-                                        modelThoughtSummaryContent = streamData.fullReasoningContent;
-                                    }
-                                    if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
-                                    break;
-                                } else if (streamData.type === 'error') {
-                                    modelResponseMetadata.finishReason = 'ERROR';
-                                    modelResponseMetadata.error = streamData.error;
-                                    throw new Error(streamData.message || "ストリーム内でエラーが発生しました。");
-                                }
+
+                        for await (const streamData of responseStreamIterator) {
+                            if (state.abortController?.signal.aborted) {
+                                modelResponseMetadata.finishReason = 'ABORTED';
+                                throw new Error("リクエストがキャンセルされました。");
                             }
 
-                            if (!isBackgroundProcess && modelMessageObjectForStream && (modelResponseRawContent || modelThoughtSummaryContent)) {
-                                const tempPlaceholderIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
-                                if (tempPlaceholderIndex !== -1) {
-                                    let displayedThought = '';
-                                    if (modelThoughtSummaryContent && contextDeepSeekIncludeThoughts) {
-                                        for (const char of modelThoughtSummaryContent) {
-                                            if (state.abortController?.signal.aborted) break;
-                                            displayedThought += char;
-                                            uiUtils.updateStreamingMessage(tempPlaceholderIndex, dummyModelPrefixForDisplay, displayedThought);
-                                            if (currentContextStreamSpeed > 0) await sleep(currentContextStreamSpeed);
-                                        }
-                                    }
-                                     if (state.abortController?.signal.aborted) {
-                                         modelResponseMetadata.finishReason = 'ABORTED';
-                                         throw new Error("リクエストがキャンセルされました。");
-                                    }
-
-                                    let displayedContent = dummyModelPrefixForDisplay;
-                                    const contentToAnimate = modelResponseRawContent.substring(dummyModelPrefixForDisplay.length);
-
-                                    for (const char of contentToAnimate) {
-                                        if (state.abortController?.signal.aborted) break;
-                                        displayedContent += char;
-                                        uiUtils.updateStreamingMessage(tempPlaceholderIndex, displayedContent, displayedThought);
-                                        if (currentContextStreamSpeed > 0) await sleep(currentContextStreamSpeed);
-                                    }
-                                    if (state.abortController?.signal.aborted) {
-                                         modelResponseMetadata.finishReason = 'ABORTED';
-                                         throw new Error("リクエストがキャンセルされました。");
-                                    }
-                                }
-                            }
-                        } else if (selectedApiProvider === 'gemini') {
-                            for await (const streamData of responseStreamIterator) {
-                                if (state.abortController?.signal.aborted) {
-                                    modelResponseMetadata.finishReason = 'ABORTED';
-                                    throw new Error("リクエストがキャンセルされました。");
-                                }
-
-                                if (streamData.type === 'chunk') {
-                                    if (streamData.thoughtText) {
-                                        if (isBackgroundProcess) {
-                                            modelThoughtSummaryContent += streamData.thoughtText;
-                                        } else {
-                                            if (contextGeminiIncludeThoughts) {
-                                                for (const char of streamData.thoughtText) {
-                                                    if (state.abortController?.signal.aborted) break;
-                                                    state.partialThoughtStreamContent += char;
-                                                    uiUtils.updateStreamingMessage(
-                                                        modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1,
-                                                        state.partialStreamContent,
-                                                        state.partialThoughtStreamContent
-                                                    );
-                                                    if (currentContextStreamSpeed > 0) await sleep(currentContextStreamSpeed);
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    if (streamData.contentText) {
-                                        if (isBackgroundProcess) {
-                                            modelResponseRawContent += streamData.contentText;
-                                        } else {
-                                            for (const char of streamData.contentText) {
+                            if (streamData.type === 'chunk') {
+                                if (streamData.thoughtText) {
+                                    if (isBackgroundProcess) {
+                                        modelThoughtSummaryContent += streamData.thoughtText;
+                                    } else {
+                                        if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
+                                            for (const char of streamData.thoughtText) {
                                                 if (state.abortController?.signal.aborted) break;
-                                                state.partialStreamContent += char;
-                                                uiUtils.updateStreamingMessage(
-                                                    modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1,
-                                                    state.partialStreamContent,
-                                                    state.partialThoughtStreamContent
-                                                );
+                                                state.partialThoughtStreamContent += char;
+                                                uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, char, true);
                                                 if (currentContextStreamSpeed > 0) await sleep(currentContextStreamSpeed);
                                             }
+                                        } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
+                                            state.partialThoughtStreamContent += streamData.thoughtText;
+                                            uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, streamData.thoughtText, true);
                                         }
                                     }
-                                    if (state.abortController?.signal.aborted) {
-                                        modelResponseMetadata.finishReason = 'ABORTED';
-                                        throw new Error("リクエストがキャンセルされました。");
-                                    }
-                                    if (streamData.groundingMetadata) {
-                                        currentGroundingMetadata = streamData.groundingMetadata;
-                                        if (!isBackgroundProcess && modelMessageObjectForStream && state.currentMessages.includes(modelMessageObjectForStream)) {
-                                            const msgIndexForGrounding = state.currentMessages.indexOf(modelMessageObjectForStream);
-                                            if (state.currentMessages[msgIndexForGrounding]) {
-                                                state.currentMessages[msgIndexForGrounding].groundingMetadata = currentGroundingMetadata;
-                                            }
-                                        }
-                                    }
-                                    if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
-
-                                } else if (streamData.type === 'metadata') {
-                                    modelResponseMetadata = {
-                                        finishReason: streamData.finishReason,
-                                        safetyRatings: streamData.safetyRatings,
-                                    };
-                                    if (streamData.groundingMetadata) currentGroundingMetadata = streamData.groundingMetadata;
-                                    if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
-                                    break;
-                                } else if (streamData.type === 'error') {
-                                    modelResponseMetadata.finishReason = 'ERROR';
-                                    modelResponseMetadata.error = streamData.error;
-                                    throw new Error(streamData.message || "ストリーム内でエラーが発生しました。");
                                 }
-                            }
-                             if (!isBackgroundProcess) {
-                                modelThoughtSummaryContent = state.partialThoughtStreamContent;
-                                modelResponseRawContent = state.partialStreamContent;
-                             }
-                        }
 
+                                if (streamData.contentText) {
+                                    if (isBackgroundProcess) {
+                                        modelResponseRawContent += streamData.contentText;
+                                    } else {
+                                        state.partialStreamContent += streamData.contentText;
+                                        uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, streamData.contentText, false);
+                                    }
+                                }
+                                if (state.abortController?.signal.aborted) {
+                                    modelResponseMetadata.finishReason = 'ABORTED';
+                                    throw new Error("リクエストがキャンセルされました。");
+                                }
+                                if (streamData.groundingMetadata && selectedApiProvider === 'gemini') {
+                                    currentGroundingMetadata = streamData.groundingMetadata;
+                                    if (!isBackgroundProcess && modelMessageObjectForStream && state.currentMessages.includes(modelMessageObjectForStream)) {
+                                        const msgIndexForGrounding = state.currentMessages.indexOf(modelMessageObjectForStream);
+                                        if (state.currentMessages[msgIndexForGrounding]) {
+                                            state.currentMessages[msgIndexForGrounding].groundingMetadata = currentGroundingMetadata;
+                                        }
+                                    }
+                                }
+                                if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
+
+                            } else if (streamData.type === 'metadata') {
+                                modelResponseMetadata = {
+                                    finishReason: streamData.finishReason,
+                                    safetyRatings: streamData.safetyRatings,
+                                };
+                                if (streamData.groundingMetadata && selectedApiProvider === 'gemini') currentGroundingMetadata = streamData.groundingMetadata;
+                                if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
+                                if (streamData.fullReasoningContent && selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
+                                    modelThoughtSummaryContent = (modelThoughtSummaryContent || "") + streamData.fullReasoningContent;
+                                }
+                                break;
+                            } else if (streamData.type === 'error') {
+                                modelResponseMetadata.finishReason = 'ERROR';
+                                modelResponseMetadata.error = streamData.error;
+                                throw new Error(streamData.message || "ストリーム内でエラーが発生しました。");
+                            }
+                        }
+                        if (!isBackgroundProcess) {
+                           modelThoughtSummaryContent = state.partialThoughtStreamContent;
+                           modelResponseRawContent = state.partialStreamContent;
+                        }
+                        if (modelResponseMetadata.fullReasoningContent && selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
+                            modelThoughtSummaryContent = modelResponseMetadata.fullReasoningContent;
+                        }
 
                          if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
                             throw new Error("リクエストがキャンセルされました。");
@@ -8404,7 +8377,7 @@
                                 }
                                 finalUsageMetadataFromStream = data.usageMetadata || null;
                             }
-                             modelResponseRawContent = dummyModelPrefixForDisplay + rawContentFromApi;
+                             modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
                         } else if (selectedApiProvider === 'deepseek') {
                             const choice = data.choices?.[0];
                             let rawContentFromApi = "";
@@ -8425,7 +8398,7 @@
                                 modelResponseMetadata = { finishReason: 'ERROR' };
                                 if (data.error) rawContentFromApi += ` (エラー: ${data.error.message})`;
                             }
-                            modelResponseRawContent = dummyModelPrefixForDisplay + rawContentFromApi;
+                            modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
                         }
                     }
 
@@ -8497,7 +8470,6 @@
                                 msgToUpdate.finishReason = modelResponseMetadata.finishReason;
                                 msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
                                 msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
-                                msgToUpdate.generatedByApiProvider = selectedApiProvider;
                                 if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
                                     msgToUpdate.thoughtSummary = modelThoughtSummaryContent || null;
                                     msgToUpdate.groundingMetadata = currentGroundingMetadata;
