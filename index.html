@@ -3239,6 +3239,14 @@
                            <input type="checkbox" id="deepseek-streaming-output">
                            ストリーミング出力を使用する
                        </label>
+                       <label class="checkbox-label" style="margin-top: 5px;">
+                           <input type="checkbox" id="deepseek-buffer-stream-toggle">
+                           受信テキストをバッファリングして1文字ずつ表示する (上記ON時)
+                       </label>
+                       <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                           ※ チェック時、APIからの各応答チャンクを一旦溜め、設定された速度で滑らかに表示します。<br>
+                           ※ オフの場合、APIからのチャンク単位でアニメーション表示します。
+                       </p>
                        <label for="deepseek-streaming-speed">文字送り速度 (ミリ秒/文字):</label>
                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                            ※非推奨。
@@ -3560,13 +3568,10 @@
                            <input type="number" id="message-body-font-size-input" placeholder="例: 14 (デフォルト)" aria-label="メッセージ本文のフォントサイズ">
                            <label for="code-block-font-size-input">コードブロックのフォントサイズ (px):</label>
                            <input type="number" id="code-block-font-size-input" placeholder="例: 13 (デフォルト)" aria-label="コードブロックのフォントサイズ">
-                           <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                               ※ 空欄でデフォルト値。
-                           </p>
                            <label for="thought-summary-font-size">思考プロセス フォントサイズ (px):</label>
                            <input type="number" id="thought-summary-font-size" min="8" max="24" step="1" placeholder="例: 13 (8-24)" aria-label="思考プロセス フォントサイズ">
                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                               ※ 空欄でデフォルト(13px)。
+                               ※ 空欄でデフォルト値。
                            </p>
                            <details id="settings-group-opacity">
                                 <summary style="cursor: pointer; font-weight: normal; font-size: 14px; color: var(--text-link); list-style: revert;">各種透明度設定</summary>
@@ -3882,6 +3887,7 @@
             deepSeekIncludeThoughtsToggle: document.getElementById('deepseek-include-thoughts-toggle'),
             deepSeekExpandThoughtsByDefaultToggle: document.getElementById('deepseek-expand-thoughts-by-default-toggle'),
             deepSeekStreamingOutputCheckbox: document.getElementById('deepseek-streaming-output'),
+            deepSeekBufferStreamToggle: document.getElementById('deepseek-buffer-stream-toggle'),
             deepSeekStreamingSpeedInput: document.getElementById('deepseek-streaming-speed'),
             deepSeekDummyUserInput: document.getElementById('deepseek-dummy-user'),
             deepSeekEnableDummyUserCheckbox: document.getElementById('deepseek-enable-dummy-user'),
@@ -4073,6 +4079,7 @@
                 deepSeekIncludeDeepSeekThoughts: false,
                 deepSeekExpandDeepSeekThoughtsByDefault: false,
                 deepSeekStreamingOutput: true,
+                deepSeekBufferStream: true,
                 deepSeekStreamingSpeed: DEFAULT_STREAMING_SPEED,
                 deepSeekDummyUser: '',
                 deepSeekEnableDummyUser: true,
@@ -4161,6 +4168,8 @@
             abortController: null,
             partialStreamContent: '',
             partialThoughtStreamContent: '',
+            deepSeekFullResponseBuffer: '',
+            isDisplayingDeepSeekStream: false,
             editingMessageIndex: null,
             isEditingSystemPrompt: false,
             touchStartX: 0,
@@ -5163,32 +5172,18 @@
                 if (!messageDiv || typeof marked === 'undefined') return;
 
                 let targetContentDiv;
-                let accumulatedContentForDisplay;
-                let textToAnimateForDeepSeek = "";
-
                 const selectedApiProvider = state.settings.apiProvider;
-                const streamSpeed = selectedApiProvider === 'gemini' ? state.settings.geminiStreamingSpeed : state.settings.deepSeekStreamingSpeed;
-
 
                 if (isThoughtSummary) {
                     if (selectedApiProvider === 'gemini' && state.settings.geminiIncludeThoughts) {
                         targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
-                        accumulatedContentForDisplay = state.partialThoughtStreamContent;
                     } else if (selectedApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) {
                         targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
-                        textToAnimateForDeepSeek = newCharOrChunk || "";
-                        accumulatedContentForDisplay = state.partialThoughtStreamContent;
                     } else {
                         return;
                     }
                 } else {
                     targetContentDiv = messageDiv.querySelector(`#streaming-content-${index}`);
-                    if (selectedApiProvider === 'gemini') {
-                        accumulatedContentForDisplay = state.partialStreamContent;
-                    } else {
-                        textToAnimateForDeepSeek = newCharOrChunk || "";
-                        accumulatedContentForDisplay = state.partialStreamContent;
-                    }
                 }
 
                 if (targetContentDiv) {
@@ -5215,32 +5210,20 @@
                             targetContentDiv.textContent = contentToRender;
                         }
                     };
-                    if (selectedApiProvider === 'gemini' || streamSpeed <= 0 || !textToAnimateForDeepSeek) {
-                        renderCurrentState(accumulatedContentForDisplay);
-                    } else if (selectedApiProvider === 'deepseek' && textToAnimateForDeepSeek) {
-                        const baseContent = accumulatedContentForDisplay.slice(0, accumulatedContentForDisplay.length - textToAnimateForDeepSeek.length);
-                        let animatedContentSegment = "";
 
-                        for (let i = 0; i < textToAnimateForDeepSeek.length; i++) {
-                            if (state.abortController?.signal.aborted) break;
-                            animatedContentSegment += textToAnimateForDeepSeek[i];
-                            renderCurrentState(baseContent + animatedContentSegment);
-
-                            if (!isThoughtSummary && state.settings.autoScrollOnNewMessage) {
-                                this.scrollToBottom();
-                            }
-                            await sleep(streamSpeed);
-                        }
-                        renderCurrentState(accumulatedContentForDisplay);
+                    if (isThoughtSummary) {
+                        renderCurrentState(state.partialThoughtStreamContent);
+                    } else {
+                        renderCurrentState(state.partialStreamContent);
                     }
                 }
+
                 if (!isThoughtSummary && state.currentMessages[index]?.groundingMetadata && selectedApiProvider === 'gemini') {
                     const citationContainer = messageDiv.querySelector(`#streaming-citations-${index}`);
                     if (citationContainer) {
                         this.renderCitations(state.currentMessages[index], citationContainer);
                     }
                 }
-
 
                 const autoScrollEnabledForThisContentType = isThoughtSummary
                     ? state.settings.autoScrollOnThought
@@ -5827,6 +5810,7 @@
                 elements.deepSeekIncludeThoughtsToggle.checked = state.settings.deepSeekIncludeDeepSeekThoughts;
                 elements.deepSeekExpandThoughtsByDefaultToggle.checked = state.settings.deepSeekExpandDeepSeekThoughtsByDefault;
                 elements.deepSeekStreamingOutputCheckbox.checked = state.settings.deepSeekStreamingOutput;
+                elements.deepSeekBufferStreamToggle.checked = state.settings.deepSeekBufferStream;
                 elements.deepSeekStreamingSpeedInput.value = state.settings.deepSeekStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
                 elements.deepSeekDummyUserInput.value = state.settings.deepSeekDummyUser || '';
                 elements.deepSeekEnableDummyUserCheckbox.checked = state.settings.deepSeekEnableDummyUser;
@@ -7847,7 +7831,8 @@
                     contextPresencePenalty, contextFrequencyPenalty,
                     contextStreamingOutput, contextStreamingSpeed,
                     contextDummyUser, contextEnableDummyUser,
-                    contextDummyModel, contextEnableDummyModel, contextConcatDummyModel;
+                    contextDummyModel, contextEnableDummyModel, contextConcatDummyModel,
+                    contextDeepSeekBufferStream;
 
                 let contextGeminiTopK, contextGeminiThinkingBudget, contextGeminiIncludeThoughts,
                     contextGeminiPseudoStreaming, contextGeminiEnableGrounding;
@@ -7883,6 +7868,7 @@
                         contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.deepSeekFrequencyPenalty;
                         contextDeepSeekIncludeThoughts = sourceSessionContext.includeDeepSeekThoughts ?? state.settings.deepSeekIncludeDeepSeekThoughts;
                         contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.deepSeekStreamingOutput;
+                        contextDeepSeekBufferStream = sourceSessionContext.deepSeekBufferStream ?? state.settings.deepSeekBufferStream;
                         contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.deepSeekStreamingSpeed;
                         contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.deepSeekDummyUser;
                         contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.deepSeekEnableDummyUser;
@@ -7917,6 +7903,7 @@
                         contextFrequencyPenalty = state.settings.deepSeekFrequencyPenalty;
                         contextDeepSeekIncludeThoughts = state.settings.deepSeekIncludeDeepSeekThoughts;
                         contextStreamingOutput = state.settings.deepSeekStreamingOutput;
+                        contextDeepSeekBufferStream = state.settings.deepSeekBufferStream;
                         contextStreamingSpeed = state.settings.deepSeekStreamingSpeed;
                         contextDummyUser = state.settings.deepSeekDummyUser;
                         contextEnableDummyUser = state.settings.deepSeekEnableDummyUser;
@@ -7930,6 +7917,8 @@
                 if (!isBackgroundProcess) {
                     if (state.editingMessageIndex !== null) { await uiUtils.showCustomAlert("他のメッセージを編集中です。"); return; }
                     if (state.isEditingSystemPrompt) { await uiUtils.showCustomAlert("システムプロンプト編集中です。"); return; }
+                    state.deepSeekFullResponseBuffer = '';
+                    state.isDisplayingDeepSeekStream = false;
                 }
 
                 let text = '';
@@ -8275,7 +8264,14 @@
                                             }
                                         } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
                                             state.partialThoughtStreamContent += streamData.thoughtText;
-                                            uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, streamData.thoughtText, true);
+                                            if (contextDeepSeekBufferStream) {
+                                                state.deepSeekFullResponseBuffer += streamData.thoughtText; // This might need specific handling for thought buffering
+                                                if (!state.isDisplayingDeepSeekStream) { // Assuming a separate display loop for thoughts if needed
+                                                     // Or, integrate thought display into the main display loop logic
+                                                }
+                                            } else {
+                                               uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, streamData.thoughtText, true);
+                                            }
                                         }
                                     }
                                 }
@@ -8291,9 +8287,17 @@
                                                 uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, char, false);
                                                 if (currentContextStreamSpeed > 0) await sleep(currentContextStreamSpeed);
                                             }
-                                        } else {
-                                            state.partialStreamContent += streamData.contentText;
-                                            uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, streamData.contentText, false);
+                                        } else { // DeepSeek
+                                            if (contextDeepSeekBufferStream) {
+                                                state.deepSeekFullResponseBuffer += streamData.contentText;
+                                                if (!state.isDisplayingDeepSeekStream && modelMessageObjectForStream) {
+                                                    this.startDeepSeekDisplayLoop(state.currentMessages.indexOf(modelMessageObjectForStream));
+                                                }
+                                            } else {
+                                                state.partialStreamContent += streamData.contentText;
+                                                // For non-buffered DeepSeek, pass the whole chunk for its own animation
+                                                uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, streamData.contentText, false);
+                                            }
                                         }
                                     }
                                 }
@@ -8320,7 +8324,14 @@
                                 if (streamData.groundingMetadata && selectedApiProvider === 'gemini') currentGroundingMetadata = streamData.groundingMetadata;
                                 if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
                                 if (streamData.fullReasoningContent && selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
-                                    modelThoughtSummaryContent = (modelThoughtSummaryContent || "") + streamData.fullReasoningContent;
+                                     if (isBackgroundProcess) {
+                                        modelThoughtSummaryContent = (modelThoughtSummaryContent || "") + streamData.fullReasoningContent;
+                                    } else {
+                                        state.partialThoughtStreamContent = (state.partialThoughtStreamContent || "") + streamData.fullReasoningContent;
+                                         if (contextDeepSeekBufferStream && modelMessageObjectForStream) {
+                                             // Potentially trigger thought display update if buffered thoughts are a separate loop
+                                         }
+                                    }
                                 }
                                 break;
                             } else if (streamData.type === 'error') {
@@ -8331,17 +8342,24 @@
                         }
                         if (!isBackgroundProcess) {
                            modelThoughtSummaryContent = state.partialThoughtStreamContent;
-                           modelResponseRawContent = state.partialStreamContent;
+                           if (selectedApiProvider === 'gemini' || !contextDeepSeekBufferStream) {
+                                modelResponseRawContent = state.partialStreamContent;
+                           } else {
+                               // For buffered DeepSeek, the full content will be in deepSeekFullResponseBuffer,
+                               // but partialStreamContent is what's been displayed so far.
+                               // If loop finished, partialStreamContent should be the full content.
+                           }
                         }
                         if (modelResponseMetadata.fullReasoningContent && selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
-                            modelThoughtSummaryContent = modelResponseMetadata.fullReasoningContent;
+                           if (isBackgroundProcess) modelThoughtSummaryContent = modelResponseMetadata.fullReasoningContent;
+                           else state.partialThoughtStreamContent = modelResponseMetadata.fullReasoningContent;
                         }
 
                          if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
                             throw new Error("リクエストがキャンセルされました。");
                         }
 
-                    } else {
+                    } else { // Non-streaming
                         const data = await apiResponseObject.json();
                         if (selectedApiProvider === 'gemini') {
                             const candidate = data.candidates?.[0];
@@ -8588,6 +8606,8 @@
                         state.abortController = null;
                         state.partialStreamContent = '';
                         state.partialThoughtStreamContent = '';
+                        state.deepSeekFullResponseBuffer = '';
+                        state.isDisplayingDeepSeekStream = false;
                         if (state.settings.autoScrollOnNewMessage) {
                             uiUtils.scrollToBottom();
                         }
@@ -8599,6 +8619,31 @@
             abortRequest() {
                 if (state.abortController) {
                     state.abortController.abort();
+                }
+                 state.isDisplayingDeepSeekStream = false;
+            },
+            async startDeepSeekDisplayLoop(messageIndex) {
+                if (state.isDisplayingDeepSeekStream || state.abortController?.signal.aborted || messageIndex === -1) {
+                    return;
+                }
+                state.isDisplayingDeepSeekStream = true;
+
+                const streamSpeed = state.settings.deepSeekStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
+
+                while (state.deepSeekFullResponseBuffer.length > 0 && !state.abortController?.signal.aborted) {
+                    const char = state.deepSeekFullResponseBuffer.charAt(0);
+                    state.deepSeekFullResponseBuffer = state.deepSeekFullResponseBuffer.substring(1);
+                    state.partialStreamContent += char;
+
+                    uiUtils.updateStreamingMessage(messageIndex, char, false);
+
+                    if (streamSpeed > 0) {
+                        await sleep(streamSpeed);
+                    }
+                }
+                state.isDisplayingDeepSeekStream = false;
+                if (messageIndex !== -1 && state.currentMessages[messageIndex] && !state.abortController?.signal.aborted) {
+                    uiUtils.finalizeStreamingMessage(messageIndex);
                 }
             },
             async handleHistoryImport(file) {
@@ -9038,6 +9083,7 @@
                 newSettings.deepSeekIncludeDeepSeekThoughts = elements.deepSeekIncludeThoughtsToggle.checked;
                 newSettings.deepSeekExpandDeepSeekThoughtsByDefault = elements.deepSeekExpandThoughtsByDefaultToggle.checked;
                 newSettings.deepSeekStreamingOutput = elements.deepSeekStreamingOutputCheckbox.checked;
+                newSettings.deepSeekBufferStream = elements.deepSeekBufferStreamToggle.checked;
                 newSettings.deepSeekStreamingSpeed = elements.deepSeekStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.deepSeekStreamingSpeedInput.value);
                 newSettings.deepSeekDummyUser = elements.deepSeekDummyUserInput.value.trim();
                 newSettings.deepSeekEnableDummyUser = elements.deepSeekEnableDummyUserCheckbox.checked;
@@ -9301,6 +9347,7 @@
                                 else if(key === 'geminiEnableGrounding') defaultSettingsCopy[key] = false;
                                 else if(key === 'deepSeekIncludeDeepSeekThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'deepSeekExpandDeepSeekThoughtsByDefault') defaultSettingsCopy[key] = false;
+                                else if(key === 'deepSeekBufferStream') defaultSettingsCopy[key] = true;
                             }
                         });
                         defaultSettingsCopy.apiKey = '';
@@ -10330,7 +10377,7 @@
                     let providerForSettingsB = state.settings.apiProvider;
                     let systemPromptB, enableSystemPromptDefaultB, dummyUserB, enableDummyUserB, dummyModelB, enableDummyModelB,
                         temperatureB, maxTokensB, topPB, presencePenaltyB, frequencyPenaltyB,
-                        streamingOutputB, streamingSpeedB, concatDummyModelB,
+                        streamingOutputB, streamingSpeedB, concatDummyModelB, deepSeekBufferStreamB,
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
                         deepSeekIncludeThoughtsB;
 
@@ -10364,6 +10411,7 @@
                         frequencyPenaltyB = state.settings.deepSeekFrequencyPenalty;
                         deepSeekIncludeThoughtsB = state.settings.deepSeekIncludeDeepSeekThoughts;
                         streamingOutputB = state.settings.deepSeekStreamingOutput;
+                        deepSeekBufferStreamB = state.settings.deepSeekBufferStream;
                         streamingSpeedB = state.settings.deepSeekStreamingSpeed;
                         dummyUserB = state.settings.deepSeekDummyUser;
                         enableDummyUserB = state.settings.deepSeekEnableDummyUser;
@@ -10386,6 +10434,7 @@
                         topK: providerForSettingsB === 'gemini' ? geminiTopKB : undefined,
                         thinkingBudget: providerForSettingsB === 'gemini' ? geminiThinkingBudgetB : undefined,
                         includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : deepSeekIncludeThoughtsB,
+                        deepSeekBufferStream: providerForSettingsB === 'deepseek' ? deepSeekBufferStreamB : undefined,
                         pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
                         enableGrounding: providerForSettingsB === 'gemini' ? geminiEnableGroundingB : undefined,
                         inputText: inputForB,
