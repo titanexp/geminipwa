@@ -153,6 +153,7 @@
             --default-ai-name-bubble-custom-rgb: 255, 255, 255;
 
             --thought-summary-opacity: 0.85;
+            --thought-summary-font-size: 13px;
         }
 
         body.dark-mode {
@@ -2527,7 +2528,7 @@
         }
         .thought-summary-content {
             padding: 8px 10px;
-            font-size: 13px;
+            font-size: var(--thought-summary-font-size);
             line-height: 1.5;
             color: var(--text-primary);
             word-wrap: break-word;
@@ -3562,6 +3563,11 @@
                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                                ※ 空欄でデフォルト値。
                            </p>
+                           <label for="thought-summary-font-size">思考プロセス フォントサイズ (px):</label>
+                           <input type="number" id="thought-summary-font-size" min="8" max="24" step="1" placeholder="例: 13 (8-24)" aria-label="思考プロセス フォントサイズ">
+                           <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                               ※ 空欄でデフォルト(13px)。
+                           </p>
                            <details id="settings-group-opacity">
                                 <summary style="cursor: pointer; font-weight: normal; font-size: 14px; color: var(--text-link); list-style: revert;">各種透明度設定</summary>
                                 <div style="padding-left: 15px; margin-top: 10px;">
@@ -3792,6 +3798,7 @@
         const DEFAULT_DICE_MIN_VALUE = 1;
         const DEFAULT_DICE_MAX_VALUE = 100;
         const DEFAULT_THOUGHT_SUMMARY_OPACITY = 0.65;
+        const DEFAULT_THOUGHT_SUMMARY_FONT_SIZE = 13;
 
         const extensionToMimeTypeMap = {
             'pdf': 'application/pdf', 'js': 'text/javascript', 'py': 'text/x-python',
@@ -3891,6 +3898,7 @@
             fontFamilyInput: document.getElementById('font-family-input'),
             messageBodyFontSizeInput: document.getElementById('message-body-font-size-input'),
             codeBlockFontSizeInput: document.getElementById('code-block-font-size-input'),
+            thoughtSummaryFontSizeInput: document.getElementById('thought-summary-font-size'),
             hideSystemPromptToggle: document.getElementById('hide-system-prompt-toggle'),
             enableSessionLinkingCheckbox: document.getElementById('enable-session-linking'),
             swipeNavigationToggle: document.getElementById('swipe-navigation-toggle'),
@@ -4080,6 +4088,7 @@
                 fontFamily: '',
                 messageBodyFontSize: DEFAULT_MESSAGE_BODY_FONT_SIZE,
                 codeBlockFontSize: DEFAULT_CODE_BLOCK_FONT_SIZE,
+                thoughtSummaryFontSize: DEFAULT_THOUGHT_SUMMARY_FONT_SIZE,
                 hideSystemPromptInChat: false,
                 enableSessionLinking: false,
                 enableSwipeNavigation: true,
@@ -4416,7 +4425,7 @@
                                           if (key === 'messageIconOffsetY' && (num < -200 || num > 200)) num = defaultValue;
                                           if (key === 'iconNameFontSize' && (num < 1 || num > 46)) num = defaultValue;
                                           if (key === 'iconNameOffsetY' && (num < -200 || num > 200)) num = defaultValue;
-                                          if ((key === 'messageBodyFontSize' || key === 'codeBlockFontSize') && (num < 8 || num > 32)) num = defaultValue;
+                                          if ((key === 'messageBodyFontSize' || key === 'codeBlockFontSize' || key === 'thoughtSummaryFontSize') && (num < 8 || num > 32)) num = defaultValue;
                                           if (key === 'diceMinValue' && num < 0) num = defaultValue;
                                           if (key === 'diceMaxValue' && num < 0) num = defaultValue;
                                           state.settings[key] = num;
@@ -4436,6 +4445,9 @@
                         }
                         if (state.settings.thoughtSummaryOpacity === undefined || state.settings.thoughtSummaryOpacity === null || isNaN(parseFloat(state.settings.thoughtSummaryOpacity))) {
                             state.settings.thoughtSummaryOpacity = DEFAULT_THOUGHT_SUMMARY_OPACITY;
+                        }
+                        if (state.settings.thoughtSummaryFontSize === undefined || state.settings.thoughtSummaryFontSize === null || isNaN(parseInt(state.settings.thoughtSummaryFontSize))) {
+                            state.settings.thoughtSummaryFontSize = DEFAULT_THOUGHT_SUMMARY_FONT_SIZE;
                         }
                         if (typeof loadedSettings.settingsUIDetailsOpenStates === 'object' && loadedSettings.settingsUIDetailsOpenStates !== null) {
                             state.settings.settingsUIDetailsOpenStates = loadedSettings.settingsUIDetailsOpenStates;
@@ -5832,6 +5844,7 @@
                 elements.fontFamilyInput.value = state.settings.fontFamily || '';
                 elements.messageBodyFontSizeInput.value = state.settings.messageBodyFontSize ?? '';
                 elements.codeBlockFontSizeInput.value = state.settings.codeBlockFontSize ?? '';
+                elements.thoughtSummaryFontSizeInput.value = state.settings.thoughtSummaryFontSize ?? '';
                 elements.hideSystemPromptToggle.checked = state.settings.hideSystemPromptInChat;
                 elements.swipeNavigationToggle.checked = state.settings.enableSwipeNavigation;
                 elements.preventZoomToggle.checked = state.settings.preventZoom;
@@ -5898,6 +5911,7 @@
 
                 document.documentElement.style.setProperty('--message-body-font-size', `${state.settings.messageBodyFontSize || DEFAULT_MESSAGE_BODY_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--code-block-font-size', `${state.settings.codeBlockFontSize || DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
+                document.documentElement.style.setProperty('--thought-summary-font-size', `${state.settings.thoughtSummaryFontSize || DEFAULT_THOUGHT_SUMMARY_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--message-toggle-button-top-width', `${state.settings.toggleButtonTopWidth || DEFAULT_TOGGLE_BUTTON_TOP_WIDTH}px`);
                 document.documentElement.style.setProperty('--message-toggle-button-top-height', `${state.settings.toggleButtonTopHeight || DEFAULT_TOGGLE_BUTTON_TOP_HEIGHT}px`);
                 document.documentElement.style.setProperty('--message-toggle-button-top-font-size', `${state.settings.toggleButtonTopFontSize || DEFAULT_TOGGLE_BUTTON_TOP_FONT_SIZE}px`);
@@ -6062,6 +6076,7 @@
                 document.documentElement.style.setProperty('--font-family', fontFamilyToApply);
                 document.documentElement.style.setProperty('--message-body-font-size', `${state.settings.messageBodyFontSize || DEFAULT_MESSAGE_BODY_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--code-block-font-size', `${state.settings.codeBlockFontSize || DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
+                document.documentElement.style.setProperty('--thought-summary-font-size', `${state.settings.thoughtSummaryFontSize || DEFAULT_THOUGHT_SUMMARY_FONT_SIZE}px`);
             },
             updateSystemPromptUI() {
                 elements.systemPromptEditor.value = state.currentSystemPrompt;
@@ -6871,6 +6886,10 @@
                 elements.codeBlockFontSizeInput.addEventListener('input', () => {
                     const newSize = elements.codeBlockFontSizeInput.value.trim();
                     document.documentElement.style.setProperty('--code-block-font-size', newSize ? `${newSize}px` : `${DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
+                });
+                elements.thoughtSummaryFontSizeInput.addEventListener('input', () => {
+                    const newSize = elements.thoughtSummaryFontSizeInput.value.trim();
+                    document.documentElement.style.setProperty('--thought-summary-font-size', newSize ? `${newSize}px` : `${DEFAULT_THOUGHT_SUMMARY_FONT_SIZE}px`);
                 });
                 elements.showToggleAllContentButtonToggle.addEventListener('change', () => {
                     state.settings.showToggleAllContentButton = elements.showToggleAllContentButtonToggle.checked;
@@ -9036,6 +9055,7 @@
                  newSettings.fontFamily = elements.fontFamilyInput.value.trim();
                  newSettings.messageBodyFontSize = elements.messageBodyFontSizeInput.value === '' ? null : parseInt(elements.messageBodyFontSizeInput.value, 10);
                  newSettings.codeBlockFontSize = elements.codeBlockFontSizeInput.value === '' ? null : parseInt(elements.codeBlockFontSizeInput.value, 10);
+                 newSettings.thoughtSummaryFontSize = elements.thoughtSummaryFontSizeInput.value === '' ? null : parseInt(elements.thoughtSummaryFontSizeInput.value, 10);
                  newSettings.hideSystemPromptInChat = elements.hideSystemPromptToggle.checked;
                  newSettings.enableSwipeNavigation = elements.swipeNavigationToggle.checked;
                  newSettings.preventZoom = elements.preventZoomToggle.checked;
@@ -9126,6 +9146,7 @@
 
                  newSettings.messageBodyFontSize = validateNumeric(newSettings.messageBodyFontSize, null, 8, 32, true);
                  newSettings.codeBlockFontSize = validateNumeric(newSettings.codeBlockFontSize, null, 8, 32, true);
+                 newSettings.thoughtSummaryFontSize = validateNumeric(newSettings.thoughtSummaryFontSize, null, 8, 24, true);
                  newSettings.messageIconSize = validateNumeric(newSettings.messageIconSize, DEFAULT_MESSAGE_ICON_SIZE, 1, 300, true);
                  newSettings.messageIconOffsetY = validateNumeric(newSettings.messageIconOffsetY, DEFAULT_MESSAGE_ICON_OFFSET_Y, -200, 200, true);
                  newSettings.iconNameFontSize = validateNumeric(newSettings.iconNameFontSize, DEFAULT_ICON_NAME_FONT_SIZE, 1, 46, true);
@@ -9299,6 +9320,7 @@
                         defaultSettingsCopy.fontFamily = '';
                         defaultSettingsCopy.messageBodyFontSize = DEFAULT_MESSAGE_BODY_FONT_SIZE;
                         defaultSettingsCopy.codeBlockFontSize = DEFAULT_CODE_BLOCK_FONT_SIZE;
+                        defaultSettingsCopy.thoughtSummaryFontSize = DEFAULT_THOUGHT_SUMMARY_FONT_SIZE;
                         defaultSettingsCopy.hideSystemPromptInChat = false;
                         defaultSettingsCopy.enableSessionLinking = false;
                         defaultSettingsCopy.enableSwipeNavigation = true;
