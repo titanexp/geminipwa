@@ -1343,7 +1343,7 @@
         .system-prompt-area.pinned-to-header {
             z-index: 3;
             width: 100%;
-            min-height: 50px;
+            min-height: 45px;
             max-height: var(--system-prompt-header-height, 300px);
             border-bottom: 1px solid var(--border-secondary);
             box-shadow: 0 1px 3px var(--shadow-primary);
@@ -1411,7 +1411,7 @@
             transform: rotate(180deg);
         }
         .system-prompt-content {
-            margin-top: 8px;
+            margin-top: 5px;
             display: flex;
             flex-direction: column;
             flex-grow: 1;
@@ -1419,22 +1419,22 @@
             overflow: auto;
         }
         .system-prompt-area.pinned-to-header .system-prompt-content {
-             margin-top: 5px;
+             margin-top: 3px;
         }
         .system-prompt-content textarea {
             width: 100%;
-            min-height: 40px;
+            min-height: 20px;
             max-height: 200px;
             margin-bottom: 5px;
             font-size: 12px;
             background-color: var(--bg-input);
             color: var(--text-primary);
             border-color: var(--border-primary);
+            padding: 5px 8px;
         }
         .system-prompt-area.pinned-to-header .system-prompt-content textarea {
             flex-grow: 1;
             max-height: none;
-            min-height: 30px;
         }
         .system-prompt-actions {
             display: flex;
@@ -4243,6 +4243,7 @@
             deepSeekDisplayTimer: null,
             deepSeekThoughtRawTextBuffer: '',
             deepSeekThoughtDisplayTimer: null,
+            deepSeekThoughtStreamEnded: false,
         };
 
         function updateMessageMaxWidthVar() {
@@ -5357,10 +5358,14 @@
                             ( (isThoughtProcess && state.partialThoughtStreamContent === state[bufferKey]) ||
                               (!isThoughtProcess && state.partialStreamContent === state[bufferKey]) );
 
-                        if (!isStillStreaming) {
+                        if (!isStillStreaming || (isThoughtProcess && state.deepSeekThoughtStreamEnded) ) {
                             clearInterval(state[timerStateKey]);
                             state[timerStateKey] = null;
-                            this.finalizeStreamingMessage(index);
+                            if (isThoughtProcess && state.deepSeekThoughtStreamEnded && !state.deepSeekDisplayTimer) {
+                                uiUtils.startDeepSeekRawTextDisplay(index, streamSpeed, false);
+                            } else if (!isThoughtProcess) {
+                                this.finalizeStreamingMessage(index);
+                            }
                         }
                     }
                 };
@@ -7452,7 +7457,11 @@
                 } else {
                      if (elements.systemPromptArea.parentNode !== mainContent) {
                         const firstContentChild = mainContent.firstChild;
-                        mainContent.insertBefore(elements.systemPromptArea, firstContentChild);
+                        if (firstContentChild && firstContentChild.id !== 'message-container') {
+                           mainContent.insertBefore(elements.systemPromptArea, firstContentChild);
+                        } else {
+                           mainContent.prepend(elements.systemPromptArea);
+                        }
                      }
                      elements.systemPromptArea.style.maxHeight = '500px';
                 }
@@ -8224,6 +8233,7 @@
                     clearInterval(state.deepSeekThoughtDisplayTimer);
                     state.deepSeekThoughtDisplayTimer = null;
                 }
+                state.deepSeekThoughtStreamEnded = false;
 
 
                 let userMessageIndex = isRetry ? retryUserMessageIndex : -1;
@@ -8501,8 +8511,12 @@
                         state.messageCollapsedStates.set(currentModelMessageIndex, false);
                         uiUtils.appendMessage('model', '', currentModelMessageIndex, true);
                          if (selectedApiProvider === 'deepseek') {
+                            state.deepSeekThoughtStreamEnded = false;
                             if (contextDeepSeekIncludeThoughts) {
                                 uiUtils.startDeepSeekRawTextDisplay(currentModelMessageIndex, contextStreamingSpeed, true);
+                            } else {
+                                state.deepSeekThoughtStreamEnded = true;
+                                uiUtils.startDeepSeekRawTextDisplay(currentModelMessageIndex, contextStreamingSpeed, false);
                             }
                         }
                     }
@@ -8517,7 +8531,7 @@
                         }
 
                         const currentContextStreamSpeed = contextStreamingSpeed;
-                        let thoughtStreamComplete = false;
+                        let thoughtStreamCompleteForCurrentCall = false;
 
 
                         for await (const streamData of responseStreamIterator) {
@@ -8556,9 +8570,12 @@
                                                 uiUtils.updateStreamingMessage(currentModelMessageIndex, char, false);
                                                 if (currentContextStreamSpeed > 0) await sleep(currentContextStreamSpeed);
                                             }
-                                        } else {
-                                            state.partialStreamContent += streamData.contentText;
-                                            state.deepSeekRawTextBuffer += streamData.contentText;
+                                        } else if (selectedApiProvider === 'deepseek') {
+                                            if (state.deepSeekThoughtStreamEnded || !contextDeepSeekIncludeThoughts) {
+                                                state.partialStreamContent += streamData.contentText;
+                                                state.deepSeekRawTextBuffer += streamData.contentText;
+                                            } else {
+                                            }
                                         }
                                     }
                                 }
@@ -8588,7 +8605,7 @@
                                     modelThoughtSummaryContent = (modelThoughtSummaryContent || "") + streamData.fullReasoningContent;
                                     state.deepSeekThoughtRawTextBuffer = modelThoughtSummaryContent;
                                 }
-                                thoughtStreamComplete = true;
+                                thoughtStreamCompleteForCurrentCall = true;
                                 break;
                             } else if (streamData.type === 'error') {
                                 modelResponseMetadata.finishReason = 'ERROR';
@@ -8596,15 +8613,16 @@
                                 throw new Error(streamData.message || "ストリーム内でエラーが発生しました。");
                             }
                         }
-
                         if (!isBackgroundProcess && selectedApiProvider === 'deepseek' && useStreamingForThisCall && currentModelMessageIndex !== -1) {
                            if (contextDeepSeekIncludeThoughts && state.deepSeekThoughtDisplayTimer) {
-                                while(state.deepSeekThoughtDisplayTimer !== null) {
-                                    if(state.abortController?.signal.aborted) break;
+                                while(state.deepSeekThoughtDisplayTimer !== null && !state.abortController?.signal.aborted) {
                                     await sleep(50);
                                 }
                             }
-                            uiUtils.startDeepSeekRawTextDisplay(currentModelMessageIndex, contextStreamingSpeed, false);
+                            state.deepSeekThoughtStreamEnded = true;
+                            if (!state.abortController?.signal.aborted) {
+                                uiUtils.startDeepSeekRawTextDisplay(currentModelMessageIndex, contextStreamingSpeed, false);
+                            }
                         }
 
                         if (!isBackgroundProcess) {
@@ -8884,6 +8902,7 @@
                         state.partialThoughtStreamContent = '';
                         state.deepSeekRawTextBuffer = '';
                         state.deepSeekThoughtRawTextBuffer = '';
+                        state.deepSeekThoughtStreamEnded = false;
 
                         if (state.settings.autoScrollOnNewMessage) {
                             uiUtils.scrollToBottom();
@@ -9986,7 +10005,6 @@
                 const contentDiv = messageElement.querySelector('.message-content');
                 const cascadeControls = messageElement.querySelector('.message-cascade-controls');
                 const textarea = messageElement.querySelector('.edit-textarea');
-
                 messageElement.style.removeProperty('width');
                 messageElement.classList.remove('editing');
                 if(contentDiv) contentDiv.classList.remove('hidden');
@@ -10014,7 +10032,7 @@
 
                 try {
                     await navigator.clipboard.writeText(textToCopy);
-                                        const originalText = buttonElement.textContent;
+                    const originalText = buttonElement.textContent;
                     buttonElement.textContent = '完了！';
                     buttonElement.disabled = true;
                     setTimeout(() => {
