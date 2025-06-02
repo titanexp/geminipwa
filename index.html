@@ -108,7 +108,7 @@
 
             --memo-height: 300px;
             --clipboard-stack-height: 300px;
-            --system-prompt-header-height: 300px;
+            --system-prompt-header-height: 180px;
             --message-icon-size: 28px;
             --message-icon-offset-y: -10px;
             --icon-name-font-size: 10px;
@@ -1343,8 +1343,8 @@
         .system-prompt-area.pinned-to-header {
             z-index: 3;
             width: 100%;
-            min-height: 80px;
-            max-height: var(--system-prompt-header-height, 300px);
+            min-height: 60px;
+            max-height: var(--system-prompt-header-height, 180px);
             border-bottom: 1px solid var(--border-secondary);
             box-shadow: 0 1px 3px var(--shadow-primary);
             resize: vertical;
@@ -1425,7 +1425,7 @@
         }
         .system-prompt-area.pinned-to-header .system-prompt-content textarea {
             flex-grow: 1;
-            max-height: none;
+            max-height: 120px;
         }
         .system-prompt-actions {
             display: flex;
@@ -3749,7 +3749,7 @@
         const DEFAULT_CODE_BLOCK_FONT_SIZE = 13;
         const DEFAULT_MEMO_HEIGHT = '300px';
         const DEFAULT_CLIPBOARD_STACK_HEIGHT = '300px';
-        const DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT = '300px';
+        const DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT = '180px';
         const DEFAULT_MESSAGE_ICON_SIZE = 28;
         const DEFAULT_MESSAGE_ICON_OFFSET_Y = -10;
         const DEFAULT_USER_NAME = "あなた";
@@ -5246,11 +5246,13 @@
                         }
                         try {
                             if (selectedApiProvider === 'deepseek' && isThoughtSummary && targetContentDiv.id === `streaming-thought-summary-${index}`) {
-                            } else {
+                            } else if (selectedApiProvider === 'deepseek' && !isThoughtSummary) {
+                            }
+                             else {
                                 const rawHtml = marked.parse(contentToRender || '');
                                 targetContentDiv.innerHTML = rawHtml;
                             }
-                            if (!isThoughtSummary ) {
+                            if (!isThoughtSummary) {
                                 this.processInteractivePlaceholders(targetContentDiv);
                                 this.processInteractiveTitles(targetContentDiv);
                                 this.addCopyButtonsToCodeBlocks(targetContentDiv);
@@ -6229,20 +6231,20 @@
 
 
                 if (state.isSystemPromptPinned) {
-                    if (elements.systemPromptArea.parentNode !== elements.chatScreen || elements.systemPromptArea.nextSibling !== elements.memoArea) {
+                     if (elements.systemPromptArea.parentNode !== elements.chatScreen || elements.systemPromptArea.nextSibling !== elements.memoArea) {
                         elements.chatScreen.insertBefore(elements.systemPromptArea, elements.memoArea);
                     }
                     elements.systemPromptArea.style.maxHeight = state.settings.systemPromptHeaderHeight || DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT;
                 } else {
-                    if (elements.systemPromptArea.parentNode !== mainContent || elements.systemPromptArea.nextSibling !== elements.messageContainer) {
+                     if (elements.systemPromptArea.parentNode !== mainContent) {
                         const firstContentChild = mainContent.firstChild;
                         if (firstContentChild) {
                             mainContent.insertBefore(elements.systemPromptArea, firstContentChild);
                         } else {
                             mainContent.appendChild(elements.systemPromptArea);
                         }
-                    }
-                    elements.systemPromptArea.style.maxHeight = '500px';
+                     }
+                     elements.systemPromptArea.style.maxHeight = '500px';
                 }
                  if (isInitialLoadOrSettingsChange) {
                     appLogic.updatePanelVisibilityAndLayout();
@@ -6257,7 +6259,7 @@
                         state.editingMessageIndex = null;
                      }
                 }
-                if (state.isEditingSystemPrompt) {
+                if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
                     appLogic.cancelEditSystemPrompt();
                 }
 
@@ -7430,9 +7432,12 @@
 
 
                 if (systemPromptVisibleAndPinned) {
-                     if (elements.systemPromptArea.parentNode !== chatScreen || elements.systemPromptArea.nextSibling !== elements.memoArea) {
-                        chatScreen.insertBefore(elements.systemPromptArea, header.nextSibling);
-                    }
+                     if (elements.systemPromptArea.parentNode !== elements.chatScreen || elements.systemPromptArea.nextSibling !== elements.memoArea) {
+                        chatScreen.insertBefore(elements.systemPromptArea, elements.memoArea);
+                     }
+                     if (!elements.memoArea.previousSibling || elements.memoArea.previousSibling.id !== 'system-prompt-area') {
+                        chatScreen.insertBefore(elements.systemPromptArea, elements.memoArea);
+                     }
                     elements.systemPromptArea.style.top = `${topOffset}px`;
                     topOffset += elements.systemPromptArea.offsetHeight;
                     elements.systemPromptArea.style.maxHeight = state.settings.systemPromptHeaderHeight || DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT;
@@ -7446,14 +7451,14 @@
 
                 if (memoVisible) {
                      if (elements.memoArea.parentNode !== chatScreen) {
-                        chatScreen.insertBefore(elements.memoArea, elements.systemPromptArea.nextSibling);
+                        chatScreen.insertBefore(elements.memoArea, elements.clipboardStackArea);
                      }
                     elements.memoArea.style.top = `${topOffset}px`;
                     topOffset += elements.memoArea.offsetHeight;
                 }
                 if (clipboardStackVisible) {
                     if (elements.clipboardStackArea.parentNode !== chatScreen) {
-                        chatScreen.insertBefore(elements.clipboardStackArea, elements.memoArea.nextSibling);
+                       chatScreen.insertBefore(elements.clipboardStackArea, mainContent);
                     }
                     elements.clipboardStackArea.style.top = `${topOffset}px`;
                     topOffset += elements.clipboardStackArea.offsetHeight;
@@ -7462,6 +7467,7 @@
                 if (mainContent) {
                   mainContent.style.paddingTop = `${topOffset}px`;
                 }
+
             },
             async copyClipboardStackText() {
                 const stackText = elements.clipboardStackEditor.value;
@@ -7653,7 +7659,7 @@
                     const msgEl = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`);
                     this.cancelEditMessage(state.editingMessageIndex, msgEl);
                 }
-                if (state.isEditingSystemPrompt) {
+                if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
                     const confirmed = await uiUtils.showCustomConfirm("システムプロンプト編集中です。変更を破棄して新規チャットを開始しますか？");
                     if (!confirmed) return;
                     this.cancelEditSystemPrompt();
@@ -7722,7 +7728,7 @@
                     const msgEl = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`);
                     this.cancelEditMessage(state.editingMessageIndex, msgEl);
                 }
-                if (state.isEditingSystemPrompt) {
+                if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
                     const confirmed = await uiUtils.showCustomConfirm("システムプロンプト編集中です。変更を破棄して別のチャットを読み込みますか？");
                     if (!confirmed) return;
                     this.cancelEditSystemPrompt();
@@ -7811,7 +7817,7 @@
             async duplicateChat(id) {
                 if (state.isSending) { const conf = await uiUtils.showCustomConfirm("送信中です。中断してチャットを複製しますか？"); if (!conf) return; this.abortRequest(); }
                 if (state.editingMessageIndex !== null) { const conf = await uiUtils.showCustomConfirm("編集中です。変更を破棄してチャットを複製しますか？"); if (!conf) return; const msgEl = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`); this.cancelEditMessage(state.editingMessageIndex, msgEl); }
-                if (state.isEditingSystemPrompt) { const conf = await uiUtils.showCustomConfirm("システムプロンプト編集中です。変更を破棄してチャットを複製しますか？"); if (!conf) return; this.cancelEditSystemPrompt(); }
+                if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) { const conf = await uiUtils.showCustomConfirm("システムプロンプト編集中です。変更を破棄してチャットを複製しますか？"); if (!conf) return; this.cancelEditSystemPrompt(); }
                 if ((state.currentMessages.length > 0 || state.currentSystemPrompt) && state.currentChatId && state.currentChatId !== id) { try { await dbUtils.saveChat(); } catch (error) { const conf = await uiUtils.showCustomConfirm("現在のチャット保存に失敗しました。複製を続行しますか？"); if (!conf) return; } }
                 if (state.pendingAttachments.length > 0) {
                     const confirmedAttach = await uiUtils.showCustomConfirm("添付準備中のファイルがあります。破棄してチャットを複製しますか？");
@@ -7945,7 +7951,7 @@
                     await uiUtils.showCustomAlert("メッセージ編集中です。完了後に再度お試しください。");
                     return;
                 }
-                if (state.isEditingSystemPrompt) {
+                if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
                     await uiUtils.showCustomAlert("システムプロンプト編集中です。完了後に再度お試しください。");
                     return;
                 }
@@ -8162,7 +8168,7 @@
 
                 if (!isBackgroundProcess) {
                     if (state.editingMessageIndex !== null) { await uiUtils.showCustomAlert("他のメッセージを編集中です。"); return; }
-                    if (state.isEditingSystemPrompt) { await uiUtils.showCustomAlert("システムプロンプト編集中です。"); return; }
+                    if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) { await uiUtils.showCustomAlert("システムプロンプト編集中です。"); return; }
                 }
 
                 let text = '';
@@ -8487,11 +8493,7 @@
                         state.messageCollapsedStates.set(tempPlaceholderIndex, false);
                         uiUtils.appendMessage('model', '', tempPlaceholderIndex, true);
                          if (selectedApiProvider === 'deepseek') {
-                            uiUtils.startDeepSeekRawTextDisplay(tempPlaceholderIndex, contextStreamingSpeed, false);
-                            if (contextDeepSeekIncludeThoughts) {
-                                uiUtils.startDeepSeekRawTextDisplay(tempPlaceholderIndex, contextStreamingSpeed, true);
-                            }
-                        }
+                         }
                     }
 
 
@@ -8652,6 +8654,21 @@
                             modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
                         }
                     }
+                    if (useStreamingForThisCall && !isBackgroundProcess && selectedApiProvider === 'deepseek') {
+                        if (state.deepSeekDisplayTimer) {
+                            clearInterval(state.deepSeekDisplayTimer);
+                            state.deepSeekDisplayTimer = null;
+                        }
+                         if (state.deepSeekThoughtDisplayTimer && contextDeepSeekIncludeThoughts) {
+                            clearInterval(state.deepSeekThoughtDisplayTimer);
+                            state.deepSeekThoughtDisplayTimer = null;
+                        }
+                        const tempPlaceholderIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+                        if (tempPlaceholderIndex !== -1) {
+                            uiUtils.finalizeStreamingMessage(tempPlaceholderIndex);
+                        }
+                    }
+
 
                     if (isBackgroundProcess) {
                         if (modelResponseRawContent || modelThoughtSummaryContent || modelResponseMetadata.finishReason) {
@@ -8727,8 +8744,8 @@
                                 } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                                 }
-                                if (state.deepSeekDisplayTimer === null && state.deepSeekThoughtDisplayTimer === null) {
-                                   uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
+                                if (selectedApiProvider !== 'deepseek' || (state.deepSeekDisplayTimer === null && state.deepSeekThoughtDisplayTimer === null) ) {
+                                    uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
                                 }
                                 await dbUtils.saveChat();
                             }
