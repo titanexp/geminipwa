@@ -1107,9 +1107,11 @@
             touch-action: pan-y;
         }
         #chat-screen > .main-content {
+            padding-top: 15px;
+        }
+        #chat-screen.has-pinned-panel > .main-content {
             padding-top: 0;
         }
-
 
         .screen {
             position: absolute;
@@ -1344,7 +1346,7 @@
             z-index: 3;
             width: 100%;
             min-height: 45px;
-            max-height: var(--system-prompt-header-height, 300px);
+            max-height: var(--system-prompt-header-height);
             border-bottom: 1px solid var(--border-secondary);
             box-shadow: 0 1px 3px var(--shadow-primary);
             resize: vertical;
@@ -1369,7 +1371,7 @@
         }
         .system-prompt-area details {
             width: 100%;
-             display: flex;
+            display: flex;
             flex-direction: column;
             flex-grow: 1;
             min-height: 0;
@@ -1423,7 +1425,7 @@
         }
         .system-prompt-content textarea {
             width: 100%;
-            min-height: 20px;
+            min-height: 60px;
             max-height: 200px;
             margin-bottom: 5px;
             font-size: 12px;
@@ -1435,6 +1437,7 @@
         .system-prompt-area.pinned-to-header .system-prompt-content textarea {
             flex-grow: 1;
             max-height: none;
+            min-height: 20px;
         }
         .system-prompt-actions {
             display: flex;
@@ -3783,8 +3786,6 @@
         const PASTEL_YELLOW_THEME_COLOR = '#ffd700';
         const PASTEL_PURPLE_THEME_COLOR = '#ab47bc';
         const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
-
-
         const DARK_MODE_USER_MESSAGE_COLOR = '#056162';
         const DARK_MODE_MODEL_MESSAGE_COLOR = '#3a3a3c';
         const DARK_MODE_SECONDARY_COLOR = '#101010';
@@ -5386,7 +5387,11 @@
                     } else if (!isThoughtProcess) {
                         targetContentDiv.textContent = state[bufferKey] || '';
                     }
-                    this.finalizeStreamingMessage(index);
+                    if (isThoughtProcess && state.deepSeekThoughtStreamEnded && !state.deepSeekDisplayTimer) {
+                         uiUtils.startDeepSeekRawTextDisplay(index, streamSpeed, false);
+                    } else {
+                        this.finalizeStreamingMessage(index);
+                    }
                 }
             },
             finalizeStreamingMessage(index) {
@@ -6258,7 +6263,11 @@
                 } else {
                      if (elements.systemPromptArea.parentNode !== mainContent) {
                         const firstContentChild = mainContent.firstChild;
-                        mainContent.insertBefore(elements.systemPromptArea, firstContentChild);
+                        if (firstContentChild && firstContentChild.id !== 'message-container') {
+                           mainContent.insertBefore(elements.systemPromptArea, firstContentChild);
+                        } else {
+                           mainContent.prepend(elements.systemPromptArea);
+                        }
                      }
                      elements.systemPromptArea.style.maxHeight = '500px';
                 }
@@ -6351,7 +6360,7 @@
                         activeScreen.classList.add('active');
                     }
                      if (currentPanelsVisible && screenName !== 'chat') {
-                        elements.chatScreen.querySelector('.main-content').style.paddingTop = '0px';
+                        elements.chatScreen.querySelector('.main-content').style.paddingTop = '15px';
                     } else if (screenName === 'chat') {
                         appLogic.updatePanelVisibilityAndLayout();
                     }
@@ -7430,59 +7439,70 @@
                 }
             },
             updatePanelVisibilityAndLayout() {
-                const systemPromptVisibleAndPinned = state.settings.pinSystemPromptToHeader && !state.settings.hideSystemPromptInChat;
-                const memoVisible = state.isMemoVisible;
-                const clipboardStackVisible = state.isClipboardStackVisible;
+                const systemPromptVisibleAndPinned = state.settings.pinSystemPromptToHeader && !state.settings.hideSystemPromptInChat && state.currentScreen === 'chat';
+                const memoVisible = state.isMemoVisible && state.currentScreen === 'chat';
+                const clipboardStackVisible = state.isClipboardStackVisible && state.currentScreen === 'chat';
+                const chatScreen = elements.chatScreen;
+                const mainContent = chatScreen.querySelector('.main-content');
 
-                elements.systemPromptArea.classList.toggle('hidden', state.settings.hideSystemPromptInChat || (!systemPromptVisibleAndPinned && state.currentScreen !== 'chat'));
+                elements.systemPromptArea.classList.toggle('hidden', !systemPromptVisibleAndPinned && (state.settings.hideSystemPromptInChat || state.currentScreen !== 'chat'));
                 elements.systemPromptArea.classList.toggle('pinned-to-header', systemPromptVisibleAndPinned);
-
-
                 elements.memoArea.classList.toggle('hidden', !memoVisible);
                 elements.clipboardStackArea.classList.toggle('hidden', !clipboardStackVisible);
 
-                let topOffset = 0;
-                const mainContent = elements.chatScreen.querySelector('.main-content');
-                const chatScreen = elements.chatScreen;
+                let accumulatedOffset = 0;
                 const header = chatScreen.querySelector('.app-header');
 
-
                 if (systemPromptVisibleAndPinned) {
-                     if (elements.systemPromptArea.parentNode !== chatScreen || elements.systemPromptArea.nextSibling !== elements.memoArea) {
-                        chatScreen.insertBefore(elements.systemPromptArea, elements.memoArea.previousSibling === header ? header.nextSibling : elements.memoArea);
-                     }
-                    elements.systemPromptArea.style.top = `${topOffset}px`;
-                    topOffset += elements.systemPromptArea.offsetHeight;
-                    elements.systemPromptArea.style.maxHeight = state.settings.systemPromptHeaderHeight || DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT;
+                    if (elements.systemPromptArea.parentNode !== chatScreen) {
+                        chatScreen.insertBefore(elements.systemPromptArea, header.nextSibling);
+                    }
+                    elements.systemPromptArea.style.top = `0px`;
+                    accumulatedOffset += elements.systemPromptArea.offsetHeight;
                 } else {
-                     if (elements.systemPromptArea.parentNode !== mainContent) {
+                    if (elements.systemPromptArea.parentNode === chatScreen) {
                         const firstContentChild = mainContent.firstChild;
-                        if (firstContentChild && firstContentChild.id !== 'message-container') {
-                           mainContent.insertBefore(elements.systemPromptArea, firstContentChild);
-                        } else {
-                           mainContent.prepend(elements.systemPromptArea);
-                        }
-                     }
-                     elements.systemPromptArea.style.maxHeight = '500px';
+                        mainContent.insertBefore(elements.systemPromptArea, firstContentChild);
+                    }
                 }
 
                 if (memoVisible) {
-                     if (elements.memoArea.parentNode !== chatScreen ) {
-                         chatScreen.insertBefore(elements.memoArea, (systemPromptVisibleAndPinned ? elements.systemPromptArea.nextSibling : header.nextSibling) );
+                     if (elements.memoArea.parentNode !== chatScreen) {
+                         chatScreen.insertBefore(elements.memoArea, systemPromptVisibleAndPinned ? elements.systemPromptArea.nextSibling : header.nextSibling);
                      }
-                    elements.memoArea.style.top = `${topOffset}px`;
-                    topOffset += elements.memoArea.offsetHeight;
+                    elements.memoArea.style.top = `${systemPromptVisibleAndPinned ? elements.systemPromptArea.offsetHeight : 0}px`;
+                    accumulatedOffset += elements.memoArea.offsetHeight;
                 }
+
                 if (clipboardStackVisible) {
-                    if (elements.clipboardStackArea.parentNode !== chatScreen ) {
-                         chatScreen.insertBefore(elements.clipboardStackArea, (memoVisible ? elements.memoArea.nextSibling : (systemPromptVisibleAndPinned ? elements.systemPromptArea.nextSibling : header.nextSibling) ) );
+                    if (elements.clipboardStackArea.parentNode !== chatScreen) {
+                        let referenceNode = header.nextSibling;
+                        if (systemPromptVisibleAndPinned) referenceNode = elements.systemPromptArea.nextSibling;
+                        if (memoVisible) referenceNode = elements.memoArea.nextSibling;
+                        chatScreen.insertBefore(elements.clipboardStackArea, referenceNode);
                     }
-                    elements.clipboardStackArea.style.top = `${topOffset}px`;
-                    topOffset += elements.clipboardStackArea.offsetHeight;
+                    let clipboardTop = 0;
+                    if (systemPromptVisibleAndPinned) clipboardTop += elements.systemPromptArea.offsetHeight;
+                    if (memoVisible) clipboardTop += elements.memoArea.offsetHeight;
+                    elements.clipboardStackArea.style.top = `${clipboardTop}px`;
+                    accumulatedOffset += elements.clipboardStackArea.offsetHeight;
                 }
 
                 if (mainContent) {
-                  mainContent.style.paddingTop = `${topOffset}px`;
+                    let finalPaddingTop = 15;
+                    if (state.currentScreen === 'chat') {
+                        if (systemPromptVisibleAndPinned && !memoVisible && !clipboardStackVisible) {
+                            finalPaddingTop = elements.systemPromptArea.offsetHeight;
+                        } else if (!systemPromptVisibleAndPinned && (memoVisible || clipboardStackVisible)) {
+                             finalPaddingTop = (memoVisible ? elements.memoArea.offsetHeight : 0) + (clipboardStackVisible ? elements.clipboardStackArea.offsetHeight : 0);
+                        } else if (systemPromptVisibleAndPinned && (memoVisible || clipboardStackVisible)){
+                             finalPaddingTop = elements.systemPromptArea.offsetHeight + (memoVisible ? elements.memoArea.offsetHeight : 0) + (clipboardStackVisible ? elements.clipboardStackArea.offsetHeight : 0);
+                        } else if (!systemPromptVisibleAndPinned && !memoVisible && !clipboardStackVisible) {
+                             finalPaddingTop = 0;
+                        }
+                    }
+                    mainContent.style.paddingTop = `${finalPaddingTop}px`;
+                    chatScreen.classList.toggle('has-pinned-panel', systemPromptVisibleAndPinned || memoVisible || clipboardStackVisible);
                 }
             },
             async copyClipboardStackText() {
@@ -7968,7 +7988,7 @@
                     await uiUtils.showCustomAlert("メッセージ編集中です。完了後に再度お試しください。");
                     return;
                 }
-                if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
+                 if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
                     await uiUtils.showCustomAlert("システムプロンプト編集中です。完了後に再度お試しください。");
                     return;
                 }
@@ -8460,7 +8480,7 @@
                 let usePseudoForThisCall = isBackgroundProcess ? false : (selectedApiProvider === 'gemini' && contextGeminiPseudoStreaming);
 
                 let modelMessageObjectForStream = null;
-                let currentModelMessageIndex = -1;
+                currentModelMessageIndex = -1;
 
                 try {
                     let apiResponseObject;
@@ -8574,7 +8594,6 @@
                                             if (state.deepSeekThoughtStreamEnded || !contextDeepSeekIncludeThoughts) {
                                                 state.partialStreamContent += streamData.contentText;
                                                 state.deepSeekRawTextBuffer += streamData.contentText;
-                                            } else {
                                             }
                                         }
                                     }
@@ -8601,38 +8620,48 @@
                                 };
                                 if (streamData.groundingMetadata && selectedApiProvider === 'gemini') currentGroundingMetadata = streamData.groundingMetadata;
                                 if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
-                                if (streamData.fullReasoningContent && selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
-                                    modelThoughtSummaryContent = (modelThoughtSummaryContent || "") + streamData.fullReasoningContent;
-                                    state.deepSeekThoughtRawTextBuffer = modelThoughtSummaryContent;
+
+                                if (selectedApiProvider === 'deepseek') {
+                                    if (contextDeepSeekIncludeThoughts && streamData.fullReasoningContent) {
+                                        modelThoughtSummaryContent = streamData.fullReasoningContent;
+                                        state.deepSeekThoughtRawTextBuffer = modelThoughtSummaryContent;
+                                    }
+                                    if (state.deepSeekThoughtDisplayTimer) {
+                                        clearInterval(state.deepSeekThoughtDisplayTimer);
+                                        state.deepSeekThoughtDisplayTimer = null;
+                                        const thoughtMessageDiv = document.getElementById(`streaming-message-${currentModelMessageIndex}`);
+                                        if (thoughtMessageDiv) {
+                                            const thoughtTargetDiv = thoughtMessageDiv.querySelector(`#streaming-thought-summary-${currentModelMessageIndex}`);
+                                            if (thoughtTargetDiv) {
+                                                let preElement = thoughtTargetDiv.querySelector('pre');
+                                                if(!preElement) { preElement = document.createElement('pre'); thoughtTargetDiv.innerHTML = ''; thoughtTargetDiv.appendChild(preElement); }
+                                                preElement.textContent = state.deepSeekThoughtRawTextBuffer;
+                                            }
+                                        }
+                                    }
+                                    state.deepSeekThoughtStreamEnded = true;
+                                     if (!state.deepSeekDisplayTimer && !state.abortController?.signal.aborted) {
+                                        uiUtils.startDeepSeekRawTextDisplay(currentModelMessageIndex, currentContextStreamSpeed, false);
+                                    }
                                 }
                                 thoughtStreamCompleteForCurrentCall = true;
                                 break;
                             } else if (streamData.type === 'error') {
                                 modelResponseMetadata.finishReason = 'ERROR';
                                 modelResponseMetadata.error = streamData.error;
+                                if (selectedApiProvider === 'deepseek') {
+                                    state.deepSeekThoughtStreamEnded = true;
+                                    if (state.deepSeekThoughtDisplayTimer) { clearInterval(state.deepSeekThoughtDisplayTimer); state.deepSeekThoughtDisplayTimer = null; }
+                                    if (state.deepSeekDisplayTimer) { clearInterval(state.deepSeekDisplayTimer); state.deepSeekDisplayTimer = null; }
+                                }
                                 throw new Error(streamData.message || "ストリーム内でエラーが発生しました。");
                             }
                         }
-                        if (!isBackgroundProcess && selectedApiProvider === 'deepseek' && useStreamingForThisCall && currentModelMessageIndex !== -1) {
-                           if (contextDeepSeekIncludeThoughts && state.deepSeekThoughtDisplayTimer) {
-                                while(state.deepSeekThoughtDisplayTimer !== null && !state.abortController?.signal.aborted) {
-                                    await sleep(50);
-                                }
-                            }
-                            state.deepSeekThoughtStreamEnded = true;
-                            if (!state.abortController?.signal.aborted) {
-                                uiUtils.startDeepSeekRawTextDisplay(currentModelMessageIndex, contextStreamingSpeed, false);
-                            }
-                        }
-
                         if (!isBackgroundProcess) {
                            modelThoughtSummaryContent = selectedApiProvider === 'deepseek' ? state.deepSeekThoughtRawTextBuffer : state.partialThoughtStreamContent;
                            modelResponseRawContent = selectedApiProvider === 'deepseek' ? state.deepSeekRawTextBuffer : state.partialStreamContent;
                         }
-                        if (modelResponseMetadata.fullReasoningContent && selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
-                            modelThoughtSummaryContent = modelResponseMetadata.fullReasoningContent;
-                            state.deepSeekThoughtRawTextBuffer = modelThoughtSummaryContent;
-                        }
+
 
                          if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
                             throw new Error("リクエストがキャンセルされました。");
@@ -8894,7 +8923,17 @@
                                 clearInterval(state.deepSeekThoughtDisplayTimer);
                                 state.deepSeekThoughtDisplayTimer = null;
                             }
-                           uiUtils.finalizeStreamingMessage(state.currentMessages.indexOf(modelMessageObjectForStream));
+                            if (!state.abortController?.signal.aborted) {
+                                const finalIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+                                if (finalIndex !== -1) {
+                                    const msgToUpdate = state.currentMessages[finalIndex];
+                                    if (msgToUpdate.content === '' && state.deepSeekRawTextBuffer) msgToUpdate.content = state.deepSeekRawTextBuffer;
+                                    if (contextDeepSeekIncludeThoughts && msgToUpdate.deepSeekThoughtSummary === null && state.deepSeekThoughtRawTextBuffer) {
+                                        msgToUpdate.deepSeekThoughtSummary = state.deepSeekThoughtRawTextBuffer;
+                                    }
+                                    uiUtils.finalizeStreamingMessage(finalIndex);
+                                }
+                            }
                         }
                         uiUtils.setSendingState(false);
                         state.abortController = null;
@@ -10171,7 +10210,7 @@
                     await uiUtils.showCustomAlert("送信中です。");
                     return;
                 }
-                 if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
+                if (state.isEditingSystemPrompt && !state.settings.pinSystemPromptToHeader) {
                     await uiUtils.showCustomAlert("システムプロンプト編集中はリトライできません。");
                     return;
                 }
