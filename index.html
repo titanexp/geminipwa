@@ -108,6 +108,7 @@
 
             --memo-height: 300px;
             --clipboard-stack-height: 300px;
+            --system-prompt-header-height: 300px;
             --message-icon-size: 28px;
             --message-icon-offset-y: -10px;
             --icon-name-font-size: 10px;
@@ -1327,11 +1328,30 @@
             border-radius: 8px;
             background-color: var(--bg-system-message);
             color: var(--text-system);
-            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, opacity 0.3s ease, visibility 0.3s ease, max-height 0.3s ease;
+            transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, opacity 0.3s ease, visibility 0.3s ease, max-height 0.3s ease, padding-top 0.3s ease, padding-bottom 0.3s ease, margin-bottom 0.3s ease, border-width 0.3s ease;
             position: relative;
             z-index: 1;
             overflow: hidden;
             max-height: 500px;
+        }
+        .system-prompt-area.pinned-to-header {
+            position: relative; /* Changed from sticky/fixed to relative for now for layout flow */
+            /* top: 0; If using sticky/fixed this would be needed */
+            z-index: 3; /* Lower than memo/clipboard, higher than content */
+            width: 100%;
+            min-height: 80px; /* Similar to memo/clipboard */
+            max-height: var(--system-prompt-header-height, 300px); /* Use a variable for consistency */
+            border-bottom: 1px solid var(--border-secondary);
+            box-shadow: 0 1px 3px var(--shadow-primary);
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            resize: vertical;
+            margin-bottom: 0; /* Remove bottom margin when pinned */
+            border-radius: 0; /* Remove radius when pinned if it looks better */
+            border-top: none;
+            border-left: none;
+            border-right: none;
         }
         .system-prompt-area.hidden {
             padding-top: 0;
@@ -1341,6 +1361,7 @@
             max-height: 0;
             opacity: 0;
             visibility: hidden;
+            min-height: 0 !important;
         }
         .system-prompt-area details {
             width: 100%;
@@ -1384,6 +1405,9 @@
             background-color: var(--bg-input);
             color: var(--text-primary);
             border-color: var(--border-primary);
+        }
+        .system-prompt-area.pinned-to-header .system-prompt-content textarea {
+            flex-grow: 1; /* Allow textarea to fill space in pinned mode */
         }
         .system-prompt-actions {
             display: flex;
@@ -2879,6 +2903,19 @@
                 <button id="goto-settings-btn" class="header-button" aria-label="設定へ">⚙</button>
             </header>
 
+            <div id="system-prompt-area" class="system-prompt-area">
+                <details id="system-prompt-details">
+                    <summary>システムプロンプト</summary>
+                    <div class="system-prompt-content">
+                        <textarea id="system-prompt-editor" aria-label="システムプロンプト編集"></textarea>
+                        <div class="system-prompt-actions">
+                            <button id="cancel-system-prompt-btn" class="cancel-system-prompt-btn">キャンセル</button>
+                            <button id="save-system-prompt-btn" class="save-system-prompt-btn">保存</button>
+                        </div>
+                    </div>
+                </details>
+            </div>
+
             <div id="memo-area" class="hidden">
                 <div class="memo-actions-container">
                     <button id="delete-memo-btn" class="delete-memo-btn" title="メモの内容を全て削除">全削除</button>
@@ -2898,18 +2935,6 @@
             </div>
 
             <main class="main-content">
-                <div id="system-prompt-area" class="system-prompt-area">
-                    <details id="system-prompt-details">
-                        <summary>システムプロンプト</summary>
-                        <div class="system-prompt-content">
-                            <textarea id="system-prompt-editor" aria-label="システムプロンプト編集"></textarea>
-                            <div class="system-prompt-actions">
-                                <button id="cancel-system-prompt-btn" class="cancel-system-prompt-btn">キャンセル</button>
-                                <button id="save-system-prompt-btn" class="save-system-prompt-btn">保存</button>
-                            </div>
-                        </div>
-                    </details>
-                </div>
                 <div id="message-container" class="message-container">
                 </div>
                 <div id="loading-indicator" class="loading-indicator hidden" aria-live="polite">応答中</div>
@@ -3240,8 +3265,6 @@
                            ストリーミング出力を使用する
                        </label>
                        <label for="deepseek-streaming-speed">文字送り速度 (ミリ秒/文字):</label>
-                       <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                           ※非推奨。
                        <input type="number" id="deepseek-streaming-speed" min="0" step="1" placeholder="例: 30 (0で無効)" aria-label="DeepSeek 文字送り速度">
                     </div>
                 </details>
@@ -3426,82 +3449,10 @@
                                <option value="pastel-rainbow">パステルモード🌈</option>
                            </select>
                            <p style="height:10px"></p>
-                           <details id="settings-group-header-footer-buttons">
-                                <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor:pointer; font-weight: normal;">ヘッダー/フッターボタン表示設定</summary>
-                                <div style="padding-top:10px; padding-left:15px;">
-                                   <label class="checkbox-label">
-                                       <input type="checkbox" id="show-chat-title-toggle">
-                                       ヘッダーにチャットタイトルを表示する
-                                   </label>
-                                   <label class="checkbox-label">
-                                       <input type="checkbox" id="show-new-chat-button-toggle">
-                                       ヘッダーに「新規」ボタンを表示する（「新」ボタン）
-                                   </label>
-                                   <label class="checkbox-label">
-                                       <input type="checkbox" id="show-delete-session-button-toggle">
-                                       ヘッダーに「全削除」ボタンを表示する（「削」ボタン）
-                                   </label>
-                                   <label class="checkbox-label">
-                                       <input type="checkbox" id="show-copy-session-button-toggle">
-                                       ヘッダーに「全コピー」ボタンを表示する（「コ」ボタン）
-                                   </label>
-                                   <label class="checkbox-label">
-                                       <input type="checkbox" id="show-scroll-to-top-button-toggle">
-                                       ヘッダーに「最上部へ(🔼)」ボタンを表示する
-                                   </label>
-                                   <label class="checkbox-label">
-                                       <input type="checkbox" id="show-scroll-to-bottom-button-toggle">
-                                       ヘッダーに「最下部へ(🔽)」ボタンを表示する
-                                   </label>
-                                   <label class="checkbox-label">
-                                       <input type="checkbox" id="show-toggle-all-content-button-toggle">
-                                       ヘッダーに「全表示/非表示(🖼️)」ボタンを表示する
-                                   </label>
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" id="show-memo-button-toggle">
-                                        ヘッダーにメモボタン(📝)を表示する
-                                    </label>
-                                    <label class="checkbox-label">
-                                        <input type="checkbox" id="show-clipboard-stack-button-toggle">
-                                        ヘッダーにクリップボードスタックボタン(🗒️)を表示する
-                                    </label>
-                                    <div>
-                                        <label for="memo-height">メモ・スタックの縦の幅 (例: 200px, 30vh):</label>
-                                        <input type="text" id="memo-height" placeholder="例: 200px, 30vh" aria-label="メモ・スタックの縦の幅">
-                                    </div>
-                                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom:10px;">
-                                        ※ 各エリアは縦方向にリサイズ可能です。
-                                    </p>
-                                   <label class="checkbox-label">
-                                        <input type="checkbox" id="show-bulk-history-actions-toggle">
-                                        履歴画面に「全出力」「全取込」ボタンを表示する
-                                    </label>
-                                   <label class="checkbox-label">
-                                       <input type="checkbox" id="show-paste-button-in-footer-toggle">
-                                       フッターに「貼付け」ボタンを表示する
-                                   </label>
-                                   <label class="checkbox-label">
-                                       <input type="checkbox" id="show-dice-button-toggle">
-                                       フッターにダイスボタン(🎲)を表示する
-                                   </label>
-                                    <div id="dice-value-settings" class="hidden" style="margin-top:5px;">
-                                        <div class="param-grid">
-                                            <div>
-                                                <label for="dice-min-value">ダイス最小値:</label>
-                                                <input type="number" id="dice-min-value" min="0" step="1" placeholder="例: 1">
-                                            </div>
-                                            <div>
-                                                <label for="dice-max-value">ダイス最大値:</label>
-                                                <input type="number" id="dice-max-value" min="0" step="1" placeholder="例: 100">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px; margin-bottom: 10px; padding-left:15px;">
-                                   ※ 以上のボタン類は必要な物のみオンにしてください。（ヘッダーを圧迫し⚙ボタンが画面から溢れ、“チャット画面から左右スワイプで画面移動”オプションもオフにしている場合、設定画面に入れなくなる恐れがあります）
-                                </p>
-                           </details>
-                           <p style="height:10px"></p>
+                           <label class="checkbox-label">
+                               <input type="checkbox" id="pin-system-prompt-toggle">
+                               システムプロンプト欄をヘッダーに固定表示する
+                           </label>
                            <label class="checkbox-label">
                                <input type="checkbox" id="hide-system-prompt-toggle">
                                システムプロンプト非表示
@@ -3545,6 +3496,81 @@
                                     <label for="toggle-button-bottom-text-expand">下部ボタン 展開時テキスト:</label>
                                     <input type="text" id="toggle-button-bottom-text-expand" placeholder="例: 表示">
                                 </div>
+                           </details>
+                           <details id="settings-group-header-footer-buttons">
+                                <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor:pointer; font-weight: normal;">ヘッダー/フッターボタン表示設定</summary>
+                                <div style="padding-top:10px; padding-left:15px;">
+                                   <label class="checkbox-label">
+                                       <input type="checkbox" id="show-chat-title-toggle">
+                                       ヘッダーにチャットタイトルを表示する
+                                   </label>
+                                   <label class="checkbox-label">
+                                       <input type="checkbox" id="show-new-chat-button-toggle">
+                                       ヘッダーに「新規」ボタンを表示する（「新」ボタン）
+                                   </label>
+                                   <label class="checkbox-label">
+                                       <input type="checkbox" id="show-delete-session-button-toggle">
+                                       ヘッダーに「全削除」ボタンを表示する（「削」ボタン）
+                                   </label>
+                                   <label class="checkbox-label">
+                                       <input type="checkbox" id="show-copy-session-button-toggle">
+                                       ヘッダーに「全コピー」ボタンを表示する（「コ」ボタン）
+                                   </label>
+                                   <label class="checkbox-label">
+                                       <input type="checkbox" id="show-scroll-to-top-button-toggle">
+                                       ヘッダーに「最上部へ(🔼)」ボタンを表示する
+                                   </label>
+                                   <label class="checkbox-label">
+                                       <input type="checkbox" id="show-scroll-to-bottom-button-toggle">
+                                       ヘッダーに「最下部へ(🔽)」ボタンを表示する
+                                   </label>
+                                   <label class="checkbox-label">
+                                       <input type="checkbox" id="show-toggle-all-content-button-toggle">
+                                       ヘッダーに「全表示/非表示(🖼️)」ボタンを表示する
+                                   </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="show-memo-button-toggle">
+                                        ヘッダーにメモボタン(📝)を表示する
+                                    </label>
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="show-clipboard-stack-button-toggle">
+                                        ヘッダーにクリップボードスタックボタン(🗒️)を表示する
+                                    </label>
+                                    <div>
+                                        <label for="memo-height">メモ・スタック・固定システムプロンプトの縦の幅 (例: 200px, 30vh):</label>
+                                        <input type="text" id="memo-height" placeholder="例: 200px, 30vh" aria-label="メモ・スタック・固定システムプロンプトの縦の幅">
+                                    </div>
+                                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom:10px;">
+                                        ※ 各エリアは縦方向にリサイズ可能です。
+                                    </p>
+                                   <label class="checkbox-label">
+                                        <input type="checkbox" id="show-bulk-history-actions-toggle">
+                                        履歴画面に「全出力」「全取込」ボタンを表示する
+                                    </label>
+                                   <label class="checkbox-label">
+                                       <input type="checkbox" id="show-paste-button-in-footer-toggle">
+                                       フッターに「貼付け」ボタンを表示する
+                                   </label>
+                                   <label class="checkbox-label">
+                                       <input type="checkbox" id="show-dice-button-toggle">
+                                       フッターにダイスボタン(🎲)を表示する
+                                   </label>
+                                    <div id="dice-value-settings" class="hidden" style="margin-top:5px;">
+                                        <div class="param-grid">
+                                            <div>
+                                                <label for="dice-min-value">ダイス最小値:</label>
+                                                <input type="number" id="dice-min-value" min="0" step="1" placeholder="例: 1">
+                                            </div>
+                                            <div>
+                                                <label for="dice-max-value">ダイス最大値:</label>
+                                                <input type="number" id="dice-max-value" min="0" step="1" placeholder="例: 100">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px; margin-bottom: 10px; padding-left:15px;">
+                                   ※ 以上のボタン類は必要な物のみオンにしてください。（ヘッダーを圧迫し⚙ボタンが画面から溢れ、“チャット画面から左右スワイプで画面移動”オプションもオフにしている場合、設定画面に入れなくなる恐れがあります）
+                                </p>
                            </details>
                            <label for="history-sort-order">履歴のソート順:</label>
                            <select id="history-sort-order" aria-label="履歴のソート順">
@@ -3704,6 +3730,7 @@
         const DEFAULT_CODE_BLOCK_FONT_SIZE = 13;
         const DEFAULT_MEMO_HEIGHT = '300px';
         const DEFAULT_CLIPBOARD_STACK_HEIGHT = '300px';
+        const DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT = '300px';
         const DEFAULT_MESSAGE_ICON_SIZE = 28;
         const DEFAULT_MESSAGE_ICON_OFFSET_Y = -10;
         const DEFAULT_USER_NAME = "あなた";
@@ -3895,6 +3922,7 @@
             autoScrollOnThoughtCheckbox: document.getElementById('auto-scroll-on-thought'),
             historySortOrderSelect: document.getElementById('history-sort-order'),
             themeSelect: document.getElementById('theme-select'),
+            pinSystemPromptToggle: document.getElementById('pin-system-prompt-toggle'),
             fontFamilyInput: document.getElementById('font-family-input'),
             messageBodyFontSizeInput: document.getElementById('message-body-font-size-input'),
             codeBlockFontSizeInput: document.getElementById('code-block-font-size-input'),
@@ -4090,6 +4118,7 @@
                 codeBlockFontSize: DEFAULT_CODE_BLOCK_FONT_SIZE,
                 thoughtSummaryFontSize: DEFAULT_THOUGHT_SUMMARY_FONT_SIZE,
                 hideSystemPromptInChat: false,
+                pinSystemPromptToHeader: false,
                 enableSessionLinking: false,
                 enableSwipeNavigation: true,
                 preventZoom: true,
@@ -4110,6 +4139,7 @@
                 memoHeight: DEFAULT_MEMO_HEIGHT,
                 showClipboardStackButton: false,
                 clipboardStackHeight: DEFAULT_CLIPBOARD_STACK_HEIGHT,
+                systemPromptHeaderHeight: DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT,
                 showUserIcon: false,
                 userIconBlob: null,
                 showUserName: false,
@@ -4174,6 +4204,7 @@
             pendingAttachments: [],
             isMemoVisible: false,
             isClipboardStackVisible: false,
+            isSystemPromptPinned: false,
             clipboardStackContent: "",
             areAllMessagesHidden: false,
             messageCollapsedStates: new Map(),
@@ -4182,6 +4213,8 @@
             isAiToAiChatProcessing: false,
             deepSeekRawTextBuffer: '',
             deepSeekDisplayTimer: null,
+            deepSeekThoughtRawTextBuffer: '',
+            deepSeekThoughtDisplayTimer: null,
         };
 
         function updateMessageMaxWidthVar() {
@@ -5183,7 +5216,7 @@
                     }
                 } else {
                     targetContentDiv = messageDiv.querySelector(`#streaming-content-${index}`);
-                    accumulatedContentForDisplay = state.partialStreamContent;
+                    accumulatedContentForDisplay = selectedApiProvider === 'deepseek' ? state.deepSeekRawTextBuffer : state.partialStreamContent;
                 }
 
                 if (targetContentDiv) {
@@ -5200,9 +5233,7 @@
                                     targetContentDiv.innerHTML = '';
                                     targetContentDiv.appendChild(currentPre);
                                 }
-                                currentPre.textContent = contentToRender || '';
                             } else if (selectedApiProvider === 'deepseek' && !isThoughtSummary) {
-                                targetContentDiv.textContent = contentToRender || '';
                             }
                              else {
                                 const rawHtml = marked.parse(contentToRender || '');
@@ -5222,7 +5253,6 @@
                         renderCurrentState(accumulatedContentForDisplay);
                     } else if (selectedApiProvider === 'deepseek') {
                         if (isThoughtSummary) {
-                            renderCurrentState(accumulatedContentForDisplay);
                         } else {
                         }
                     }
@@ -5243,45 +5273,76 @@
                     this.scrollToBottom();
                 }
             },
-            startDeepSeekRawTextDisplay(index, streamSpeed) {
-                if (state.deepSeekDisplayTimer) {
-                    clearInterval(state.deepSeekDisplayTimer);
-                    state.deepSeekDisplayTimer = null;
+            startDeepSeekRawTextDisplay(index, streamSpeed, isThoughtProcess = false) {
+                const timerStateKey = isThoughtProcess ? 'deepSeekThoughtDisplayTimer' : 'deepSeekDisplayTimer';
+                const bufferKey = isThoughtProcess ? 'deepSeekThoughtRawTextBuffer' : 'deepSeekRawTextBuffer';
+                const streamingIdSuffix = isThoughtProcess ? 'thought-summary' : 'content';
+
+                if (state[timerStateKey]) {
+                    clearInterval(state[timerStateKey]);
+                    state[timerStateKey] = null;
                 }
                 const messageDiv = document.getElementById(`streaming-message-${index}`);
                 if (!messageDiv) return;
-                const targetContentDiv = messageDiv.querySelector(`#streaming-content-${index}`);
+                const targetContentDiv = messageDiv.querySelector(`#streaming-${streamingIdSuffix}-${index}`);
                 if (!targetContentDiv) return;
 
                 let displayedLength = 0;
+                let preElement;
+                if (isThoughtProcess) {
+                    preElement = targetContentDiv.querySelector('pre');
+                    if (!preElement) {
+                        preElement = document.createElement('pre');
+                        targetContentDiv.innerHTML = '';
+                        targetContentDiv.appendChild(preElement);
+                    }
+                }
+
 
                 const displayNextCharacter = () => {
                     if (state.abortController?.signal.aborted) {
-                        clearInterval(state.deepSeekDisplayTimer);
-                        state.deepSeekDisplayTimer = null;
+                        clearInterval(state[timerStateKey]);
+                        state[timerStateKey] = null;
                         return;
                     }
-                    if (displayedLength < state.deepSeekRawTextBuffer.length) {
+                    if (displayedLength < state[bufferKey].length) {
                         displayedLength++;
-                        targetContentDiv.textContent = state.deepSeekRawTextBuffer.substring(0, displayedLength);
+                        const textToShow = state[bufferKey].substring(0, displayedLength);
+                        if (isThoughtProcess && preElement) {
+                            preElement.textContent = textToShow;
+                        } else if (!isThoughtProcess) {
+                             targetContentDiv.textContent = textToShow;
+                        }
 
-                        if (state.settings.autoScrollOnNewMessage) {
+
+                        const autoScrollEnabledForThisContentType = isThoughtProcess
+                            ? state.settings.autoScrollOnThought
+                            : state.settings.autoScrollOnNewMessage;
+                        if (autoScrollEnabledForThisContentType) {
                             this.scrollToBottom();
                         }
-                    } else if (state.deepSeekDisplayTimer) {
-                         const isStillStreaming = state.isSending && (state.partialStreamContent === state.deepSeekRawTextBuffer);
+
+                    } else if (state[timerStateKey]) {
+                         const isStillStreaming = state.isSending &&
+                            ( (isThoughtProcess && state.partialThoughtStreamContent === state[bufferKey]) ||
+                              (!isThoughtProcess && state.partialStreamContent === state[bufferKey]) );
+
                         if (!isStillStreaming) {
-                            clearInterval(state.deepSeekDisplayTimer);
-                            state.deepSeekDisplayTimer = null;
+                            clearInterval(state[timerStateKey]);
+                            state[timerStateKey] = null;
                             this.finalizeStreamingMessage(index);
                         }
                     }
                 };
                 if (streamSpeed > 0) {
-                    state.deepSeekDisplayTimer = setInterval(displayNextCharacter, streamSpeed);
+                    state[timerStateKey] = setInterval(displayNextCharacter, streamSpeed);
                 } else {
-                     targetContentDiv.textContent = state.deepSeekRawTextBuffer;
-                     this.finalizeStreamingMessage(index);
+                     if (isThoughtProcess && preElement) {
+                        preElement.textContent = state[bufferKey];
+                    } else if (!isThoughtProcess) {
+                        targetContentDiv.textContent = state[bufferKey];
+                    }
+                    this.finalizeStreamingMessage(index);
                 }
             },
             finalizeStreamingMessage(index) {
@@ -5306,10 +5367,13 @@
                     } else if (finalMessageData.deepSeekThoughtSummary && messageApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) {
                         const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`) || messageDiv.querySelector('.thought-summary-details .thought-summary-content');
                         if (thoughtContentDiv) {
-                            const pre = document.createElement('pre');
+                            let pre = thoughtContentDiv.querySelector('pre');
+                            if (!pre) {
+                                pre = document.createElement('pre');
+                                thoughtContentDiv.innerHTML = '';
+                                thoughtContentDiv.appendChild(pre);
+                            }
                             pre.textContent = finalMessageData.deepSeekThoughtSummary || '';
-                            thoughtContentDiv.innerHTML = '';
-                            thoughtContentDiv.appendChild(pre);
                             if (thoughtContentDiv.id === `streaming-thought-summary-${index}`) {
                                 thoughtContentDiv.removeAttribute('id');
                             }
@@ -5548,6 +5612,8 @@
                     elements.toggleClipboardStackBtn.classList.toggle('hidden', !state.settings.showClipboardStackButton);
                 }
                 document.documentElement.style.setProperty('--clipboard-stack-height', state.settings.clipboardStackHeight || DEFAULT_CLIPBOARD_STACK_HEIGHT);
+                document.documentElement.style.setProperty('--system-prompt-header-height', state.settings.systemPromptHeaderHeight || DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT);
+
                 document.documentElement.style.setProperty('--message-icon-size', `${state.settings.messageIconSize || DEFAULT_MESSAGE_ICON_SIZE}px`);
                 document.documentElement.style.setProperty('--message-icon-offset-y', `${state.settings.messageIconOffsetY || DEFAULT_MESSAGE_ICON_OFFSET_Y}px`);
                 document.documentElement.style.setProperty('--icon-name-font-size', `${state.settings.iconNameFontSize || DEFAULT_ICON_NAME_FONT_SIZE}px`);
@@ -5879,6 +5945,7 @@
                 elements.messageBodyFontSizeInput.value = state.settings.messageBodyFontSize ?? '';
                 elements.codeBlockFontSizeInput.value = state.settings.codeBlockFontSize ?? '';
                 elements.thoughtSummaryFontSizeInput.value = state.settings.thoughtSummaryFontSize ?? '';
+                elements.pinSystemPromptToggle.checked = state.settings.pinSystemPromptToHeader;
                 elements.hideSystemPromptToggle.checked = state.settings.hideSystemPromptInChat;
                 elements.swipeNavigationToggle.checked = state.settings.enableSwipeNavigation;
                 elements.preventZoomToggle.checked = state.settings.preventZoom;
@@ -5962,7 +6029,7 @@
                 this.updateIconSettingsUI();
                 this.applyTheme();
                 this.applyFontFamily();
-                this.toggleSystemPromptVisibility();
+                this.toggleSystemPromptVisibility(true);
                 this.applySidePanelSettingsToUI();
                 this.updateSessionLinkingUI();
             },
@@ -6118,11 +6185,36 @@
                     elements.systemPromptDetails.removeAttribute('open');
                 }
                 this.adjustTextareaHeight(elements.systemPromptEditor, 200);
-                this.toggleSystemPromptVisibility();
+                this.toggleSystemPromptVisibility(false);
             },
-            toggleSystemPromptVisibility() {
+            toggleSystemPromptVisibility(isInitialLoad = false) {
                 const shouldHide = state.settings.hideSystemPromptInChat;
+                const shouldPin = state.settings.pinSystemPromptToHeader;
+                const chatScreen = elements.chatScreen;
+                const header = chatScreen.querySelector('.app-header');
+                const mainContent = chatScreen.querySelector('.main-content');
+
                 elements.systemPromptArea.classList.toggle('hidden', shouldHide);
+                elements.systemPromptArea.classList.toggle('pinned-to-header', !shouldHide && shouldPin);
+
+                if (!shouldHide && shouldPin) {
+                    if (elements.systemPromptArea.parentNode !== header.parentNode) {
+                        header.parentNode.insertBefore(elements.systemPromptArea, header.nextSibling);
+                    }
+                    elements.systemPromptArea.style.maxHeight = state.settings.systemPromptHeaderHeight || DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT;
+                } else {
+                    if (elements.systemPromptArea.parentNode !== mainContent || elements.systemPromptArea.nextSibling !== elements.messageContainer) {
+                       if (mainContent.firstChild && mainContent.firstChild.id !== 'message-container') {
+                            mainContent.insertBefore(elements.systemPromptArea, mainContent.firstChild);
+                       } else {
+                            mainContent.prepend(elements.systemPromptArea);
+                       }
+                    }
+                    elements.systemPromptArea.style.maxHeight = '500px';
+                }
+                 if (isInitialLoad) {
+                    appLogic.updatePanelVisibilityAndLayout();
+                }
             },
             showScreen(screenName, fromPopState = false) {
                 if (state.editingMessageIndex !== null) {
@@ -6144,6 +6236,9 @@
                      elements.clipboardStackArea.classList.add('hidden');
                      state.isClipboardStackVisible = false;
                 }
+                if (state.isSystemPromptPinned && screenName !== 'chat') {
+                }
+
 
                 if (screenName === state.currentScreen) {
                     if (screenName === 'history') this.updateHistoryHeaderButtonVisibility();
@@ -6174,9 +6269,11 @@
                     elements.historyScreen.style.transform = 'translateX(-100%)';
                     elements.settingsScreen.style.transform = 'translateX(100%)';
                     requestAnimationFrame(() => {
+                        this.toggleSystemPromptVisibility(true);
                         this.updateSystemPromptUI();
                         this.adjustTextareaHeight();
                         this.updateChatScreenElementVisibility();
+                        appLogic.updatePanelVisibilityAndLayout();
                     });
                 } else if (screenName === 'history') {
                     activeScreen = elements.historyScreen;
@@ -6841,10 +6938,13 @@
                     uiUtils.renderChatMessages(true);
                 });
 
-
+                elements.pinSystemPromptToggle.addEventListener('change', () => {
+                    state.settings.pinSystemPromptToHeader = elements.pinSystemPromptToggle.checked;
+                    uiUtils.toggleSystemPromptVisibility(true);
+                });
                 elements.hideSystemPromptToggle.addEventListener('change', () => {
                     state.settings.hideSystemPromptInChat = elements.hideSystemPromptToggle.checked;
-                    uiUtils.toggleSystemPromptVisibility();
+                    uiUtils.toggleSystemPromptVisibility(true);
                 });
                 elements.showChatTitleToggle.addEventListener('change', () => {
                     state.settings.showChatTitle = elements.showChatTitleToggle.checked;
@@ -6853,10 +6953,12 @@
                 elements.showMemoButtonToggle.addEventListener('change', () => {
                     state.settings.showMemoButton = elements.showMemoButtonToggle.checked;
                     uiUtils.updateChatScreenElementVisibility();
+                    appLogic.updatePanelVisibilityAndLayout();
                 });
                 elements.showClipboardStackButtonToggle.addEventListener('change', () => {
                     state.settings.showClipboardStackButton = elements.showClipboardStackButtonToggle.checked;
                     uiUtils.updateChatScreenElementVisibility();
+                    appLogic.updatePanelVisibilityAndLayout();
                 });
                 elements.showNewChatButtonToggle.addEventListener('change', () => {
                     state.settings.showNewChatButton = elements.showNewChatButtonToggle.checked;
@@ -6908,9 +7010,11 @@
                     if (newHeight) {
                         document.documentElement.style.setProperty('--memo-height', newHeight);
                         document.documentElement.style.setProperty('--clipboard-stack-height', newHeight);
+                        document.documentElement.style.setProperty('--system-prompt-header-height', newHeight);
                     } else {
                         document.documentElement.style.setProperty('--memo-height', DEFAULT_MEMO_HEIGHT);
                         document.documentElement.style.setProperty('--clipboard-stack-height', DEFAULT_CLIPBOARD_STACK_HEIGHT);
+                        document.documentElement.style.setProperty('--system-prompt-header-height', DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT);
                     }
                 });
                 elements.messageBodyFontSizeInput.addEventListener('input', () => {
@@ -7156,7 +7260,8 @@
                  }
 
                 state.isMemoVisible = !state.isMemoVisible;
-                elements.memoArea.classList.toggle('hidden', !state.isMemoVisible);
+                this.updatePanelVisibilityAndLayout();
+
 
                 if (state.isMemoVisible) {
                     elements.memoEditor.focus();
@@ -7255,13 +7360,55 @@
                  }
 
                 state.isClipboardStackVisible = !state.isClipboardStackVisible;
-                elements.clipboardStackArea.classList.toggle('hidden', !state.isClipboardStackVisible);
+                this.updatePanelVisibilityAndLayout();
 
                 if (state.isClipboardStackVisible) {
                     elements.clipboardStackEditor.value = state.clipboardStackContent;
                     elements.clipboardStackEditor.focus();
                     elements.clipboardStackEditor.scrollTop = elements.clipboardStackEditor.scrollHeight;
                 }
+            },
+            updatePanelVisibilityAndLayout() {
+                const systemPromptPinned = state.settings.pinSystemPromptToHeader && !state.settings.hideSystemPromptInChat;
+                const memoVisible = state.isMemoVisible;
+                const clipboardStackVisible = state.isClipboardStackVisible;
+
+                elements.systemPromptArea.classList.toggle('hidden', state.settings.hideSystemPromptInChat || (!systemPromptPinned && state.currentScreen !== 'chat'));
+                elements.systemPromptArea.classList.toggle('pinned-to-header', systemPromptPinned && !state.settings.hideSystemPromptInChat);
+
+                elements.memoArea.classList.toggle('hidden', !memoVisible);
+                elements.clipboardStackArea.classList.toggle('hidden', !clipboardStackVisible);
+
+                let topOffset = 0;
+                const mainContent = elements.chatScreen.querySelector('.main-content');
+
+                if (systemPromptPinned && !state.settings.hideSystemPromptInChat) {
+                    elements.systemPromptArea.style.top = `${topOffset}px`;
+                    topOffset += elements.systemPromptArea.offsetHeight;
+                }
+                if (memoVisible) {
+                    elements.memoArea.style.top = `${topOffset}px`;
+                    topOffset += elements.memoArea.offsetHeight;
+                }
+                if (clipboardStackVisible) {
+                    elements.clipboardStackArea.style.top = `${topOffset}px`;
+                    topOffset += elements.clipboardStackArea.offsetHeight;
+                }
+                if (mainContent) {
+                  mainContent.style.paddingTop = `${topOffset}px`;
+                }
+
+                if (elements.systemPromptArea.classList.contains('pinned-to-header')) {
+                     if (elements.systemPromptArea.parentNode !== elements.chatScreen) {
+                         elements.chatScreen.insertBefore(elements.systemPromptArea, elements.memoArea);
+                     }
+                 } else {
+                     if (elements.systemPromptArea.parentNode !== mainContent || elements.systemPromptArea.nextSibling !== elements.messageContainer) {
+                         const firstChildInMain = mainContent.firstChild;
+                         mainContent.insertBefore(elements.systemPromptArea, firstChildInMain);
+                     }
+                 }
+
             },
             async copyClipboardStackText() {
                 const stackText = elements.clipboardStackEditor.value;
@@ -7489,16 +7636,14 @@
                 }
                 state.pendingAttachments = [];
                 state.isMemoVisible = false;
-                elements.memoArea.classList.add('hidden');
-                elements.memoEditor.value = '';
                 state.isClipboardStackVisible = false;
-                elements.clipboardStackArea.classList.add('hidden');
                 state.clipboardStackContent = '';
                 state.areAllMessagesHidden = false;
                 uiUtils.updateToggleAllContentButton();
                 state.messageCollapsedStates.clear();
                 state.thoughtSummaryOpenStates.clear();
                 uiUtils.updateSystemPromptUI();
+                this.updatePanelVisibilityAndLayout();
                 uiUtils.renderChatMessages();
                 uiUtils.updateChatTitle();
                 elements.userInput.value = '';
@@ -7570,6 +7715,7 @@
                         state.areAllMessagesHidden = false;
                         uiUtils.updateToggleAllContentButton();
                         uiUtils.updateSystemPromptUI();
+                        this.updatePanelVisibilityAndLayout();
                         state.messageCollapsedStates.clear();
                         state.thoughtSummaryOpenStates.clear();
                         if (state.settings.persistMessageCollapseState && chat.collapsedStates) {
@@ -7654,7 +7800,6 @@
                                 m.isSelected = (idx === siblings.length - 1);
                             });
                         });
-
                         const newChatData = {
                             messages: duplicatedMessages,
                             systemPrompt: chat.systemPrompt || '',
@@ -8002,10 +8147,16 @@
                 state.partialStreamContent = '';
                 state.partialThoughtStreamContent = '';
                 state.deepSeekRawTextBuffer = '';
+                state.deepSeekThoughtRawTextBuffer = '';
                 if (state.deepSeekDisplayTimer) {
                     clearInterval(state.deepSeekDisplayTimer);
                     state.deepSeekDisplayTimer = null;
                 }
+                 if (state.deepSeekThoughtDisplayTimer) {
+                    clearInterval(state.deepSeekThoughtDisplayTimer);
+                    state.deepSeekThoughtDisplayTimer = null;
+                }
+
 
                 let userMessageIndex = isRetry ? retryUserMessageIndex : -1;
                 let existingSiblingGroupId = null;
@@ -8247,6 +8398,7 @@
                         state.partialStreamContent = dummyModelPrefix;
                         state.partialThoughtStreamContent = '';
                         state.deepSeekRawTextBuffer = dummyModelPrefix;
+                        state.deepSeekThoughtRawTextBuffer = '';
                     }
 
                     if (useStreamingForThisCall && !isBackgroundProcess) {
@@ -8281,7 +8433,10 @@
                         state.messageCollapsedStates.set(tempPlaceholderIndex, false);
                         uiUtils.appendMessage('model', '', tempPlaceholderIndex, true);
                          if (selectedApiProvider === 'deepseek') {
-                            uiUtils.startDeepSeekRawTextDisplay(tempPlaceholderIndex, contextStreamingSpeed);
+                            uiUtils.startDeepSeekRawTextDisplay(tempPlaceholderIndex, contextStreamingSpeed, false);
+                            if (contextDeepSeekIncludeThoughts) {
+                                uiUtils.startDeepSeekRawTextDisplay(tempPlaceholderIndex, contextStreamingSpeed, true);
+                            }
                         }
                     }
 
@@ -8317,7 +8472,7 @@
                                             }
                                         } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
                                             state.partialThoughtStreamContent += streamData.thoughtText;
-                                            uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, streamData.thoughtText, true);
+                                            state.deepSeekThoughtRawTextBuffer += streamData.thoughtText;
                                         }
                                     }
                                 }
@@ -8372,7 +8527,7 @@
                             }
                         }
                         if (!isBackgroundProcess) {
-                           modelThoughtSummaryContent = state.partialThoughtStreamContent;
+                           modelThoughtSummaryContent = selectedApiProvider === 'deepseek' ? state.deepSeekThoughtRawTextBuffer : state.partialThoughtStreamContent;
                            modelResponseRawContent = selectedApiProvider === 'deepseek' ? state.deepSeekRawTextBuffer : state.partialStreamContent;
                         }
                         if (modelResponseMetadata.fullReasoningContent && selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
@@ -8518,7 +8673,9 @@
                                 } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                                 }
-                                uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
+                                if (selectedApiProvider !== 'deepseek' || state.deepSeekDisplayTimer === null) {
+                                    uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
+                                }
                                 await dbUtils.saveChat();
                             }
                         } else {
@@ -8572,9 +8729,8 @@
                     const isAbort = error.message === "リクエストがキャンセルされました。" || modelResponseMetadata.finishReason === 'ABORTED';
                     const displayErrorMessage = isAbort ? error.message : (error.message || "不明なエラーが発生しました");
 
-                    let partialThoughtContentOnError = state.partialThoughtStreamContent;
+                    let partialThoughtContentOnError = selectedApiProvider === 'deepseek' ? state.deepSeekThoughtRawTextBuffer : state.partialThoughtStreamContent;
                     let partialContentOnError = selectedApiProvider === 'deepseek' ? state.deepSeekRawTextBuffer : state.partialStreamContent;
-
 
                     if (isBackgroundProcess) {
                          throw error;
@@ -8632,9 +8788,14 @@
                         state.partialStreamContent = '';
                         state.partialThoughtStreamContent = '';
                         state.deepSeekRawTextBuffer = '';
+                        state.deepSeekThoughtRawTextBuffer = '';
                         if(state.deepSeekDisplayTimer) {
                             clearInterval(state.deepSeekDisplayTimer);
                             state.deepSeekDisplayTimer = null;
+                        }
+                        if(state.deepSeekThoughtDisplayTimer) {
+                            clearInterval(state.deepSeekThoughtDisplayTimer);
+                            state.deepSeekThoughtDisplayTimer = null;
                         }
                         if (state.settings.autoScrollOnNewMessage) {
                             uiUtils.scrollToBottom();
@@ -8651,6 +8812,10 @@
                 if (state.deepSeekDisplayTimer) {
                     clearInterval(state.deepSeekDisplayTimer);
                     state.deepSeekDisplayTimer = null;
+                }
+                if (state.deepSeekThoughtDisplayTimer) {
+                    clearInterval(state.deepSeekThoughtDisplayTimer);
+                    state.deepSeekThoughtDisplayTimer = null;
                 }
             },
             async handleHistoryImport(file) {
@@ -9103,6 +9268,7 @@
                  newSettings.autoScrollOnThought = elements.autoScrollOnThoughtCheckbox.checked;
                  newSettings.historySortOrder = elements.historySortOrderSelect.value;
                  newSettings.theme = elements.themeSelect.value;
+                 newSettings.pinSystemPromptToHeader = elements.pinSystemPromptToggle.checked;
                  newSettings.enableSessionLinking = elements.enableSessionLinkingCheckbox.checked;
                  newSettings.fontFamily = elements.fontFamilyInput.value.trim();
                  newSettings.messageBodyFontSize = elements.messageBodyFontSizeInput.value === '' ? null : parseInt(elements.messageBodyFontSizeInput.value, 10);
@@ -9126,8 +9292,9 @@
                  newSettings.diceMaxValue = elements.diceMaxValueInput.value === '' ? null : parseInt(elements.diceMaxValueInput.value, 10);
                  newSettings.showMemoButton = elements.showMemoButtonToggle.checked;
                  newSettings.memoHeight = elements.memoHeightInput.value.trim() || DEFAULT_MEMO_HEIGHT;
+                 newSettings.clipboardStackHeight = newSettings.memoHeight;
+                 newSettings.systemPromptHeaderHeight = newSettings.memoHeight;
                  newSettings.showClipboardStackButton = elements.showClipboardStackButtonToggle.checked;
-                 newSettings.clipboardStackHeight = state.settings.clipboardStackHeight;
                  newSettings.showUserIcon = elements.showUserIconToggle.checked;
                  newSettings.showUserName = elements.showUserNameToggle.checked;
                  newSettings.userName = elements.userNameInput.value.trim() || DEFAULT_USER_NAME;
@@ -9374,6 +9541,7 @@
                         defaultSettingsCopy.codeBlockFontSize = DEFAULT_CODE_BLOCK_FONT_SIZE;
                         defaultSettingsCopy.thoughtSummaryFontSize = DEFAULT_THOUGHT_SUMMARY_FONT_SIZE;
                         defaultSettingsCopy.hideSystemPromptInChat = false;
+                        defaultSettingsCopy.pinSystemPromptToHeader = false;
                         defaultSettingsCopy.enableSessionLinking = false;
                         defaultSettingsCopy.enableSwipeNavigation = true;
                         defaultSettingsCopy.preventZoom = true;
@@ -9394,6 +9562,7 @@
                         defaultSettingsCopy.memoHeight = DEFAULT_MEMO_HEIGHT;
                         defaultSettingsCopy.showClipboardStackButton = false;
                         defaultSettingsCopy.clipboardStackHeight = DEFAULT_CLIPBOARD_STACK_HEIGHT;
+                        defaultSettingsCopy.systemPromptHeaderHeight = DEFAULT_SYSTEM_PROMPT_HEADER_HEIGHT;
                         defaultSettingsCopy.showUserIcon = false;
                         defaultSettingsCopy.userIconBlob = null;
                         defaultSettingsCopy.showUserName = false;
@@ -10254,7 +10423,7 @@
                             textExpand = state.settings.toggleButtonTopTextExpand;
                         } else {
                             textCollapse = state.settings.toggleButtonBottomTextCollapse;
-                            textExpand = state.settings.toggleButtonBottomTextExpand;
+                                                        textExpand = state.settings.toggleButtonBottomTextExpand;
                         }
                         baseTitle = isCollapsed ? 'メッセージを展開' : 'メッセージを折りたたむ';
                         button.textContent = isCollapsed ? textExpand : textCollapse;
