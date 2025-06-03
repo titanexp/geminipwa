@@ -6534,22 +6534,21 @@
                 return messageDiv.querySelector('.message-content');
             },
             animateDeepSeekThought(messageIndex) {
-                if (state.isDisplayingDeepSeekThought && state.deepSeekThoughtTimerId) return;
-                state.isDisplayingDeepSeekThought = true;
+                if (!state.isDisplayingDeepSeekThought) state.isDisplayingDeepSeekThought = true;
 
                 const preElement = this.getDeepSeekThoughtElement(messageIndex, true);
-                if (!preElement || state.abortController?.signal.aborted) {
+                if (!preElement) {
                     state.isDisplayingDeepSeekThought = false;
                     if (state.deepSeekThoughtTimerId) clearTimeout(state.deepSeekThoughtTimerId);
                     state.deepSeekThoughtTimerId = null;
+                    if (state.deepSeekThoughtStreamCompleted && state.deepSeekRawTextBuffer.length > 0 && !state.isDisplayingDeepSeekContent) {
+                        this.animateDeepSeekContent(messageIndex);
+                    }
                     return;
-                }
-                if (preElement.textContent.length === 0 && state.deepSeekThoughtDisplayIndex > 0) {
-                     preElement.textContent = state.deepSeekThoughtRawTextBuffer.substring(0, state.deepSeekThoughtDisplayIndex);
                 }
 
                 if (state.deepSeekThoughtDisplayIndex < state.deepSeekThoughtRawTextBuffer.length) {
-                    preElement.textContent += state.deepSeekThoughtRawTextBuffer.charAt(state.deepSeekThoughtDisplayIndex);
+                    preElement.textContent = state.deepSeekThoughtRawTextBuffer.substring(0, state.deepSeekThoughtDisplayIndex + 1);
                     state.deepSeekThoughtDisplayIndex++;
 
                     if (state.settings.autoScrollOnThought) this.scrollToBottom();
@@ -6565,6 +6564,7 @@
                         }
                     }
                 } else {
+                    preElement.textContent = state.deepSeekThoughtRawTextBuffer;
                     state.isDisplayingDeepSeekThought = false;
                     if (state.deepSeekThoughtTimerId) clearTimeout(state.deepSeekThoughtTimerId);
                     state.deepSeekThoughtTimerId = null;
@@ -6574,30 +6574,21 @@
                 }
             },
             animateDeepSeekContent(messageIndex) {
-                if (state.isDisplayingDeepSeekContent && state.deepSeekContentTimerId) return;
-                if (state.isDisplayingDeepSeekThought || state.deepSeekThoughtTimerId) return;
-
-                state.isDisplayingDeepSeekContent = true;
+                if (state.isDisplayingDeepSeekThought && state.deepSeekThoughtRawTextBuffer.length > 0) {
+                   return;
+                }
+                if (!state.isDisplayingDeepSeekContent) state.isDisplayingDeepSeekContent = true;
 
                 const contentDiv = this.getDeepSeekContentElement(messageIndex);
-                if (!contentDiv || state.abortController?.signal.aborted) {
+                if (!contentDiv) {
                     state.isDisplayingDeepSeekContent = false;
                     if (state.deepSeekContentTimerId) clearTimeout(state.deepSeekContentTimerId);
                     state.deepSeekContentTimerId = null;
                     return;
                 }
 
-                let currentTextToParse = state.deepSeekRawTextBuffer.substring(0, state.deepSeekContentDisplayIndex);
-                if (contentDiv.textContent.length === 0 && state.deepSeekContentDisplayIndex > 0) {
-                    try {
-                        contentDiv.innerHTML = marked.parse(currentTextToParse || '');
-                        this.addCopyButtonsToCodeBlocks(contentDiv);
-                    } catch(e) { contentDiv.textContent = currentTextToParse;}
-                }
-
-
                 if (state.deepSeekContentDisplayIndex < state.deepSeekRawTextBuffer.length) {
-                    currentTextToParse += state.deepSeekRawTextBuffer.charAt(state.deepSeekContentDisplayIndex);
+                    const currentTextToParse = state.deepSeekRawTextBuffer.substring(0, state.deepSeekContentDisplayIndex + 1);
                     try {
                         contentDiv.innerHTML = marked.parse(currentTextToParse || '');
                         this.addCopyButtonsToCodeBlocks(contentDiv);
@@ -6621,6 +6612,12 @@
                         state.isDisplayingDeepSeekContent = false;
                     }
                 } else {
+                    try {
+                        contentDiv.innerHTML = marked.parse(state.deepSeekRawTextBuffer || '');
+                        this.addCopyButtonsToCodeBlocks(contentDiv);
+                    } catch (e) {
+                        contentDiv.textContent = state.deepSeekRawTextBuffer;
+                    }
                     state.isDisplayingDeepSeekContent = false;
                     if (state.deepSeekContentTimerId) clearTimeout(state.deepSeekContentTimerId);
                     state.deepSeekContentTimerId = null;
@@ -8412,7 +8409,7 @@
                         if (selectedApiProvider === 'gemini') {
                             responseStreamIterator = apiUtils.handleStreamingResponse(apiResponseObject);
                         } else if (selectedApiProvider === 'deepseek') {
-                            responseStreamIterator = apiUtils.handleDeepSeekStreamingResponse(apiResponseObject, isBackgroundProcess ? -1 : state.currentMessages.indexOf(modelMessageObjectForStream));
+                            responseStreamIterator = apiUtils.handleDeepSeekStreamingResponse(apiResponseObject);
                         }
 
                         const currentContextStreamSpeed = selectedApiProvider === 'gemini' ? contextStreamingSpeed : state.settings.deepSeekStreamingSpeed;
@@ -8437,6 +8434,11 @@
                                                 uiUtils.updateStreamingMessage(messageIndexForDisplay, char, true);
                                                 if (currentContextStreamSpeed > 0) await sleep(currentContextStreamSpeed);
                                             }
+                                        } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
+                                            state.deepSeekThoughtRawTextBuffer += streamData.thoughtText;
+                                            if (!state.isDisplayingDeepSeekThought) {
+                                                uiUtils.animateDeepSeekThought(messageIndexForDisplay);
+                                            }
                                         }
                                     }
                                 }
@@ -8451,6 +8453,11 @@
                                                 state.partialStreamContent += char;
                                                 uiUtils.updateStreamingMessage(messageIndexForDisplay, char, false);
                                                 if (currentContextStreamSpeed > 0) await sleep(currentContextStreamSpeed);
+                                            }
+                                        } else if (selectedApiProvider === 'deepseek') {
+                                            state.deepSeekRawTextBuffer += streamData.contentText;
+                                             if (state.deepSeekThoughtStreamCompleted && !state.isDisplayingDeepSeekThought && !state.isDisplayingDeepSeekContent) {
+                                                uiUtils.animateDeepSeekContent(messageIndexForDisplay);
                                             }
                                         }
                                     }
@@ -8470,6 +8477,14 @@
                                 }
                                 if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
                             } else if (streamData.type === 'thoughtStreamEnd' && selectedApiProvider === 'deepseek') {
+                                state.deepSeekThoughtStreamCompleted = true;
+                                if (!isBackgroundProcess) {
+                                    if (state.isDisplayingDeepSeekThought && state.deepSeekThoughtDisplayIndex < state.deepSeekThoughtRawTextBuffer.length) {
+                                    }
+                                    if (!state.isDisplayingDeepSeekThought && state.deepSeekRawTextBuffer.length > 0 && !state.isDisplayingDeepSeekContent) {
+                                        uiUtils.animateDeepSeekContent(messageIndexForDisplay);
+                                    }
+                                }
                             } else if (streamData.type === 'metadata') {
                                 modelResponseMetadata = {
                                     finishReason: streamData.finishReason,
@@ -10928,7 +10943,7 @@
                     throw error;
                 }
             },
-            async *handleDeepSeekStreamingResponse(response, messageIndexForDisplay) {
+            async *handleDeepSeekStreamingResponse(response) {
                 if (!response.body) {
                     throw new Error("DeepSeekレスポンスボディがありません。");
                 }
@@ -10937,7 +10952,6 @@
                 let finalUsage = null;
                 let finalFinishReason = null;
                 let isCancelled = false;
-                let accumulatedFullReasoningContent = "";
 
                 state.deepSeekThoughtStreamCompleted = false;
                 state.deepSeekContentStreamCompleted = false;
@@ -10951,7 +10965,14 @@
                         }
 
                         const { value, done } = await reader.read();
-                        if (done) break;
+                        if (done) {
+                           if (!state.deepSeekThoughtStreamCompleted) {
+                               state.deepSeekThoughtStreamCompleted = true;
+                               yield { type: 'thoughtStreamEnd' };
+                           }
+                           state.deepSeekContentStreamCompleted = true;
+                           break;
+                        }
 
                         buffer += value;
                         let eolIndex;
@@ -10970,6 +10991,11 @@
                                 const jsonData = line.substring(6);
                                 if (jsonData.trim() === '[DONE]') {
                                     finalFinishReason = finalFinishReason || 'stop';
+                                    if (!state.deepSeekThoughtStreamCompleted) {
+                                        state.deepSeekThoughtStreamCompleted = true;
+                                        yield { type: 'thoughtStreamEnd' };
+                                    }
+                                    state.deepSeekContentStreamCompleted = true;
                                     processingBuffer = false;
                                     break;
                                 }
@@ -10977,46 +11003,29 @@
                                     const chunk = JSON.parse(jsonData);
                                     let contentTextChunk = null;
                                     let reasoningTextChunk = null;
+                                    let emittedThoughtStreamEndThisChunk = false;
 
                                     if (chunk.choices && chunk.choices[0] && chunk.choices[0].delta) {
                                         const delta = chunk.choices[0].delta;
                                         if (delta.reasoning_content) {
                                             reasoningTextChunk = delta.reasoning_content;
-                                            accumulatedFullReasoningContent += reasoningTextChunk;
-                                            if (messageIndexForDisplay !== -1) {
-                                                state.deepSeekThoughtRawTextBuffer += reasoningTextChunk;
-                                                if (!state.isDisplayingDeepSeekThought && !state.deepSeekThoughtTimerId) {
-                                                    uiUtils.animateDeepSeekThought(messageIndexForDisplay);
-                                                }
-                                            }
                                         } else if (delta.content) {
-                                            if (!state.deepSeekThoughtStreamCompleted && accumulatedFullReasoningContent.length > 0 && messageIndexForDisplay !== -1) {
+                                            if (!state.deepSeekThoughtStreamCompleted) {
                                                 state.deepSeekThoughtStreamCompleted = true;
-                                                if (state.isDisplayingDeepSeekThought || state.deepSeekThoughtTimerId) {
-                                                    await new Promise(resolve => {
-                                                        const checkThoughtDone = setInterval(() => {
-                                                            if (!state.isDisplayingDeepSeekThought && !state.deepSeekThoughtTimerId) {
-                                                                clearInterval(checkThoughtDone);
-                                                                resolve();
-                                                            }
-                                                        }, 50);
-                                                    });
-                                                }
                                                 yield { type: 'thoughtStreamEnd' };
+                                                emittedThoughtStreamEndThisChunk = true;
                                             }
                                             contentTextChunk = delta.content;
-                                            if (messageIndexForDisplay !== -1) {
-                                                state.deepSeekRawTextBuffer += contentTextChunk;
-                                                if (!state.isDisplayingDeepSeekThought && !state.deepSeekThoughtTimerId &&
-                                                    !state.isDisplayingDeepSeekContent && !state.deepSeekContentTimerId) {
-                                                    uiUtils.animateDeepSeekContent(messageIndexForDisplay);
-                                                }
-                                            }
                                         }
                                     }
 
                                     if (chunk.choices && chunk.choices[0] && chunk.choices[0].finish_reason) {
                                         finalFinishReason = chunk.choices[0].finish_reason;
+                                        if (!state.deepSeekThoughtStreamCompleted && !emittedThoughtStreamEndThisChunk) {
+                                            state.deepSeekThoughtStreamCompleted = true;
+                                            yield { type: 'thoughtStreamEnd' };
+                                        }
+                                        state.deepSeekContentStreamCompleted = true;
                                     }
                                     if (chunk.usage) {
                                         finalUsage = chunk.usage;
@@ -11028,39 +11037,18 @@
                                 } catch (e) {
                                 }
                             }
-                             if (finalFinishReason && finalFinishReason !== 'null' && processingBuffer) break;
+                            if (finalFinishReason && finalFinishReason !== 'null' && processingBuffer) {
+                                processingBuffer = false;
+                                break;
+                            }
                         }
                          if (finalFinishReason && finalFinishReason !== 'null') break;
                     }
-
-                    if (!state.deepSeekThoughtStreamCompleted && accumulatedFullReasoningContent.length > 0 && messageIndexForDisplay !== -1) {
+                    if (!state.deepSeekThoughtStreamCompleted) {
                         state.deepSeekThoughtStreamCompleted = true;
-                        if (state.isDisplayingDeepSeekThought || state.deepSeekThoughtTimerId) {
-                           await new Promise(resolve => {
-                               const checkThoughtDoneInterval = setInterval(() => {
-                                   if (!state.isDisplayingDeepSeekThought && !state.deepSeekThoughtTimerId) {
-                                       clearInterval(checkThoughtDoneInterval);
-                                       resolve();
-                                   }
-                               }, 50);
-                           });
-                        }
                         yield { type: 'thoughtStreamEnd' };
                     }
-
-
-                    if (messageIndexForDisplay !== -1 && (state.isDisplayingDeepSeekThought || state.deepSeekThoughtTimerId || state.isDisplayingDeepSeekContent || state.deepSeekContentTimerId)) {
-                        await new Promise(resolve => {
-                            const checkDisplayDoneInterval = setInterval(() => {
-                                if (!state.isDisplayingDeepSeekThought && !state.deepSeekThoughtTimerId &&
-                                    !state.isDisplayingDeepSeekContent && !state.deepSeekContentTimerId) {
-                                    clearInterval(checkDisplayDoneInterval);
-                                    resolve();
-                                }
-                            }, 50);
-                        });
-                    }
-
+                    state.deepSeekContentStreamCompleted = true;
 
                     yield {
                         type: 'metadata',
@@ -11071,7 +11059,6 @@
                             candidatesTokenCount: finalUsage.completion_tokens,
                             totalTokenCount: finalUsage.total_tokens,
                         } : null,
-                        fullReasoningContent: accumulatedFullReasoningContent || null
                     };
                 } catch (error) {
                     yield { type: 'error', error: { message: error.message }, message: error.message };
@@ -11087,3 +11074,4 @@
     </script>
 </body>
 </html>
+
