@@ -6568,8 +6568,11 @@
                     if (state.deepSeekThoughtStreamCompleted && state.deepSeekRawTextBuffer.length > 0 && !state.isDisplayingDeepSeekContent) {
                         this.animateDeepSeekContent(messageIndex);
                     }
-                    if (state.deepSeekThoughtDisplayIndex >= state.deepSeekThoughtRawTextBuffer.length &&
-                        state.deepSeekContentDisplayIndex >= state.deepSeekRawTextBuffer.length &&
+                    const displayFinished =
+                        state.deepSeekThoughtDisplayIndex >= state.deepSeekThoughtRawTextBuffer.length &&
+                        state.deepSeekContentDisplayIndex >= state.deepSeekRawTextBuffer.length;
+
+                    if (displayFinished &&
                         state.deepSeekThoughtStreamCompleted &&
                         state.deepSeekContentStreamCompleted) {
                         this.finalizeDeepSeekDisplay(messageIndex);
@@ -6623,8 +6626,11 @@
                     if (state.deepSeekContentTimerId) clearTimeout(state.deepSeekContentTimerId);
                     state.deepSeekContentTimerId = null;
 
-                    if (state.deepSeekThoughtDisplayIndex >= state.deepSeekThoughtRawTextBuffer.length &&
-                        state.deepSeekContentDisplayIndex >= state.deepSeekRawTextBuffer.length &&
+                    const displayFinished =
+                        state.deepSeekThoughtDisplayIndex >= state.deepSeekThoughtRawTextBuffer.length &&
+                        state.deepSeekContentDisplayIndex >= state.deepSeekRawTextBuffer.length;
+
+                    if (displayFinished &&
                         state.deepSeekThoughtStreamCompleted &&
                         state.deepSeekContentStreamCompleted) {
                         this.finalizeDeepSeekDisplay(messageIndex);
@@ -8514,7 +8520,10 @@
                                     if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
 
                                     if (!isBackgroundProcess) {
-                                        if (state.settings.deepSeekStreamingSpeed === 0) {
+                                        if (state.settings.deepSeekStreamingSpeed === 0 ||
+                                            streamData.finishReason === 'ABORTED' ||
+                                            streamData.finishReason === 'ERROR' ||
+                                            streamData.finishReason === 'stop') {
                                             uiUtils.finalizeDeepSeekDisplay(messageIndexForDisplay);
                                         } else {
                                             if (!state.isDisplayingDeepSeekThought && state.deepSeekThoughtDisplayIndex < state.deepSeekThoughtRawTextBuffer.length) {
@@ -8522,9 +8531,13 @@
                                             }
                                             if (!state.isDisplayingDeepSeekContent && state.deepSeekRawTextBuffer.length > state.deepSeekContentDisplayIndex) {
                                                  uiUtils.animateDeepSeekContent(messageIndexForDisplay);
-                                            } else if (state.deepSeekThoughtDisplayIndex >= state.deepSeekThoughtRawTextBuffer.length &&
-                                                       state.deepSeekContentDisplayIndex >= state.deepSeekRawTextBuffer.length) {
-                                                 uiUtils.finalizeDeepSeekDisplay(messageIndexForDisplay);
+                                            } else {
+                                                const displayFinished =
+                                                    state.deepSeekThoughtDisplayIndex >= state.deepSeekThoughtRawTextBuffer.length &&
+                                                    state.deepSeekContentDisplayIndex >= state.deepSeekRawTextBuffer.length;
+                                                if (displayFinished) {
+                                                     uiUtils.finalizeDeepSeekDisplay(messageIndexForDisplay);
+                                                }
                                             }
                                         }
                                     }
@@ -8737,8 +8750,7 @@
                             const placeholderElement = document.getElementById(`streaming-message-${tempPlaceholderIndex}`);
                             if (placeholderElement) placeholderElement.remove();
                             if(tempPlaceholderIndex !== -1) state.currentMessages.splice(tempPlaceholderIndex, 1);
-                            state.messageCollapsedStates.delete(tempPlaceholderIndex);
-                         }
+                        }
                     }
                 } catch (error) {
                     const isAbort = error.message === "リクエストがキャンセルされました。" || modelResponseMetadata.finishReason === 'ABORTED';
@@ -11034,8 +11046,11 @@
                                         }
                                     }
 
-                                    if (chunk.choices && chunk.choices[0] && chunk.choices[0].finish_reason) {
-                                        finalFinishReason = chunk.choices[0].finish_reason;
+                                    if (chunk.choices && chunk.choices[0]) {
+                                        const fr = chunk.choices[0].finish_reason;
+                                        if (fr !== null && fr !== '' && fr !== 'null') {
+                                            finalFinishReason = fr;
+                                        }
                                     }
                                     if (chunk.usage) {
                                         finalUsage = chunk.usage;
@@ -11051,17 +11066,24 @@
                                 } catch (e) {
                                 }
                             }
-                            if (finalFinishReason && finalFinishReason !== 'null' && processingBuffer) break;
+                            if (finalFinishReason === 'stop' || line.endsWith('[DONE]')) {
+                                processingBuffer = false;
+                                break;
+                            }
                         }
-                         if (finalFinishReason && finalFinishReason !== 'null') break;
+                         if (finalFinishReason === 'stop' || line.endsWith('[DONE]')) {
+                             break;
+                         }
                     }
                     if (!thoughtStreamEnded && accumulatedFullReasoningContent.length > 0) {
                         yield { type: 'thoughtStreamEnd' };
                     }
 
+                    const finishReasonToSend = isCancelled ? 'ABORTED' : finalFinishReason || 'stop';
+
                     yield {
                         type: 'metadata',
-                        finishReason: isCancelled ? 'ABORTED' : finalFinishReason || 'stop',
+                        finishReason: finishReasonToSend,
                         safetyRatings: null,
                         groundingMetadata: null,
                         usageMetadata: finalUsage ? {
