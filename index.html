@@ -6568,12 +6568,6 @@
                     if (state.deepSeekThoughtStreamCompleted && state.deepSeekRawTextBuffer.length > 0 && !state.isDisplayingDeepSeekContent) {
                         this.animateDeepSeekContent(messageIndex);
                     }
-                    if (state.deepSeekThoughtDisplayIndex >= state.deepSeekThoughtRawTextBuffer.length &&
-                        state.deepSeekContentDisplayIndex >= state.deepSeekRawTextBuffer.length &&
-                        state.deepSeekThoughtStreamCompleted &&
-                        state.deepSeekContentStreamCompleted) {
-                        this.finalizeDeepSeekDisplay(messageIndex);
-                    }
                 }
             },
             animateDeepSeekContent(messageIndex) {
@@ -6622,19 +6616,9 @@
                     state.isDisplayingDeepSeekContent = false;
                     if (state.deepSeekContentTimerId) clearTimeout(state.deepSeekContentTimerId);
                     state.deepSeekContentTimerId = null;
-
-                    if (state.deepSeekThoughtDisplayIndex >= state.deepSeekThoughtRawTextBuffer.length &&
-                        state.deepSeekContentDisplayIndex >= state.deepSeekRawTextBuffer.length &&
-                        state.deepSeekThoughtStreamCompleted &&
-                        state.deepSeekContentStreamCompleted) {
-                        this.finalizeDeepSeekDisplay(messageIndex);
-                    }
                 }
             },
             finalizeDeepSeekDisplay(messageIndex) {
-                const msgDiv = document.getElementById(`streaming-message-${messageIndex}`);
-                if (!msgDiv) return;
-
                 if (state.deepSeekThoughtTimerId) clearTimeout(state.deepSeekThoughtTimerId);
                 state.deepSeekThoughtTimerId = null;
                 state.isDisplayingDeepSeekThought = false;
@@ -8377,8 +8361,6 @@
                             state.deepSeekRawTextBuffer = dummyModelPrefix;
                             state.deepSeekThoughtRawTextBuffer = '';
                             state.deepSeekContentDisplayIndex = dummyModelPrefix.length;
-                            state.deepSeekThoughtStreamCompleted = false;
-                            state.deepSeekContentStreamCompleted = false;
                         }
                     }
 
@@ -8512,22 +8494,6 @@
                                         modelThoughtSummaryContent = streamData.fullReasoningContent;
                                     }
                                     if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
-
-                                    if (!isBackgroundProcess) {
-                                        if (state.settings.deepSeekStreamingSpeed === 0) {
-                                            uiUtils.finalizeDeepSeekDisplay(messageIndexForDisplay);
-                                        } else {
-                                            if (!state.isDisplayingDeepSeekThought && state.deepSeekThoughtDisplayIndex < state.deepSeekThoughtRawTextBuffer.length) {
-                                                 uiUtils.animateDeepSeekThought(messageIndexForDisplay);
-                                            }
-                                            if (!state.isDisplayingDeepSeekContent && state.deepSeekRawTextBuffer.length > state.deepSeekContentDisplayIndex) {
-                                                 uiUtils.animateDeepSeekContent(messageIndexForDisplay);
-                                            } else if (state.deepSeekThoughtDisplayIndex >= state.deepSeekThoughtRawTextBuffer.length &&
-                                                       state.deepSeekContentDisplayIndex >= state.deepSeekRawTextBuffer.length) {
-                                                 uiUtils.finalizeDeepSeekDisplay(messageIndexForDisplay);
-                                            }
-                                        }
-                                    }
                                 }
                                 break;
                             } else if (streamData.type === 'error') {
