@@ -6556,23 +6556,18 @@
                         preElement.textContent = state.deepSeekThoughtRawTextBuffer;
                         state.deepSeekThoughtDisplayIndex = state.deepSeekThoughtRawTextBuffer.length;
                         state.isDisplayingDeepSeekThought = false;
-                        if (state.deepSeekThoughtStreamCompleted && state.deepSeekRawTextBuffer.length > 0 && !state.isDisplayingDeepSeekContent) {
-                            this.animateDeepSeekContent(messageIndex);
-                        }
+                        this.checkAndFinalizeDeepSeek(messageIndex);
                     }
                 } else {
                     preElement.textContent = state.deepSeekThoughtRawTextBuffer;
                     state.isDisplayingDeepSeekThought = false;
                     if (state.deepSeekThoughtTimerId) clearTimeout(state.deepSeekThoughtTimerId);
                     state.deepSeekThoughtTimerId = null;
+
                     if (state.deepSeekThoughtStreamCompleted && state.deepSeekRawTextBuffer.length > 0 && !state.isDisplayingDeepSeekContent) {
                         this.animateDeepSeekContent(messageIndex);
-                    }
-                    if (state.deepSeekThoughtDisplayIndex >= state.deepSeekThoughtRawTextBuffer.length &&
-                        state.deepSeekContentDisplayIndex >= state.deepSeekRawTextBuffer.length &&
-                        state.deepSeekThoughtStreamCompleted &&
-                        state.deepSeekContentStreamCompleted) {
-                        this.finalizeDeepSeekDisplay(messageIndex);
+                    } else {
+                        this.checkAndFinalizeDeepSeek(messageIndex);
                     }
                 }
             },
@@ -6611,6 +6606,7 @@
                         }
                         state.deepSeekContentDisplayIndex = state.deepSeekRawTextBuffer.length;
                         state.isDisplayingDeepSeekContent = false;
+                        this.checkAndFinalizeDeepSeek(messageIndex);
                     }
                 } else {
                     try {
@@ -6623,12 +6619,18 @@
                     if (state.deepSeekContentTimerId) clearTimeout(state.deepSeekContentTimerId);
                     state.deepSeekContentTimerId = null;
 
-                    if (state.deepSeekThoughtDisplayIndex >= state.deepSeekThoughtRawTextBuffer.length &&
-                        state.deepSeekContentDisplayIndex >= state.deepSeekRawTextBuffer.length &&
-                        state.deepSeekThoughtStreamCompleted &&
-                        state.deepSeekContentStreamCompleted) {
-                        this.finalizeDeepSeekDisplay(messageIndex);
-                    }
+                    this.checkAndFinalizeDeepSeek(messageIndex);
+                }
+            },
+            checkAndFinalizeDeepSeek(messageIndex) {
+                const thoughtCompleted = !state.isDisplayingDeepSeekThought &&
+                                       state.deepSeekThoughtDisplayIndex >= state.deepSeekThoughtRawTextBuffer.length;
+                const contentCompleted = !state.isDisplayingDeepSeekContent &&
+                                       state.deepSeekContentDisplayIndex >= state.deepSeekRawTextBuffer.length;
+
+                if (thoughtCompleted && contentCompleted &&
+                    state.deepSeekThoughtStreamCompleted && state.deepSeekContentStreamCompleted) {
+                    this.finalizeDeepSeekDisplay(messageIndex);
                 }
             },
             finalizeDeepSeekDisplay(messageIndex) {
@@ -8517,15 +8519,7 @@
                                         if (state.settings.deepSeekStreamingSpeed === 0) {
                                             uiUtils.finalizeDeepSeekDisplay(messageIndexForDisplay);
                                         } else {
-                                            if (!state.isDisplayingDeepSeekThought && state.deepSeekThoughtDisplayIndex < state.deepSeekThoughtRawTextBuffer.length) {
-                                                 uiUtils.animateDeepSeekThought(messageIndexForDisplay);
-                                            }
-                                            if (!state.isDisplayingDeepSeekContent && state.deepSeekRawTextBuffer.length > state.deepSeekContentDisplayIndex) {
-                                                 uiUtils.animateDeepSeekContent(messageIndexForDisplay);
-                                            } else if (state.deepSeekThoughtDisplayIndex >= state.deepSeekThoughtRawTextBuffer.length &&
-                                                       state.deepSeekContentDisplayIndex >= state.deepSeekRawTextBuffer.length) {
-                                                 uiUtils.finalizeDeepSeekDisplay(messageIndexForDisplay);
-                                            }
+                                            uiUtils.checkAndFinalizeDeepSeek(messageIndexForDisplay);
                                         }
                                     }
                                 }
@@ -8689,7 +8683,10 @@
                                 if (selectedApiProvider === 'gemini') {
                                     uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
                                 } else if (selectedApiProvider === 'deepseek') {
-                                    uiUtils.finalizeDeepSeekDisplay(finalModelMessageIndex);
+                                    if (state.settings.deepSeekStreamingSpeed > 0) {
+                                    } else {
+                                        uiUtils.finalizeDeepSeekDisplay(finalModelMessageIndex);
+                                    }
                                 }
                                 await dbUtils.saveChat();
                             }
