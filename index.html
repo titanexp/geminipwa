@@ -1372,11 +1372,12 @@
             color: var(--text-system);
         }
         #system-prompt-area.system-prompt-sticky.details-open {
-            max-height: var(--memo-height);
+            height: var(--memo-height);
             padding: 10px 15px;
+            overflow: auto;
         }
         #system-prompt-area.system-prompt-sticky.details-closed {
-            max-height: 42px;
+            max-height: 30px;
             padding-top: 5px;
             padding-bottom: 5px;
             overflow: hidden;
@@ -1436,6 +1437,7 @@
             background-color: var(--bg-input);
             color: var(--text-primary);
             border-color: var(--border-primary);
+            resize: none;
         }
         .system-prompt-actions {
             display: flex;
@@ -2609,7 +2611,7 @@
             overflow-x: auto;
             margin: 0.8em 0;
             font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
-            font-size: 12px;
+            font-size: var(--thought-summary-font-size);
             border: 1px solid var(--border-tertiary);
             color: var(--text-secondary);
         }
@@ -2617,6 +2619,7 @@
             background-color: var(--bg-tertiary);
             border-color: var(--border-primary);
             color: var(--text-secondary);
+            font-size: var(--thought-summary-font-size);
         }
         .thought-summary-content code:not(pre > code) {
             background-color: var(--bg-secondary);
@@ -3469,6 +3472,13 @@
                                <input type="checkbox" id="disable-delete-message-confirmation-toggle">
                                メッセージ削除時の確認ダイアログを無効にする
                            </label>
+                           <label class="checkbox-label">
+                               <input type="checkbox" id="enable-input-while-sending">
+                               応答中でもメッセージ入力を可能にする (非推奨)
+                           </label>
+                           <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                               ※ 通常、応答中は入力できませんが、このオプションで可能になります。
+                           </p>
                            <p style="height:10px"></p>
                            <label for="theme-select">表示テーマ:</label>
                            <select id="theme-select" aria-label="表示テーマ">
@@ -4092,6 +4102,7 @@
             geminiPseudoStreamingParam: document.getElementById('gemini-pseudo-streaming-param'),
             deepSeekThoughtsParam: document.getElementById('deepseek-thoughts-param'),
             disableSaveSettingsConfirmationToggle: document.getElementById('disable-save-settings-confirmation-toggle'),
+            enableInputWhileSendingToggle: document.getElementById('enable-input-while-sending'),
         };
 
         const state = {
@@ -4198,6 +4209,7 @@
                 disableRetryConfirmation: false,
                 disableLoadChatConfirmationWhileSending: false,
                 disableDeleteMessageConfirmation: false,
+                enableInputWhileSending: false,
                 showTopCollapseButton: true,
                 showBottomCollapseButton: true,
                 persistMessageCollapseState: DEFAULT_PERSIST_MESSAGE_COLLAPSE_STATE,
@@ -5992,6 +6004,7 @@
                 elements.disableRetryConfirmationToggle.checked = state.settings.disableRetryConfirmation;
                 elements.disableLoadChatConfirmationWhileSendingToggle.checked = state.settings.disableLoadChatConfirmationWhileSending;
                 elements.disableDeleteMessageConfirmationToggle.checked = state.settings.disableDeleteMessageConfirmation;
+                elements.enableInputWhileSendingToggle.checked = state.settings.enableInputWhileSending;
                 elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
                 elements.showBottomCollapseButtonToggle.checked = state.settings.showBottomCollapseButton;
@@ -6006,6 +6019,7 @@
                 elements.toggleButtonBottomFontSizeInput.value = state.settings.toggleButtonBottomFontSize ?? DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE;
                 elements.toggleButtonBottomTextCollapseInput.value = state.settings.toggleButtonBottomTextCollapse || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 elements.toggleButtonBottomTextExpandInput.value = state.settings.toggleButtonBottomTextExpand || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
+                elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity || DEFAULT_THOUGHT_SUMMARY_OPACITY;
 
                 document.documentElement.style.setProperty('--message-body-font-size', `${state.settings.messageBodyFontSize || DEFAULT_MESSAGE_BODY_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--code-block-font-size', `${state.settings.codeBlockFontSize || DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
@@ -6204,18 +6218,15 @@
                         state.editingMessageIndex = null;
                      }
                 }
-                if (state.isEditingSystemPrompt) {
-                    appLogic.cancelEditSystemPrompt();
-                }
-                if (state.isMemoVisible && screenName !== 'chat') {
+                if (state.isMemoVisible && screenName !== 'chat' && !state.isEditingSystemPrompt) {
                      elements.memoArea.classList.add('hidden');
                      state.isMemoVisible = false;
                 }
-                if (state.isClipboardStackVisible && screenName !== 'chat') {
+                if (state.isClipboardStackVisible && screenName !== 'chat' && !state.isEditingSystemPrompt) {
                      elements.clipboardStackArea.classList.add('hidden');
                      state.isClipboardStackVisible = false;
                 }
-                 if (state.settings.stickySystemPrompt && elements.systemPromptDetails.open && screenName !== 'chat') {
+                 if (state.settings.stickySystemPrompt && elements.systemPromptDetails.open && screenName !== 'chat' && !state.isEditingSystemPrompt) {
                      elements.systemPromptDetails.open = false;
                  }
 
@@ -6286,7 +6297,9 @@
                     elements.sendButton.classList.add('sending');
                     elements.sendButton.title = "停止";
                     elements.sendButton.disabled = false;
-                    elements.userInput.disabled = true;
+                    if(!state.settings.enableInputWhileSending) {
+                        elements.userInput.disabled = true;
+                    }
                     elements.attachFileBtn.disabled = true;
                     elements.pasteToInputBtn.disabled = true;
                     elements.rollDiceBtn.disabled = true;
@@ -6594,7 +6607,9 @@
                     elements.loadingIndicator.setAttribute('aria-live', 'assertive');
 
                     elements.sendButton.disabled = true;
-                    elements.userInput.disabled = true;
+                    if(!state.settings.enableInputWhileSending) {
+                        elements.userInput.disabled = true;
+                    }
                     elements.attachFileBtn.disabled = true;
                     elements.pasteToInputBtn.disabled = true;
                     elements.rollDiceBtn.disabled = true;
@@ -7178,6 +7193,14 @@
                     state.settings.preventZoom = elements.preventZoomToggle.checked;
                     uiUtils.applyZoomPreventionSetting();
                 });
+                elements.enableInputWhileSendingToggle.addEventListener('change', (event) => {
+                    state.settings.enableInputWhileSending = event.target.checked;
+                    if (state.isSending && !state.settings.enableInputWhileSending) {
+                        elements.userInput.disabled = true;
+                    } else if (state.isSending && state.settings.enableInputWhileSending) {
+                         elements.userInput.disabled = false;
+                    }
+                });
 
                 elements.memoHeightInput.addEventListener('input', () => {
                     const newHeight = elements.memoHeightInput.value.trim();
@@ -7427,13 +7450,10 @@
                      uiUtils.showCustomAlert("メッセージ編集中はメモを開閉できません。");
                      return;
                  }
-                 if (state.isEditingSystemPrompt) {
-                     uiUtils.showCustomAlert("システムプロンプト編集中はメモを開閉できません。");
-                     return;
-                 }
 
                 state.isMemoVisible = !state.isMemoVisible;
                 elements.memoArea.classList.toggle('hidden', !state.isMemoVisible);
+
                 if (state.isMemoVisible) {
                     elements.memoEditor.focus();
                 }
@@ -7524,10 +7544,6 @@
             toggleClipboardStack() {
                  if (state.editingMessageIndex !== null) {
                      uiUtils.showCustomAlert("メッセージ編集中はクリップボードスタックを開閉できません。");
-                     return;
-                 }
-                 if (state.isEditingSystemPrompt) {
-                     uiUtils.showCustomAlert("システムプロンプト編集中はクリップボードスタックを開閉できません。");
                      return;
                  }
 
@@ -8475,7 +8491,10 @@
                 const dummyModelTextToUse = contextEnableDummyModel && contextDummyModel?.trim() ? contextDummyModel.trim() : null;
 
                 if (dummyUserTextToUse) apiMessages.push({ role: 'user', parts: [{ text: dummyUserTextToUse }] });
-                if (dummyModelTextToUse) apiMessages.push({ role: 'model', parts: [{ text: dummyModelTextToUse }] });
+                if (dummyModelTextToUse) {
+                    const dummyModelRole = selectedApiProvider === 'deepseek' ? 'assistant' : 'model';
+                    apiMessages.push({ role: dummyModelRole, parts: [{ text: dummyModelTextToUse }] });
+                }
 
 
                 const commonGenerationConfig = {};
@@ -8902,8 +8921,7 @@
                             const placeholderElement = document.getElementById(`streaming-message-${tempPlaceholderIndex}`);
                             if (placeholderElement) placeholderElement.remove();
                             if(tempPlaceholderIndex !== -1) state.currentMessages.splice(tempPlaceholderIndex, 1);
-                            state.messageCollapsedStates.delete(tempPlaceholderIndex);
-                         }
+                        }
                     }
                 } catch (error) {
                     const isAbort = error.message === "リクエストがキャンセルされました。" || modelResponseMetadata.finishReason === 'ABORTED';
@@ -9522,6 +9540,7 @@
                  newSettings.disableRetryConfirmation = elements.disableRetryConfirmationToggle.checked;
                  newSettings.disableLoadChatConfirmationWhileSending = elements.disableLoadChatConfirmationWhileSendingToggle.checked;
                  newSettings.disableDeleteMessageConfirmation = elements.disableDeleteMessageConfirmationToggle.checked;
+                 newSettings.enableInputWhileSending = elements.enableInputWhileSendingToggle.checked;
                  newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
                  newSettings.showTopCollapseButton = elements.showTopCollapseButtonToggle.checked;
                  newSettings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
@@ -9762,7 +9781,7 @@
                         defaultSettingsCopy.diceMinValue = DEFAULT_DICE_MIN_VALUE;
                         defaultSettingsCopy.diceMaxValue = DEFAULT_DICE_MAX_VALUE;
                         defaultSettingsCopy.showMemoButton = false;
-                        defaultSettingsCopy.memoHeight = DEFAULT_MEMO_HEIGHT;
+                                                defaultSettingsCopy.memoHeight = DEFAULT_MEMO_HEIGHT;
                         defaultSettingsCopy.showClipboardStackButton = false;
                         defaultSettingsCopy.clipboardStackHeight = DEFAULT_CLIPBOARD_STACK_HEIGHT;
                         defaultSettingsCopy.showUserIcon = false;
@@ -9788,7 +9807,7 @@
                         defaultSettingsCopy.disableRetryConfirmation = false;
                         defaultSettingsCopy.disableLoadChatConfirmationWhileSending = false;
                         defaultSettingsCopy.disableDeleteMessageConfirmation = false;
-                        defaultSettingsCopy.disableSaveSettingsConfirmation = false;
+                        defaultSettingsCopy.enableInputWhileSending = false;
                         defaultSettingsCopy.showTopCollapseButton = true;
                         defaultSettingsCopy.showBottomCollapseButton = true;
                         defaultSettingsCopy.persistMessageCollapseState = DEFAULT_PERSIST_MESSAGE_COLLAPSE_STATE;
@@ -9875,10 +9894,7 @@
                     await uiUtils.showCustomAlert("システムプロンプトのチャットへの保存に失敗しました。");
                 }
                 state.isEditingSystemPrompt = false;
-                if (!state.settings.stickySystemPrompt || !elements.systemPromptDetails.open) {
-                     elements.systemPromptDetails.removeAttribute('open');
-                }
-                uiUtils.updateStickySystemPromptDetailsClass();
+                uiUtils.updateSystemPromptUI();
             },
             cancelEditSystemPrompt() {
                 state.isEditingSystemPrompt = false;
