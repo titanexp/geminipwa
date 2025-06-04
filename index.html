@@ -8592,7 +8592,7 @@
                     if (useStreamingForThisCall) {
                         let responseStreamIterator;
                         if (selectedApiProvider === 'gemini') {
-                            responseStreamIterator = apiUtils.handleStreamingResponse(apiResponseObject);
+                            responseStreamIterator = apiUtils.handleStreamingResponse(apiResponseObject, contextGeminiIncludeThoughts);
                         } else if (selectedApiProvider === 'deepseek') {
                             responseStreamIterator = apiUtils.handleDeepSeekStreamingResponse(apiResponseObject);
                         }
@@ -8732,8 +8732,10 @@
                             if (candidate) {
                                 modelResponseMetadata = { finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings };
                                 candidate.content?.parts?.forEach(part => {
-                                    if (part.thought === true && contextGeminiIncludeThoughts) {
-                                        modelThoughtSummaryContent += (part.text || "") + "\n\n";
+                                    if (part.thought === true) {
+                                        if (contextGeminiIncludeThoughts) {
+                                            modelThoughtSummaryContent += (part.text || "") + "\n\n";
+                                        }
                                     } else if (part.thought !== true){
                                         rawContentFromApi += (part.text || "") + "\n\n";
                                     }
@@ -8910,7 +8912,8 @@
                             const placeholderElement = document.getElementById(`streaming-message-${tempPlaceholderIndex}`);
                             if (placeholderElement) placeholderElement.remove();
                             if(tempPlaceholderIndex !== -1) state.currentMessages.splice(tempPlaceholderIndex, 1);
-                        }
+                            state.messageCollapsedStates.delete(tempPlaceholderIndex);
+                         }
                     }
                 } catch (error) {
                     const isAbort = error.message === "リクエストがキャンセルされました。" || modelResponseMetadata.finishReason === 'ABORTED';
@@ -10933,7 +10936,7 @@
                     throw error;
                 }
             },
-            async *handleStreamingResponse(response) {
+            async *handleStreamingResponse(response, contextGeminiIncludeThoughtsParam) {
                  if (!response.body) {
                      throw new Error("レスポンスボディがありません。");
                  }
@@ -10970,7 +10973,7 @@
 
                          if (done) {
                              if (buffer.trim()) {
-                                 const finalData = parseSseDataForYield(buffer.trim().substring(6));
+                                 const finalData = parseSseDataForYield(buffer.trim().substring(6), contextGeminiIncludeThoughtsParam);
                                  if (finalData) yield finalData;
                              }
                              break;
@@ -10988,7 +10991,7 @@
                              remainingBuffer = remainingBuffer.substring(newlineIndex + 1);
 
                              if (line.startsWith('data: ')) {
-                                 const chunkData = parseSseDataForYield(line.substring(6));
+                                 const chunkData = parseSseDataForYield(line.substring(6), contextGeminiIncludeThoughtsParam);
                                  if (chunkData) {
                                      if (chunkData.groundingMetadata) groundingMetadata = chunkData.groundingMetadata;
                                      if (chunkData.usageMetadata) finalUsageMetadata = chunkData.usageMetadata;
@@ -11021,7 +11024,7 @@
                      }
                  }
 
-                 function parseSseDataForYield(jsonString) {
+                 function parseSseDataForYield(jsonString, includeThoughtsSetting) {
                      try {
                          const chunkJson = JSON.parse(jsonString);
                          if (chunkJson.error) {
@@ -11041,7 +11044,9 @@
                                  lastCandidateInfo.content.parts.forEach(part => {
                                      if (typeof part.text === 'string') {
                                          if (part.thought === true) {
-                                             thoughtText = (thoughtText || '') + part.text;
+                                             if (includeThoughtsSetting) {
+                                                 thoughtText = (thoughtText || '') + part.text;
+                                             }
                                          } else {
                                              contentText = (contentText || '') + part.text;
                                          }
