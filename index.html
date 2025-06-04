@@ -1341,7 +1341,7 @@
             position: relative;
             z-index: 1;
             overflow: hidden;
-            max-height: 100px;
+            max-height: 500px;
         }
         .system-prompt-area.hidden {
             padding-top: 0 !important;
@@ -1360,7 +1360,7 @@
             border-style: solid;
             border-color: var(--border-secondary);
             border-width: 0 0 1px 0;
-            padding: 10px 15px 5px 15px;
+            padding: 10px 15px;
             z-index: 3;
             box-shadow: 0 1px 3px var(--shadow-primary);
             overflow: hidden;
@@ -1399,22 +1399,22 @@
             flex-direction: column;
             position: relative;
             min-height: 0;
-            margin-top: 5px;
+            margin-top: 10px;
         }
         #system-prompt-area.system-prompt-sticky .system-prompt-content textarea {
             flex-grow: 1;
             resize: none;
             margin-bottom: 0;
-            border-radius: 5px;
-            padding-bottom: 2px;
-            padding-right: 145px;
+            border-radius: 5px 5px 0 0;
+            padding-bottom: 45px;
         }
         #system-prompt-area.system-prompt-sticky .system-prompt-actions {
             position: absolute;
-            top: 5px;
-            right: 5px;
-            background-color: transparent;
-            padding: 0;
+            bottom: 10px;
+            right: 10px;
+            background-color: rgba(var(--bg-tertiary-rgb), 0.8);
+            padding: 5px;
+            border-radius: 0 0 5px 5px;
         }
 
 
@@ -5879,21 +5879,12 @@
             applyStickySystemPromptStyle() {
                 const systemPromptArea = elements.systemPromptArea;
                 const mainContent = elements.chatScreen.querySelector('.main-content');
-                const chatHeader = elements.chatScreen.querySelector('.app-header');
+                const header = elements.chatScreen.querySelector('.app-header');
                 const placeholder = elements.systemPromptAreaPlaceholder;
-                 const memoArea = elements.memoArea;
-                const clipboardStackArea = elements.clipboardStackArea;
-
 
                 if (state.settings.stickySystemPrompt) {
                     systemPromptArea.classList.add('system-prompt-sticky');
-                    chatHeader.insertAdjacentElement('afterend', systemPromptArea);
-                    if (!memoArea.classList.contains('hidden')) {
-                        systemPromptArea.insertAdjacentElement('afterend', memoArea);
-                    }
-                    if (!clipboardStackArea.classList.contains('hidden')) {
-                        (memoArea.classList.contains('hidden') ? systemPromptArea : memoArea).insertAdjacentElement('afterend', clipboardStackArea);
-                    }
+                    header.insertAdjacentElement('afterend', systemPromptArea);
                     this.updateStickySystemPromptDetailsClass();
                 } else {
                     systemPromptArea.classList.remove('system-prompt-sticky', 'details-open', 'details-closed');
@@ -6250,27 +6241,14 @@
                 const memoArea = elements.memoArea;
                 const clipboardStackArea = elements.clipboardStackArea;
 
-                let currentTopElement = chatHeader;
-                if (systemPromptArea.classList.contains('system-prompt-sticky') && !systemPromptArea.classList.contains('hidden')) {
-                    currentTopElement = systemPromptArea;
-                }
-
                 if (state.isMemoVisible && screenName !== 'chat' && !state.isEditingSystemPrompt) {
                      memoArea.classList.add('hidden');
                      state.isMemoVisible = false;
-                } else if (state.isMemoVisible && screenName === 'chat'){
-                     currentTopElement.insertAdjacentElement('afterend', memoArea);
-                     currentTopElement = memoArea;
                 }
-
                 if (state.isClipboardStackVisible && screenName !== 'chat' && !state.isEditingSystemPrompt) {
                      clipboardStackArea.classList.add('hidden');
                      state.isClipboardStackVisible = false;
-                } else if (state.isClipboardStackVisible && screenName === 'chat'){
-                     currentTopElement.insertAdjacentElement('afterend', clipboardStackArea);
-                     currentTopElement = clipboardStackArea;
                 }
-
                  if (state.settings.stickySystemPrompt && elements.systemPromptDetails.open && screenName !== 'chat' && !state.isEditingSystemPrompt) {
                      elements.systemPromptDetails.open = false;
                  }
@@ -6308,16 +6286,12 @@
                     if(state.settings.stickySystemPrompt){
                          chatHeader.insertAdjacentElement('afterend', systemPromptArea);
                     }
-                    let lastInsertedElement = systemPromptArea.classList.contains('system-prompt-sticky') && !systemPromptArea.classList.contains('hidden') ? systemPromptArea : chatHeader;
-
+                    if (!clipboardStackArea.classList.contains('hidden')) {
+                        (systemPromptArea.classList.contains('system-prompt-sticky') ? systemPromptArea : chatHeader).insertAdjacentElement('afterend', clipboardStackArea);
+                    }
                     if (!memoArea.classList.contains('hidden')) {
-                        lastInsertedElement.insertAdjacentElement('afterend', memoArea);
-                        lastInsertedElement = memoArea;
+                        (clipboardStackArea.classList.contains('hidden') ? (systemPromptArea.classList.contains('system-prompt-sticky') ? systemPromptArea : chatHeader) : clipboardStackArea).insertAdjacentElement('afterend', memoArea);
                     }
-                     if (!clipboardStackArea.classList.contains('hidden')) {
-                        lastInsertedElement.insertAdjacentElement('afterend', clipboardStackArea);
-                    }
-
 
                     requestAnimationFrame(() => {
                         this.updateSystemPromptUI();
