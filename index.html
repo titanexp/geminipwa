@@ -7,7 +7,6 @@
     <title>GeminiPWA</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" id="theme-color-meta" content="#4a90e2">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://cdnjs.cloudflare.com; script-src 'self' https://cdnjs.cloudflare.com 'unsafe-inline'; object-src 'none'; frame-ancestors 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://generativelanguage.googleapis.com https://api.deepseek.com;">
     <style>
         :root {
             --bg-primary: #ffffff;
@@ -1452,18 +1451,19 @@
             margin-bottom: 0;
             border-radius: 5px;
             padding-bottom: 5px;
-            padding-right: 145px;
+            padding-right: 5px;
             background-color: var(--bg-input);
             color: var(--text-primary);
             border: 1px solid var(--border-primary);
         }
 
         .system-prompt-area.system-prompt-sticky .system-prompt-actions {
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            background-color: transparent;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
             padding: 0;
+            margin-top: 8px;
+            flex-shrink: 0;
         }
 
         .system-prompt-area:not(.system-prompt-sticky) details {
@@ -1541,14 +1541,6 @@
         }
         .system-prompt-area:not(.system-prompt-sticky) .system-prompt-actions .cancel-system-prompt-btn:hover {
             background-color: var(--bg-button-cancel-hover);
-        }
-
-        .system-prompt-area.system-prompt-sticky .system-prompt-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
-            padding: 0;
-            flex-shrink: 0;
         }
 
         .system-prompt-area.system-prompt-sticky .system-prompt-actions button {
@@ -2027,7 +2019,7 @@
         .chat-input-area textarea {
             flex-grow: 1;
             min-height: 40px;
-            max-height: 200px;
+            max-height: 120px;
             height: 40px;
             resize: none;
             margin-bottom: 0;
@@ -3032,7 +3024,6 @@
 
     </style>
     <script src="marked.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js" integrity="sha512-3xR29H5yNih58Zl8v2l/NJV92VjSS3WPrT+aXk9O5y6/Yv+yP2OxJ0MDBv7G2yKChx91H2KqU4oQ8J2G7Wl+A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
     <div class="app-container">
@@ -4423,50 +4414,21 @@
                 reader.readAsDataURL(file);
             });
         }
-
-        function validateApiEndpoint(url) {
-            try {
-                const parsedUrl = new URL(url);
-                if (parsedUrl.protocol !== 'https:') {
-                    throw new Error('HTTPSプロトコルのみが許可されています。');
-                }
-                const allowedHosts = ['api.deepseek.com'];
-                if (!allowedHosts.includes(parsedUrl.hostname) && !parsedUrl.hostname.endsWith('.deepseek.com')) {
-                     throw new Error('許可されていないホストです。');
-                }
-                return parsedUrl.toString();
-            } catch (error) {
-                throw new Error(`無効なAPIエンドポイントURLです: ${error.message}`);
-            }
-        }
-
-        async function registerServiceWorker() {
+        function registerServiceWorker() {
             if ('serviceWorker' in navigator) {
-                try {
-                    const registration = await navigator.serviceWorker.register('./sw.js');
-                    registration.onupdatefound = () => {
-                        const installingWorker = registration.installing;
-                        if (installingWorker) {
-                            installingWorker.onstatechange = () => {
-                                if (installingWorker.state === 'installed') {
-                                    if (navigator.serviceWorker.controller) {
-                                        if (confirm("新しいバージョンが利用可能です。今すぐリロードしますか？")) {
-                                            window.location.reload();
-                                        }
-                                    }
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('./sw.js')
+                        .then(registration => {
+                            navigator.serviceWorker.addEventListener('message', event => {
+                                if (event.data && event.data.action === 'reloadPage') {
+                                    alert('アプリが更新されました。ページをリロードします。');
+                                    window.location.reload();
                                 }
-                            };
-                        }
-                    };
-                    navigator.serviceWorker.addEventListener('message', event => {
-                        if (event.data && event.data.action === 'reloadPage') {
-                            if (confirm('アプリが更新されました。ページをリロードしますか？')) {
-                                window.location.reload();
-                            }
-                        }
-                    });
-                } catch (err) {
-                }
+                            });
+                        })
+                        .catch(err => {
+                        });
+                });
             }
         }
 
@@ -5026,7 +4988,7 @@
                         }
                     } else if (messageApiProvider === 'gemini' && messageData?.thoughtSummary) {
                         try {
-                            thoughtContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(messageData.thoughtSummary || ''));
+                            thoughtContentDiv.innerHTML = marked.parse(messageData.thoughtSummary || '');
                         } catch (e) {
                             thoughtContentDiv.textContent = messageData.thoughtSummary || '';
                         }
@@ -5104,9 +5066,9 @@
                     }
                 } else {
                     try {
-                        if (role === 'model' && !isStreamingPlaceholder && typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+                        if (role === 'model' && !isStreamingPlaceholder && typeof marked !== 'undefined') {
                             const rawHtml = marked.parse(content || '');
-                            contentDiv.innerHTML = DOMPurify.sanitize(rawHtml);
+                            contentDiv.innerHTML = rawHtml;
                             this.processInteractivePlaceholders(contentDiv);
                             this.processInteractiveTitles(contentDiv);
                             this.addCopyButtonsToCodeBlocks(contentDiv);
@@ -5402,7 +5364,7 @@
             },
             async updateStreamingMessage(index, newCharOrChunk, isThoughtSummary = false) {
                 const messageDiv = document.getElementById(`streaming-message-${index}`);
-                if (!messageDiv || typeof marked === 'undefined' || typeof DOMPurify === 'undefined') return;
+                if (!messageDiv || typeof marked === 'undefined') return;
 
                 let targetContentDiv;
                 let accumulatedContentForDisplay;
@@ -5433,7 +5395,7 @@
                     const renderCurrentState = (contentToRender) => {
                         try {
                             const rawHtml = marked.parse(contentToRender || '');
-                            targetContentDiv.innerHTML = DOMPurify.sanitize(rawHtml);
+                            targetContentDiv.innerHTML = rawHtml;
 
                             if (!isThoughtSummary) {
                                 this.processInteractivePlaceholders(targetContentDiv);
@@ -5471,9 +5433,9 @@
 
                     if (finalMessageData.thoughtSummary && messageApiProvider === 'gemini' && state.settings.geminiIncludeThoughts) {
                         const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
-                        if (thoughtContentDiv && typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+                        if (thoughtContentDiv && typeof marked !== 'undefined') {
                             try {
-                                thoughtContentDiv.innerHTML = DOMPurify.sanitize(marked.parse(finalMessageData.thoughtSummary || ''));
+                                thoughtContentDiv.innerHTML = marked.parse(finalMessageData.thoughtSummary || '');
                             } catch (e) {
                                 thoughtContentDiv.textContent = finalMessageData.thoughtSummary || '';
                             }
@@ -5505,10 +5467,10 @@
 
                     const contentDiv = messageDiv.querySelector(`#streaming-content-${index}`);
                     const finalRawContent = finalMessageData.content || '';
-                    if (contentDiv && typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+                    if (contentDiv && typeof marked !== 'undefined') {
                          try {
                              const rawHtml = marked.parse(finalRawContent);
-                             contentDiv.innerHTML = DOMPurify.sanitize(rawHtml);
+                             contentDiv.innerHTML = rawHtml;
                              this.processInteractivePlaceholders(contentDiv);
                              this.processInteractiveTitles(contentDiv);
                              this.addCopyButtonsToCodeBlocks(contentDiv);
@@ -6957,7 +6919,7 @@
                     if (state.deepSeekContentDisplayIndex < state.deepSeekRawTextBuffer.length) {
                         const currentTextToParse = state.deepSeekRawTextBuffer.substring(0, state.deepSeekContentDisplayIndex + 1);
                         try {
-                            contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(currentTextToParse || ''));
+                            contentDiv.innerHTML = marked.parse(currentTextToParse || '');
                             this.addCopyButtonsToCodeBlocks(contentDiv);
                         } catch (e) {
                             contentDiv.textContent = currentTextToParse;
@@ -6968,7 +6930,7 @@
                             state.deepSeekContentTimerId = setTimeout(animate, state.settings.deepSeekStreamingSpeed);
                         } else {
                             try {
-                                contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(state.deepSeekRawTextBuffer || ''));
+                                contentDiv.innerHTML = marked.parse(state.deepSeekRawTextBuffer || '');
                                 this.addCopyButtonsToCodeBlocks(contentDiv);
                             } catch (e) {
                                 contentDiv.textContent = state.deepSeekRawTextBuffer;
@@ -6978,7 +6940,7 @@
                         }
                     } else {
                         try {
-                            contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(state.deepSeekRawTextBuffer || ''));
+                            contentDiv.innerHTML = marked.parse(state.deepSeekRawTextBuffer || '');
                             this.addCopyButtonsToCodeBlocks(contentDiv);
                         } catch (e) {
                             contentDiv.textContent = state.deepSeekRawTextBuffer;
@@ -7010,7 +6972,7 @@
                     const contentDiv = this.getDeepSeekContentElement(messageIndex);
                     if (contentDiv) {
                         try {
-                            contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(messageData.content || state.deepSeekRawTextBuffer || ''));
+                            contentDiv.innerHTML = marked.parse(messageData.content || state.deepSeekRawTextBuffer || '');
                             this.addCopyButtonsToCodeBlocks(contentDiv);
                         } catch (e) {
                             contentDiv.textContent = messageData.content || state.deepSeekRawTextBuffer;
@@ -7025,7 +6987,7 @@
             async initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
-                        breaks: true, gfm: true, sanitize: false, smartypants: false
+                        breaks: true, gfm: true, sanitize: true, smartypants: false
                     });
                 }
                 elements.appVersionSpan.textContent = APP_VERSION;
@@ -7639,6 +7601,7 @@
                      uiUtils.showCustomAlert("メッセージ編集中はメモを開閉できません。");
                      return;
                  }
+
                 state.isMemoVisible = !state.isMemoVisible;
                 elements.memoArea.classList.toggle('hidden', !state.isMemoVisible);
 
@@ -7759,7 +7722,6 @@
                 const systemPromptArea = elements.systemPromptArea;
                 const memoArea = elements.memoArea;
                 const clipboardStackArea = elements.clipboardStackArea;
-
                 let referenceElementForClipboard = systemPromptArea.classList.contains('system-prompt-sticky') && !systemPromptArea.classList.contains('hidden')
                                                  ? systemPromptArea
                                                  : chatHeader;
@@ -10281,11 +10243,11 @@
                 delete originalMessage.error;
 
                 const contentDiv = messageElement.querySelector('.message-content');
-                if (contentDiv && typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined' && originalMessage.role === 'model') {
+                if (contentDiv && typeof marked !== 'undefined' && originalMessage.role === 'model') {
                     try {
                         const rawHtml = marked.parse(newRawContent || '');
                         const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = DOMPurify.sanitize(rawHtml);
+                        tempDiv.innerHTML = rawHtml;
                         uiUtils.processInteractivePlaceholders(tempDiv);
                         uiUtils.processInteractiveTitles(tempDiv);
                         contentDiv.innerHTML = tempDiv.innerHTML;
@@ -11315,12 +11277,7 @@
 
                 const model = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
                 const apiKey = state.settings.deepSeekApiKey;
-                let baseUrl;
-                try {
-                    baseUrl = state.settings.deepSeekApiEndpoint ? validateApiEndpoint(state.settings.deepSeekApiEndpoint) : DEEPSEEK_API_DEFAULT_BASE_URL;
-                } catch (e) {
-                    throw e;
-                }
+                const baseUrl = state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
                 const endpoint = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
 
                 const dsMessages = [];
