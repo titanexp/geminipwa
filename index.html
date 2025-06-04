@@ -1363,7 +1363,7 @@
             padding: 10px 15px;
             z-index: 3;
             box-shadow: 0 1px 3px var(--shadow-primary);
-            overflow: auto;
+            overflow: hidden;
             display: flex;
             flex-direction: column;
             transition: max-height 0.3s ease-out, padding-top 0.3s ease-out, padding-bottom 0.3s ease-out, opacity 0.3s ease-out, border-width 0.3s ease-out;
@@ -1393,10 +1393,36 @@
             opacity: 0 !important;
             visibility: hidden !important;
         }
+        #system-prompt-area.system-prompt-sticky .system-prompt-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            min-height: 0;
+            margin-top: 10px;
+        }
+        #system-prompt-area.system-prompt-sticky .system-prompt-content textarea {
+            flex-grow: 1;
+            resize: none;
+            margin-bottom: 0;
+            border-radius: 5px 5px 0 0;
+            padding-bottom: 45px;
+        }
+        #system-prompt-area.system-prompt-sticky .system-prompt-actions {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background-color: rgba(var(--bg-tertiary-rgb), 0.8);
+            padding: 5px;
+            border-radius: 0 0 5px 5px;
+        }
 
 
         .system-prompt-area details {
             width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
         }
         .system-prompt-area summary {
             font-weight: bold;
@@ -2935,7 +2961,6 @@
             </header>
 
             <div id="system-prompt-area-placeholder" style="display:none;"></div>
-
 
             <div id="memo-area" class="hidden">
                 <div class="memo-actions-container">
@@ -5859,13 +5884,7 @@
 
                 if (state.settings.stickySystemPrompt) {
                     systemPromptArea.classList.add('system-prompt-sticky');
-                    let insertAfterElement = header;
-                    if (elements.clipboardStackArea && !elements.clipboardStackArea.classList.contains('hidden')) {
-                        insertAfterElement = elements.clipboardStackArea;
-                    } else if (elements.memoArea && !elements.memoArea.classList.contains('hidden')) {
-                        insertAfterElement = elements.memoArea;
-                    }
-                    insertAfterElement.insertAdjacentElement('afterend', systemPromptArea);
+                    header.insertAdjacentElement('afterend', systemPromptArea);
                     this.updateStickySystemPromptDetailsClass();
                 } else {
                     systemPromptArea.classList.remove('system-prompt-sticky', 'details-open', 'details-closed');
@@ -6216,12 +6235,18 @@
                         state.editingMessageIndex = null;
                      }
                 }
+
+                const chatHeader = elements.chatScreen.querySelector('.app-header');
+                const systemPromptArea = elements.systemPromptArea;
+                const memoArea = elements.memoArea;
+                const clipboardStackArea = elements.clipboardStackArea;
+
                 if (state.isMemoVisible && screenName !== 'chat' && !state.isEditingSystemPrompt) {
-                     elements.memoArea.classList.add('hidden');
+                     memoArea.classList.add('hidden');
                      state.isMemoVisible = false;
                 }
                 if (state.isClipboardStackVisible && screenName !== 'chat' && !state.isEditingSystemPrompt) {
-                     elements.clipboardStackArea.classList.add('hidden');
+                     clipboardStackArea.classList.add('hidden');
                      state.isClipboardStackVisible = false;
                 }
                  if (state.settings.stickySystemPrompt && elements.systemPromptDetails.open && screenName !== 'chat' && !state.isEditingSystemPrompt) {
@@ -6257,6 +6282,17 @@
                     elements.chatScreen.style.transform = 'translateX(0)';
                     elements.historyScreen.style.transform = 'translateX(-100%)';
                     elements.settingsScreen.style.transform = 'translateX(100%)';
+
+                    if(state.settings.stickySystemPrompt){
+                         chatHeader.insertAdjacentElement('afterend', systemPromptArea);
+                    }
+                    if (!clipboardStackArea.classList.contains('hidden')) {
+                        (systemPromptArea.classList.contains('system-prompt-sticky') ? systemPromptArea : chatHeader).insertAdjacentElement('afterend', clipboardStackArea);
+                    }
+                    if (!memoArea.classList.contains('hidden')) {
+                        (clipboardStackArea.classList.contains('hidden') ? (systemPromptArea.classList.contains('system-prompt-sticky') ? systemPromptArea : chatHeader) : clipboardStackArea).insertAdjacentElement('afterend', memoArea);
+                    }
+
                     requestAnimationFrame(() => {
                         this.updateSystemPromptUI();
                         this.adjustTextareaHeight();
@@ -7460,8 +7496,25 @@
                 state.isMemoVisible = !state.isMemoVisible;
                 elements.memoArea.classList.toggle('hidden', !state.isMemoVisible);
 
+                const chatHeader = elements.chatScreen.querySelector('.app-header');
+                const systemPromptArea = elements.systemPromptArea;
+                const memoArea = elements.memoArea;
+                const clipboardStackArea = elements.clipboardStackArea;
+
+                let referenceElementForMemo = systemPromptArea.classList.contains('system-prompt-sticky') && !systemPromptArea.classList.contains('hidden')
+                                          ? systemPromptArea
+                                          : chatHeader;
+
                 if (state.isMemoVisible) {
+                    referenceElementForMemo.insertAdjacentElement('afterend', memoArea);
+                    if (!clipboardStackArea.classList.contains('hidden')) {
+                        memoArea.insertAdjacentElement('afterend', clipboardStackArea);
+                    }
                     elements.memoEditor.focus();
+                } else {
+                    if (!clipboardStackArea.classList.contains('hidden')) {
+                         referenceElementForMemo.insertAdjacentElement('afterend', clipboardStackArea);
+                    }
                 }
                  uiUtils.applyStickySystemPromptStyle();
             },
@@ -7556,7 +7609,20 @@
                 state.isClipboardStackVisible = !state.isClipboardStackVisible;
                 elements.clipboardStackArea.classList.toggle('hidden', !state.isClipboardStackVisible);
 
+                const chatHeader = elements.chatScreen.querySelector('.app-header');
+                const systemPromptArea = elements.systemPromptArea;
+                const memoArea = elements.memoArea;
+                const clipboardStackArea = elements.clipboardStackArea;
+
+                let referenceElementForClipboard = systemPromptArea.classList.contains('system-prompt-sticky') && !systemPromptArea.classList.contains('hidden')
+                                                 ? systemPromptArea
+                                                 : chatHeader;
+                if (!memoArea.classList.contains('hidden')) {
+                    referenceElementForClipboard = memoArea;
+                }
+
                 if (state.isClipboardStackVisible) {
+                    referenceElementForClipboard.insertAdjacentElement('afterend', clipboardStackArea);
                     elements.clipboardStackEditor.value = state.clipboardStackContent;
                     elements.clipboardStackEditor.focus();
                     elements.clipboardStackEditor.scrollTop = elements.clipboardStackEditor.scrollHeight;
