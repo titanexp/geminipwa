@@ -1105,6 +1105,11 @@
             z-index: 1;
             touch-action: pan-y;
         }
+        /* When system prompt is NOT sticky, it lives inside main-content */
+        .main-content > .system-prompt-area:not(.system-prompt-sticky) {
+            margin-bottom: 15px; /* Original margin */
+        }
+
 
         .screen {
             position: absolute;
@@ -1157,7 +1162,16 @@
             touch-action: pan-x pan-y pinch-zoom;
             flex-grow: 1;
         }
-        #chat-screen .app-header { z-index: 2; }
+        #chat-screen .app-header { z-index: 2; } /* Ensure header is above main content */
+
+        /* Sticky system prompt, memo, clipboard_stack will be inserted between header and main-content if active */
+        /* They need their own z-index and background */
+        #chat-screen .system-prompt-area.system-prompt-sticky,
+        #chat-screen #memo-area:not(.hidden),
+        #chat-screen #clipboard-stack-area:not(.hidden) {
+            z-index: 2; /* Higher than main content's relative children, same as input area potentially */
+        }
+
         #chat-screen .chat-input-area {
             z-index: 2;
             background-color: rgba(var(--bg-secondary-rgb, 240, 242, 245), var(--header-footer-opacity, 1));
@@ -1175,7 +1189,7 @@
             background-color: var(--bg-memo);
             border-bottom: 1px solid var(--border-secondary);
             padding: 10px 15px;
-            z-index: 4;
+            z-index: 4; /* Higher than sticky system prompt */
             box-shadow: 0 1px 3px var(--shadow-primary);
             overflow: auto;
             display: flex;
@@ -1251,7 +1265,7 @@
             background-color: var(--bg-memo);
             border-bottom: 1px solid var(--border-secondary);
             padding: 10px 15px;
-            z-index: 5;
+            z-index: 5; /* Highest of the sticky panels */
             box-shadow: 0 1px 3px var(--shadow-primary);
             overflow: auto;
             display: flex;
@@ -1320,9 +1334,9 @@
         }
 
 
-        .system-prompt-area {
+        .system-prompt-area { /* Default inline style */
             padding: 10px 15px;
-            margin-bottom: 15px;
+            /* margin-bottom: 15px; Added dynamically by JS if not sticky */
             border: 1px solid var(--border-system);
             border-radius: 8px;
             background-color: var(--bg-system-message);
@@ -1333,15 +1347,58 @@
             overflow: hidden;
             max-height: 500px;
         }
-        .system-prompt-area.hidden {
-            padding-top: 0;
-            padding-bottom: 0;
-            margin-bottom: 0;
-            border-width: 0;
-            max-height: 0;
-            opacity: 0;
-            visibility: hidden;
+        .system-prompt-area.hidden { /* This applies to both sticky and inline when globally hidden */
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            margin-bottom: 0 !important;
+            border-width: 0 !important;
+            max-height: 0 !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
+            overflow: hidden !important;
         }
+        /* Styles for when system-prompt-area is made sticky */
+        #system-prompt-area.system-prompt-sticky {
+            position: relative; /* Will be placed in flow after header */
+            width: 100%;
+            background-color: var(--bg-system-message);
+            border-style: solid;
+            border-color: var(--border-secondary);
+            border-width: 0 0 1px 0; /* Only bottom border */
+            padding: 10px 15px;
+            z-index: 3; /* Below memo/clipboard_stack if they are also visible */
+            box-shadow: 0 1px 3px var(--shadow-primary);
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            transition: max-height 0.3s ease-out, padding-top 0.3s ease-out, padding-bottom 0.3s ease-out, opacity 0.3s ease-out, border-width 0.3s ease-out;
+            margin-bottom: 0; /* Reset original margin */
+            border-radius: 0; /* Reset original border-radius */
+            color: var(--text-system); /* Ensure text color is consistent */
+        }
+        #system-prompt-area.system-prompt-sticky.details-open {
+            max-height: var(--memo-height); /* Reuse memo height or define a new var */
+            padding: 10px 15px;
+        }
+        #system-prompt-area.system-prompt-sticky.details-closed {
+            max-height: 42px; /* Compact height for summary */
+            padding-top: 5px;
+            padding-bottom: 5px;
+            overflow: hidden;
+        }
+        #system-prompt-area.system-prompt-sticky.details-closed .system-prompt-content {
+            display: none;
+        }
+        #system-prompt-area.system-prompt-sticky.hidden { /* Ensure hidden state applies correctly to sticky version */
+            max-height: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            border-width: 0 !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
+        }
+
+
         .system-prompt-area details {
             width: 100%;
         }
@@ -2879,6 +2936,10 @@
                 <button id="goto-settings-btn" class="header-button" aria-label="設定へ">⚙</button>
             </header>
 
+            <!-- Sticky panels will be inserted here by JS if active -->
+            <div id="system-prompt-area-placeholder" style="display:none;"></div> <!-- For DOM manipulation reference -->
+
+
             <div id="memo-area" class="hidden">
                 <div class="memo-actions-container">
                     <button id="delete-memo-btn" class="delete-memo-btn" title="メモの内容を全て削除">全削除</button>
@@ -2898,7 +2959,7 @@
             </div>
 
             <main class="main-content">
-                <div id="system-prompt-area" class="system-prompt-area">
+                <div id="system-prompt-area" class="system-prompt-area"> <!-- This is the original, can be moved or styled -->
                     <details id="system-prompt-details">
                         <summary>システムプロンプト</summary>
                         <div class="system-prompt-content">
@@ -3466,8 +3527,8 @@
                                         ヘッダーにクリップボードスタックボタン(🗒️)を表示する
                                     </label>
                                     <div>
-                                        <label for="memo-height">メモ・スタックの縦の幅 (例: 200px, 30vh):</label>
-                                        <input type="text" id="memo-height" placeholder="例: 200px, 30vh" aria-label="メモ・スタックの縦の幅">
+                                        <label for="memo-height">メモ・スタック・固定プロンプトの縦の幅 (例: 200px, 30vh):</label>
+                                        <input type="text" id="memo-height" placeholder="例: 200px, 30vh" aria-label="メモ・スタック・固定プロンプトの縦の幅">
                                     </div>
                                     <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom:10px;">
                                         ※ 各エリアは縦方向にリサイズ可能です。
@@ -3502,6 +3563,13 @@
                                 </p>
                            </details>
                            <p style="height:10px"></p>
+                           <label class="checkbox-label">
+                               <input type="checkbox" id="sticky-system-prompt-toggle">
+                               システムプロンプトをヘッダーに固定表示する
+                           </label>
+                           <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                               ※ 有効時、システムプロンプト欄がヘッダー下に固定され、メモ欄等と同様のスタイルになります。
+                           </p>
                            <label class="checkbox-label">
                                <input type="checkbox" id="hide-system-prompt-toggle">
                                システムプロンプト非表示
@@ -3557,14 +3625,14 @@
                                ※ 端末またはPCにインストールされているフォント名を指定。
                            </p>
                            <label for="message-body-font-size-input">メッセージ本文のフォントサイズ (px):</label>
-                           <input type="number" id="message-body-font-size-input" placeholder="例: 14 (デフォルト)" aria-label="メッセージ本文のフォントサイズ">
+                           <input type="number" id="message-body-font-size-input" min="1" max="100" step="1" placeholder="例: 14 (1-100)" aria-label="メッセージ本文のフォントサイズ">
                            <label for="code-block-font-size-input">コードブロックのフォントサイズ (px):</label>
-                           <input type="number" id="code-block-font-size-input" placeholder="例: 13 (デフォルト)" aria-label="コードブロックのフォントサイズ">
+                           <input type="number" id="code-block-font-size-input" min="1" max="100" step="1" placeholder="例: 13 (1-100)" aria-label="コードブロックのフォントサイズ">
                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                                ※ 空欄でデフォルト値。
                            </p>
                            <label for="thought-summary-font-size">思考プロセス フォントサイズ (px):</label>
-                           <input type="number" id="thought-summary-font-size" min="8" max="24" step="1" placeholder="例: 13 (8-24)" aria-label="思考プロセス フォントサイズ">
+                           <input type="number" id="thought-summary-font-size" min="1" max="100" step="1" placeholder="例: 13 (1-100)" aria-label="思考プロセス フォントサイズ">
                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                                ※ 空欄でデフォルト(13px)。
                            </p>
@@ -3773,7 +3841,7 @@
         const LIGHT_MODE_PRIMARY_COLOR = '#ffffff';
 
 
-        const APP_VERSION = "0.26ti";
+        const APP_VERSION = "0.26ti.2"; // Updated version
         const SWIPE_THRESHOLD = 50;
         const ZOOM_THRESHOLD = 1.01;
         const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -3833,6 +3901,8 @@
             systemPromptEditor: document.getElementById('system-prompt-editor'),
             saveSystemPromptBtn: document.getElementById('save-system-prompt-btn'),
             cancelSystemPromptBtn: document.getElementById('cancel-system-prompt-btn'),
+            systemPromptAreaPlaceholder: document.getElementById('system-prompt-area-placeholder'),
+            stickySystemPromptToggle: document.getElementById('sticky-system-prompt-toggle'),
             apiProviderSelect: document.getElementById('api-provider-select'),
             geminiSettingsGroup: document.getElementById('gemini-settings-group'),
             geminiApiKeyInput: document.getElementById('gemini-api-key'),
@@ -4089,6 +4159,7 @@
                 messageBodyFontSize: DEFAULT_MESSAGE_BODY_FONT_SIZE,
                 codeBlockFontSize: DEFAULT_CODE_BLOCK_FONT_SIZE,
                 thoughtSummaryFontSize: DEFAULT_THOUGHT_SUMMARY_FONT_SIZE,
+                stickySystemPrompt: false,
                 hideSystemPromptInChat: false,
                 enableSessionLinking: false,
                 enableSwipeNavigation: true,
@@ -4161,6 +4232,21 @@
             abortController: null,
             partialStreamContent: '',
             partialThoughtStreamContent: '',
+
+            deepSeekThoughtRawTextBuffer: '',
+            deepSeekRawTextBuffer: '',
+            isDisplayingDeepSeekThought: false,
+            isDisplayingDeepSeekContent: false,
+            deepSeekThoughtDisplayIndex: 0,
+            deepSeekContentDisplayIndex: 0,
+            deepSeekThoughtTimerId: null,
+            deepSeekContentTimerId: null,
+            deepSeekThoughtStreamCompleted: false,
+            deepSeekContentStreamCompleted: false,
+            deepSeekIsProcessingThoughtQueue: false,
+            deepSeekIsProcessingContentQueue: false,
+            deepSeekStreamEnded: false,
+
             editingMessageIndex: null,
             isEditingSystemPrompt: false,
             touchStartX: 0,
@@ -4425,7 +4511,7 @@
                                           if (key === 'messageIconOffsetY' && (num < -200 || num > 200)) num = defaultValue;
                                           if (key === 'iconNameFontSize' && (num < 1 || num > 46)) num = defaultValue;
                                           if (key === 'iconNameOffsetY' && (num < -200 || num > 200)) num = defaultValue;
-                                          if ((key === 'messageBodyFontSize' || key === 'codeBlockFontSize' || key === 'thoughtSummaryFontSize') && (num < 8 || num > 32)) num = defaultValue;
+                                          if ((key === 'messageBodyFontSize' || key === 'codeBlockFontSize' || key === 'thoughtSummaryFontSize') && (num < 1 || num > 100)) num = defaultValue; // Updated range
                                           if (key === 'diceMinValue' && num < 0) num = defaultValue;
                                           if (key === 'diceMaxValue' && num < 0) num = defaultValue;
                                           state.settings[key] = num;
@@ -4781,7 +4867,13 @@
 
                     if (isStreamingPlaceholder) {
                         thoughtContentDiv.id = `streaming-thought-summary-${index}`;
-                        thoughtContentDiv.innerHTML = '';
+                        if (messageApiProvider === 'deepseek') {
+                            const pre = document.createElement('pre');
+                            pre.id = `deepseek-thought-pre-${index}`;
+                            thoughtContentDiv.appendChild(pre);
+                        } else {
+                            thoughtContentDiv.innerHTML = '';
+                        }
                     } else if (messageApiProvider === 'gemini' && messageData?.thoughtSummary) {
                         try {
                             thoughtContentDiv.innerHTML = marked.parse(messageData.thoughtSummary || '');
@@ -5164,7 +5256,6 @@
 
                 let targetContentDiv;
                 let accumulatedContentForDisplay;
-                let textToAnimateForDeepSeek = "";
 
                 const selectedApiProvider = state.settings.apiProvider;
                 const streamSpeed = selectedApiProvider === 'gemini' ? state.settings.geminiStreamingSpeed : state.settings.deepSeekStreamingSpeed;
@@ -5175,9 +5266,7 @@
                         targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
                         accumulatedContentForDisplay = state.partialThoughtStreamContent;
                     } else if (selectedApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) {
-                        targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
-                        textToAnimateForDeepSeek = newCharOrChunk || "";
-                        accumulatedContentForDisplay = state.partialThoughtStreamContent;
+                        return;
                     } else {
                         return;
                     }
@@ -5186,26 +5275,16 @@
                     if (selectedApiProvider === 'gemini') {
                         accumulatedContentForDisplay = state.partialStreamContent;
                     } else {
-                        textToAnimateForDeepSeek = newCharOrChunk || "";
-                        accumulatedContentForDisplay = state.partialStreamContent;
+                        return;
                     }
                 }
 
                 if (targetContentDiv) {
                     const renderCurrentState = (contentToRender) => {
                         try {
-                            if (selectedApiProvider === 'deepseek' && isThoughtSummary && targetContentDiv.id === `streaming-thought-summary-${index}`) {
-                                let currentPre = targetContentDiv.querySelector('pre');
-                                if (!currentPre) {
-                                    currentPre = document.createElement('pre');
-                                    targetContentDiv.innerHTML = '';
-                                    targetContentDiv.appendChild(currentPre);
-                                }
-                                currentPre.textContent = contentToRender || '';
-                            } else {
-                                const rawHtml = marked.parse(contentToRender || '');
-                                targetContentDiv.innerHTML = rawHtml;
-                            }
+                            const rawHtml = marked.parse(contentToRender || '');
+                            targetContentDiv.innerHTML = rawHtml;
+
                             if (!isThoughtSummary) {
                                 this.processInteractivePlaceholders(targetContentDiv);
                                 this.processInteractiveTitles(targetContentDiv);
@@ -5215,24 +5294,7 @@
                             targetContentDiv.textContent = contentToRender;
                         }
                     };
-                    if (selectedApiProvider === 'gemini' || streamSpeed <= 0 || !textToAnimateForDeepSeek) {
-                        renderCurrentState(accumulatedContentForDisplay);
-                    } else if (selectedApiProvider === 'deepseek' && textToAnimateForDeepSeek) {
-                        const baseContent = accumulatedContentForDisplay.slice(0, accumulatedContentForDisplay.length - textToAnimateForDeepSeek.length);
-                        let animatedContentSegment = "";
-
-                        for (let i = 0; i < textToAnimateForDeepSeek.length; i++) {
-                            if (state.abortController?.signal.aborted) break;
-                            animatedContentSegment += textToAnimateForDeepSeek[i];
-                            renderCurrentState(baseContent + animatedContentSegment);
-
-                            if (!isThoughtSummary && state.settings.autoScrollOnNewMessage) {
-                                this.scrollToBottom();
-                            }
-                            await sleep(streamSpeed);
-                        }
-                        renderCurrentState(accumulatedContentForDisplay);
-                    }
+                    renderCurrentState(accumulatedContentForDisplay);
                 }
                 if (!isThoughtSummary && state.currentMessages[index]?.groundingMetadata && selectedApiProvider === 'gemini') {
                     const citationContainer = messageDiv.querySelector(`#streaming-citations-${index}`);
@@ -5271,15 +5333,16 @@
                         if (thoughtContentDiv) thoughtContentDiv.removeAttribute('id');
                     } else if (finalMessageData.deepSeekThoughtSummary && messageApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) {
                         const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`) || messageDiv.querySelector('.thought-summary-details .thought-summary-content');
-                        if (thoughtContentDiv) {
-                            const pre = document.createElement('pre');
-                            pre.textContent = finalMessageData.deepSeekThoughtSummary || '';
-                            thoughtContentDiv.innerHTML = '';
-                            thoughtContentDiv.appendChild(pre);
-                            if (thoughtContentDiv.id === `streaming-thought-summary-${index}`) {
-                                thoughtContentDiv.removeAttribute('id');
+                        const preElement = this.getDeepSeekThoughtElement(index, true);
+                        if (preElement) {
+                            preElement.textContent = finalMessageData.deepSeekThoughtSummary || '';
+                            if (preElement.id === `deepseek-thought-pre-${index}`) {
+                                preElement.removeAttribute('id');
                             }
                         }
+                         if (thoughtContentDiv && thoughtContentDiv.id === `streaming-thought-summary-${index}`) {
+                             thoughtContentDiv.removeAttribute('id');
+                         }
                     }
 
                     const thoughtDetailsElement = messageDiv.querySelector('.thought-summary-details');
@@ -5784,6 +5847,48 @@
                 this.applyOpacitySettings();
                 this.applyZoomPreventionSetting();
             },
+            applyStickySystemPromptStyle() {
+                const systemPromptArea = elements.systemPromptArea;
+                const mainContent = elements.chatScreen.querySelector('.main-content');
+                const header = elements.chatScreen.querySelector('.app-header');
+                const placeholder = elements.systemPromptAreaPlaceholder;
+
+                if (state.settings.stickySystemPrompt) {
+                    systemPromptArea.classList.add('system-prompt-sticky');
+                    // Insert after header and other sticky panels
+                    let insertAfterElement = header;
+                    if (elements.clipboardStackArea && !elements.clipboardStackArea.classList.contains('hidden')) {
+                        insertAfterElement = elements.clipboardStackArea;
+                    } else if (elements.memoArea && !elements.memoArea.classList.contains('hidden')) {
+                        insertAfterElement = elements.memoArea;
+                    }
+                    insertAfterElement.insertAdjacentElement('afterend', systemPromptArea);
+                    this.updateStickySystemPromptDetailsClass(); // Initial state
+                } else {
+                    systemPromptArea.classList.remove('system-prompt-sticky', 'details-open', 'details-closed');
+                    // Move back to its original placeholder position in main-content
+                    if (mainContent && placeholder && placeholder.parentNode === mainContent) {
+                         mainContent.insertBefore(systemPromptArea, placeholder.nextSibling);
+                    } else if (mainContent) { // Fallback if placeholder somehow got removed
+                         mainContent.insertBefore(systemPromptArea, mainContent.firstChild);
+                    }
+                    systemPromptArea.style.marginBottom = '15px'; // Restore original margin
+                }
+                this.toggleSystemPromptVisibility(); // Re-apply global visibility
+            },
+            updateStickySystemPromptDetailsClass() {
+                if (state.settings.stickySystemPrompt && elements.systemPromptArea.classList.contains('system-prompt-sticky')) {
+                    if (elements.systemPromptDetails.open) {
+                        elements.systemPromptArea.classList.add('details-open');
+                        elements.systemPromptArea.classList.remove('details-closed');
+                    } else {
+                        elements.systemPromptArea.classList.add('details-closed');
+                        elements.systemPromptArea.classList.remove('details-open');
+                    }
+                } else {
+                    elements.systemPromptArea.classList.remove('details-open', 'details-closed');
+                }
+            },
             applySettingsToUI() {
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
                 elements.apiProviderSelect.value = state.settings.apiProvider;
@@ -5845,6 +5950,7 @@
                 elements.messageBodyFontSizeInput.value = state.settings.messageBodyFontSize ?? '';
                 elements.codeBlockFontSizeInput.value = state.settings.codeBlockFontSize ?? '';
                 elements.thoughtSummaryFontSizeInput.value = state.settings.thoughtSummaryFontSize ?? '';
+                elements.stickySystemPromptToggle.checked = state.settings.stickySystemPrompt;
                 elements.hideSystemPromptToggle.checked = state.settings.hideSystemPromptInChat;
                 elements.swipeNavigationToggle.checked = state.settings.enableSwipeNavigation;
                 elements.preventZoomToggle.checked = state.settings.preventZoom;
@@ -5926,8 +6032,9 @@
                 this.updateDeepSeekUserModelOptions();
                 this.updateBackgroundSettingsUI();
                 this.updateIconSettingsUI();
-                this.applyTheme();
+                this.applyTheme(); // Includes opacity settings
                 this.applyFontFamily();
+                this.applyStickySystemPromptStyle(); // Before toggleSystemPromptVisibility
                 this.toggleSystemPromptVisibility();
                 this.applySidePanelSettingsToUI();
                 this.updateSessionLinkingUI();
@@ -6083,12 +6190,19 @@
                 if (!state.isEditingSystemPrompt) {
                     elements.systemPromptDetails.removeAttribute('open');
                 }
-                this.adjustTextareaHeight(elements.systemPromptEditor, 200);
-                this.toggleSystemPromptVisibility();
+                uiUtils.adjustTextareaHeight(elements.systemPromptEditor, 200);
+                if (!state.settings.stickySystemPrompt) { // Only toggle global visibility if not sticky
+                    this.toggleSystemPromptVisibility();
+                }
+                this.updateStickySystemPromptDetailsClass(); // Always update class for sticky mode
             },
             toggleSystemPromptVisibility() {
                 const shouldHide = state.settings.hideSystemPromptInChat;
                 elements.systemPromptArea.classList.toggle('hidden', shouldHide);
+                // If sticky and now unhidden, ensure details state is correct
+                if (state.settings.stickySystemPrompt && !shouldHide) {
+                    this.updateStickySystemPromptDetailsClass();
+                }
             },
             showScreen(screenName, fromPopState = false) {
                 if (state.editingMessageIndex !== null) {
@@ -6110,6 +6224,10 @@
                      elements.clipboardStackArea.classList.add('hidden');
                      state.isClipboardStackVisible = false;
                 }
+                 if (state.settings.stickySystemPrompt && elements.systemPromptDetails.open && screenName !== 'chat') {
+                     elements.systemPromptDetails.open = false; // Close sticky system prompt if navigating away
+                 }
+
 
                 if (screenName === state.currentScreen) {
                     if (screenName === 'history') this.updateHistoryHeaderButtonVisibility();
@@ -6143,6 +6261,7 @@
                         this.updateSystemPromptUI();
                         this.adjustTextareaHeight();
                         this.updateChatScreenElementVisibility();
+                        this.applyStickySystemPromptStyle(); // Re-apply style when returning to chat
                     });
                 } else if (screenName === 'history') {
                     activeScreen = elements.historyScreen;
@@ -6183,8 +6302,10 @@
                     if (elements.aiToAiChatBtn) elements.aiToAiChatBtn.disabled = true;
                     elements.loadingIndicator.classList.remove('hidden');
                     elements.loadingIndicator.setAttribute('aria-live', 'polite');
-                    elements.systemPromptDetails.style.pointerEvents = 'none';
-                    elements.systemPromptDetails.style.opacity = '0.7';
+                    if (elements.systemPromptDetails) { // Check if it exists
+                        elements.systemPromptDetails.style.pointerEvents = 'none';
+                        elements.systemPromptDetails.style.opacity = '0.7';
+                    }
                 } else {
                     elements.sendButton.textContent = '送';
                     elements.sendButton.classList.remove('sending');
@@ -6202,8 +6323,10 @@
                     }
                     elements.loadingIndicator.classList.add('hidden');
                     elements.loadingIndicator.removeAttribute('aria-live');
-                    elements.systemPromptDetails.style.pointerEvents = '';
-                    elements.systemPromptDetails.style.opacity = '';
+                    if (elements.systemPromptDetails) { // Check if it exists
+                        elements.systemPromptDetails.style.pointerEvents = '';
+                        elements.systemPromptDetails.style.opacity = '';
+                    }
                 }
             },
             adjustTextareaHeight(textarea = elements.userInput, maxHeight = TEXTAREA_MAX_HEIGHT) {
@@ -6485,8 +6608,10 @@
                     elements.pasteToInputBtn.disabled = true;
                     elements.rollDiceBtn.disabled = true;
                     if (elements.aiToAiChatBtn) elements.aiToAiChatBtn.disabled = true;
-                    elements.systemPromptDetails.style.pointerEvents = 'none';
-                    elements.systemPromptDetails.style.opacity = '0.7';
+                    if (elements.systemPromptDetails) {
+                        elements.systemPromptDetails.style.pointerEvents = 'none';
+                        elements.systemPromptDetails.style.opacity = '0.7';
+                    }
                 } else {
                     elements.loadingIndicator.textContent = '応答中';
                     elements.loadingIndicator.classList.add('hidden');
@@ -6503,14 +6628,204 @@
                                           state.currentChatId && state.linkedSessionIds.includes(state.currentChatId);
                         elements.aiToAiChatBtn.disabled = !showAiToAiBtn;
                     }
-                    elements.systemPromptDetails.style.pointerEvents = '';
-                    elements.systemPromptDetails.style.opacity = '';
+                    if (elements.systemPromptDetails) {
+                        elements.systemPromptDetails.style.pointerEvents = '';
+                        elements.systemPromptDetails.style.opacity = '';
+                    }
                 }
             },
             updateSessionLinkingUI() {
                 this.renderHistoryList();
                 this.updateChatScreenElementVisibility();
             },
+            getDeepSeekThoughtElement(messageIndex, ensurePre = false) {
+                const messageDiv = document.getElementById(`streaming-message-${messageIndex}`) ||
+                                elements.messageContainer.querySelector(`.message[data-index="${messageIndex}"]`);
+                if (!messageDiv) return null;
+
+                const thoughtSummaryDetails = messageDiv.querySelector('.thought-summary-details');
+                if (!thoughtSummaryDetails) return null;
+
+                let thoughtContentDiv = thoughtSummaryDetails.querySelector('.thought-summary-content');
+                if (!thoughtContentDiv) {
+                    thoughtContentDiv = document.createElement('div');
+                    thoughtContentDiv.classList.add('thought-summary-content');
+                    thoughtSummaryDetails.appendChild(thoughtContentDiv);
+                }
+
+                if (ensurePre) {
+                    let preElement = thoughtContentDiv.querySelector('pre');
+                    if (!preElement) {
+                        preElement = document.createElement('pre');
+                        preElement.id = `deepseek-thought-pre-${messageIndex}`;
+                        thoughtContentDiv.innerHTML = '';
+                        thoughtContentDiv.appendChild(preElement);
+                    }
+                    return preElement;
+                }
+                return thoughtContentDiv;
+            },
+            getDeepSeekContentElement(messageIndex) {
+                const messageDiv = document.getElementById(`streaming-message-${messageIndex}`) ||
+                                elements.messageContainer.querySelector(`.message[data-index="${messageIndex}"]`);
+                if (!messageDiv) return null;
+                return messageDiv.querySelector('.message-content');
+            },
+            async processDeepSeekThoughtQueue(messageIndex) {
+                if (state.deepSeekIsProcessingThoughtQueue || state.deepSeekThoughtChunkQueue.length === 0) {
+                    return;
+                }
+                state.deepSeekIsProcessingThoughtQueue = true;
+
+                while (state.deepSeekThoughtChunkQueue.length > 0) {
+                    const chunk = state.deepSeekThoughtChunkQueue.shift();
+                    state.deepSeekThoughtRawTextBuffer += chunk;
+
+                    if (!state.isDisplayingDeepSeekThought) {
+                        this.animateDeepSeekThought(messageIndex);
+                    }
+                    while (state.isDisplayingDeepSeekThought) {
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
+                }
+                state.deepSeekIsProcessingThoughtQueue = false;
+
+                if (state.deepSeekThoughtStreamCompleted &&
+                    state.deepSeekContentChunkQueue.length > 0 &&
+                    !state.deepSeekIsProcessingContentQueue) {
+                    this.processDeepSeekContentQueue(messageIndex);
+                }
+            },
+            async processDeepSeekContentQueue(messageIndex) {
+                if (state.deepSeekIsProcessingContentQueue || state.deepSeekContentChunkQueue.length === 0) {
+                    return;
+                }
+                state.deepSeekIsProcessingContentQueue = true;
+
+                while (state.deepSeekContentChunkQueue.length > 0) {
+                    const chunk = state.deepSeekContentChunkQueue.shift();
+                    state.deepSeekRawTextBuffer += chunk;
+
+                    if (!state.isDisplayingDeepSeekContent &&
+                        (state.deepSeekThoughtStreamCompleted || !state.deepSeekThoughtRawTextBuffer)) {
+                        this.animateDeepSeekContent(messageIndex);
+                    }
+                    while (state.isDisplayingDeepSeekContent) {
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
+                }
+                state.deepSeekIsProcessingContentQueue = false;
+            },
+            animateDeepSeekThought(messageIndex) {
+                if (state.isDisplayingDeepSeekThought) return;
+                state.isDisplayingDeepSeekThought = true;
+
+                const preElement = this.getDeepSeekThoughtElement(messageIndex, true);
+                if (!preElement) {
+                    state.isDisplayingDeepSeekThought = false;
+                    return;
+                }
+
+                const animate = () => {
+                    if (state.deepSeekThoughtDisplayIndex < state.deepSeekThoughtRawTextBuffer.length) {
+                        preElement.textContent = state.deepSeekThoughtRawTextBuffer.substring(0, state.deepSeekThoughtDisplayIndex + 1);
+                        state.deepSeekThoughtDisplayIndex++;
+                        if (state.settings.autoScrollOnThought) this.scrollToBottom();
+                        if (state.settings.deepSeekStreamingSpeed > 0) {
+                            state.deepSeekThoughtTimerId = setTimeout(animate, state.settings.deepSeekStreamingSpeed);
+                        } else {
+                            preElement.textContent = state.deepSeekThoughtRawTextBuffer;
+                            state.deepSeekThoughtDisplayIndex = state.deepSeekThoughtRawTextBuffer.length;
+                            state.isDisplayingDeepSeekThought = false;
+                        }
+                    } else {
+                        preElement.textContent = state.deepSeekThoughtRawTextBuffer;
+                        state.isDisplayingDeepSeekThought = false;
+                        if (state.deepSeekThoughtTimerId) {
+                            clearTimeout(state.deepSeekThoughtTimerId);
+                            state.deepSeekThoughtTimerId = null;
+                        }
+                    }
+                };
+                animate();
+            },
+            animateDeepSeekContent(messageIndex) {
+                if (state.isDisplayingDeepSeekContent) return;
+                if (state.isDisplayingDeepSeekThought) return;
+                state.isDisplayingDeepSeekContent = true;
+
+                const contentDiv = this.getDeepSeekContentElement(messageIndex);
+                if (!contentDiv) {
+                    state.isDisplayingDeepSeekContent = false;
+                    return;
+                }
+
+                const animate = () => {
+                    if (state.deepSeekContentDisplayIndex < state.deepSeekRawTextBuffer.length) {
+                        const currentTextToParse = state.deepSeekRawTextBuffer.substring(0, state.deepSeekContentDisplayIndex + 1);
+                        try {
+                            contentDiv.innerHTML = marked.parse(currentTextToParse || '');
+                            this.addCopyButtonsToCodeBlocks(contentDiv);
+                        } catch (e) {
+                            contentDiv.textContent = currentTextToParse;
+                        }
+                        state.deepSeekContentDisplayIndex++;
+                        if (state.settings.autoScrollOnNewMessage) this.scrollToBottom();
+                        if (state.settings.deepSeekStreamingSpeed > 0) {
+                            state.deepSeekContentTimerId = setTimeout(animate, state.settings.deepSeekStreamingSpeed);
+                        } else {
+                            try {
+                                contentDiv.innerHTML = marked.parse(state.deepSeekRawTextBuffer || '');
+                                this.addCopyButtonsToCodeBlocks(contentDiv);
+                            } catch (e) {
+                                contentDiv.textContent = state.deepSeekRawTextBuffer;
+                            }
+                            state.deepSeekContentDisplayIndex = state.deepSeekRawTextBuffer.length;
+                            state.isDisplayingDeepSeekContent = false;
+                        }
+                    } else {
+                        try {
+                            contentDiv.innerHTML = marked.parse(state.deepSeekRawTextBuffer || '');
+                            this.addCopyButtonsToCodeBlocks(contentDiv);
+                        } catch (e) {
+                            contentDiv.textContent = state.deepSeekRawTextBuffer;
+                        }
+                        state.isDisplayingDeepSeekContent = false;
+                        if (state.deepSeekContentTimerId) {
+                            clearTimeout(state.deepSeekContentTimerId);
+                            state.deepSeekContentTimerId = null;
+                        }
+                    }
+                };
+                animate();
+            },
+            finalizeDeepSeekDisplay(messageIndex) {
+                if (state.deepSeekThoughtTimerId) clearTimeout(state.deepSeekThoughtTimerId);
+                state.deepSeekThoughtTimerId = null;
+                state.isDisplayingDeepSeekThought = false;
+
+                if (state.deepSeekContentTimerId) clearTimeout(state.deepSeekContentTimerId);
+                state.deepSeekContentTimerId = null;
+                state.isDisplayingDeepSeekContent = false;
+
+                const messageData = state.currentMessages[messageIndex];
+                if (messageData) {
+                    const thoughtPre = this.getDeepSeekThoughtElement(messageIndex, true);
+                    if (thoughtPre) {
+                        thoughtPre.textContent = messageData.deepSeekThoughtSummary || state.deepSeekThoughtRawTextBuffer;
+                    }
+                    const contentDiv = this.getDeepSeekContentElement(messageIndex);
+                    if (contentDiv) {
+                        try {
+                            contentDiv.innerHTML = marked.parse(messageData.content || state.deepSeekRawTextBuffer || '');
+                            this.addCopyButtonsToCodeBlocks(contentDiv);
+                        } catch (e) {
+                            contentDiv.textContent = messageData.content || state.deepSeekRawTextBuffer;
+                        }
+                    }
+                    this.finalizeStreamingMessage(messageIndex);
+                }
+            }
         };
 
         const appLogic = {
@@ -6554,7 +6869,7 @@
                         try { state.aiIconUrl = URL.createObjectURL(state.settings.aiIconBlob); } catch (e) { }
                     }
 
-                    uiUtils.applySettingsToUI();
+                    uiUtils.applySettingsToUI(); // This will also call applyStickySystemPromptStyle internally
 
                     const chats = await dbUtils.getAllChats(state.settings.historySortOrder);
                     if (chats && chats.length > 0) {
@@ -6623,10 +6938,11 @@
                  elements.userInput.addEventListener('input', () => uiUtils.updateAttachmentBadgeVisibility());
 
                 elements.systemPromptDetails.addEventListener('toggle', (event) => {
+                    uiUtils.updateStickySystemPromptDetailsClass(); // Update class for sticky style
                     if (event.target.open) {
                         this.startEditSystemPrompt();
                     } else if (state.isEditingSystemPrompt) {
-                        this.cancelEditSystemPrompt();
+                        this.cancelEditSystemPrompt(); // If closed externally while editing
                     }
                 });
                 elements.saveSystemPromptBtn.addEventListener('click', () => this.saveCurrentSystemPrompt());
@@ -6807,7 +7123,10 @@
                     uiUtils.renderChatMessages(true);
                 });
 
-
+                elements.stickySystemPromptToggle.addEventListener('change', () => {
+                    state.settings.stickySystemPrompt = elements.stickySystemPromptToggle.checked;
+                    uiUtils.applyStickySystemPromptStyle();
+                });
                 elements.hideSystemPromptToggle.addEventListener('change', () => {
                     state.settings.hideSystemPromptInChat = elements.hideSystemPromptToggle.checked;
                     uiUtils.toggleSystemPromptVisibility();
@@ -6983,6 +7302,7 @@
                     if (!elements.messageContainer.contains(event.target) &&
                         !elements.memoArea.contains(event.target) &&
                         !elements.clipboardStackArea.contains(event.target) &&
+                        !elements.systemPromptArea.contains(event.target) && // Consider sticky system prompt
                         !event.target.closest('.custom-dialog')) {
                         const currentlyShown = elements.messageContainer.querySelector('.message.show-actions');
                         if (currentlyShown) {
@@ -7127,6 +7447,7 @@
                 if (state.isMemoVisible) {
                     elements.memoEditor.focus();
                 }
+                 uiUtils.applyStickySystemPromptStyle(); // Re-evaluate position of sticky prompt
             },
             async copyMemoText() {
                 const memoText = elements.memoEditor.value;
@@ -7228,6 +7549,7 @@
                     elements.clipboardStackEditor.focus();
                     elements.clipboardStackEditor.scrollTop = elements.clipboardStackEditor.scrollHeight;
                 }
+                 uiUtils.applyStickySystemPromptStyle(); // Re-evaluate position of sticky prompt
             },
             async copyClipboardStackText() {
                 const stackText = elements.clipboardStackEditor.value;
@@ -7716,7 +8038,6 @@
                     await uiUtils.showCustomAlert("システムプロンプト編集中です。完了後に再度お試しください。");
                     return;
                 }
-
                 const chatTitle = elements.chatTitle.textContent.startsWith("新規チャット") ? "このチャット" : `チャット「${elements.chatTitle.textContent.replace(/^: /, '')}」`;
                 const confirmed = await uiUtils.showCustomConfirm(
                     `${chatTitle}を完全に削除しますか？\nこの操作は元に戻せません。`
@@ -7967,6 +8288,25 @@
                 if (!isBackgroundProcess) uiUtils.setSendingState(true);
                 state.partialStreamContent = '';
                 state.partialThoughtStreamContent = '';
+                if (selectedApiProvider === 'deepseek') {
+                    state.deepSeekThoughtRawTextBuffer = '';
+                    state.deepSeekRawTextBuffer = '';
+                    state.isDisplayingDeepSeekThought = false;
+                    state.isDisplayingDeepSeekContent = false;
+                    state.deepSeekThoughtDisplayIndex = 0;
+                    state.deepSeekContentDisplayIndex = 0;
+                    state.deepSeekThoughtChunkQueue = [];
+                    state.deepSeekContentChunkQueue = [];
+                    state.deepSeekIsProcessingThoughtQueue = false;
+                    state.deepSeekIsProcessingContentQueue = false;
+                    state.deepSeekStreamEnded = false;
+                    if (state.deepSeekThoughtTimerId) clearTimeout(state.deepSeekThoughtTimerId);
+                    if (state.deepSeekContentTimerId) clearTimeout(state.deepSeekContentTimerId);
+                    state.deepSeekThoughtTimerId = null;
+                    state.deepSeekContentTimerId = null;
+                    state.deepSeekThoughtStreamCompleted = false;
+                    state.deepSeekContentStreamCompleted = false;
+                }
 
 
                 let userMessageIndex = isRetry ? retryUserMessageIndex : -1;
@@ -8206,15 +8546,22 @@
 
                     const dummyModelPrefix = (contextConcatDummyModel && dummyModelTextToUse) ? dummyModelTextToUse : '';
                      if (!isBackgroundProcess) {
-                        state.partialStreamContent = dummyModelPrefix;
-                        state.partialThoughtStreamContent = '';
+                        if (selectedApiProvider === 'gemini') {
+                            state.partialStreamContent = dummyModelPrefix;
+                            state.partialThoughtStreamContent = '';
+                        } else if (selectedApiProvider === 'deepseek') {
+                            state.deepSeekRawTextBuffer = dummyModelPrefix;
+                            state.deepSeekThoughtRawTextBuffer = '';
+                            state.deepSeekContentDisplayIndex = dummyModelPrefix.length;
+                        }
                     }
+
 
                     if (useStreamingForThisCall && !isBackgroundProcess) {
                         const tempPlaceholderIndex = state.currentMessages.length;
                         modelMessageObjectForStream = {
                             role: 'model',
-                            content: '',
+                            content: selectedApiProvider === 'deepseek' ? dummyModelPrefix : '',
                             thoughtSummary: null,
                             deepSeekThoughtSummary: null,
                             timestamp: Date.now(),
@@ -8240,7 +8587,7 @@
 
                         state.currentMessages.push(modelMessageObjectForStream);
                         state.messageCollapsedStates.set(tempPlaceholderIndex, false);
-                        uiUtils.appendMessage('model', '', tempPlaceholderIndex, true);
+                        uiUtils.appendMessage('model', modelMessageObjectForStream.content, tempPlaceholderIndex, true);
                     }
 
 
@@ -8252,7 +8599,8 @@
                             responseStreamIterator = apiUtils.handleDeepSeekStreamingResponse(apiResponseObject);
                         }
 
-                        const currentContextStreamSpeed = contextStreamingSpeed;
+                        const currentContextStreamSpeed = selectedApiProvider === 'gemini' ? contextStreamingSpeed : state.settings.deepSeekStreamingSpeed;
+                        const messageIndexForDisplay = isBackgroundProcess ? -1 : (modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1);
 
 
                         for await (const streamData of responseStreamIterator) {
@@ -8270,12 +8618,14 @@
                                             for (const char of streamData.thoughtText) {
                                                 if (state.abortController?.signal.aborted) break;
                                                 state.partialThoughtStreamContent += char;
-                                                uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, char, true);
+                                                uiUtils.updateStreamingMessage(messageIndexForDisplay, char, true);
                                                 if (currentContextStreamSpeed > 0) await sleep(currentContextStreamSpeed);
                                             }
                                         } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
-                                            state.partialThoughtStreamContent += streamData.thoughtText;
-                                            uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, streamData.thoughtText, true);
+                                            state.deepSeekThoughtChunkQueue.push(streamData.thoughtText);
+                                            if (!state.deepSeekIsProcessingThoughtQueue) {
+                                                uiUtils.processDeepSeekThoughtQueue(messageIndexForDisplay);
+                                            }
                                         }
                                     }
                                 }
@@ -8288,12 +8638,15 @@
                                             for (const char of streamData.contentText) {
                                                 if (state.abortController?.signal.aborted) break;
                                                 state.partialStreamContent += char;
-                                                uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, char, false);
+                                                uiUtils.updateStreamingMessage(messageIndexForDisplay, char, false);
                                                 if (currentContextStreamSpeed > 0) await sleep(currentContextStreamSpeed);
                                             }
-                                        } else {
-                                            state.partialStreamContent += streamData.contentText;
-                                            uiUtils.updateStreamingMessage(modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1, streamData.contentText, false);
+                                        } else if (selectedApiProvider === 'deepseek') {
+                                            state.deepSeekContentChunkQueue.push(streamData.contentText);
+                                             if ((state.deepSeekThoughtStreamCompleted || !state.deepSeekThoughtRawTextBuffer) &&
+                                                 !state.deepSeekIsProcessingContentQueue) {
+                                                uiUtils.processDeepSeekContentQueue(messageIndexForDisplay);
+                                            }
                                         }
                                     }
                                 }
@@ -8311,16 +8664,45 @@
                                     }
                                 }
                                 if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
-
+                            } else if (streamData.type === 'thoughtStreamEnd' && selectedApiProvider === 'deepseek') {
+                                state.deepSeekThoughtStreamCompleted = true;
+                                if (!state.deepSeekIsProcessingThoughtQueue && state.deepSeekThoughtChunkQueue.length > 0) {
+                                    await uiUtils.processDeepSeekThoughtQueue(messageIndexForDisplay);
+                                }
+                                while (state.deepSeekIsProcessingThoughtQueue) {
+                                    await sleep(50);
+                                }
+                                if (!state.deepSeekIsProcessingContentQueue && state.deepSeekContentChunkQueue.length > 0) {
+                                    uiUtils.processDeepSeekContentQueue(messageIndexForDisplay);
+                                }
                             } else if (streamData.type === 'metadata') {
+                                state.deepSeekStreamEnded = true;
+                                if (!state.deepSeekIsProcessingThoughtQueue && state.deepSeekThoughtChunkQueue.length > 0) {
+                                    await uiUtils.processDeepSeekThoughtQueue(messageIndexForDisplay);
+                                }
+                                while (state.deepSeekIsProcessingThoughtQueue) {
+                                     await sleep(50);
+                                }
+                                if (!state.deepSeekIsProcessingContentQueue && state.deepSeekContentChunkQueue.length > 0) {
+                                    await uiUtils.processDeepSeekContentQueue(messageIndexForDisplay);
+                                }
+                                while (state.deepSeekIsProcessingContentQueue) {
+                                     await sleep(50);
+                                }
                                 modelResponseMetadata = {
                                     finishReason: streamData.finishReason,
                                     safetyRatings: streamData.safetyRatings,
                                 };
-                                if (streamData.groundingMetadata && selectedApiProvider === 'gemini') currentGroundingMetadata = streamData.groundingMetadata;
-                                if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
-                                if (streamData.fullReasoningContent && selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
-                                    modelThoughtSummaryContent = (modelThoughtSummaryContent || "") + streamData.fullReasoningContent;
+                                if (selectedApiProvider === 'gemini') {
+                                     if (streamData.groundingMetadata) currentGroundingMetadata = streamData.groundingMetadata;
+                                     if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
+                                } else if (selectedApiProvider === 'deepseek') {
+                                    state.deepSeekThoughtStreamCompleted = true;
+                                    state.deepSeekContentStreamCompleted = true;
+                                    if (streamData.fullReasoningContent && contextDeepSeekIncludeThoughts) {
+                                        modelThoughtSummaryContent = streamData.fullReasoningContent;
+                                    }
+                                    if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
                                 }
                                 break;
                             } else if (streamData.type === 'error') {
@@ -8329,15 +8711,18 @@
                                 throw new Error(streamData.message || "ストリーム内でエラーが発生しました。");
                             }
                         }
+
                         if (!isBackgroundProcess) {
-                           modelThoughtSummaryContent = state.partialThoughtStreamContent;
-                           modelResponseRawContent = state.partialStreamContent;
-                        }
-                        if (modelResponseMetadata.fullReasoningContent && selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
-                            modelThoughtSummaryContent = modelResponseMetadata.fullReasoningContent;
+                           if (selectedApiProvider === 'gemini') {
+                               modelThoughtSummaryContent = state.partialThoughtStreamContent;
+                               modelResponseRawContent = state.partialStreamContent;
+                           } else if (selectedApiProvider === 'deepseek') {
+                               modelThoughtSummaryContent = state.deepSeekThoughtRawTextBuffer;
+                               modelResponseRawContent = state.deepSeekRawTextBuffer;
+                           }
                         }
 
-                         if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
+                        if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
                             throw new Error("リクエストがキャンセルされました。");
                         }
 
@@ -8476,7 +8861,11 @@
                                 } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                                 }
-                                uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
+                                if (selectedApiProvider === 'gemini') {
+                                    uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
+                                } else if (selectedApiProvider === 'deepseek') {
+                                    uiUtils.finalizeDeepSeekDisplay(finalModelMessageIndex);
+                                }
                                 await dbUtils.saveChat();
                             }
                         } else {
@@ -8530,8 +8919,15 @@
                     const isAbort = error.message === "リクエストがキャンセルされました。" || modelResponseMetadata.finishReason === 'ABORTED';
                     const displayErrorMessage = isAbort ? error.message : (error.message || "不明なエラーが発生しました");
 
-                    const partialThoughtContentOnError = state.partialThoughtStreamContent;
-                    const partialContentOnError = state.partialStreamContent;
+                    let partialThoughtContentOnError, partialContentOnError;
+                    if (selectedApiProvider === 'gemini') {
+                        partialThoughtContentOnError = state.partialThoughtStreamContent;
+                        partialContentOnError = state.partialStreamContent;
+                    } else if (selectedApiProvider === 'deepseek') {
+                        partialThoughtContentOnError = state.deepSeekThoughtRawTextBuffer;
+                        partialContentOnError = state.deepSeekRawTextBuffer;
+                    }
+
 
                     if (isBackgroundProcess) {
                          throw error;
@@ -8565,7 +8961,11 @@
                             }
 
                              try {
-                                 uiUtils.finalizeStreamingMessage(streamingMessageIndex);
+                                 if (selectedApiProvider === 'gemini') {
+                                     uiUtils.finalizeStreamingMessage(streamingMessageIndex);
+                                 } else if (selectedApiProvider === 'deepseek') {
+                                     uiUtils.finalizeDeepSeekDisplay(streamingMessageIndex);
+                                 }
                                  await dbUtils.saveChat();
                              } catch (saveError) {
                                  uiUtils.displayError(displayErrorMessage, !isAbort);
@@ -8588,6 +8988,25 @@
                         state.abortController = null;
                         state.partialStreamContent = '';
                         state.partialThoughtStreamContent = '';
+                        if (selectedApiProvider === 'deepseek') {
+                            state.deepSeekThoughtRawTextBuffer = '';
+                            state.deepSeekRawTextBuffer = '';
+                            state.isDisplayingDeepSeekThought = false;
+                            state.isDisplayingDeepSeekContent = false;
+                            state.deepSeekThoughtDisplayIndex = 0;
+                            state.deepSeekContentDisplayIndex = 0;
+                            state.deepSeekThoughtChunkQueue = [];
+                            state.deepSeekContentChunkQueue = [];
+                            state.deepSeekIsProcessingThoughtQueue = false;
+                            state.deepSeekIsProcessingContentQueue = false;
+                            state.deepSeekStreamEnded = false;
+                            if (state.deepSeekThoughtTimerId) clearTimeout(state.deepSeekThoughtTimerId);
+                            if (state.deepSeekContentTimerId) clearTimeout(state.deepSeekContentTimerId);
+                            state.deepSeekThoughtTimerId = null;
+                            state.deepSeekContentTimerId = null;
+                            state.deepSeekThoughtStreamCompleted = false;
+                            state.deepSeekContentStreamCompleted = false;
+                        }
                         if (state.settings.autoScrollOnNewMessage) {
                             uiUtils.scrollToBottom();
                         }
@@ -8600,6 +9019,21 @@
                 if (state.abortController) {
                     state.abortController.abort();
                 }
+                if (state.deepSeekThoughtTimerId) {
+                    clearTimeout(state.deepSeekThoughtTimerId);
+                    state.deepSeekThoughtTimerId = null;
+                }
+                if (state.deepSeekContentTimerId) {
+                    clearTimeout(state.deepSeekContentTimerId);
+                    state.deepSeekContentTimerId = null;
+                }
+                state.isDisplayingDeepSeekThought = false;
+                state.isDisplayingDeepSeekContent = false;
+                state.deepSeekStreamEnded = true;
+                state.deepSeekThoughtChunkQueue = [];
+                state.deepSeekContentChunkQueue = [];
+                state.deepSeekIsProcessingThoughtQueue = false;
+                state.deepSeekIsProcessingContentQueue = false;
             },
             async handleHistoryImport(file) {
                 if (!file || !file.type.startsWith('text/plain')) {
@@ -9056,6 +9490,7 @@
                  newSettings.messageBodyFontSize = elements.messageBodyFontSizeInput.value === '' ? null : parseInt(elements.messageBodyFontSizeInput.value, 10);
                  newSettings.codeBlockFontSize = elements.codeBlockFontSizeInput.value === '' ? null : parseInt(elements.codeBlockFontSizeInput.value, 10);
                  newSettings.thoughtSummaryFontSize = elements.thoughtSummaryFontSizeInput.value === '' ? null : parseInt(elements.thoughtSummaryFontSizeInput.value, 10);
+                 newSettings.stickySystemPrompt = elements.stickySystemPromptToggle.checked;
                  newSettings.hideSystemPromptInChat = elements.hideSystemPromptToggle.checked;
                  newSettings.enableSwipeNavigation = elements.swipeNavigationToggle.checked;
                  newSettings.preventZoom = elements.preventZoomToggle.checked;
@@ -9144,9 +9579,9 @@
                 }
 
 
-                 newSettings.messageBodyFontSize = validateNumeric(newSettings.messageBodyFontSize, null, 8, 32, true);
-                 newSettings.codeBlockFontSize = validateNumeric(newSettings.codeBlockFontSize, null, 8, 32, true);
-                 newSettings.thoughtSummaryFontSize = validateNumeric(newSettings.thoughtSummaryFontSize, null, 8, 24, true);
+                 newSettings.messageBodyFontSize = validateNumeric(newSettings.messageBodyFontSize, null, 1, 100, true); // Updated range
+                 newSettings.codeBlockFontSize = validateNumeric(newSettings.codeBlockFontSize, null, 1, 100, true); // Updated range
+                 newSettings.thoughtSummaryFontSize = validateNumeric(newSettings.thoughtSummaryFontSize, null, 1, 100, true); // Updated range
                  newSettings.messageIconSize = validateNumeric(newSettings.messageIconSize, DEFAULT_MESSAGE_ICON_SIZE, 1, 300, true);
                  newSettings.messageIconOffsetY = validateNumeric(newSettings.messageIconOffsetY, DEFAULT_MESSAGE_ICON_OFFSET_Y, -200, 200, true);
                  newSettings.iconNameFontSize = validateNumeric(newSettings.iconNameFontSize, DEFAULT_ICON_NAME_FONT_SIZE, 1, 46, true);
@@ -9217,11 +9652,7 @@
                      state.settings.disableSaveSettingsConfirmation = newSettings.disableSaveSettingsConfirmation;
 
 
-                     if (!newSettings.enableSessionLinking) {
-                         state.linkedSessionIds = [];
-                     }
-
-                    if (!state.isSending && !state.isAiToAiChatProcessing) {
+                     if (!state.isSending && !state.isAiToAiChatProcessing) {
                         uiUtils.applySettingsToUI();
                         uiUtils.renderChatMessages(true);
                     } else {
@@ -9232,6 +9663,7 @@
                         uiUtils.updateHistoryHeaderButtonVisibility();
                         uiUtils.toggleApiSettingsVisibility(state.settings.apiProvider);
                         uiUtils.applySettingsUIDetailsOpenStates();
+                        uiUtils.applyStickySystemPromptStyle();
                     }
 
                     if (!state.settings.disableSaveSettingsConfirmation) {
@@ -9321,6 +9753,7 @@
                         defaultSettingsCopy.messageBodyFontSize = DEFAULT_MESSAGE_BODY_FONT_SIZE;
                         defaultSettingsCopy.codeBlockFontSize = DEFAULT_CODE_BLOCK_FONT_SIZE;
                         defaultSettingsCopy.thoughtSummaryFontSize = DEFAULT_THOUGHT_SUMMARY_FONT_SIZE;
+                        defaultSettingsCopy.stickySystemPrompt = false;
                         defaultSettingsCopy.hideSystemPromptInChat = false;
                         defaultSettingsCopy.enableSessionLinking = false;
                         defaultSettingsCopy.enableSwipeNavigation = true;
@@ -9452,13 +9885,19 @@
                     await uiUtils.showCustomAlert("システムプロンプトのチャットへの保存に失敗しました。");
                 }
                 state.isEditingSystemPrompt = false;
-                elements.systemPromptDetails.removeAttribute('open');
+                if (!state.settings.stickySystemPrompt || !elements.systemPromptDetails.open) {
+                     elements.systemPromptDetails.removeAttribute('open');
+                }
+                uiUtils.updateStickySystemPromptDetailsClass();
             },
             cancelEditSystemPrompt() {
                 state.isEditingSystemPrompt = false;
                 elements.systemPromptEditor.value = state.currentSystemPrompt;
-                elements.systemPromptDetails.removeAttribute('open');
+                if (!state.settings.stickySystemPrompt || !elements.systemPromptDetails.open) {
+                    elements.systemPromptDetails.removeAttribute('open');
+                }
                 uiUtils.adjustTextareaHeight(elements.systemPromptEditor, 200);
+                uiUtils.updateStickySystemPromptDetailsClass();
             },
             async startEditMessage(index, messageElement) {
                  if (state.isSending) {
@@ -10731,6 +11170,7 @@
                 let finalFinishReason = null;
                 let isCancelled = false;
                 let accumulatedFullReasoningContent = "";
+                let thoughtStreamEnded = false;
 
                 try {
                     while (true) {
@@ -10767,6 +11207,7 @@
                                     const chunk = JSON.parse(jsonData);
                                     let contentTextChunk = null;
                                     let reasoningTextChunk = null;
+                                    let isFirstContentAfterThought = false;
 
                                     if (chunk.choices && chunk.choices[0] && chunk.choices[0].delta) {
                                         const delta = chunk.choices[0].delta;
@@ -10774,6 +11215,10 @@
                                             reasoningTextChunk = delta.reasoning_content;
                                             accumulatedFullReasoningContent += reasoningTextChunk;
                                         } else if (delta.content) {
+                                            if (!thoughtStreamEnded && accumulatedFullReasoningContent.length > 0) {
+                                                isFirstContentAfterThought = true;
+                                                thoughtStreamEnded = true;
+                                            }
                                             contentTextChunk = delta.content;
                                         }
                                     }
@@ -10785,6 +11230,10 @@
                                         finalUsage = chunk.usage;
                                     }
 
+                                    if (isFirstContentAfterThought) {
+                                        yield { type: 'thoughtStreamEnd' };
+                                    }
+
                                     if (contentTextChunk !== null || reasoningTextChunk !== null) {
                                         yield { type: 'chunk', contentText: contentTextChunk, thoughtText: reasoningTextChunk };
                                     }
@@ -10794,6 +11243,9 @@
                             if (finalFinishReason && finalFinishReason !== 'null' && processingBuffer) break;
                         }
                          if (finalFinishReason && finalFinishReason !== 'null') break;
+                    }
+                    if (!thoughtStreamEnded && accumulatedFullReasoningContent.length > 0) {
+                        yield { type: 'thoughtStreamEnd' };
                     }
 
                     yield {
