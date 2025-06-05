@@ -3440,6 +3440,7 @@
                            </select>
                            <p style="height:10px"></p>
                            <details id="settings-group-header-footer-buttons">
+
                                 <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor:pointer; font-weight: normal;">ヘッダー/フッターボタン表示設定</summary>
                                 <div style="padding-top:10px; padding-left:15px;">
                                    <label class="checkbox-label">
@@ -10823,7 +10824,7 @@
                      while (true) {
                          if (state.abortController?.signal.aborted && !isCancelled) {
                              isCancelled = true;
-                             await reader.cancel("User aborted");
+                             try { await reader.cancel("User aborted"); } catch(e){}
                              throw new Error("リクエストがキャンセルされました。");
                          }
 
@@ -10869,7 +10870,6 @@
                                      if (chunkData.usageMetadata) finalUsageMetadata = chunkData.usageMetadata;
                                      yield chunkData;
                                  }
-                             } else if (line !== '') {
                              }
                              if (remainingBuffer === '') {
                                 buffer = '';
@@ -10877,19 +10877,24 @@
                              }
                          }
                      }
-                     const finishReason = lastCandidateInfo?.finishReason;
+
+                     const finishReason = lastCandidateInfo?.finishReason || (isCancelled ? 'ABORTED' : 'STOP');
                      const safetyRatings = lastCandidateInfo?.safetyRatings;
 
                      yield {
                          type: 'metadata',
-                         finishReason: isCancelled ? 'ABORTED' : finishReason,
+                         finishReason: finishReason,
                          safetyRatings,
                          groundingMetadata: groundingMetadata,
                          usageMetadata: finalUsageMetadata
                      };
 
                  } catch (error) {
-                     throw new Error(`${error.message || error}`, { cause: { originalError: error } });
+                      if (error.message === "リクエストがキャンセルされました。") {
+                        yield { type: 'metadata', finishReason: 'ABORTED', safetyRatings: null, groundingMetadata: null, usageMetadata: finalUsageMetadata };
+                      } else {
+                        yield { type: 'error', error: { message: error.message }, message: error.message || "ストリーム処理中に不明なエラーが発生しました。" };
+                      }
                  } finally {
                      if (!reader.closed && !isCancelled) {
                          try { await reader.cancel("Cleanup cancellation"); } catch(e) {  }
