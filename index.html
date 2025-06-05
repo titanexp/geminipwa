@@ -3045,20 +3045,33 @@
 
                         <label for="anthropic-model-name">モデル名:</label>
                         <select id="anthropic-model-name" aria-label="Anthropic モデル名">
+                            <optgroup label="Claude 4">
+                                <option value="claude-opus-4-20250514">Claude Opus 4</option>
+                                <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                            </optgroup>
+                            <optgroup label="Claude 3.7">
+                                <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet (latest)</option>
+                                <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet</option>
+                            </optgroup>
+                            <optgroup label="Claude 3.5">
+                                <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (latest)</option>
+                                <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku</option>
+                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet v2 (latest)</option>
+                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet v2</option>
+                                <option value="claude-3-5-sonnet-20240620">Claude 3.5 Sonnet</option>
+                            </optgroup>
                             <optgroup label="Claude 3">
+                                <option value="claude-3-opus-20240229">Claude 3 Opus (latest)</option>
                                 <option value="claude-3-opus-20240229">Claude 3 Opus</option>
                                 <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
                                 <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
-                            </optgroup>
-                            <optgroup label="Claude 3.5">
-                                <option value="claude-3-5-sonnet-20240620">Claude 3.5 Sonnet</option>
                             </optgroup>
                             <optgroup label="Legacy">
                                 <option value="claude-2.1">Claude 2.1</option>
                                 <option value="claude-2.0">Claude 2.0</option>
                                 <option value="claude-instant-1.2">Claude Instant 1.2</option>
                             </optgroup>
-                            <optgroup label="ユーザー指定" id="anthropic-user-defined-models-group">
+                             <optgroup label="ユーザー指定" id="anthropic-user-defined-models-group">
                             </optgroup>
                         </select>
                         <label for="anthropic-additional-models" style="margin-top:10px;">追加モデル (カンマ区切り):</label>
@@ -6934,7 +6947,7 @@
                 if (state.isDisplayingAnthropicContent) return;
                 state.isDisplayingAnthropicContent = true;
 
-                const contentDiv = this.getDeepSeekContentElement(messageIndex);
+                const contentDiv = this.getDeepSeekContentElement(messageIndex); // Re-use for Anthropic
                 if (!contentDiv) {
                     state.isDisplayingAnthropicContent = false;
                     return;
@@ -6986,7 +6999,7 @@
 
                 const messageData = state.currentMessages[messageIndex];
                 if (messageData) {
-                    const contentDiv = this.getDeepSeekContentElement(messageIndex);
+                    const contentDiv = this.getDeepSeekContentElement(messageIndex); // Re-use for Anthropic
                     if (contentDiv) {
                         try {
                             contentDiv.innerHTML = marked.parse(messageData.content || state.anthropicRawTextBuffer || '');
@@ -9047,10 +9060,10 @@
                             modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
                         } else if (selectedApiProvider === 'anthropic') {
                             let rawContentFromApi = "";
-                            if (data.completion) {
+                            if (data.completion) { // Legacy completion API
                                 rawContentFromApi = data.completion;
                                 modelResponseMetadata = { finishReason: data.stop_reason };
-                            } else if (data.content && Array.isArray(data.content)) {
+                            } else if (data.content && Array.isArray(data.content)) { // Messages API
                                 data.content.forEach(item => {
                                     if(item.type === 'text') rawContentFromApi += item.text;
                                 });
@@ -9064,7 +9077,7 @@
                             } else {
                                 rawContentFromApi = "Anthropicからの応答がありません。";
                                 modelResponseMetadata = { finishReason: 'ERROR' };
-                                if (data.error) rawContentFromApi += ` (エラー: ${data.error.message})`;
+                                if (data.error) rawContentFromApi += ` (エラー: ${data.error.message || data.error.type})`;
                             }
                              modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
                         }
@@ -11612,7 +11625,7 @@
                     }
                 }
             },
-             async callAnthropicApi(messagesForApi, generationConfig, systemInstruction, useStreaming, apiVersion) {
+            async callAnthropicApi(messagesForApi, generationConfig, systemInstruction, useStreaming, apiVersion) {
                 if (!state.settings.anthropicApiKey) {
                     throw new Error("Anthropic APIキーが設定されていません。");
                 }
@@ -11623,23 +11636,29 @@
                 const apiKey = state.settings.anthropicApiKey;
                 const finalApiVersion = apiVersion || ANTHROPIC_DEFAULT_API_VERSION;
 
-                const anthropicMessages = messagesForApi.map(msg => {
-                    let content = "";
-                    if (msg.parts && msg.parts.length > 0) {
-                         content = msg.parts.map(part => {
-                            if (part.text) return part.text;
-                            if (part.inlineData && part.inlineData.mimeType && part.inlineData.data) {
-                                return `[画像: ${part.inlineData.mimeType}]`;
+                const anthropicMessages = messagesForApi
+                    .filter(msg => msg.parts.some(p => p.text || (p.inlineData && p.inlineData.data)))
+                    .map(msg => {
+                        const contentArray = [];
+                        msg.parts.forEach(part => {
+                            if (part.text) {
+                                contentArray.push({ type: "text", text: part.text });
+                            } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data) {
+                                contentArray.push({
+                                    type: "image",
+                                    source: {
+                                        type: "base64",
+                                        media_type: part.inlineData.mimeType,
+                                        data: part.inlineData.data
+                                    }
+                                });
                             }
-                            return '';
-                        }).join('\n');
-                    }
-                    return {
-                        role: msg.role === 'model' ? 'assistant' : msg.role,
-                        content: content || ""
-                    };
+                        });
+                        return {
+                            role: msg.role === 'model' ? 'assistant' : msg.role,
+                            content: contentArray
+                        };
                 });
-
 
                 const requestBody = {
                     model: model,
@@ -11674,7 +11693,7 @@
                             if (errorData.error && errorData.error.message) {
                                 errorMsg = `Anthropic APIエラー (${response.status}): ${errorData.error.message} (Type: ${errorData.error.type || 'N/A'})`;
                             }
-                        } catch (e) { }
+                        } catch (e) {  }
                         throw new Error(errorMsg);
                     }
                     return response;
@@ -11708,45 +11727,50 @@
 
                         buffer += value;
                         let eolIndex;
-                        while ((eolIndex = buffer.indexOf('\n')) >= 0) {
-                            const line = buffer.substring(0, eolIndex).trim();
-                            buffer = buffer.substring(eolIndex + 1);
+                        while ((eolIndex = buffer.indexOf('\n\n')) >= 0) {
+                            const eventBlock = buffer.substring(0, eolIndex + 1);
+                            buffer = buffer.substring(eolIndex + 2);
 
-                            if (line.startsWith('event: ')) {
-                                const eventType = line.substring(7).trim();
-                                if (eventType === 'message_start') {
-                                    const dataLine = buffer.substring(buffer.indexOf('data: ') + 6, buffer.indexOf('\n', buffer.indexOf('data: '))).trim();
-                                    try {
-                                        const messageStartData = JSON.parse(dataLine);
-                                        if (messageStartData.message && messageStartData.message.usage) {
-                                            finalUsage = messageStartData.message.usage;
-                                        }
-                                    } catch(e){}
-                                } else if (eventType === 'content_block_delta') {
-                                    const dataLine = buffer.substring(buffer.indexOf('data: ') + 6, buffer.indexOf('\n', buffer.indexOf('data: '))).trim();
-                                    try {
-                                        const deltaData = JSON.parse(dataLine);
-                                        if (deltaData.delta && deltaData.delta.type === 'text_delta' && deltaData.delta.text) {
-                                            yield { type: 'chunk', contentText: deltaData.delta.text };
-                                        }
-                                    } catch(e){}
-                                } else if (eventType === 'message_delta') {
-                                     const dataLine = buffer.substring(buffer.indexOf('data: ') + 6, buffer.indexOf('\n', buffer.indexOf('data: '))).trim();
-                                     try {
-                                        const messageDeltaData = JSON.parse(dataLine);
-                                        if (messageDeltaData.delta && messageDeltaData.delta.stop_reason) {
-                                            finalStopReason = messageDeltaData.delta.stop_reason;
-                                        }
-                                        if (messageDeltaData.usage) {
-                                            finalUsage = { ...finalUsage, ...messageDeltaData.usage };
-                                        }
-                                     } catch(e){}
-                                } else if (eventType === 'message_stop') {
-                                     if (!finalStopReason) finalStopReason = 'stop';
+                            const lines = eventBlock.split('\n').filter(line => line.trim() !== '');
+                            let eventType = null;
+                            let dataJson = null;
+
+                            for (const line of lines) {
+                                if (line.startsWith('event: ')) {
+                                    eventType = line.substring(7).trim();
+                                } else if (line.startsWith('data: ')) {
+                                    dataJson = line.substring(6).trim();
                                 }
                             }
+
+                            if (eventType && dataJson) {
+                                try {
+                                    const chunk = JSON.parse(dataJson);
+                                    if (eventType === 'message_start') {
+                                        if (chunk.message && chunk.message.usage) {
+                                            finalUsage = chunk.message.usage;
+                                        }
+                                    } else if (eventType === 'content_block_delta') {
+                                        if (chunk.delta && chunk.delta.type === 'text_delta' && chunk.delta.text) {
+                                            yield { type: 'chunk', contentText: chunk.delta.text };
+                                        }
+                                    } else if (eventType === 'message_delta') {
+                                        if (chunk.delta && chunk.delta.stop_reason) {
+                                            finalStopReason = chunk.delta.stop_reason;
+                                        }
+                                        if (chunk.usage) {
+                                            finalUsage = { ...finalUsage, ...chunk.usage };
+                                        }
+                                    } else if (eventType === 'message_stop') {
+                                        if (!finalStopReason) finalStopReason = 'stop';
+                                    }
+                                } catch (e) {}
+                            }
+                             if (finalStopReason && finalStopReason !== 'null') break;
                         }
+                         if (finalStopReason && finalStopReason !== 'null') break;
                     }
+
                     yield {
                         type: 'metadata',
                         finishReason: isCancelled ? 'ABORTED' : finalStopReason || 'stop',
