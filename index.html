@@ -1105,8 +1105,9 @@
             z-index: 1;
             touch-action: pan-y;
         }
-        .main-content > .system-prompt-area {
-            margin-bottom: 15px;
+        /* When system prompt is NOT sticky, it lives inside main-content */
+        .main-content > .system-prompt-area:not(.system-prompt-sticky) {
+            margin-bottom: 15px; /* Original margin */
         }
 
 
@@ -1161,11 +1162,14 @@
             touch-action: pan-x pan-y pinch-zoom;
             flex-grow: 1;
         }
-        #chat-screen .app-header { z-index: 2; }
+        #chat-screen .app-header { z-index: 2; } /* Ensure header is above main content */
 
+        /* Sticky system prompt, memo, clipboard_stack will be inserted between header and main-content if active */
+        /* They need their own z-index and background */
+        #chat-screen .system-prompt-area.system-prompt-sticky,
         #chat-screen #memo-area:not(.hidden),
         #chat-screen #clipboard-stack-area:not(.hidden) {
-            z-index: 2;
+            z-index: 2; /* Higher than main content's relative children, same as input area potentially */
         }
 
         #chat-screen .chat-input-area {
@@ -1185,7 +1189,7 @@
             background-color: var(--bg-memo);
             border-bottom: 1px solid var(--border-secondary);
             padding: 10px 15px;
-            z-index: 4;
+            z-index: 4; /* Higher than sticky system prompt */
             box-shadow: 0 1px 3px var(--shadow-primary);
             overflow: auto;
             display: flex;
@@ -1261,7 +1265,7 @@
             background-color: var(--bg-memo);
             border-bottom: 1px solid var(--border-secondary);
             padding: 10px 15px;
-            z-index: 5;
+            z-index: 5; /* Highest of the sticky panels */
             box-shadow: 0 1px 3px var(--shadow-primary);
             overflow: auto;
             display: flex;
@@ -1330,8 +1334,9 @@
         }
 
 
-        .system-prompt-area {
+        .system-prompt-area { /* Default inline style */
             padding: 10px 15px;
+            /* margin-bottom: 15px; Added dynamically by JS if not sticky */
             border: 1px solid var(--border-system);
             border-radius: 8px;
             background-color: var(--bg-system-message);
@@ -1342,7 +1347,7 @@
             overflow: hidden;
             max-height: 500px;
         }
-        .system-prompt-area.hidden {
+        .system-prompt-area.hidden { /* This applies to both sticky and inline when globally hidden */
             padding-top: 0 !important;
             padding-bottom: 0 !important;
             margin-bottom: 0 !important;
@@ -1351,6 +1356,46 @@
             opacity: 0 !important;
             visibility: hidden !important;
             overflow: hidden !important;
+        }
+        /* Styles for when system-prompt-area is made sticky */
+        #system-prompt-area.system-prompt-sticky {
+            position: relative; /* Will be placed in flow after header */
+            width: 100%;
+            background-color: var(--bg-system-message);
+            border-style: solid;
+            border-color: var(--border-secondary);
+            border-width: 0 0 1px 0; /* Only bottom border */
+            padding: 10px 15px;
+            z-index: 3; /* Below memo/clipboard_stack if they are also visible */
+            box-shadow: 0 1px 3px var(--shadow-primary);
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            transition: max-height 0.3s ease-out, padding-top 0.3s ease-out, padding-bottom 0.3s ease-out, opacity 0.3s ease-out, border-width 0.3s ease-out;
+            margin-bottom: 0; /* Reset original margin */
+            border-radius: 0; /* Reset original border-radius */
+            color: var(--text-system); /* Ensure text color is consistent */
+        }
+        #system-prompt-area.system-prompt-sticky.details-open {
+            max-height: var(--memo-height); /* Reuse memo height or define a new var */
+            padding: 10px 15px;
+        }
+        #system-prompt-area.system-prompt-sticky.details-closed {
+            max-height: 42px; /* Compact height for summary */
+            padding-top: 5px;
+            padding-bottom: 5px;
+            overflow: hidden;
+        }
+        #system-prompt-area.system-prompt-sticky.details-closed .system-prompt-content {
+            display: none;
+        }
+        #system-prompt-area.system-prompt-sticky.hidden { /* Ensure hidden state applies correctly to sticky version */
+            max-height: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            border-width: 0 !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
         }
 
 
@@ -2569,7 +2614,7 @@
             overflow-x: auto;
             margin: 0.8em 0;
             font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
-            font-size: inherit;
+            font-size: 12px;
             border: 1px solid var(--border-tertiary);
             color: var(--text-secondary);
         }
@@ -2891,6 +2936,10 @@
                 <button id="goto-settings-btn" class="header-button" aria-label="設定へ">⚙</button>
             </header>
 
+            <!-- Sticky panels will be inserted here by JS if active -->
+            <div id="system-prompt-area-placeholder" style="display:none;"></div> <!-- For DOM manipulation reference -->
+
+
             <div id="memo-area" class="hidden">
                 <div class="memo-actions-container">
                     <button id="delete-memo-btn" class="delete-memo-btn" title="メモの内容を全て削除">全削除</button>
@@ -2910,7 +2959,7 @@
             </div>
 
             <main class="main-content">
-                <div id="system-prompt-area" class="system-prompt-area">
+                <div id="system-prompt-area" class="system-prompt-area"> <!-- This is the original, can be moved or styled -->
                     <details id="system-prompt-details">
                         <summary>システムプロンプト</summary>
                         <div class="system-prompt-content">
@@ -3208,9 +3257,6 @@
                            <input type="checkbox" id="gemini-streaming-output">
                            ストリーミング出力を使用する
                        </label>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                            ※Geminiの「ガードが固くなる」場合があります
-                        </p>
                        <label for="gemini-streaming-speed">文字送り速度 (ミリ秒/文字):</label>
                        <input type="number" id="gemini-streaming-speed" min="0" step="1" placeholder="例: 30 (0で無効)" aria-label="Gemini 文字送り速度">
                        <div id="gemini-pseudo-streaming-param">
@@ -3255,6 +3301,8 @@
                            ストリーミング出力を使用する
                        </label>
                        <label for="deepseek-streaming-speed">文字送り速度 (ミリ秒/文字):</label>
+                       <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                           ※非推奨。
                        <input type="number" id="deepseek-streaming-speed" min="0" step="1" placeholder="例: 30 (0で無効)" aria-label="DeepSeek 文字送り速度">
                     </div>
                 </details>
@@ -3516,6 +3564,13 @@
                            </details>
                            <p style="height:10px"></p>
                            <label class="checkbox-label">
+                               <input type="checkbox" id="sticky-system-prompt-toggle">
+                               システムプロンプトをヘッダーに固定表示する
+                           </label>
+                           <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                               ※ 有効時、システムプロンプト欄がヘッダー下に固定され、メモ欄等と同様のスタイルになります。
+                           </p>
+                           <label class="checkbox-label">
                                <input type="checkbox" id="hide-system-prompt-toggle">
                                システムプロンプト非表示
                            </label>
@@ -3570,13 +3625,16 @@
                                ※ 端末またはPCにインストールされているフォント名を指定。
                            </p>
                            <label for="message-body-font-size-input">メッセージ本文のフォントサイズ (px):</label>
-                           <input type="number" id="message-body-font-size-input" min="1" max="100" step="1" placeholder="例: 14 (1-100)" aria-label="メッセージ本文のフォントサイズ (1-100)">
+                           <input type="number" id="message-body-font-size-input" min="1" max="100" step="1" placeholder="例: 14 (1-100)" aria-label="メッセージ本文のフォントサイズ">
                            <label for="code-block-font-size-input">コードブロックのフォントサイズ (px):</label>
-                           <input type="number" id="code-block-font-size-input" min="1" max="100" step="1" placeholder="例: 13 (1-100)" aria-label="コードブロックのフォントサイズ (1-100)">
-                           <label for="thought-summary-font-size">思考プロセス フォントサイズ (px):</label>
-                           <input type="number" id="thought-summary-font-size" min="1" max="100" step="1" placeholder="例: 13 (1-100)" aria-label="思考プロセス フォントサイズ (1-100)">
+                           <input type="number" id="code-block-font-size-input" min="1" max="100" step="1" placeholder="例: 13 (1-100)" aria-label="コードブロックのフォントサイズ">
                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                               ※ 空欄でデフォルト値 (1-100の範囲で指定)。
+                               ※ 空欄でデフォルト値。
+                           </p>
+                           <label for="thought-summary-font-size">思考プロセス フォントサイズ (px):</label>
+                           <input type="number" id="thought-summary-font-size" min="1" max="100" step="1" placeholder="例: 13 (1-100)" aria-label="思考プロセス フォントサイズ">
+                           <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                               ※ 空欄でデフォルト(13px)。
                            </p>
                            <details id="settings-group-opacity">
                                 <summary style="cursor: pointer; font-weight: normal; font-size: 14px; color: var(--text-link); list-style: revert;">各種透明度設定</summary>
@@ -3783,7 +3841,7 @@
         const LIGHT_MODE_PRIMARY_COLOR = '#ffffff';
 
 
-        const APP_VERSION = "0.26ti";
+        const APP_VERSION = "0.26ti.2"; // Updated version
         const SWIPE_THRESHOLD = 50;
         const ZOOM_THRESHOLD = 1.01;
         const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -3843,6 +3901,8 @@
             systemPromptEditor: document.getElementById('system-prompt-editor'),
             saveSystemPromptBtn: document.getElementById('save-system-prompt-btn'),
             cancelSystemPromptBtn: document.getElementById('cancel-system-prompt-btn'),
+            systemPromptAreaPlaceholder: document.getElementById('system-prompt-area-placeholder'),
+            stickySystemPromptToggle: document.getElementById('sticky-system-prompt-toggle'),
             apiProviderSelect: document.getElementById('api-provider-select'),
             geminiSettingsGroup: document.getElementById('gemini-settings-group'),
             geminiApiKeyInput: document.getElementById('gemini-api-key'),
@@ -4099,6 +4159,7 @@
                 messageBodyFontSize: DEFAULT_MESSAGE_BODY_FONT_SIZE,
                 codeBlockFontSize: DEFAULT_CODE_BLOCK_FONT_SIZE,
                 thoughtSummaryFontSize: DEFAULT_THOUGHT_SUMMARY_FONT_SIZE,
+                stickySystemPrompt: false,
                 hideSystemPromptInChat: false,
                 enableSessionLinking: false,
                 enableSwipeNavigation: true,
@@ -4380,7 +4441,6 @@
                              if (key === 'darkMode') continue;
                              if (key === 'memoWidth') continue;
                              if (key === 'showCollapseButtons') continue;
-                             if (key === 'stickySystemPrompt') continue;
 
                              if (key in defaultSettings) {
                                 const loadedValue = loadedSettings[key];
@@ -4451,7 +4511,7 @@
                                           if (key === 'messageIconOffsetY' && (num < -200 || num > 200)) num = defaultValue;
                                           if (key === 'iconNameFontSize' && (num < 1 || num > 46)) num = defaultValue;
                                           if (key === 'iconNameOffsetY' && (num < -200 || num > 200)) num = defaultValue;
-                                          if ((key === 'messageBodyFontSize' || key === 'codeBlockFontSize' || key === 'thoughtSummaryFontSize') && (num < 1 || num > 100)) num = defaultValue;
+                                          if ((key === 'messageBodyFontSize' || key === 'codeBlockFontSize' || key === 'thoughtSummaryFontSize') && (num < 1 || num > 100)) num = defaultValue; // Updated range
                                           if (key === 'diceMinValue' && num < 0) num = defaultValue;
                                           if (key === 'diceMaxValue' && num < 0) num = defaultValue;
                                           state.settings[key] = num;
@@ -5787,6 +5847,48 @@
                 this.applyOpacitySettings();
                 this.applyZoomPreventionSetting();
             },
+            applyStickySystemPromptStyle() {
+                const systemPromptArea = elements.systemPromptArea;
+                const mainContent = elements.chatScreen.querySelector('.main-content');
+                const header = elements.chatScreen.querySelector('.app-header');
+                const placeholder = elements.systemPromptAreaPlaceholder;
+
+                if (state.settings.stickySystemPrompt) {
+                    systemPromptArea.classList.add('system-prompt-sticky');
+                    // Insert after header and other sticky panels
+                    let insertAfterElement = header;
+                    if (elements.clipboardStackArea && !elements.clipboardStackArea.classList.contains('hidden')) {
+                        insertAfterElement = elements.clipboardStackArea;
+                    } else if (elements.memoArea && !elements.memoArea.classList.contains('hidden')) {
+                        insertAfterElement = elements.memoArea;
+                    }
+                    insertAfterElement.insertAdjacentElement('afterend', systemPromptArea);
+                    this.updateStickySystemPromptDetailsClass(); // Initial state
+                } else {
+                    systemPromptArea.classList.remove('system-prompt-sticky', 'details-open', 'details-closed');
+                    // Move back to its original placeholder position in main-content
+                    if (mainContent && placeholder && placeholder.parentNode === mainContent) {
+                         mainContent.insertBefore(systemPromptArea, placeholder.nextSibling);
+                    } else if (mainContent) { // Fallback if placeholder somehow got removed
+                         mainContent.insertBefore(systemPromptArea, mainContent.firstChild);
+                    }
+                    systemPromptArea.style.marginBottom = '15px'; // Restore original margin
+                }
+                this.toggleSystemPromptVisibility(); // Re-apply global visibility
+            },
+            updateStickySystemPromptDetailsClass() {
+                if (state.settings.stickySystemPrompt && elements.systemPromptArea.classList.contains('system-prompt-sticky')) {
+                    if (elements.systemPromptDetails.open) {
+                        elements.systemPromptArea.classList.add('details-open');
+                        elements.systemPromptArea.classList.remove('details-closed');
+                    } else {
+                        elements.systemPromptArea.classList.add('details-closed');
+                        elements.systemPromptArea.classList.remove('details-open');
+                    }
+                } else {
+                    elements.systemPromptArea.classList.remove('details-open', 'details-closed');
+                }
+            },
             applySettingsToUI() {
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
                 elements.apiProviderSelect.value = state.settings.apiProvider;
@@ -5848,6 +5950,7 @@
                 elements.messageBodyFontSizeInput.value = state.settings.messageBodyFontSize ?? '';
                 elements.codeBlockFontSizeInput.value = state.settings.codeBlockFontSize ?? '';
                 elements.thoughtSummaryFontSizeInput.value = state.settings.thoughtSummaryFontSize ?? '';
+                elements.stickySystemPromptToggle.checked = state.settings.stickySystemPrompt;
                 elements.hideSystemPromptToggle.checked = state.settings.hideSystemPromptInChat;
                 elements.swipeNavigationToggle.checked = state.settings.enableSwipeNavigation;
                 elements.preventZoomToggle.checked = state.settings.preventZoom;
@@ -5929,8 +6032,9 @@
                 this.updateDeepSeekUserModelOptions();
                 this.updateBackgroundSettingsUI();
                 this.updateIconSettingsUI();
-                this.applyTheme();
+                this.applyTheme(); // Includes opacity settings
                 this.applyFontFamily();
+                this.applyStickySystemPromptStyle(); // Before toggleSystemPromptVisibility
                 this.toggleSystemPromptVisibility();
                 this.applySidePanelSettingsToUI();
                 this.updateSessionLinkingUI();
@@ -6087,11 +6191,18 @@
                     elements.systemPromptDetails.removeAttribute('open');
                 }
                 uiUtils.adjustTextareaHeight(elements.systemPromptEditor, 200);
-                this.toggleSystemPromptVisibility();
+                if (!state.settings.stickySystemPrompt) { // Only toggle global visibility if not sticky
+                    this.toggleSystemPromptVisibility();
+                }
+                this.updateStickySystemPromptDetailsClass(); // Always update class for sticky mode
             },
             toggleSystemPromptVisibility() {
                 const shouldHide = state.settings.hideSystemPromptInChat;
                 elements.systemPromptArea.classList.toggle('hidden', shouldHide);
+                // If sticky and now unhidden, ensure details state is correct
+                if (state.settings.stickySystemPrompt && !shouldHide) {
+                    this.updateStickySystemPromptDetailsClass();
+                }
             },
             showScreen(screenName, fromPopState = false) {
                 if (state.editingMessageIndex !== null) {
@@ -6113,6 +6224,9 @@
                      elements.clipboardStackArea.classList.add('hidden');
                      state.isClipboardStackVisible = false;
                 }
+                 if (state.settings.stickySystemPrompt && elements.systemPromptDetails.open && screenName !== 'chat') {
+                     elements.systemPromptDetails.open = false; // Close sticky system prompt if navigating away
+                 }
 
 
                 if (screenName === state.currentScreen) {
@@ -6147,6 +6261,7 @@
                         this.updateSystemPromptUI();
                         this.adjustTextareaHeight();
                         this.updateChatScreenElementVisibility();
+                        this.applyStickySystemPromptStyle(); // Re-apply style when returning to chat
                     });
                 } else if (screenName === 'history') {
                     activeScreen = elements.historyScreen;
@@ -6187,7 +6302,7 @@
                     if (elements.aiToAiChatBtn) elements.aiToAiChatBtn.disabled = true;
                     elements.loadingIndicator.classList.remove('hidden');
                     elements.loadingIndicator.setAttribute('aria-live', 'polite');
-                    if (elements.systemPromptDetails) {
+                    if (elements.systemPromptDetails) { // Check if it exists
                         elements.systemPromptDetails.style.pointerEvents = 'none';
                         elements.systemPromptDetails.style.opacity = '0.7';
                     }
@@ -6208,7 +6323,7 @@
                     }
                     elements.loadingIndicator.classList.add('hidden');
                     elements.loadingIndicator.removeAttribute('aria-live');
-                    if (elements.systemPromptDetails) {
+                    if (elements.systemPromptDetails) { // Check if it exists
                         elements.systemPromptDetails.style.pointerEvents = '';
                         elements.systemPromptDetails.style.opacity = '';
                     }
@@ -6754,7 +6869,7 @@
                         try { state.aiIconUrl = URL.createObjectURL(state.settings.aiIconBlob); } catch (e) { }
                     }
 
-                    uiUtils.applySettingsToUI();
+                    uiUtils.applySettingsToUI(); // This will also call applyStickySystemPromptStyle internally
 
                     const chats = await dbUtils.getAllChats(state.settings.historySortOrder);
                     if (chats && chats.length > 0) {
@@ -6823,10 +6938,11 @@
                  elements.userInput.addEventListener('input', () => uiUtils.updateAttachmentBadgeVisibility());
 
                 elements.systemPromptDetails.addEventListener('toggle', (event) => {
+                    uiUtils.updateStickySystemPromptDetailsClass(); // Update class for sticky style
                     if (event.target.open) {
                         this.startEditSystemPrompt();
                     } else if (state.isEditingSystemPrompt) {
-                        this.cancelEditSystemPrompt();
+                        this.cancelEditSystemPrompt(); // If closed externally while editing
                     }
                 });
                 elements.saveSystemPromptBtn.addEventListener('click', () => this.saveCurrentSystemPrompt());
@@ -7007,6 +7123,10 @@
                     uiUtils.renderChatMessages(true);
                 });
 
+                elements.stickySystemPromptToggle.addEventListener('change', () => {
+                    state.settings.stickySystemPrompt = elements.stickySystemPromptToggle.checked;
+                    uiUtils.applyStickySystemPromptStyle();
+                });
                 elements.hideSystemPromptToggle.addEventListener('change', () => {
                     state.settings.hideSystemPromptInChat = elements.hideSystemPromptToggle.checked;
                     uiUtils.toggleSystemPromptVisibility();
@@ -7182,7 +7302,7 @@
                     if (!elements.messageContainer.contains(event.target) &&
                         !elements.memoArea.contains(event.target) &&
                         !elements.clipboardStackArea.contains(event.target) &&
-                        !elements.systemPromptArea.contains(event.target) &&
+                        !elements.systemPromptArea.contains(event.target) && // Consider sticky system prompt
                         !event.target.closest('.custom-dialog')) {
                         const currentlyShown = elements.messageContainer.querySelector('.message.show-actions');
                         if (currentlyShown) {
@@ -7327,6 +7447,7 @@
                 if (state.isMemoVisible) {
                     elements.memoEditor.focus();
                 }
+                 uiUtils.applyStickySystemPromptStyle(); // Re-evaluate position of sticky prompt
             },
             async copyMemoText() {
                 const memoText = elements.memoEditor.value;
@@ -7428,6 +7549,7 @@
                     elements.clipboardStackEditor.focus();
                     elements.clipboardStackEditor.scrollTop = elements.clipboardStackEditor.scrollHeight;
                 }
+                 uiUtils.applyStickySystemPromptStyle(); // Re-evaluate position of sticky prompt
             },
             async copyClipboardStackText() {
                 const stackText = elements.clipboardStackEditor.value;
@@ -9368,6 +9490,7 @@
                  newSettings.messageBodyFontSize = elements.messageBodyFontSizeInput.value === '' ? null : parseInt(elements.messageBodyFontSizeInput.value, 10);
                  newSettings.codeBlockFontSize = elements.codeBlockFontSizeInput.value === '' ? null : parseInt(elements.codeBlockFontSizeInput.value, 10);
                  newSettings.thoughtSummaryFontSize = elements.thoughtSummaryFontSizeInput.value === '' ? null : parseInt(elements.thoughtSummaryFontSizeInput.value, 10);
+                 newSettings.stickySystemPrompt = elements.stickySystemPromptToggle.checked;
                  newSettings.hideSystemPromptInChat = elements.hideSystemPromptToggle.checked;
                  newSettings.enableSwipeNavigation = elements.swipeNavigationToggle.checked;
                  newSettings.preventZoom = elements.preventZoomToggle.checked;
@@ -9456,9 +9579,9 @@
                 }
 
 
-                 newSettings.messageBodyFontSize = validateNumeric(newSettings.messageBodyFontSize, null, 1, 100, true);
-                 newSettings.codeBlockFontSize = validateNumeric(newSettings.codeBlockFontSize, null, 1, 100, true);
-                 newSettings.thoughtSummaryFontSize = validateNumeric(newSettings.thoughtSummaryFontSize, null, 1, 100, true);
+                 newSettings.messageBodyFontSize = validateNumeric(newSettings.messageBodyFontSize, null, 1, 100, true); // Updated range
+                 newSettings.codeBlockFontSize = validateNumeric(newSettings.codeBlockFontSize, null, 1, 100, true); // Updated range
+                 newSettings.thoughtSummaryFontSize = validateNumeric(newSettings.thoughtSummaryFontSize, null, 1, 100, true); // Updated range
                  newSettings.messageIconSize = validateNumeric(newSettings.messageIconSize, DEFAULT_MESSAGE_ICON_SIZE, 1, 300, true);
                  newSettings.messageIconOffsetY = validateNumeric(newSettings.messageIconOffsetY, DEFAULT_MESSAGE_ICON_OFFSET_Y, -200, 200, true);
                  newSettings.iconNameFontSize = validateNumeric(newSettings.iconNameFontSize, DEFAULT_ICON_NAME_FONT_SIZE, 1, 46, true);
@@ -9540,6 +9663,7 @@
                         uiUtils.updateHistoryHeaderButtonVisibility();
                         uiUtils.toggleApiSettingsVisibility(state.settings.apiProvider);
                         uiUtils.applySettingsUIDetailsOpenStates();
+                        uiUtils.applyStickySystemPromptStyle();
                     }
 
                     if (!state.settings.disableSaveSettingsConfirmation) {
@@ -9629,6 +9753,7 @@
                         defaultSettingsCopy.messageBodyFontSize = DEFAULT_MESSAGE_BODY_FONT_SIZE;
                         defaultSettingsCopy.codeBlockFontSize = DEFAULT_CODE_BLOCK_FONT_SIZE;
                         defaultSettingsCopy.thoughtSummaryFontSize = DEFAULT_THOUGHT_SUMMARY_FONT_SIZE;
+                        defaultSettingsCopy.stickySystemPrompt = false;
                         defaultSettingsCopy.hideSystemPromptInChat = false;
                         defaultSettingsCopy.enableSessionLinking = false;
                         defaultSettingsCopy.enableSwipeNavigation = true;
@@ -9760,13 +9885,19 @@
                     await uiUtils.showCustomAlert("システムプロンプトのチャットへの保存に失敗しました。");
                 }
                 state.isEditingSystemPrompt = false;
-                elements.systemPromptDetails.removeAttribute('open');
+                if (!state.settings.stickySystemPrompt || !elements.systemPromptDetails.open) {
+                     elements.systemPromptDetails.removeAttribute('open');
+                }
+                uiUtils.updateStickySystemPromptDetailsClass();
             },
             cancelEditSystemPrompt() {
                 state.isEditingSystemPrompt = false;
                 elements.systemPromptEditor.value = state.currentSystemPrompt;
-                elements.systemPromptDetails.removeAttribute('open');
+                if (!state.settings.stickySystemPrompt || !elements.systemPromptDetails.open) {
+                    elements.systemPromptDetails.removeAttribute('open');
+                }
                 uiUtils.adjustTextareaHeight(elements.systemPromptEditor, 200);
+                uiUtils.updateStickySystemPromptDetailsClass();
             },
             async startEditMessage(index, messageElement) {
                  if (state.isSending) {
