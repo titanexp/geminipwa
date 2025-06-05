@@ -3440,7 +3440,6 @@
                            </select>
                            <p style="height:10px"></p>
                            <details id="settings-group-header-footer-buttons">
-
                                 <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor:pointer; font-weight: normal;">ヘッダー/フッターボタン表示設定</summary>
                                 <div style="padding-top:10px; padding-left:15px;">
                                    <label class="checkbox-label">
@@ -7781,6 +7780,7 @@
                 if (state.editingMessageIndex !== null) { const conf = await uiUtils.showCustomConfirm("編集中です。変更を破棄してチャットを複製しますか？"); if (!conf) return; const msgEl = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`); this.cancelEditMessage(state.editingMessageIndex, msgEl); }
                 if (state.isEditingSystemPrompt) { const conf = await uiUtils.showCustomConfirm("システムプロンプト編集中です。変更を破棄してチャットを複製しますか？"); if (!conf) return; this.cancelEditSystemPrompt(); }
                 if ((state.currentMessages.length > 0 || state.currentSystemPrompt) && state.currentChatId && state.currentChatId !== id) { try { await dbUtils.saveChat(); } catch (error) { const conf = await uiUtils.showCustomConfirm("現在のチャット保存に失敗しました。複製を続行しますか？"); if (!conf) return; } }
+
                 if (state.pendingAttachments.length > 0) {
                     const confirmedAttach = await uiUtils.showCustomConfirm("添付準備中のファイルがあります。破棄してチャットを複製しますか？");
                     if (!confirmedAttach) return;
@@ -8795,71 +8795,97 @@
                          }
                     }
                 } catch (error) {
+                    const isStreamCompletedSuccessfully = modelResponseMetadata.finishReason === 'STOP' || modelResponseMetadata.finishReason === 'MAX_TOKENS';
                     const isAbort = error.message === "リクエストがキャンセルされました。" || modelResponseMetadata.finishReason === 'ABORTED';
-                    const displayErrorMessage = isAbort ? error.message : (error.message || "不明なエラーが発生しました");
 
-                    let partialThoughtContentOnError, partialContentOnError;
-                    if (selectedApiProvider === 'gemini') {
-                        partialThoughtContentOnError = state.partialThoughtStreamContent;
-                        partialContentOnError = state.partialStreamContent;
-                    } else if (selectedApiProvider === 'deepseek') {
-                        partialThoughtContentOnError = state.deepSeekThoughtRawTextBuffer;
-                        partialContentOnError = state.deepSeekRawTextBuffer;
-                    }
+                    if (isStreamCompletedSuccessfully && !isAbort && !isBackgroundProcess) {
+                        console.warn("ストリーム処理は正常完了しましたが、後続のクリーンアップ処理でエラーが発生しました:", error);
 
+                        const finalContent = selectedApiProvider === 'gemini' ? state.partialStreamContent : state.deepSeekRawTextBuffer;
+                        const finalThought = selectedApiProvider === 'gemini' ? state.partialThoughtStreamContent : state.deepSeekThoughtRawTextBuffer;
 
-                    if (isBackgroundProcess) {
-                         throw error;
-                    }
+                        if (useStreamingForThisCall && modelMessageObjectForStream) {
+                            const streamingMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+                            if (streamingMessageIndex !== -1) {
+                                const msgToUpdate = state.currentMessages[streamingMessageIndex];
+                                msgToUpdate.content = finalContent;
+                                msgToUpdate.timestamp = Date.now();
+                                msgToUpdate.finishReason = modelResponseMetadata.finishReason;
+                                msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
+                                msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
+                                msgToUpdate.generatedByApiProvider = selectedApiProvider;
 
-                    if ((partialContentOnError || partialThoughtContentOnError) && useStreamingForThisCall && modelMessageObjectForStream) {
-                         const finalPartialContent = partialContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
-                         let finalPartialThoughtValue = null;
-                         if (selectedApiProvider === 'gemini' && partialThoughtContentOnError && contextGeminiIncludeThoughts) {
-                             finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
-                         } else if (selectedApiProvider === 'deepseek' && partialThoughtContentOnError && contextDeepSeekIncludeThoughts) {
-                             finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
-                         }
+                                if (selectedApiProvider === 'gemini') {
+                                    msgToUpdate.thoughtSummary = finalThought || null;
+                                    msgToUpdate.groundingMetadata = currentGroundingMetadata;
+                                } else if (selectedApiProvider === 'deepseek') {
+                                    msgToUpdate.deepSeekThoughtSummary = finalThought || null;
+                                }
+                                delete msgToUpdate.error;
 
-                        const streamingMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
-                        if (streamingMessageIndex !== -1) {
-                            const msgToUpdate = state.currentMessages[streamingMessageIndex];
-                            msgToUpdate.content = finalPartialContent;
-                            msgToUpdate.timestamp = Date.now();
-                            msgToUpdate.error = true;
-                            msgToUpdate.finishReason = isAbort ? 'ABORTED' : (modelResponseMetadata.finishReason || 'ERROR');
-                            msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
-                            msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
-                            msgToUpdate.generatedByApiProvider = selectedApiProvider;
-
-                            if (selectedApiProvider === 'gemini') {
-                                msgToUpdate.thoughtSummary = finalPartialThoughtValue;
-                                msgToUpdate.groundingMetadata = currentGroundingMetadata;
-                            } else if (selectedApiProvider === 'deepseek') {
-                                msgToUpdate.deepSeekThoughtSummary = finalPartialThoughtValue;
+                                try {
+                                    if (selectedApiProvider === 'gemini') {
+                                        uiUtils.finalizeStreamingMessage(streamingMessageIndex);
+                                    } else if (selectedApiProvider === 'deepseek') {
+                                        uiUtils.finalizeDeepSeekDisplay(streamingMessageIndex);
+                                    }
+                                    await dbUtils.saveChat();
+                                } catch (saveError) {
+                                    uiUtils.displayError(`ストリーム終了後の保存エラー: ${saveError.message}`, false);
+                                }
                             }
-
-                             try {
-                                 if (selectedApiProvider === 'gemini') {
-                                     uiUtils.finalizeStreamingMessage(streamingMessageIndex);
-                                 } else if (selectedApiProvider === 'deepseek') {
-                                     uiUtils.finalizeDeepSeekDisplay(streamingMessageIndex);
-                                 }
-                                 await dbUtils.saveChat();
-                             } catch (saveError) {
-                                 uiUtils.displayError(displayErrorMessage, !isAbort);
-                             }
-                        } else {
-                             uiUtils.displayError(displayErrorMessage, !isAbort);
                         }
+                    } else if (isBackgroundProcess) {
+                        throw error;
                     } else {
-                        if (useStreamingForThisCall && !isAbort && modelMessageObjectForStream) {
-                            const tempPlaceholderIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
-                            const placeholderElement = document.getElementById(`streaming-message-${tempPlaceholderIndex}`);
-                            if (placeholderElement) placeholderElement.remove();
-                            if(tempPlaceholderIndex !== -1) state.currentMessages.splice(tempPlaceholderIndex, 1);
+                        const displayErrorMessage = isAbort ? error.message : (error.message || "不明なエラーが発生しました");
+                        let currentPartialContent = "";
+                        let currentPartialThought = "";
+
+                        if (selectedApiProvider === 'gemini') {
+                            currentPartialContent = state.partialStreamContent || "";
+                            currentPartialThought = state.partialThoughtStreamContent || "";
+                        } else if (selectedApiProvider === 'deepseek') {
+                            currentPartialContent = state.deepSeekRawTextBuffer || "";
+                            currentPartialThought = state.deepSeekThoughtRawTextBuffer || "";
                         }
-                        uiUtils.displayError(displayErrorMessage, !isAbort);
+
+                        if ((currentPartialContent || currentPartialThought) && useStreamingForThisCall && modelMessageObjectForStream) {
+                            const finalErrorAppendedContent = currentPartialContent + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
+                            const streamingMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+                            if (streamingMessageIndex !== -1) {
+                                const msgToUpdate = state.currentMessages[streamingMessageIndex];
+                                msgToUpdate.content = finalErrorAppendedContent;
+                                msgToUpdate.timestamp = Date.now();
+                                msgToUpdate.error = true;
+                                msgToUpdate.finishReason = isAbort ? 'ABORTED' : (modelResponseMetadata.finishReason || 'ERROR');
+                                msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
+                                msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
+                                msgToUpdate.generatedByApiProvider = selectedApiProvider;
+
+                                if (selectedApiProvider === 'gemini' && currentPartialThought) {
+                                    msgToUpdate.thoughtSummary = currentPartialThought + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
+                                    msgToUpdate.groundingMetadata = currentGroundingMetadata;
+                                } else if (selectedApiProvider === 'deepseek' && currentPartialThought) {
+                                    msgToUpdate.deepSeekThoughtSummary = currentPartialThought + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
+                                }
+
+                                try {
+                                    if (selectedApiProvider === 'gemini') {
+                                        uiUtils.finalizeStreamingMessage(streamingMessageIndex);
+                                    } else if (selectedApiProvider === 'deepseek') {
+                                        uiUtils.finalizeDeepSeekDisplay(streamingMessageIndex);
+                                    }
+                                    await dbUtils.saveChat();
+                                } catch (saveError) {
+                                     uiUtils.displayError(displayErrorMessage, !isAbort);
+                                }
+                            } else {
+                                 uiUtils.displayError(displayErrorMessage, !isAbort);
+                            }
+                        } else {
+                            uiUtils.displayError(displayErrorMessage, !isAbort);
+                        }
                     }
                 } finally {
                     if (!isBackgroundProcess) {
@@ -10096,7 +10122,7 @@
                     const oldThoughtOpenStates = new Map(state.thoughtSummaryOpenStates);
                     state.thoughtSummaryOpenStates.clear();
                      state.currentMessages.forEach((msg, newIdx) => {
-                        const oldIdxEquivalent = newIdx >= Math.min(...indicesToDelete) ? newIdx + indicesToDelete.filter(i => i <= newIdx).length : newIdx;
+                        const oldIdxEquivalent = newIdx >= Math.min(...indicesToDelete) ? newIdx + 1 : newIdx;
                         if (oldThoughtOpenStates.has(oldIdxEquivalent)) {
                             state.thoughtSummaryOpenStates.set(newIdx, oldThoughtOpenStates.get(oldIdxEquivalent));
                         } else {
@@ -10824,7 +10850,7 @@
                      while (true) {
                          if (state.abortController?.signal.aborted && !isCancelled) {
                              isCancelled = true;
-                             try { await reader.cancel("User aborted"); } catch(e){}
+                             await reader.cancel("User aborted");
                              throw new Error("リクエストがキャンセルされました。");
                          }
 
@@ -10870,6 +10896,7 @@
                                      if (chunkData.usageMetadata) finalUsageMetadata = chunkData.usageMetadata;
                                      yield chunkData;
                                  }
+                             } else if (line !== '') {
                              }
                              if (remainingBuffer === '') {
                                 buffer = '';
@@ -10877,24 +10904,19 @@
                              }
                          }
                      }
-
-                     const finishReason = lastCandidateInfo?.finishReason || (isCancelled ? 'ABORTED' : 'STOP');
+                     const finishReason = lastCandidateInfo?.finishReason;
                      const safetyRatings = lastCandidateInfo?.safetyRatings;
 
                      yield {
                          type: 'metadata',
-                         finishReason: finishReason,
+                         finishReason: isCancelled ? 'ABORTED' : finishReason,
                          safetyRatings,
                          groundingMetadata: groundingMetadata,
                          usageMetadata: finalUsageMetadata
                      };
 
                  } catch (error) {
-                      if (error.message === "リクエストがキャンセルされました。") {
-                        yield { type: 'metadata', finishReason: 'ABORTED', safetyRatings: null, groundingMetadata: null, usageMetadata: finalUsageMetadata };
-                      } else {
-                        yield { type: 'error', error: { message: error.message }, message: error.message || "ストリーム処理中に不明なエラーが発生しました。" };
-                      }
+                     throw new Error(`${error.message || error}`, { cause: { originalError: error } });
                  } finally {
                      if (!reader.closed && !isCancelled) {
                          try { await reader.cancel("Cleanup cancellation"); } catch(e) {  }
