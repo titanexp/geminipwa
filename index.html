@@ -3049,20 +3049,17 @@
                                 <option value="claude-opus-4-20250514">Claude Opus 4</option>
                                 <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
                             </optgroup>
-                            <optgroup label="Claude 3.7">
+                             <optgroup label="Claude 3.7">
                                 <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet (latest)</option>
                                 <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet</option>
                             </optgroup>
                             <optgroup label="Claude 3.5">
-                                <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (latest)</option>
-                                <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku</option>
-                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet v2 (latest)</option>
-                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet v2</option>
                                 <option value="claude-3-5-sonnet-20240620">Claude 3.5 Sonnet</option>
+                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet v2 (latest)</option>
+                                <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (latest)</option>
                             </optgroup>
                             <optgroup label="Claude 3">
                                 <option value="claude-3-opus-20240229">Claude 3 Opus (latest)</option>
-                                <option value="claude-3-opus-20240229">Claude 3 Opus</option>
                                 <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
                                 <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
                             </optgroup>
@@ -3071,7 +3068,7 @@
                                 <option value="claude-2.0">Claude 2.0</option>
                                 <option value="claude-instant-1.2">Claude Instant 1.2</option>
                             </optgroup>
-                             <optgroup label="ユーザー指定" id="anthropic-user-defined-models-group">
+                            <optgroup label="ユーザー指定" id="anthropic-user-defined-models-group">
                             </optgroup>
                         </select>
                         <label for="anthropic-additional-models" style="margin-top:10px;">追加モデル (カンマ区切り):</label>
@@ -3080,7 +3077,6 @@
                         <input type="text" id="anthropic-api-version" placeholder="例: 2023-06-01" aria-label="Anthropic APIバージョン">
                     </div>
                 </details>
-
 
                 <details id="gemini-params-group" class="settings-group">
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">パラメータ (Gemini)</summary>
@@ -9212,8 +9208,7 @@
                             const placeholderElement = document.getElementById(`streaming-message-${tempPlaceholderIndex}`);
                             if (placeholderElement) placeholderElement.remove();
                             if(tempPlaceholderIndex !== -1) state.currentMessages.splice(tempPlaceholderIndex, 1);
-                            state.messageCollapsedStates.delete(tempPlaceholderIndex);
-                         }
+                        }
                     }
                 } catch (error) {
                     const isAbort = error.message === "リクエストがキャンセルされました。" || modelResponseMetadata.finishReason === 'ABORTED';
@@ -9790,9 +9785,8 @@
 
                 newSettings.deepSeekSystemPrompt = elements.deepSeekSystemPromptDefaultTextarea.value.trim();
                 newSettings.deepSeekEnableSystemPromptDefault = elements.deepSeekEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.deepSeekMaxTokensInput.value = state.settings.deepSeekMaxTokens === null ? '' : state.settings.deepSeekMaxTokens;
-                newSettings.deepSeekTemperature = elements.deepSeekTemperatureInput.value === '' ? null : parseFloat(elements.deepSeekTemperatureInput.value);
                 newSettings.deepSeekMaxTokens = elements.deepSeekMaxTokensInput.value === '' ? null : parseInt(elements.deepSeekMaxTokensInput.value);
+                newSettings.deepSeekTemperature = elements.deepSeekTemperatureInput.value === '' ? null : parseFloat(elements.deepSeekTemperatureInput.value);
                 newSettings.deepSeekTopP = elements.deepSeekTopPInput.value === '' ? null : parseFloat(elements.deepSeekTopPInput.value);
                 newSettings.deepSeekPresencePenalty = elements.deepSeekPresencePenaltyInput.value === '' ? null : parseFloat(elements.deepSeekPresencePenaltyInput.value);
                 newSettings.deepSeekFrequencyPenalty = elements.deepSeekFrequencyPenaltyInput.value === '' ? null : parseFloat(elements.deepSeekFrequencyPenaltyInput.value);
@@ -11755,14 +11749,18 @@
                                             yield { type: 'chunk', contentText: chunk.delta.text };
                                         }
                                     } else if (eventType === 'message_delta') {
-                                        if (chunk.delta && chunk.delta.stop_reason) {
-                                            finalStopReason = chunk.delta.stop_reason;
-                                        }
-                                        if (chunk.usage) {
-                                            finalUsage = { ...finalUsage, ...chunk.usage };
-                                        }
+                                         const dataLine = buffer.substring(buffer.indexOf('data: ') + 6, buffer.indexOf('\n', buffer.indexOf('data: '))).trim();
+                                         try {
+                                            const messageDeltaData = JSON.parse(dataLine);
+                                            if (messageDeltaData.delta && messageDeltaData.delta.stop_reason) {
+                                                finalStopReason = messageDeltaData.delta.stop_reason;
+                                            }
+                                            if (messageDeltaData.usage) {
+                                                finalUsage = { ...finalUsage, ...messageDeltaData.usage };
+                                            }
+                                         } catch(e){}
                                     } else if (eventType === 'message_stop') {
-                                        if (!finalStopReason) finalStopReason = 'stop';
+                                         if (!finalStopReason) finalStopReason = 'stop';
                                     }
                                 } catch (e) {}
                             }
@@ -11770,7 +11768,6 @@
                         }
                          if (finalStopReason && finalStopReason !== 'null') break;
                     }
-
                     yield {
                         type: 'metadata',
                         finishReason: isCancelled ? 'ABORTED' : finalStopReason || 'stop',
@@ -11790,3 +11787,4 @@
     </script>
 </body>
 </html>
+
