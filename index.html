@@ -3506,6 +3506,8 @@
                  let isCancelled = false;
                  let groundingMetadata = null;
                  let finalUsageMetadata = null;
+                 let isProcessingThought = false;
+                 let hasProcessedThoughtInCurrentBlock = false;
 
                  try {
                      while (true) {
@@ -3536,7 +3538,15 @@
                              console.log("ストリーム終了 (done)");
                              if (buffer.trim()) {
                                  const finalData = parseSseDataForYield(buffer.trim().substring(6));
-                                 if (finalData) yield finalData;
+                                 if (finalData) {
+                                    if (finalData.thoughtText) isProcessingThought = true;
+                                    yield finalData;
+                                    if (finalData.thoughtText) hasProcessedThoughtInCurrentBlock = true;
+                                    if (finalData.contentText && isProcessingThought && hasProcessedThoughtInCurrentBlock) {
+                                        isProcessingThought = false;
+                                        hasProcessedThoughtInCurrentBlock = false;
+                                    }
+                                 }
                              }
                              break;
                          }
@@ -3557,7 +3567,23 @@
                                  if (chunkData) {
                                      if (chunkData.groundingMetadata) groundingMetadata = chunkData.groundingMetadata;
                                      if (chunkData.usageMetadata) finalUsageMetadata = chunkData.usageMetadata;
-                                     yield chunkData;
+
+                                     if (chunkData.thoughtText) {
+                                        isProcessingThought = true;
+                                        yield chunkData;
+                                        hasProcessedThoughtInCurrentBlock = true;
+                                     } else if (chunkData.contentText) {
+                                        if (isProcessingThought && hasProcessedThoughtInCurrentBlock) {
+                                            isProcessingThought = false;
+                                            hasProcessedThoughtInCurrentBlock = false;
+                                        }
+                                        if (!isProcessingThought) {
+                                            yield chunkData;
+                                        } else {
+                                        }
+                                     } else {
+                                        yield chunkData;
+                                     }
                                  }
                              } else if (line !== '') {
                                  console.warn("データ以外のSSE行を無視:", line);
@@ -4399,6 +4425,8 @@
                     
                     state.partialStreamContent = '';
                     state.partialThoughtStreamContent = applyDummyToThoughts ? dummyModelTextFromSettings + '\n\n' : '';
+                    let isProcessingThoughtInStream = false;
+
 
                     if (state.settings.streamingOutput) {
                         const tempPlaceholderIndex = state.currentMessages.length;
@@ -4407,7 +4435,7 @@
                         placeholderMessageDiv.classList.add('message', 'model');
                         placeholderMessageDiv.id = `streaming-message-${tempPlaceholderIndex}`;
 
-                        if (state.settings.includeThoughts || applyDummyToThoughts) { // Always create if dummy is applied to thoughts
+                        if (state.settings.includeThoughts || applyDummyToThoughts) {
                             const thoughtDetails = document.createElement('details');
                             thoughtDetails.classList.add('thought-summary-details');
                             const thoughtSummaryElem = document.createElement('summary');
@@ -4425,6 +4453,8 @@
                         elements.messageContainer.appendChild(placeholderMessageDiv);
 
                         const streamSpeed = state.settings.streamingSpeed;
+                        let thoughtBuffer = ""; // Temporary buffer for thoughtText
+                        let contentBuffer = ""; // Temporary buffer for contentText
 
                         for await (const streamData of apiUtils.handleStreamingResponse(response)) {
                             if (state.abortController?.signal.aborted) {
@@ -4434,21 +4464,33 @@
 
                             if (streamData.type === 'chunk') {
                                 if (streamData.thoughtText) {
-                                    for (const char of streamData.thoughtText) {
-                                        if (state.abortController?.signal.aborted) break;
-                                        state.partialThoughtStreamContent += char;
-                                        uiUtils.updateStreamingMessage(tempPlaceholderIndex, char, true);
-                                        if (streamSpeed > 0) await sleep(streamSpeed);
-                                    }
+                                    isProcessingThoughtInStream = true;
+                                    thoughtBuffer += streamData.thoughtText;
                                 }
                                 if (streamData.contentText) {
-                                    for (const char of streamData.contentText) {
+                                    if (isProcessingThoughtInStream) {
+                                        isProcessingThoughtInStream = false; 
+                                        for (const char of thoughtBuffer) {
+                                            if (state.abortController?.signal.aborted) break;
+                                            state.partialThoughtStreamContent += char;
+                                            uiUtils.updateStreamingMessage(tempPlaceholderIndex, char, true);
+                                            if (streamSpeed > 0) await sleep(streamSpeed);
+                                        }
+                                        thoughtBuffer = ""; 
+                                    }
+                                    contentBuffer += streamData.contentText;
+                                }
+
+                                if (!isProcessingThoughtInStream && contentBuffer) {
+                                     for (const char of contentBuffer) {
                                         if (state.abortController?.signal.aborted) break;
                                         state.partialStreamContent += char;
                                         uiUtils.updateStreamingMessage(tempPlaceholderIndex, char, false);
                                         if (streamSpeed > 0) await sleep(streamSpeed);
                                     }
+                                    contentBuffer = "";
                                 }
+                                
                                 if (state.abortController?.signal.aborted) {
                                     modelResponseMetadata.finishReason = 'ABORTED';
                                     throw new Error("リクエストがキャンセルされました。");
@@ -4471,6 +4513,23 @@
                                 throw new Error(streamData.message || "ストリーム内でエラーが発生しました。");
                             }
                         }
+                        
+                        if (thoughtBuffer) {
+                             for (const char of thoughtBuffer) {
+                                if (state.abortController?.signal.aborted) break;
+                                state.partialThoughtStreamContent += char;
+                                uiUtils.updateStreamingMessage(tempPlaceholderIndex, char, true);
+                                if (streamSpeed > 0) await sleep(streamSpeed);
+                            }
+                        }
+                        if (contentBuffer && !state.abortController?.signal.aborted) {
+                             for (const char of contentBuffer) {
+                                state.partialStreamContent += char;
+                                uiUtils.updateStreamingMessage(tempPlaceholderIndex, char, false);
+                                if (streamSpeed > 0) await sleep(streamSpeed);
+                            }
+                        }
+
                         modelThoughtSummaryContent = state.partialThoughtStreamContent.trim();
                         modelResponseRawContent = state.partialStreamContent.trim();
 
@@ -4478,7 +4537,7 @@
                             throw new Error("リクエストがキャンセルされました。");
                         }
 
-                    } else { // Non-streaming
+                    } else { 
                         const data = await response.json();
                         console.log("API応答 (非ストリーミング):", data);
                         const candidate = data.candidates?.[0];
