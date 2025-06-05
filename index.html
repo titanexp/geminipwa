@@ -1360,7 +1360,7 @@
             border-style: solid;
             border-color: var(--border-secondary);
             border-width: 0 0 1px 0;
-            padding: 100px 15px;
+            padding: 10px 15px;
             z-index: 3;
             box-shadow: 0 1px 3px var(--shadow-primary);
             overflow: auto;
@@ -3470,6 +3470,13 @@
                                <input type="checkbox" id="disable-delete-message-confirmation-toggle">
                                メッセージ削除時の確認ダイアログを無効にする
                            </label>
+                           <label class="checkbox-label" style="margin-top: 10px;">
+                               <input type="checkbox" id="allow-input-during-model-response-toggle">
+                               モデル応答中にユーザー操作を許可する
+                           </label>
+                           <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                               ※ 有効時、モデル応答中でも入力欄への入力、ファイル添付、システムプロンプト編集などが可能になります。動作が不安定になる可能性があります。
+                           </p>
                            <p style="height:10px"></p>
                            <label for="theme-select">表示テーマ:</label>
                            <select id="theme-select" aria-label="表示テーマ">
@@ -3964,6 +3971,7 @@
             messageBodyFontSizeInput: document.getElementById('message-body-font-size-input'),
             codeBlockFontSizeInput: document.getElementById('code-block-font-size-input'),
             thoughtSummaryFontSizeInput: document.getElementById('thought-summary-font-size'),
+            stickySystemPromptToggle: document.getElementById('sticky-system-prompt-toggle'),
             hideSystemPromptToggle: document.getElementById('hide-system-prompt-toggle'),
             enableSessionLinkingCheckbox: document.getElementById('enable-session-linking'),
             swipeNavigationToggle: document.getElementById('swipe-navigation-toggle'),
@@ -4043,6 +4051,7 @@
             disableRetryConfirmationToggle: document.getElementById('disable-retry-confirmation-toggle'),
             disableLoadChatConfirmationWhileSendingToggle: document.getElementById('disable-load-chat-confirmation-while-sending-toggle'),
             disableDeleteMessageConfirmationToggle: document.getElementById('disable-delete-message-confirmation-toggle'),
+            allowInputDuringModelResponseToggle: document.getElementById('allow-input-during-model-response-toggle'),
             showTopCollapseButtonToggle: document.getElementById('show-top-collapse-button-toggle'),
             showBottomCollapseButtonToggle: document.getElementById('show-bottom-collapse-button-toggle'),
             persistMessageCollapseStateCheckbox: document.getElementById('persist-message-collapse-state'),
@@ -4122,7 +4131,7 @@
                 geminiDummyModel: '',
                 geminiEnableDummyModel: true,
                 geminiConcatDummyModel: false,
-                geminiPseudoStreaming: false,
+                geminiPseudoStreaming: true,
                 geminiEnableGrounding: false,
                 deepSeekApiKey: '',
                 deepSeekModelName: DEFAULT_DEEPSEEK_MODEL,
@@ -4199,6 +4208,7 @@
                 disableRetryConfirmation: false,
                 disableLoadChatConfirmationWhileSending: false,
                 disableDeleteMessageConfirmation: false,
+                allowInputDuringModelResponse: false,
                 showTopCollapseButton: true,
                 showBottomCollapseButton: true,
                 persistMessageCollapseState: DEFAULT_PERSIST_MESSAGE_COLLAPSE_STATE,
@@ -5993,6 +6003,7 @@
                 elements.disableRetryConfirmationToggle.checked = state.settings.disableRetryConfirmation;
                 elements.disableLoadChatConfirmationWhileSendingToggle.checked = state.settings.disableLoadChatConfirmationWhileSending;
                 elements.disableDeleteMessageConfirmationToggle.checked = state.settings.disableDeleteMessageConfirmation;
+                elements.allowInputDuringModelResponseToggle.checked = state.settings.allowInputDuringModelResponse;
                 elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
                 elements.showBottomCollapseButtonToggle.checked = state.settings.showBottomCollapseButton;
@@ -6283,21 +6294,30 @@
             },
             setSendingState(sending) {
                 state.isSending = sending;
+                const allowInputDuringResponse = state.settings.allowInputDuringModelResponse;
+
                 if (sending) {
                     elements.sendButton.textContent = '止';
                     elements.sendButton.classList.add('sending');
                     elements.sendButton.title = "停止";
                     elements.sendButton.disabled = false;
-                    elements.userInput.disabled = true;
-                    elements.attachFileBtn.disabled = true;
-                    elements.pasteToInputBtn.disabled = true;
-                    elements.rollDiceBtn.disabled = true;
+
+                    elements.userInput.disabled = !allowInputDuringResponse;
+                    elements.attachFileBtn.disabled = !allowInputDuringResponse;
+                    elements.pasteToInputBtn.disabled = !allowInputDuringResponse;
+                    elements.rollDiceBtn.disabled = !allowInputDuringResponse;
                     if (elements.aiToAiChatBtn) elements.aiToAiChatBtn.disabled = true;
+
                     elements.loadingIndicator.classList.remove('hidden');
                     elements.loadingIndicator.setAttribute('aria-live', 'polite');
                     if (elements.systemPromptDetails) {
-                        elements.systemPromptDetails.style.pointerEvents = 'none';
-                        elements.systemPromptDetails.style.opacity = '0.7';
+                        if (!allowInputDuringResponse) {
+                            elements.systemPromptDetails.style.pointerEvents = 'none';
+                            elements.systemPromptDetails.style.opacity = '0.7';
+                        } else {
+                            elements.systemPromptDetails.style.pointerEvents = '';
+                            elements.systemPromptDetails.style.opacity = '';
+                        }
                     }
                 } else {
                     elements.sendButton.textContent = '送';
@@ -7429,10 +7449,6 @@
                      uiUtils.showCustomAlert("メッセージ編集中はメモを開閉できません。");
                      return;
                  }
-                 if (state.isEditingSystemPrompt) {
-                     uiUtils.showCustomAlert("システムプロンプト編集中はメモを開閉できません。");
-                     return;
-                 }
 
                 state.isMemoVisible = !state.isMemoVisible;
                 elements.memoArea.classList.toggle('hidden', !state.isMemoVisible);
@@ -7527,10 +7543,6 @@
             toggleClipboardStack() {
                  if (state.editingMessageIndex !== null) {
                      uiUtils.showCustomAlert("メッセージ編集中はクリップボードスタックを開閉できません。");
-                     return;
-                 }
-                 if (state.isEditingSystemPrompt) {
-                     uiUtils.showCustomAlert("システムプロンプト編集中はクリップボードスタックを開閉できません。");
                      return;
                  }
 
@@ -8243,7 +8255,7 @@
 
                 if (!isBackgroundProcess) {
                     if (state.editingMessageIndex !== null) { await uiUtils.showCustomAlert("他のメッセージを編集中です。"); return; }
-                    if (state.isEditingSystemPrompt) { await uiUtils.showCustomAlert("システムプロンプト編集中です。"); return; }
+                    if (state.isEditingSystemPrompt && !state.settings.allowInputDuringModelResponse) { await uiUtils.showCustomAlert("システムプロンプト編集中です。"); return; }
                 }
 
                 let text = '';
@@ -8265,9 +8277,13 @@
                     attachmentsToSend = [...state.pendingAttachments];
                 }
 
-                if (!isBackgroundProcess && (state.isSending || (!text && attachmentsToSend.length === 0))) {
+                if (!isBackgroundProcess && (state.isSending && !state.settings.allowInputDuringModelResponse) && (!text && attachmentsToSend.length === 0)) {
                     return;
                 }
+                 if (!isBackgroundProcess && state.isSending && state.settings.allowInputDuringModelResponse && (!text && attachmentsToSend.length === 0)) {
+                    return;
+                 }
+
 
                 if (selectedApiProvider === 'gemini' && !state.settings.apiKey) {
                     if (!isBackgroundProcess) { await uiUtils.showCustomAlert("Gemini APIキーが設定されていません。設定画面を開きます。"); uiUtils.showScreen('settings'); }
@@ -9527,6 +9543,7 @@
                  newSettings.disableRetryConfirmation = elements.disableRetryConfirmationToggle.checked;
                  newSettings.disableLoadChatConfirmationWhileSending = elements.disableLoadChatConfirmationWhileSendingToggle.checked;
                  newSettings.disableDeleteMessageConfirmation = elements.disableDeleteMessageConfirmationToggle.checked;
+                 newSettings.allowInputDuringModelResponse = elements.allowInputDuringModelResponseToggle.checked;
                  newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
                  newSettings.showTopCollapseButton = elements.showTopCollapseButtonToggle.checked;
                  newSettings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
@@ -9645,6 +9662,7 @@
                      state.settings.userIconBlob = currentUserIconBlob;
                      state.settings.aiIconBlob = currentAiIconBlob;
                      state.settings.disableSaveSettingsConfirmation = newSettings.disableSaveSettingsConfirmation;
+                     state.settings.allowInputDuringModelResponse = newSettings.allowInputDuringModelResponse;
 
 
                      if (!state.isSending && !state.isAiToAiChatProcessing) {
@@ -9659,6 +9677,9 @@
                         uiUtils.toggleApiSettingsVisibility(state.settings.apiProvider);
                         uiUtils.applySettingsUIDetailsOpenStates();
                         uiUtils.applyStickySystemPromptStyle();
+                        if (state.isSending) {
+                            uiUtils.setSendingState(true);
+                        }
                     }
 
                     if (!state.settings.disableSaveSettingsConfirmation) {
@@ -9724,7 +9745,7 @@
                                 else if(key.toLowerCase().includes('concatdummymodel')) defaultSettingsCopy[key] = false;
                                 else if(key === 'geminiIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'geminiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
-                                else if(key === 'geminiPseudoStreaming') defaultSettingsCopy[key] = false;
+                                else if(key === 'geminiPseudoStreaming') defaultSettingsCopy[key] = true;
                                 else if(key === 'geminiEnableGrounding') defaultSettingsCopy[key] = false;
                                 else if(key === 'deepSeekIncludeDeepSeekThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'deepSeekExpandDeepSeekThoughtsByDefault') defaultSettingsCopy[key] = false;
@@ -9793,6 +9814,7 @@
                         defaultSettingsCopy.disableRetryConfirmation = false;
                         defaultSettingsCopy.disableLoadChatConfirmationWhileSending = false;
                         defaultSettingsCopy.disableDeleteMessageConfirmation = false;
+                        defaultSettingsCopy.allowInputDuringModelResponse = false;
                         defaultSettingsCopy.disableSaveSettingsConfirmation = false;
                         defaultSettingsCopy.showTopCollapseButton = true;
                         defaultSettingsCopy.showBottomCollapseButton = true;
@@ -9864,8 +9886,11 @@
                     }
                 }
             },
-            startEditSystemPrompt() {
-                if (state.isSending) return;
+            async startEditSystemPrompt() {
+                if (state.isSending && !state.settings.allowInputDuringModelResponse) {
+                     await uiUtils.showCustomAlert("モデル応答中です。システムプロンプトの編集はできません。");
+                     return;
+                }
                 state.isEditingSystemPrompt = true;
                 elements.systemPromptEditor.value = state.currentSystemPrompt;
                 uiUtils.adjustTextareaHeight(elements.systemPromptEditor, 200);
