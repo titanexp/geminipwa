@@ -9761,7 +9761,7 @@
                      const currentBgBlob = state.settings.backgroundImageBlob;
                      const currentUserIconBlob = state.settings.userIconBlob;
                      const currentAiIconBlob = state.settings.aiIconBlob;
-                     state.settings = { ...state.settings, ...settingsToSave };
+                                          state.settings = { ...state.settings, ...settingsToSave };
 
                      state.settings.backgroundImageBlob = currentBgBlob;
                      state.settings.userIconBlob = currentUserIconBlob;
@@ -9853,6 +9853,10 @@
                                 else if(key === 'geminiEnableGrounding') defaultSettingsCopy[key] = false;
                                 else if(key === 'deepSeekIncludeDeepSeekThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'deepSeekExpandDeepSeekThoughtsByDefault') defaultSettingsCopy[key] = false;
+                                else if(key === 'claudeEnableDummyUser') defaultSettingsCopy[key] = false;
+                                else if(key === 'claudeEnableDummyModel') defaultSettingsCopy[key] = false;
+                                else if(key === 'claudeConcatDummyModel') defaultSettingsCopy[key] = false;
+
                             }
                         });
                         defaultSettingsCopy.apiKey = '';
@@ -10854,10 +10858,7 @@
                     return;
                 }
                 const selectedApiProvider = state.settings.apiProvider;
-                 if ((selectedApiProvider === 'gemini' && !state.settings.apiKey) || 
-                     (selectedApiProvider === 'deepseek' && !state.settings.deepSeekApiKey) ||
-                     (selectedApiProvider === 'claude' && !state.settings.claudeApiKey)
-                    ) {
+                 if ((selectedApiProvider === 'gemini' && !state.settings.apiKey) || (selectedApiProvider === 'deepseek' && !state.settings.deepSeekApiKey)) {
                     await uiUtils.showCustomAlert("選択中のAPIプロバイダーのAPIキーが設定されていません。");
                     uiUtils.showScreen('settings');
                     return;
@@ -10956,8 +10957,7 @@
                         dummyModel: dummyModelB, enableDummyModel: enableDummyModelB, concatDummyModel: concatDummyModelB,
                         topK: providerForSettingsB === 'gemini' ? geminiTopKB : undefined,
                         thinkingBudget: providerForSettingsB === 'gemini' ? geminiThinkingBudgetB : undefined,
-                        includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : 
-                                         providerForSettingsB === 'deepseek' ? deepSeekIncludeThoughtsB : undefined,
+                        includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : deepSeekIncludeThoughtsB,
                         pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
                         enableGrounding: providerForSettingsB === 'gemini' ? geminiEnableGroundingB : undefined,
                         inputText: inputForB,
@@ -11409,34 +11409,44 @@
 
                 const model = state.settings.claudeModelName || DEFAULT_CLAUDE_MODEL;
                 const apiKey = state.settings.claudeApiKey;
+                const endpoint = CLAUDE_API_BASE_URL;
 
-                const anthropicRequest = this.convertToClaudeRequest(messagesForApi, systemInstruction);
-
+                const claudeMessages = messagesForApi
+                    .filter(msg => msg.role === 'user' || msg.role === 'model')
+                    .map(msg => ({
+                        role: msg.role === 'model' ? 'assistant' : msg.role,
+                        content: msg.parts.map(part => {
+                            if (part.text) {
+                                return { type: 'text', text: part.text };
+                            } else if (part.inlineData) {
+                                return {
+                                    type: 'image',
+                                    source: {
+                                        type: 'base64',
+                                        media_type: part.inlineData.mimeType,
+                                        data: part.inlineData.data
+                                    }
+                                };
+                            }
+                            return null;
+                        }).filter(p => p !== null)
+                    }));
+                
                 const requestBody = {
                     model: model,
-                    messages: anthropicRequest.messages,
-                    stream: useStreaming,
-                    max_tokens: generationConfig.maxOutputTokens || state.settings.claudeMaxTokens || DEFAULT_CLAUDE_MAX_TOKENS
+                    messages: claudeMessages,
+                    max_tokens: generationConfig.maxOutputTokens || 4096,
+                    stream: useStreaming
                 };
-                if(anthropicRequest.system) requestBody.system = anthropicRequest.system;
-                if (generationConfig.temperature !== undefined && generationConfig.temperature !== null) {
-                    requestBody.temperature = generationConfig.temperature;
-                } else if (state.settings.claudeTemperature !== null) {
-                    requestBody.temperature = state.settings.claudeTemperature;
-                } else {
-                    requestBody.temperature = DEFAULT_CLAUDE_TEMPERATURE;
-                }
 
-                if (generationConfig.topP !== undefined && generationConfig.topP !== null) {
-                    requestBody.top_p = generationConfig.topP;
-                } else if (state.settings.claudeTopP !== null) {
-                    requestBody.top_p = state.settings.claudeTopP;
-                } else {
-                    requestBody.top_p = DEFAULT_CLAUDE_TOP_P;
+                if (systemInstruction && systemInstruction.content) {
+                    requestBody.system = systemInstruction.content;
                 }
+                if (generationConfig.temperature !== null) requestBody.temperature = generationConfig.temperature;
+                if (generationConfig.topP !== null) requestBody.top_p = generationConfig.topP;
 
                 try {
-                    const response = await fetch(CLAUDE_API_BASE_URL, {
+                    const response = await fetch(endpoint, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -11452,9 +11462,9 @@
                         try {
                             const errorData = await response.json();
                             if (errorData.error && errorData.error.message) {
-                                errorMsg = `Claude APIエラー (${response.status}): ${errorData.error.message} (Type: ${errorData.error.type || 'N/A'})`;
+                                errorMsg = `Claude APIエラー: ${errorData.error.message}`;
                             }
-                        } catch (e) {}
+                        } catch(e) {}
                         throw new Error(errorMsg);
                     }
                     return response;
@@ -11464,46 +11474,6 @@
                     }
                     throw error;
                 }
-            },
-            convertToClaudeRequest(messagesForApi, systemInstruction) {
-                const claudeMessages = [];
-                let systemContent = '';
-
-                if (systemInstruction && systemInstruction.content) {
-                    systemContent = systemInstruction.content;
-                } else if (systemInstruction && systemInstruction.parts && systemInstruction.parts.length > 0 && systemInstruction.parts[0].text) {
-                    systemContent = systemInstruction.parts[0].text;
-                }
-
-                for (const msg of messagesForApi) {
-                    const claudeRole = msg.role === 'model' ? 'assistant' : 'user';
-                    const contentParts = [];
-                    msg.parts.forEach(part => {
-                        if (part.text) {
-                            contentParts.push({ type: 'text', text: part.text });
-                        } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
-                             contentParts.push({
-                                type: 'image',
-                                source: {
-                                    type: 'base64',
-                                    media_type: part.inlineData.mimeType,
-                                    data: part.inlineData.data
-                                }
-                            });
-                        }
-                    });
-
-                    if (contentParts.length > 0) {
-                        claudeMessages.push({
-                            role: claudeRole,
-                            content: contentParts
-                        });
-                    }
-                }
-                return {
-                    messages: claudeMessages,
-                    system: systemContent || undefined
-                };
             },
             async *handleClaudeStreamingResponse(response) {
                 if (!response.body) {
@@ -11518,63 +11488,50 @@
                 try {
                     while (true) {
                         if (state.abortController?.signal.aborted && !isCancelled) {
-                            isCancelled = true;
-                            await reader.cancel("User aborted");
-                            throw new Error("リクエストがキャンセルされました。");
+                             isCancelled = true;
+                             await reader.cancel("User aborted");
+                             throw new Error("リクエストがキャンセルされました。");
                         }
-
                         const { value, done } = await reader.read();
                         if (done) break;
 
                         buffer += value;
-                        let eolIndex;
-                        while ((eolIndex = buffer.indexOf('\n')) >= 0) {
-                            const line = buffer.substring(0, eolIndex).trim();
-                            buffer = buffer.substring(eolIndex + 1);
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop(); 
 
+                        for (const line of lines) {
                             if (line.startsWith('data: ')) {
                                 const jsonData = line.substring(6);
-                                if (jsonData.trim() === '[DONE]') {
-                                    break;
-                                }
                                 try {
                                     const chunk = JSON.parse(jsonData);
-                                    if (chunk.type === 'content_block_delta' && chunk.delta && chunk.delta.type === 'text_delta') {
-                                        yield { type: 'chunk', contentText: chunk.delta.text || '', thoughtText: null };
+                                    if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+                                        yield { type: 'chunk', contentText: chunk.delta.text, thoughtText: null };
                                     } else if (chunk.type === 'message_stop') {
-                                        finalFinishReason = chunk.message?.stop_reason || 'stop';
-                                        if (chunk["amazon-bedrock-invocationMetrics"]) {
-                                            finalUsage = {
-                                                input_tokens: chunk["amazon-bedrock-invocationMetrics"].inputTokenCount,
-                                                output_tokens: chunk["amazon-bedrock-invocationMetrics"].outputTokenCount
-                                            };
-                                        } else if (chunk.usage) {
-                                            finalUsage = chunk.usage;
-                                        }
-                                    } else if (chunk.type === 'message_delta' && chunk.usage) {
+                                        finalFinishReason = chunk['amazon-bedrock-invocationMetrics']?.stopReason || 'stop';
+                                    } else if (chunk.type === 'message_delta') {
+                                        finalFinishReason = chunk.delta.stop_reason;
                                         finalUsage = chunk.usage;
                                     }
                                 } catch (e) {
                                 }
                             }
                         }
-                        if (finalFinishReason && finalFinishReason !== 'null') break;
                     }
                     yield {
                         type: 'metadata',
-                        finishReason: isCancelled ? 'ABORTED' : finalFinishReason || 'stop',
+                        finishReason: isCancelled ? 'ABORTED' : finalFinishReason,
                         safetyRatings: null,
                         groundingMetadata: null,
                         usageMetadata: finalUsage ? {
                             candidatesTokenCount: finalUsage.output_tokens,
-                            totalTokenCount: finalUsage.input_tokens + finalUsage.output_tokens
+                            totalTokenCount: finalUsage.input_tokens + finalUsage.output_tokens,
                         } : null
                     };
                 } catch (error) {
-                     yield { type: 'error', error: { message: error.message }, message: error.message };
+                    yield { type: 'error', error: { message: error.message }, message: error.message };
                 } finally {
                     if (!reader.closed && !isCancelled) {
-                        try { await reader.cancel("Stream processing ended."); } catch (e) { }
+                        try { await reader.cancel(); } catch (e) {}
                     }
                 }
             }
@@ -11584,3 +11541,4 @@
     </script>
 </body>
 </html>
+
