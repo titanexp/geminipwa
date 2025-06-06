@@ -6878,7 +6878,7 @@
         };
 
         const appLogic = {
-            async initializeApp() {
+            initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true, gfm: true, sanitize: true, smartypants: false
@@ -11413,24 +11413,29 @@
 
                 const claudeMessages = messagesForApi
                     .filter(msg => msg.role === 'user' || msg.role === 'model')
-                    .map(msg => ({
-                        role: msg.role === 'model' ? 'assistant' : msg.role,
-                        content: msg.parts.map(part => {
-                            if (part.text) {
-                                return { type: 'text', text: part.text };
-                            } else if (part.inlineData) {
-                                return {
+                    .map(msg => {
+                        const content = [];
+                        msg.parts.forEach(part => {
+                            if (part.text && part.text.trim()) {
+                                content.push({ type: 'text', text: part.text });
+                            }
+                            if (part.inlineData) {
+                                content.push({
                                     type: 'image',
                                     source: {
                                         type: 'base64',
                                         media_type: part.inlineData.mimeType,
                                         data: part.inlineData.data
                                     }
-                                };
+                                });
                             }
-                            return null;
-                        }).filter(p => p !== null)
-                    }));
+                        });
+                        return {
+                            role: msg.role === 'model' ? 'assistant' : msg.role,
+                            content: content
+                        };
+                    })
+                    .filter(msg => msg.content.length > 0);
                 
                 const requestBody = {
                     model: model,
@@ -11442,8 +11447,12 @@
                 if (systemInstruction && systemInstruction.content) {
                     requestBody.system = systemInstruction.content;
                 }
-                if (generationConfig.temperature !== null) requestBody.temperature = generationConfig.temperature;
-                if (generationConfig.topP !== null) requestBody.top_p = generationConfig.topP;
+                if (generationConfig.temperature !== null && generationConfig.temperature !== undefined) {
+                    requestBody.temperature = Math.min(Math.max(generationConfig.temperature, 0), 1);
+                }
+                if (generationConfig.topP !== null && generationConfig.topP !== undefined) {
+                    requestBody.top_p = generationConfig.topP;
+                }
 
                 try {
                     const response = await fetch(endpoint, {
@@ -11461,8 +11470,13 @@
                         let errorMsg = `Claude APIエラー (${response.status}): ${response.statusText}`;
                         try {
                             const errorData = await response.json();
-                            if (errorData.error && errorData.error.message) {
-                                errorMsg = `Claude APIエラー: ${errorData.error.message}`;
+                            if (errorData.error) {
+                                if (errorData.error.message) {
+                                    errorMsg = `Claude APIエラー: ${errorData.error.message}`;
+                                }
+                                if (errorData.error.type) {
+                                    errorMsg += ` (Type: ${errorData.error.type})`;
+                                }
                             }
                         } catch(e) {}
                         throw new Error(errorMsg);
@@ -11541,4 +11555,3 @@
     </script>
 </body>
 </html>
-
