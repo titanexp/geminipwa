@@ -778,6 +778,13 @@
             color: var(--text-primary);
             transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
         }
+        input:disabled,
+        select:disabled,
+        textarea:disabled {
+            background-color: var(--bg-secondary);
+            color: var(--text-secondary);
+            cursor: not-allowed;
+        }
         textarea {
             min-height: 80px;
             resize: vertical;
@@ -3229,10 +3236,18 @@
                             <div>
                                 <label for="claude-max-tokens">Max Tokens:</label>
                                 <input type="number" id="claude-max-tokens" step="1" min="1" placeholder="例:4096" aria-label="Claude Max Tokens">
+                                <label class="checkbox-label" style="margin-top: -5px; margin-bottom: 15px;">
+                                    <input type="checkbox" id="claude-enable-max-tokens">
+                                    有効にする
+                                </label>
                             </div>
                             <div>
                                 <label for="claude-temperature">Temperature:</label>
                                 <input type="number" id="claude-temperature" step="0.01" min="0" max="1" placeholder="例:0.7 (0.0-1.0)" aria-label="Claude Temperature">
+                                <label class="checkbox-label" style="margin-top: -5px; margin-bottom: 15px;">
+                                    <input type="checkbox" id="claude-enable-temperature">
+                                    有効にする
+                                </label>
                             </div>
                             <div>
                                 <label for="claude-top-p">Top P:</label>
@@ -4033,7 +4048,9 @@
             claudeSystemPromptDefaultTextarea: document.getElementById('claude-system-prompt-default'),
             claudeEnableSystemPromptDefaultCheckbox: document.getElementById('claude-enable-system-prompt-default'),
             claudeMaxTokensInput: document.getElementById('claude-max-tokens'),
+            claudeEnableMaxTokensCheckbox: document.getElementById('claude-enable-max-tokens'),
             claudeTemperatureInput: document.getElementById('claude-temperature'),
+            claudeEnableTemperatureCheckbox: document.getElementById('claude-enable-temperature'),
             claudeTopPInput: document.getElementById('claude-top-p'),
             claudeStreamingOutputCheckbox: document.getElementById('claude-streaming-output'),
             claudeStreamingSpeedInput: document.getElementById('claude-streaming-speed'),
@@ -4244,6 +4261,8 @@
                 claudeEnableSystemPromptDefault: true,
                 claudeTemperature: null,
                 claudeMaxTokens: null,
+                claudeEnableMaxTokens: true,
+                claudeEnableTemperature: true,
                 claudeTopP: null,
                 claudeStreamingOutput: true,
                 claudeStreamingSpeed: DEFAULT_STREAMING_SPEED,
@@ -6014,8 +6033,10 @@
 
                 elements.claudeSystemPromptDefaultTextarea.value = state.settings.claudeSystemPrompt || '';
                 elements.claudeEnableSystemPromptDefaultCheckbox.checked = state.settings.claudeEnableSystemPromptDefault;
-                elements.claudeTemperatureInput.value = state.settings.claudeTemperature === null ? '' : state.settings.claudeTemperature;
                 elements.claudeMaxTokensInput.value = state.settings.claudeMaxTokens === null ? '' : state.settings.claudeMaxTokens;
+                elements.claudeEnableMaxTokensCheckbox.checked = state.settings.claudeEnableMaxTokens;
+                elements.claudeTemperatureInput.value = state.settings.claudeTemperature === null ? '' : state.settings.claudeTemperature;
+                elements.claudeEnableTemperatureCheckbox.checked = state.settings.claudeEnableTemperature;
                 elements.claudeTopPInput.value = state.settings.claudeTopP === null ? '' : state.settings.claudeTopP;
                 elements.claudeStreamingOutputCheckbox.checked = state.settings.claudeStreamingOutput;
                 elements.claudeStreamingSpeedInput.value = state.settings.claudeStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
@@ -6027,6 +6048,8 @@
                 elements.claudeIncludeThoughtsToggle.checked = state.settings.claudeIncludeThoughts;
                 elements.claudeExpandThoughtsByDefaultToggle.checked = state.settings.claudeExpandThoughtsByDefault;
                 elements.claudeThinkingBudgetInput.value = state.settings.claudeThinkingBudget === null ? '' : state.settings.claudeThinkingBudget;
+                elements.claudeMaxTokensInput.disabled = !state.settings.claudeEnableMaxTokens;
+                elements.claudeTemperatureInput.disabled = !state.settings.claudeEnableTemperature;
 
 
                 elements.enterToSendCheckbox.checked = state.settings.enterToSend;
@@ -7103,6 +7126,13 @@
                     });
                 });
 
+                elements.claudeEnableMaxTokensCheckbox.addEventListener('change', (event) => {
+                    elements.claudeMaxTokensInput.disabled = !event.target.checked;
+                });
+                elements.claudeEnableTemperatureCheckbox.addEventListener('change', (event) => {
+                    elements.claudeTemperatureInput.disabled = !event.target.checked;
+                });
+
                 elements.uploadBackgroundBtn.addEventListener('click', () => elements.backgroundImageInput.click());
                 elements.backgroundImageInput.addEventListener('change', (event) => {
                     const file = event.target.files[0];
@@ -7858,26 +7888,15 @@
                 state.currentChatId = null;
                 state.currentMessages = [];
                 const currentProvider = state.settings.apiProvider;
-                let shouldSetSystemPrompt = false;
-                let systemPromptToUse = '';
-                switch (currentProvider) {
-                    case 'gemini':
-                        shouldSetSystemPrompt = state.settings.geminiEnableSystemPromptDefault === true;
-                        systemPromptToUse = state.settings.geminiSystemPrompt || '';
-                        break;
-                    case 'deepseek':
-                        shouldSetSystemPrompt = state.settings.deepSeekEnableSystemPromptDefault === true;
-                        systemPromptToUse = state.settings.deepSeekSystemPrompt || '';
-                        break;
-                    case 'claude':
-                        shouldSetSystemPrompt = state.settings.claudeEnableSystemPromptDefault === true;
-                        systemPromptToUse = state.settings.claudeSystemPrompt || '';
-                        break;
-                    default:
-                        shouldSetSystemPrompt = false;
-                        systemPromptToUse = '';
+                if (currentProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
+                    state.currentSystemPrompt = state.settings.geminiSystemPrompt || '';
+                } else if (currentProvider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
+                    state.currentSystemPrompt = state.settings.deepSeekSystemPrompt || '';
+                } else if (currentProvider === 'claude' && state.settings.claudeEnableSystemPromptDefault) {
+                    state.currentSystemPrompt = state.settings.claudeSystemPrompt || '';
+                } else {
+                    state.currentSystemPrompt = '';
                 }
-                state.currentSystemPrompt = shouldSetSystemPrompt ? systemPromptToUse : '';
                 state.pendingAttachments = [];
                 state.isMemoVisible = false;
                 elements.memoArea.classList.add('hidden');
@@ -8278,7 +8297,8 @@
 
                 let contextDeepSeekIncludeThoughts;
 
-                let contextClaudeIncludeThoughts, contextClaudeThinkingBudget, contextClaudeExpandThoughtsByDefault;
+                let contextClaudeIncludeThoughts, contextClaudeThinkingBudget, contextClaudeExpandThoughtsByDefault,
+                    contextClaudeEnableMaxTokens, contextClaudeEnableTemperature;
 
 
                 if (isBackgroundProcess) {
@@ -8329,6 +8349,8 @@
                         contextClaudeIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.claudeIncludeThoughts;
                         contextClaudeThinkingBudget = sourceSessionContext.thinkingBudget ?? state.settings.claudeThinkingBudget;
                         contextClaudeExpandThoughtsByDefault = sourceSessionContext.expandThoughtsByDefault ?? state.settings.claudeExpandThoughtsByDefault;
+                        contextClaudeEnableMaxTokens = sourceSessionContext.enableMaxTokens ?? state.settings.claudeEnableMaxTokens;
+                        contextClaudeEnableTemperature = sourceSessionContext.enableTemperature ?? state.settings.claudeEnableTemperature;
                     }
                 } else {
                     if (selectedApiProvider === 'gemini') {
@@ -8377,6 +8399,8 @@
                         contextClaudeIncludeThoughts = state.settings.claudeIncludeThoughts;
                         contextClaudeThinkingBudget = state.settings.claudeThinkingBudget;
                         contextClaudeExpandThoughtsByDefault = state.settings.claudeExpandThoughtsByDefault;
+                        contextClaudeEnableMaxTokens = state.settings.claudeEnableMaxTokens;
+                        contextClaudeEnableTemperature = state.settings.claudeEnableTemperature;
                     }
                 }
 
@@ -8644,6 +8668,17 @@
                          if (Object.keys(commonGenerationConfig.thinkingConfig).length === 0) delete commonGenerationConfig.thinkingConfig;
                     }
                 } else if (selectedApiProvider === 'claude') {
+                    if (contextClaudeEnableMaxTokens && contextMaxTokens !== null) {
+                        commonGenerationConfig.maxOutputTokens = contextMaxTokens;
+                    } else if (contextClaudeEnableMaxTokens) {
+                         commonGenerationConfig.maxOutputTokens = DEFAULT_CLAUDE_MAX_TOKENS;
+                    }
+
+                    if (contextClaudeEnableTemperature && contextTemperature !== null) {
+                        commonGenerationConfig.temperature = contextTemperature;
+                    } else if (contextClaudeEnableTemperature) {
+                         commonGenerationConfig.temperature = DEFAULT_CLAUDE_TEMPERATURE;
+                    }
                     if(contextClaudeIncludeThoughts) {
                         commonGenerationConfig.thinkingConfig = { "type": "enabled" };
                         if (contextClaudeThinkingBudget !== null && Number.isInteger(contextClaudeThinkingBudget) && contextClaudeThinkingBudget >= 1024) {
@@ -9685,8 +9720,10 @@
 
                 newSettings.claudeSystemPrompt = elements.claudeSystemPromptDefaultTextarea.value.trim();
                 newSettings.claudeEnableSystemPromptDefault = elements.claudeEnableSystemPromptDefaultCheckbox.checked;
+                newSettings.claudeMaxTokens = elements.claudeMaxTokensInput.value === '' ? null : parseInt(elements.claudeMaxTokensInput.value, 10);
+                newSettings.claudeEnableMaxTokens = elements.claudeEnableMaxTokensCheckbox.checked;
                 newSettings.claudeTemperature = elements.claudeTemperatureInput.value === '' ? null : parseFloat(elements.claudeTemperatureInput.value);
-                newSettings.claudeMaxTokens = elements.claudeMaxTokensInput.value === '' ? null : parseInt(elements.claudeMaxTokensInput.value);
+                newSettings.claudeEnableTemperature = elements.claudeEnableTemperatureCheckbox.checked;
                 newSettings.claudeTopP = elements.claudeTopPInput.value === '' ? null : parseFloat(elements.claudeTopPInput.value);
                 newSettings.claudeStreamingOutput = elements.claudeStreamingOutputCheckbox.checked;
                 newSettings.claudeStreamingSpeed = elements.claudeStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.claudeStreamingSpeedInput.value);
@@ -9797,8 +9834,8 @@
                     newSettings.deepSeekFrequencyPenalty = validateNumeric(newSettings.deepSeekFrequencyPenalty, null, -2.0, 2.0);
                 } else if (currentProvider === 'claude') {
                     newSettings.claudeStreamingSpeed = validateNumeric(newSettings.claudeStreamingSpeed, DEFAULT_STREAMING_SPEED, 0, Infinity, true);
-                    newSettings.claudeTemperature = validateNumeric(newSettings.claudeTemperature, null, 0, 1);
-                    newSettings.claudeMaxTokens = validateNumeric(newSettings.claudeMaxTokens, null, 1, Infinity, true);
+                    newSettings.claudeMaxTokens = newSettings.claudeEnableMaxTokens ? validateNumeric(newSettings.claudeMaxTokens, null, 1, Infinity, true) : null;
+                    newSettings.claudeTemperature = newSettings.claudeEnableTemperature ? validateNumeric(newSettings.claudeTemperature, null, 0, 1) : null;
                     newSettings.claudeTopP = validateNumeric(newSettings.claudeTopP, null, 0, 1);
                     newSettings.claudeThinkingBudget = validateNumeric(newSettings.claudeThinkingBudget, null, 1024, Infinity, true);
                 }
@@ -9960,6 +9997,8 @@
                                 else if(key === 'claudeIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeThinkingBudget') defaultSettingsCopy[key] = null;
+                                else if(key === 'claudeEnableMaxTokens') defaultSettingsCopy[key] = true;
+                                else if(key === 'claudeEnableTemperature') defaultSettingsCopy[key] = true;
                             }
                         });
                         defaultSettingsCopy.apiKey = '';
@@ -10455,7 +10494,7 @@
                         } else {
                             const messageApiProvider = msg?.generatedByApiProvider || state.settings.apiProvider;
                             state.thoughtSummaryOpenStates.set(newIdx, (messageApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
-                                                                       (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
+                                                                       (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault) ||
                                                                        (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault));
                         }
                     });
@@ -11002,7 +11041,8 @@
                         streamingOutputB, streamingSpeedB, concatDummyModelB,
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
                         deepSeekIncludeThoughtsB,
-                        claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB;
+                        claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB,
+                        claudeEnableMaxTokensB, claudeEnableTemperatureB;
 
                     if (providerForSettingsB === 'gemini') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
@@ -11056,6 +11096,8 @@
                         claudeIncludeThoughtsB = state.settings.claudeIncludeThoughts;
                         claudeThinkingBudgetB = state.settings.claudeThinkingBudget;
                         claudeExpandThoughtsByDefaultB = state.settings.claudeExpandThoughtsByDefault;
+                        claudeEnableMaxTokensB = state.settings.claudeEnableMaxTokens;
+                        claudeEnableTemperatureB = state.settings.claudeEnableTemperature;
                     }
 
 
@@ -11076,6 +11118,8 @@
                                          providerForSettingsB === 'deepseek' ? deepSeekIncludeThoughtsB : 
                                          providerForSettingsB === 'claude' ? claudeIncludeThoughtsB : undefined,
                         expandThoughtsByDefault: providerForSettingsB === 'claude' ? claudeExpandThoughtsByDefaultB : undefined,
+                        enableMaxTokens: providerForSettingsB === 'claude' ? claudeEnableMaxTokensB : undefined,
+                        enableTemperature: providerForSettingsB === 'claude' ? claudeEnableTemperatureB : undefined,
                         pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
                         enableGrounding: providerForSettingsB === 'gemini' ? geminiEnableGroundingB : undefined,
                         inputText: inputForB,
@@ -11534,15 +11578,23 @@
                     model: model,
                     messages: anthropicRequest.messages,
                     stream: useStreaming,
-                    max_tokens: generationConfig.maxOutputTokens || state.settings.claudeMaxTokens || DEFAULT_CLAUDE_MAX_TOKENS
                 };
                 if(anthropicRequest.system) requestBody.system = anthropicRequest.system;
-                if (generationConfig.temperature !== undefined && generationConfig.temperature !== null) {
-                    requestBody.temperature = generationConfig.temperature;
-                } else if (state.settings.claudeTemperature !== null) {
-                    requestBody.temperature = state.settings.claudeTemperature;
+                
+                if (state.settings.claudeEnableMaxTokens) {
+                    requestBody.max_tokens = generationConfig.maxOutputTokens || state.settings.claudeMaxTokens || DEFAULT_CLAUDE_MAX_TOKENS;
                 } else {
-                    requestBody.temperature = DEFAULT_CLAUDE_TEMPERATURE;
+                     requestBody.max_tokens = DEFAULT_CLAUDE_MAX_TOKENS;
+                }
+
+                if (state.settings.claudeEnableTemperature) {
+                    if (generationConfig.temperature !== undefined && generationConfig.temperature !== null) {
+                        requestBody.temperature = generationConfig.temperature;
+                    } else if (state.settings.claudeTemperature !== null) {
+                        requestBody.temperature = state.settings.claudeTemperature;
+                    } else {
+                        requestBody.temperature = DEFAULT_CLAUDE_TEMPERATURE;
+                    }
                 }
 
                 if (generationConfig.topP !== undefined && generationConfig.topP !== null) {
