@@ -3526,7 +3526,7 @@
                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                                ※ スマホ等でテキスト入力時に意図せずズームするのを防ぎます。
                            </p>
-                            <label class="checkbox-label">
+                           <label class="checkbox-label">
                                 <input type="checkbox" id="show-paste-button-in-edit-toggle">
                                 メッセージ編集ツールバーに「貼付け」ボタンを表示する
                             </label>
@@ -7858,15 +7858,26 @@
                 state.currentChatId = null;
                 state.currentMessages = [];
                 const currentProvider = state.settings.apiProvider;
-                if (currentProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
-                    state.currentSystemPrompt = state.settings.geminiSystemPrompt || '';
-                } else if (currentProvider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
-                    state.currentSystemPrompt = state.settings.deepSeekSystemPrompt || '';
-                } else if (currentProvider === 'claude' && state.settings.claudeEnableSystemPromptDefault) {
-                    state.currentSystemPrompt = state.settings.claudeSystemPrompt || '';
-                } else {
-                    state.currentSystemPrompt = '';
+                let shouldSetSystemPrompt = false;
+                let systemPromptToUse = '';
+                switch (currentProvider) {
+                    case 'gemini':
+                        shouldSetSystemPrompt = state.settings.geminiEnableSystemPromptDefault === true;
+                        systemPromptToUse = state.settings.geminiSystemPrompt || '';
+                        break;
+                    case 'deepseek':
+                        shouldSetSystemPrompt = state.settings.deepSeekEnableSystemPromptDefault === true;
+                        systemPromptToUse = state.settings.deepSeekSystemPrompt || '';
+                        break;
+                    case 'claude':
+                        shouldSetSystemPrompt = state.settings.claudeEnableSystemPromptDefault === true;
+                        systemPromptToUse = state.settings.claudeSystemPrompt || '';
+                        break;
+                    default:
+                        shouldSetSystemPrompt = false;
+                        systemPromptToUse = '';
                 }
+                state.currentSystemPrompt = shouldSetSystemPrompt ? systemPromptToUse : '';
                 state.pendingAttachments = [];
                 state.isMemoVisible = false;
                 elements.memoArea.classList.add('hidden');
@@ -9151,7 +9162,10 @@
                             }
 
                              try {
-                                 uiUtils.finalizeDeepSeekDisplay(streamingMessageIndex);
+                                 if (selectedApiProvider === 'gemini' || selectedApiProvider === 'claude') {
+                                     uiUtils.finalizeStreamingMessage(streamingMessageIndex);
+                                 } else if (selectedApiProvider === 'deepseek') {
+                                     uiUtils.finalizeDeepSeekDisplay(streamingMessageIndex);
                                  }
                                  await dbUtils.saveChat();
                              } catch (saveError) {
@@ -10441,7 +10455,7 @@
                         } else {
                             const messageApiProvider = msg?.generatedByApiProvider || state.settings.apiProvider;
                             state.thoughtSummaryOpenStates.set(newIdx, (messageApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
-                                                                       (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault) ||
+                                                                       (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                                        (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault));
                         }
                     });
