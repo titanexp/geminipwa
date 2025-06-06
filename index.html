@@ -8944,7 +8944,7 @@
                                     if (block.type === 'text') {
                                         rawContentFromApi += block.text;
                                     } else if (block.type === 'thinking' && contextClaudeIncludeThoughts) {
-                                        modelThoughtSummaryContent += (block.thinking || "") + "\n\n";
+                                        modelThoughtSummaryContent += (block.text || block.thinking || "") + "\n\n";
                                     }
                                 });
                                 modelThoughtSummaryContent = modelThoughtSummaryContent.trim();
@@ -9746,6 +9746,7 @@
                  newSettings.persistMessageCollapseState = elements.persistMessageCollapseStateCheckbox.checked;
                  newSettings.messageBubbleOpacity = elements.messageBubbleOpacityInput.value === '' ? DEFAULT_MESSAGE_BUBBLE_OPACITY : parseFloat(elements.messageBubbleOpacityInput.value);
                  newSettings.chatOverlayOpacity = elements.chatOverlayOpacityInput.value === '' ? DEFAULT_CHAT_OVERLAY_OPACITY : parseFloat(elements.chatOverlayOpacityInput.value);
+
                  newSettings.headerFooterOpacity = elements.headerFooterOpacityInput.value === '' ? DEFAULT_HEADER_FOOTER_OPACITY : parseFloat(elements.headerFooterOpacityInput.value);
                  newSettings.messageActionsBackgroundOpacity = elements.messageActionsBackgroundOpacityInput.value === '' ? DEFAULT_MESSAGE_ACTIONS_BACKGROUND_OPACITY : parseFloat(elements.messageActionsBackgroundOpacityInput.value);
                  newSettings.toggleButtonTopWidth = parseInt(elements.toggleButtonTopWidthInput.value, 10) || DEFAULT_TOGGLE_BUTTON_TOP_WIDTH;
@@ -11657,10 +11658,12 @@
                                     const chunk = JSON.parse(jsonData);
                                     if (chunk.type === 'content_block_delta' && chunk.delta && chunk.delta.type === 'text_delta') {
                                         yield { type: 'chunk', contentText: chunk.delta.text || '', thoughtText: null };
-                                    } else if (chunk.type === 'content_block_start' && chunk.content_block && chunk.content_block.type === 'thinking') {
-                                        // thinking_start - no content yet
                                     } else if (chunk.type === 'content_block_delta' && chunk.delta && chunk.delta.type === 'thinking_delta') {
                                         yield { type: 'chunk', contentText: null, thoughtText: chunk.delta.text || '' };
+                                    } else if (chunk.type === 'content_block_start' && chunk.content_block && chunk.content_block.type === 'thinking') {
+                                        if (chunk.content_block.text) {
+                                            yield { type: 'chunk', contentText: null, thoughtText: chunk.content_block.text };
+                                        }
                                     } else if (chunk.type === 'message_stop') {
                                         finalFinishReason = chunk.message?.stop_reason || 'stop';
                                         if (chunk["amazon-bedrock-invocationMetrics"]) {
