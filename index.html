@@ -3595,12 +3595,12 @@
                                 <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor:pointer; font-weight: normal;">ヘッダー/フッターボタン表示設定</summary>
                                 <div style="padding-top:10px; padding-left:15px;">
                                    <label class="checkbox-label">
-                                       <input type="checkbox" id="show-chat-title-toggle">
-                                       ヘッダーにチャットタイトルを表示する
+                                        <input type="checkbox" id="show-bulk-history-actions-toggle">
+                                        履歴画面に「全出力」「全取込」ボタンを表示する
                                    </label>
                                    <label class="checkbox-label">
-                                       <input type="checkbox" id="show-api-provider-toggle-header">
-                                       ヘッダーにAPI切替ボタンを表示する
+                                       <input type="checkbox" id="show-chat-title-toggle">
+                                       ヘッダーにチャットタイトルを表示する
                                    </label>
                                    <label class="checkbox-label">
                                        <input type="checkbox" id="show-new-chat-button-toggle">
@@ -3641,14 +3641,34 @@
                                     <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom:10px;">
                                         ※ 各エリアは縦方向にリサイズ可能です。
                                     </p>
-                                   <label class="checkbox-label">
-                                        <input type="checkbox" id="show-bulk-history-actions-toggle">
-                                        履歴画面に「全出力」「全取込」ボタンを表示する
-                                    </label>
-                                   <label class="checkbox-label">
-                                       <input type="checkbox" id="show-api-provider-toggle-footer">
-                                       フッターにAPI切替ボタンを表示する
-                                   </label>
+                                   <details id="settings-group-api-provider-toggle" style="margin-top:10px; margin-bottom: 5px;">
+                                       <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor:pointer; font-weight: normal;">API切替ボタン設定</summary>
+                                       <div style="padding-left: 15px;">
+                                           <label class="checkbox-label">
+                                               <input type="checkbox" id="show-api-provider-toggle-header">
+                                               ヘッダーにAPI切替ボタンを表示する
+                                           </label>
+                                           <label class="checkbox-label">
+                                               <input type="checkbox" id="show-api-provider-toggle-footer">
+                                               フッターにAPI切替ボタンを表示する
+                                           </label>
+                                           <div id="api-provider-cycle-settings" style="margin-left: 20px; border-left: 1px solid var(--border-secondary); padding-left: 15px; margin-top: 5px;">
+                                               <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 5px;">切替対象のAPI:</p>
+                                               <label class="checkbox-label" style="font-size: 12px;">
+                                                   <input type="checkbox" id="api-provider-cycle-gemini">
+                                                   Google Gemini
+                                               </label>
+                                               <label class="checkbox-label" style="font-size: 12px;">
+                                                   <input type="checkbox" id="api-provider-cycle-deepseek">
+                                                   DeepSeek
+                                               </label>
+                                               <label class="checkbox-label" style="font-size: 12px;">
+                                                   <input type="checkbox" id="api-provider-cycle-claude">
+                                                   Claude (Anthropic API)
+                                               </label>
+                                           </div>
+                                       </div>
+                                   </details>
                                    <label class="checkbox-label">
                                        <input type="checkbox" id="show-paste-button-in-footer-toggle">
                                        フッターに「貼付け」ボタンを表示する
@@ -4239,6 +4259,9 @@
             footerApiProviderToggleBtn: document.getElementById('footer-api-provider-toggle-btn'),
             showApiProviderToggleHeaderCheckbox: document.getElementById('show-api-provider-toggle-header'),
             showApiProviderToggleFooterCheckbox: document.getElementById('show-api-provider-toggle-footer'),
+            apiProviderCycleGeminiCheckbox: document.getElementById('api-provider-cycle-gemini'),
+            apiProviderCycleDeepSeekCheckbox: document.getElementById('api-provider-cycle-deepseek'),
+            apiProviderCycleClaudeCheckbox: document.getElementById('api-provider-cycle-claude'),
         };
 
         const state = {
@@ -4385,6 +4408,11 @@
                 disableSaveSettingsConfirmation: false,
                 showApiProviderToggleHeader: false,
                 showApiProviderToggleFooter: false,
+                apiProviderCycle: {
+                    gemini: true,
+                    deepseek: true,
+                    claude: true,
+                },
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -6127,6 +6155,9 @@
                  elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity ?? DEFAULT_THOUGHT_SUMMARY_OPACITY;
                  elements.showApiProviderToggleHeaderCheckbox.checked = state.settings.showApiProviderToggleHeader;
                  elements.showApiProviderToggleFooterCheckbox.checked = state.settings.showApiProviderToggleFooter;
+                 elements.apiProviderCycleGeminiCheckbox.checked = state.settings.apiProviderCycle.gemini;
+                 elements.apiProviderCycleDeepSeekCheckbox.checked = state.settings.apiProviderCycle.deepseek;
+                 elements.apiProviderCycleClaudeCheckbox.checked = state.settings.apiProviderCycle.claude;
 
                 elements.showMemoButtonToggle.checked = state.settings.showMemoButton;
                 elements.memoHeightInput.value = state.settings.memoHeight || '';
@@ -9318,10 +9349,17 @@
                     await uiUtils.showCustomAlert('現在処理中のため、APIプロバイダーを変更できません。');
                     return;
                 }
-                const providers = ['gemini', 'deepseek', 'claude'];
-                const currentIndex = providers.indexOf(state.settings.apiProvider);
-                const nextIndex = (currentIndex + 1) % providers.length;
-                state.settings.apiProvider = providers[nextIndex];
+                const availableProviders = ['gemini', 'deepseek', 'claude'];
+                const cycleProviders = availableProviders.filter(p => state.settings.apiProviderCycle[p]);
+
+                if (cycleProviders.length === 0) {
+                    await uiUtils.showCustomAlert('切り替え可能なAPIプロバイダーが選択されていません。設定を確認してください。');
+                    return;
+                }
+
+                const currentIndex = cycleProviders.indexOf(state.settings.apiProvider);
+                const nextIndex = (currentIndex + 1) % cycleProviders.length;
+                state.settings.apiProvider = cycleProviders[nextIndex];
 
                 try {
                     await dbUtils.saveSetting('apiProvider', state.settings.apiProvider);
@@ -9331,7 +9369,7 @@
                     this.updateSystemPromptBasedOnProvider();
                 } catch (error) {
                     await uiUtils.showCustomAlert(`APIプロバイダー設定の保存に失敗しました: ${error.message}`);
-                    state.settings.apiProvider = providers[currentIndex];
+                    state.settings.apiProvider = cycleProviders[currentIndex];
                     elements.apiProviderSelect.value = state.settings.apiProvider;
                     uiUtils.updateChatScreenElementVisibility();
                 }
@@ -9908,6 +9946,12 @@
                  newSettings.thoughtSummaryOpacity = elements.thoughtSummaryOpacityInput.value === '' ? DEFAULT_THOUGHT_SUMMARY_OPACITY : parseFloat(elements.thoughtSummaryOpacityInput.value);
                  newSettings.showApiProviderToggleHeader = elements.showApiProviderToggleHeaderCheckbox.checked;
                  newSettings.showApiProviderToggleFooter = elements.showApiProviderToggleFooterCheckbox.checked;
+                 newSettings.apiProviderCycle = {
+                     gemini: elements.apiProviderCycleGeminiCheckbox.checked,
+                     deepseek: elements.apiProviderCycleDeepSeekCheckbox.checked,
+                     claude: elements.apiProviderCycleClaudeCheckbox.checked,
+                 };
+
 
                 const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
                     let num = isInteger ? parseInt(value, 10) : parseFloat(value);
@@ -10186,6 +10230,10 @@
                         defaultSettingsCopy.toggleButtonBottomTextExpand = DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
                         defaultSettingsCopy.thoughtSummaryOpacity = DEFAULT_THOUGHT_SUMMARY_OPACITY;
                         defaultSettingsCopy.settingsUIDetailsOpenStates = {};
+                        defaultSettingsCopy.showApiProviderToggleHeader = false;
+                        defaultSettingsCopy.showApiProviderToggleFooter = false;
+                        defaultSettingsCopy.apiProviderCycle = { gemini: true, deepseek: true, claude: true };
+
                         state.settings = defaultSettingsCopy;
 
                         state.backgroundImageUrl = null;
