@@ -3264,7 +3264,7 @@
                            <label for="claude-thinking-budget">Thinking Budget (トークン数):</label>
                            <input type="number" id="claude-thinking-budget" step="1" min="1024" placeholder="例: 2000 (1024以上)">
                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                               ※ 一部のモデルでのみ利用可能。チェック時、モデルは内部思考を生成します。
+                               ※ 一部のモデルでのみ利用可能。チェック時、モデルは内部思考を生成します。ダミーModelプロンプトとは併用不可。思考のsignatureを要求され、思考プロセスを偽装することが不可能なため。
                            </p>
                         </div>
 
@@ -3285,7 +3285,7 @@
                        <textarea id="gemini-dummy-model" placeholder="API送信直前に model ロールとして履歴最末尾に追加されます" aria-label="Gemini ダミー Model プロンプト"></textarea>
                        <label class="checkbox-label" style="margin-top: -5px;">
                            <input type="checkbox" id="gemini-enable-dummy-model">
-                           このダミーModelプロンプトを有効にする
+                           このダミーModelプロンプトを有効にする　※推論と併用不可。思考プロセスを偽装して送信することが不可能なため。
                        </label>
                        <label class="checkbox-label" style="margin-top: -5px; margin-bottom: 15px;">
                            <input type="checkbox" id="gemini-concat-dummy-model">
@@ -4652,6 +4652,9 @@
                         }
                         if (state.settings.thoughtSummaryOpacity === undefined || state.settings.thoughtSummaryOpacity === null || isNaN(parseFloat(state.settings.thoughtSummaryOpacity))) {
                             state.settings.thoughtSummaryOpacity = DEFAULT_THOUGHT_SUMMARY_OPACITY;
+                        }
+                        if (state.settings.thoughtSummaryFontSize === undefined || state.settings.thoughtSummaryFontSize === null || isNaN(parseInt(state.settings.thoughtSummaryFontSize))) {
+                            state.settings.thoughtSummaryFontSize = DEFAULT_THOUGHT_SUMMARY_FONT_SIZE;
                         }
                         if (typeof loadedSettings.settingsUIDetailsOpenStates === 'object' && loadedSettings.settingsUIDetailsOpenStates !== null) {
                             state.settings.settingsUIDetailsOpenStates = loadedSettings.settingsUIDetailsOpenStates;
@@ -8702,7 +8705,7 @@
                     } else if (selectedApiProvider === 'deepseek') {
                         apiResponseObject = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                     } else if (selectedApiProvider === 'claude') {
-                        apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, contextClaudeIncludeThoughts, dummyModelTextToUse);
+                        apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                     } else {
                         throw new Error("不明なAPIプロバイダーが選択されています。");
                     }
@@ -11540,7 +11543,7 @@
                     }
                 }
             },
-            async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming, includeThoughts = false, dummyModelText = null) {
+            async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
                 if (!state.settings.claudeApiKey) {
                     throw new Error("Claude APIキーが設定されていません。");
                 }
@@ -11550,7 +11553,7 @@
                 const model = state.settings.claudeModelName || DEFAULT_CLAUDE_MODEL;
                 const apiKey = state.settings.claudeApiKey;
 
-                const anthropicRequest = this.convertToClaudeRequest(messagesForApi, systemInstruction, includeThoughts, dummyModelText);
+                const anthropicRequest = this.convertToClaudeRequest(messagesForApi, systemInstruction);
 
                 const requestBody = {
                     model: model,
@@ -11620,7 +11623,7 @@
                     throw error;
                 }
             },
-            convertToClaudeRequest(messagesForApi, systemInstruction, includeThoughts = false, dummyModelText = null) {
+            convertToClaudeRequest(messagesForApi, systemInstruction) {
                 const claudeMessages = [];
                 let systemContent = '';
 
@@ -11630,35 +11633,23 @@
                     systemContent = systemInstruction.parts[0].text;
                 }
 
-                messagesForApi.forEach((msg, index) => {
+                for (const msg of messagesForApi) {
                     const claudeRole = msg.role === 'model' ? 'assistant' : 'user';
-                    let contentParts = [];
-                    
-                    const isDummyModelPrompt = 
-                        includeThoughts &&
-                        dummyModelText &&
-                        msg.role === 'model' &&
-                        index === messagesForApi.length - 1 &&
-                        msg.parts.length === 1 && msg.parts[0].text === dummyModelText;
-
-                    if (isDummyModelPrompt) {
-                        contentParts.push({ type: 'thinking', thinking: msg.parts[0].text });
-                    } else {
-                        msg.parts.forEach(part => {
-                            if (part.text) {
-                                contentParts.push({ type: 'text', text: part.text });
-                            } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
-                                 contentParts.push({
-                                    type: 'image',
-                                    source: {
-                                        type: 'base64',
-                                        media_type: part.inlineData.mimeType,
-                                        data: part.inlineData.data
-                                    }
-                                });
-                            }
-                        });
-                    }
+                    const contentParts = [];
+                    msg.parts.forEach(part => {
+                        if (part.text) {
+                            contentParts.push({ type: 'text', text: part.text });
+                        } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
+                             contentParts.push({
+                                type: 'image',
+                                source: {
+                                    type: 'base64',
+                                    media_type: part.inlineData.mimeType,
+                                    data: part.inlineData.data
+                                }
+                            });
+                        }
+                    });
 
                     if (contentParts.length > 0) {
                         claudeMessages.push({
@@ -11666,8 +11657,7 @@
                             content: contentParts
                         });
                     }
-                });
-
+                }
                 return {
                     messages: claudeMessages,
                     system: systemContent || undefined
