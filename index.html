@@ -4653,9 +4653,6 @@
                         if (state.settings.thoughtSummaryOpacity === undefined || state.settings.thoughtSummaryOpacity === null || isNaN(parseFloat(state.settings.thoughtSummaryOpacity))) {
                             state.settings.thoughtSummaryOpacity = DEFAULT_THOUGHT_SUMMARY_OPACITY;
                         }
-                        if (state.settings.thoughtSummaryFontSize === undefined || state.settings.thoughtSummaryFontSize === null || isNaN(parseInt(state.settings.thoughtSummaryFontSize))) {
-                            state.settings.thoughtSummaryFontSize = DEFAULT_THOUGHT_SUMMARY_FONT_SIZE;
-                        }
                         if (typeof loadedSettings.settingsUIDetailsOpenStates === 'object' && loadedSettings.settingsUIDetailsOpenStates !== null) {
                             state.settings.settingsUIDetailsOpenStates = loadedSettings.settingsUIDetailsOpenStates;
                         } else {
@@ -8705,7 +8702,7 @@
                     } else if (selectedApiProvider === 'deepseek') {
                         apiResponseObject = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                     } else if (selectedApiProvider === 'claude') {
-                        apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
+                        apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, contextClaudeIncludeThoughts, dummyModelTextToUse);
                     } else {
                         throw new Error("不明なAPIプロバイダーが選択されています。");
                     }
@@ -11543,7 +11540,7 @@
                     }
                 }
             },
-            async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
+            async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming, includeThoughts = false, dummyModelText = null) {
                 if (!state.settings.claudeApiKey) {
                     throw new Error("Claude APIキーが設定されていません。");
                 }
@@ -11553,7 +11550,7 @@
                 const model = state.settings.claudeModelName || DEFAULT_CLAUDE_MODEL;
                 const apiKey = state.settings.claudeApiKey;
 
-                const anthropicRequest = this.convertToClaudeRequest(messagesForApi, systemInstruction);
+                const anthropicRequest = this.convertToClaudeRequest(messagesForApi, systemInstruction, includeThoughts, dummyModelText);
 
                 const requestBody = {
                     model: model,
@@ -11623,7 +11620,7 @@
                     throw error;
                 }
             },
-            convertToClaudeRequest(messagesForApi, systemInstruction) {
+            convertToClaudeRequest(messagesForApi, systemInstruction, includeThoughts = false, dummyModelText = null) {
                 const claudeMessages = [];
                 let systemContent = '';
 
@@ -11633,23 +11630,35 @@
                     systemContent = systemInstruction.parts[0].text;
                 }
 
-                for (const msg of messagesForApi) {
+                messagesForApi.forEach((msg, index) => {
                     const claudeRole = msg.role === 'model' ? 'assistant' : 'user';
-                    const contentParts = [];
-                    msg.parts.forEach(part => {
-                        if (part.text) {
-                            contentParts.push({ type: 'text', text: part.text });
-                        } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
-                             contentParts.push({
-                                type: 'image',
-                                source: {
-                                    type: 'base64',
-                                    media_type: part.inlineData.mimeType,
-                                    data: part.inlineData.data
-                                }
-                            });
-                        }
-                    });
+                    let contentParts = [];
+                    
+                    const isDummyModelPrompt = 
+                        includeThoughts &&
+                        dummyModelText &&
+                        msg.role === 'model' &&
+                        index === messagesForApi.length - 1 &&
+                        msg.parts.length === 1 && msg.parts[0].text === dummyModelText;
+
+                    if (isDummyModelPrompt) {
+                        contentParts.push({ type: 'thinking', thinking: msg.parts[0].text });
+                    } else {
+                        msg.parts.forEach(part => {
+                            if (part.text) {
+                                contentParts.push({ type: 'text', text: part.text });
+                            } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
+                                 contentParts.push({
+                                    type: 'image',
+                                    source: {
+                                        type: 'base64',
+                                        media_type: part.inlineData.mimeType,
+                                        data: part.inlineData.data
+                                    }
+                                });
+                            }
+                        });
+                    }
 
                     if (contentParts.length > 0) {
                         claudeMessages.push({
@@ -11657,7 +11666,8 @@
                             content: contentParts
                         });
                     }
-                }
+                });
+
                 return {
                     messages: claudeMessages,
                     system: systemContent || undefined
