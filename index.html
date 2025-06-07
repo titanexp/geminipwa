@@ -3077,11 +3077,6 @@
                         </select>
                         <label for="claude-additional-models" style="margin-top:10px;">追加モデル (カンマ区切り):</label>
                         <textarea id="claude-additional-models" placeholder="例: my-custom-claude-model" aria-label="Claude 追加モデル"></textarea>
-                        <label for="claude-api-version" style="margin-top:10px;">Anthropic APIバージョン:</label>
-                        <input type="text" id="claude-api-version" placeholder="例: 2023-06-01" aria-label="Anthropic APIバージョン">
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                           ※指定は必須ではありません
-                        </p>
                     </div>
                 </details>
 
@@ -3837,8 +3832,8 @@
         const CHATS_STORE = 'chats';
         const CHAT_UPDATEDAT_INDEX = 'updatedAtIndex';
         const CHAT_CREATEDAT_INDEX = 'createdAtIndex';
-        const DEFAULT_MODEL = 'gemini-2.5-flash-preview-05-20';
-        const DEFAULT_DEEPSEEK_MODEL = 'deepseek-reasoner';
+        const DEFAULT_MODEL = 'gemini-2.0-flash';
+        const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat';
         const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-20250514';
         const DEFAULT_STREAMING_SPEED = 12;
         const DEFAULT_TEMPERATURE = 0.5;
@@ -4000,7 +3995,6 @@
             claudeModelNameSelect: document.getElementById('claude-model-name'),
             claudeUserDefinedModelsGroup: document.getElementById('claude-user-defined-models-group'),
             claudeAdditionalModelsTextarea: document.getElementById('claude-additional-models'),
-            claudeApiVersionInput: document.getElementById('claude-api-version'),
 
             geminiParamsGroup: document.getElementById('gemini-params-group'),
             deepseekParamsGroup: document.getElementById('deepseek-params-group'),
@@ -4225,7 +4219,7 @@
                 geminiPresencePenalty: null,
                 geminiFrequencyPenalty: null,
                 geminiThinkingBudget: null,
-                geminiIncludeThoughts: true,
+                geminiIncludeThoughts: false,
                 geminiExpandThoughtsByDefault: false,
                 geminiStreamingOutput: true,
                 geminiStreamingSpeed: DEFAULT_STREAMING_SPEED,
@@ -4247,7 +4241,7 @@
                 deepSeekTopP: null,
                 deepSeekPresencePenalty: null,
                 deepSeekFrequencyPenalty: null,
-                deepSeekIncludeDeepSeekThoughts: true,
+                deepSeekIncludeDeepSeekThoughts: false,
                 deepSeekExpandDeepSeekThoughtsByDefault: false,
                 deepSeekStreamingOutput: true,
                 deepSeekStreamingSpeed: DEFAULT_STREAMING_SPEED,
@@ -4259,7 +4253,6 @@
                 claudeApiKey: '',
                 claudeModelName: DEFAULT_CLAUDE_MODEL,
                 claudeAdditionalModels: '',
-                claudeApiVersion: '',
                 claudeSystemPrompt: '',
                 claudeEnableSystemPromptDefault: true,
                 claudeTemperature: null,
@@ -5994,7 +5987,6 @@
                 elements.claudeApiKeyInput.value = state.settings.claudeApiKey || '';
                 elements.claudeModelNameSelect.value = state.settings.claudeModelName || DEFAULT_CLAUDE_MODEL;
                 elements.claudeAdditionalModelsTextarea.value = state.settings.claudeAdditionalModels || '';
-                elements.claudeApiVersionInput.value = state.settings.claudeApiVersion || '';
 
                 elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPrompt || '';
                 elements.geminiEnableSystemPromptDefaultCheckbox.checked = state.settings.geminiEnableSystemPromptDefault;
@@ -6949,7 +6941,7 @@
         };
 
         const appLogic = {
-            initializeApp() {
+            async initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true, gfm: true, sanitize: true, smartypants: false
@@ -9520,7 +9512,6 @@
                                     siblings[siblings.length - 1].isSelected = true;
                                 } else if (selectedSiblings.length > 1) {
                                     for (let i = 0; i < selectedSiblings.length - 1; i++) {
-                                    for (let i = 0; i < selectedSiblings.length - 1; i++) {
                                         selectedSiblings[i].isSelected = false;
                                     }
                                 }
@@ -9674,7 +9665,6 @@
                  newSettings.claudeApiKey = elements.claudeApiKeyInput.value.trim();
                  newSettings.claudeModelName = elements.claudeModelNameSelect.value;
                  newSettings.claudeAdditionalModels = elements.claudeAdditionalModelsTextarea.value.trim();
-                 newSettings.claudeApiVersion = elements.claudeApiVersionInput.value.trim();
 
                 newSettings.geminiSystemPrompt = elements.geminiSystemPromptDefaultTextarea.value.trim();
                 newSettings.geminiEnableSystemPromptDefault = elements.geminiEnableSystemPromptDefaultCheckbox.checked;
@@ -9984,11 +9974,11 @@
                                 else if(key.toLowerCase().includes('dummyuser') || key.toLowerCase().includes('dummymodel')) defaultSettingsCopy[key] = '';
                                 else if(key.toLowerCase().includes('enabledummyuser') || key.toLowerCase().includes('enabledummymodel')) defaultSettingsCopy[key] = true;
                                 else if(key.toLowerCase().includes('concatdummymodel')) defaultSettingsCopy[key] = false;
-                                else if(key === 'geminiIncludeThoughts') defaultSettingsCopy[key] = true;
+                                else if(key === 'geminiIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'geminiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'geminiPseudoStreaming') defaultSettingsCopy[key] = false;
                                 else if(key === 'geminiEnableGrounding') defaultSettingsCopy[key] = false;
-                                else if(key === 'deepSeekIncludeDeepSeekThoughts') defaultSettingsCopy[key] = true;
+                                else if(key === 'deepSeekIncludeDeepSeekThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'deepSeekExpandDeepSeekThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
@@ -10005,7 +9995,6 @@
                         defaultSettingsCopy.claudeApiKey = '';
                         defaultSettingsCopy.claudeModelName = DEFAULT_CLAUDE_MODEL;
                         defaultSettingsCopy.claudeAdditionalModels = '';
-                        defaultSettingsCopy.claudeApiVersion = '';
                         defaultSettingsCopy.apiProvider = 'gemini';
                         defaultSettingsCopy.enterToSend = true;
                         defaultSettingsCopy.autoScrollOnNewMessage = DEFAULT_AUTO_SCROLL_ON_NEW_MESSAGE;
@@ -11036,7 +11025,7 @@
                         streamingOutputB, streamingSpeedB, concatDummyModelB,
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
                         deepSeekIncludeThoughtsB,
-                        claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB, claudeApiVersionB;
+                        claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB;
 
                     if (providerForSettingsB === 'gemini') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
@@ -11091,7 +11080,6 @@
                         claudeIncludeThoughtsB = state.settings.claudeIncludeThoughts;
                         claudeThinkingBudgetB = state.settings.claudeThinkingBudget;
                         claudeExpandThoughtsByDefaultB = state.settings.claudeExpandThoughtsByDefault;
-                        claudeApiVersionB = state.settings.claudeApiVersion;
                     }
 
 
@@ -11115,7 +11103,6 @@
                         expandThoughtsByDefault: providerForSettingsB === 'claude' ? claudeExpandThoughtsByDefaultB : undefined,
                         pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
                         enableGrounding: providerForSettingsB === 'gemini' ? geminiEnableGroundingB : undefined,
-                        apiVersion: providerForSettingsB === 'claude' ? claudeApiVersionB : undefined,
                         inputText: inputForB,
                         attachments: [],
                         apiProvider: providerForSettingsB
@@ -11565,7 +11552,6 @@
 
                 const model = state.settings.claudeModelName || DEFAULT_CLAUDE_MODEL;
                 const apiKey = state.settings.claudeApiKey;
-                const apiVersion = state.settings.claudeApiVersion || '2023-06-01';
 
                 const anthropicRequest = this.convertToClaudeRequest(messagesForApi, systemInstruction);
 
@@ -11612,7 +11598,7 @@
                         headers: {
                             'Content-Type': 'application/json',
                             'x-api-key': apiKey,
-                            'anthropic-version': apiVersion,
+                            'anthropic-version': '2023-06-01',
                             'anthropic-dangerous-direct-browser-access': 'true'
                         },
                         body: JSON.stringify(requestBody),
