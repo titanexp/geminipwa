@@ -2854,7 +2854,7 @@
         }
         #ai-to-ai-chat-btn {
         }
-        .set-thinking-budget-btn {
+        .set-thinking-budget-btn, .set-claude-param-btn {
             flex-grow: 1;
         }
 
@@ -3230,22 +3230,22 @@
                                 <label for="claude-max-tokens">Max Tokens:</label>
                                 <input type="number" id="claude-max-tokens" step="1" min="1" placeholder="例:4096" aria-label="Claude Max Tokens">
                                 <div style="display: flex; gap: 8px; margin-top: 5px; margin-bottom: 10px;">
-                                    <button type="button" class="set-claude-max-tokens-btn" data-value="null" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px; flex-grow:1;">無</button>
-                                    <button type="button" class="set-claude-max-tokens-btn" data-value="32000" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px; flex-grow:1;">32000</button>
+                                    <button type="button" class="set-claude-param-btn" data-target="claude-max-tokens" data-value="null" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px;">無</button>
+                                    <button type="button" class="set-claude-param-btn" data-target="claude-max-tokens" data-value="32000" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px;">32000</button>
                                 </div>
                             </div>
                             <div>
                                 <label for="claude-temperature">Temperature:</label>
-                                <input type="number" id="claude-temperature" step="0.01" min="0" max="3" placeholder="例:0.7 (0.0-3.0)" aria-label="Claude Temperature">
+                                <input type="number" id="claude-temperature" step="0.01" min="0" max="1" placeholder="例:0.7 (0.0-1.0)" aria-label="Claude Temperature">
                                 <div style="display: flex; gap: 8px; margin-top: 5px; margin-bottom: 10px;">
-                                    <button type="button" class="set-claude-temperature-btn" data-value="null" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px; flex-grow:1;">無</button>
-                                    <button type="button" class="set-claude-temperature-btn" data-value="1.0" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px; flex-grow:1;">1.0</button>
-                                    <button type="button" class="set-claude-temperature-btn" data-value="2.0" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px; flex-grow:1;">2.0</button>
+                                    <button type="button" class="set-claude-param-btn" data-target="claude-temperature" data-value="null" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px;">無</button>
+                                    <button type="button" class="set-claude-param-btn" data-target="claude-temperature" data-value="0" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px;">0</button>
+                                    <button type="button" class="set-claude-param-btn" data-target="claude-temperature" data-value="1.0" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px;">1.0</button>
                                 </div>
                             </div>
                             <div>
                                 <label for="claude-top-k">Top K:</label>
-                                <input type="number" id="claude-top-k" step="1" min="1" placeholder="例:40(1-40)" aria-label="Claude Top K">
+                                <input type="number" id="claude-top-k" step="1" min="1" placeholder="例:5" aria-label="Claude Top K">
                             </div>
                             <div>
                                 <label for="claude-top-p">Top P:</label>
@@ -3836,7 +3836,7 @@
         const CHAT_CREATEDAT_INDEX = 'createdAtIndex';
         const DEFAULT_MODEL = 'gemini-2.0-flash';
         const DEFAULT_DEEPSEEK_MODEL = 'deepseek-chat';
-        const DEFAULT_CLAUDE_MODEL = 'claude-3-5-sonnet-20240620';
+        const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-20250514';
         const DEFAULT_STREAMING_SPEED = 12;
         const DEFAULT_TEMPERATURE = 0.5;
         const DEFAULT_MAX_TOKENS = 4000;
@@ -4059,10 +4059,9 @@
             claudeIncludeThoughtsToggle: document.getElementById('claude-include-thoughts-toggle'),
             claudeExpandThoughtsByDefaultToggle: document.getElementById('claude-expand-thoughts-by-default-toggle'),
             claudeThinkingBudgetInput: document.getElementById('claude-thinking-budget'),
-            setClaudeMaxTokensBtns: document.querySelectorAll('.set-claude-max-tokens-btn'),
-            setClaudeTemperatureBtns: document.querySelectorAll('.set-claude-temperature-btn'),
 
             setThinkingBudgetBtns: document.querySelectorAll('.set-thinking-budget-btn'),
+            setClaudeParamBtns: document.querySelectorAll('.set-claude-param-btn'),
             enterToSendCheckbox: document.getElementById('enter-to-send'),
             autoScrollOnNewMessageCheckbox: document.getElementById('auto-scroll-on-new-message'),
             autoScrollOnThoughtCheckbox: document.getElementById('auto-scroll-on-thought'),
@@ -7120,27 +7119,20 @@
                         }
                     });
                 });
-                elements.setClaudeMaxTokensBtns.forEach(button => {
+                elements.setClaudeParamBtns.forEach(button => {
                     button.addEventListener('click', () => {
+                        const targetId = button.dataset.target;
                         const value = button.dataset.value;
-                        if (value === 'null') {
-                            elements.claudeMaxTokensInput.value = '';
-                        } else {
-                            elements.claudeMaxTokensInput.value = value;
+                        const targetInput = document.getElementById(targetId);
+                        if (targetInput) {
+                            if (value === 'null') {
+                                targetInput.value = '';
+                            } else {
+                                targetInput.value = value;
+                            }
                         }
                     });
                 });
-                elements.setClaudeTemperatureBtns.forEach(button => {
-                    button.addEventListener('click', () => {
-                        const value = button.dataset.value;
-                        if (value === 'null') {
-                            elements.claudeTemperatureInput.value = '';
-                        } else {
-                            elements.claudeTemperatureInput.value = value;
-                        }
-                    });
-                });
-
 
                 elements.uploadBackgroundBtn.addEventListener('click', () => elements.backgroundImageInput.click());
                 elements.backgroundImageInput.addEventListener('change', (event) => {
@@ -9829,7 +9821,7 @@
                     newSettings.deepSeekFrequencyPenalty = validateNumeric(newSettings.deepSeekFrequencyPenalty, null, -2.0, 2.0);
                 } else if (currentProvider === 'claude') {
                     newSettings.claudeStreamingSpeed = validateNumeric(newSettings.claudeStreamingSpeed, DEFAULT_STREAMING_SPEED, 0, Infinity, true);
-                    newSettings.claudeTemperature = validateNumeric(newSettings.claudeTemperature, null, 0, 3);
+                    newSettings.claudeTemperature = validateNumeric(newSettings.claudeTemperature, null, 0, 1);
                     newSettings.claudeMaxTokens = validateNumeric(newSettings.claudeMaxTokens, null, 1, Infinity, true);
                     newSettings.claudeTopK = validateNumeric(newSettings.claudeTopK, null, 1, Infinity, true);
                     newSettings.claudeTopP = validateNumeric(newSettings.claudeTopP, null, 0, 1);
@@ -11103,7 +11095,8 @@
                         streamingOutput: streamingOutputB, streamingSpeed: streamingSpeedB,
                         dummyUser: dummyUserB, enableDummyUser: enableDummyUserB,
                         dummyModel: dummyModelB, enableDummyModel: enableDummyModelB, concatDummyModel: concatDummyModelB,
-                        topK: providerForSettingsB === 'gemini' ? geminiTopKB : (providerForSettingsB === 'claude' ? claudeTopKB : undefined),
+                        topK: providerForSettingsB === 'gemini' ? geminiTopKB :
+                              providerForSettingsB === 'claude' ? claudeTopKB : undefined,
                         thinkingBudget: providerForSettingsB === 'gemini' ? geminiThinkingBudgetB : 
                                         providerForSettingsB === 'claude' ? claudeThinkingBudgetB : undefined,
                         includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : 
@@ -11578,6 +11571,7 @@
                 } else {
                     requestBody.temperature = DEFAULT_CLAUDE_TEMPERATURE;
                 }
+
                 if (generationConfig.topK !== undefined && generationConfig.topK !== null) {
                     requestBody.top_k = generationConfig.topK;
                 } else if (state.settings.claudeTopK !== null) {
