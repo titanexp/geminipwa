@@ -2907,6 +2907,7 @@
 
     </style>
     <script src="marked.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -4453,7 +4454,7 @@
                 settingsUIDetailsOpenStates: {},
                 disableSaveSettingsConfirmation: false,
                 showApiProviderToggleHeader: false,
-                showApiProviderToggleFooter: false,
+                showApiProviderToggleFooter: true,
                 apiProviderCycle: {
                     gemini: true,
                     deepseek: true,
@@ -4983,6 +4984,19 @@
         };
 
         const uiUtils = {
+            _sanitizeAndParseMarkdown(content) {
+                if (typeof DOMPurify === 'undefined') {
+                    const div = document.createElement('div');
+                    div.textContent = content || '';
+                    return div.innerHTML;
+                }
+                const rawHtml = marked.parse(content || '');
+                const cleanHtml = DOMPurify.sanitize(rawHtml, {
+                    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'code', 'a', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr', 'img'],
+                    ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'src', 'alt']
+                });
+                return cleanHtml;
+            },
             renderChatMessages(maintainScroll = false) {
                 const mainContent = elements.chatScreen.querySelector('.main-content');
                 const oldScrollTop = maintainScroll ? mainContent.scrollTop : null;
@@ -5126,7 +5140,7 @@
                         }
                     } else if ((messageApiProvider === 'gemini' || messageApiProvider === 'claude') && messageData?.thoughtSummary) {
                         try {
-                            thoughtContentDiv.innerHTML = marked.parse(messageData.thoughtSummary || '');
+                            thoughtContentDiv.innerHTML = this._sanitizeAndParseMarkdown(messageData.thoughtSummary || '');
                         } catch (e) {
                             thoughtContentDiv.textContent = messageData.thoughtSummary || '';
                         }
@@ -5204,8 +5218,8 @@
                 } else {
                     try {
                         if (role === 'model' && !isStreamingPlaceholder && typeof marked !== 'undefined') {
-                            const rawHtml = marked.parse(content || '');
-                            contentDiv.innerHTML = rawHtml;
+                            const safeHtml = this._sanitizeAndParseMarkdown(content || '');
+                            contentDiv.innerHTML = safeHtml;
                             this.processInteractivePlaceholders(contentDiv);
                             this.processInteractiveTitles(contentDiv);
                             this.addCopyButtonsToCodeBlocks(contentDiv);
@@ -5534,8 +5548,8 @@
                 if (targetContentDiv) {
                     const renderCurrentState = (contentToRender) => {
                         try {
-                            const rawHtml = marked.parse(contentToRender || '');
-                            targetContentDiv.innerHTML = rawHtml;
+                            const safeHtml = this._sanitizeAndParseMarkdown(contentToRender || '');
+                            targetContentDiv.innerHTML = safeHtml;
 
                             if (!isThoughtSummary) {
                                 this.processInteractivePlaceholders(targetContentDiv);
@@ -5575,7 +5589,7 @@
                         const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
                         if (thoughtContentDiv && typeof marked !== 'undefined') {
                             try {
-                                thoughtContentDiv.innerHTML = marked.parse(finalMessageData.thoughtSummary || '');
+                                thoughtContentDiv.innerHTML = this._sanitizeAndParseMarkdown(finalMessageData.thoughtSummary || '');
                             } catch (e) {
                                 thoughtContentDiv.textContent = finalMessageData.thoughtSummary || '';
                             }
@@ -5609,8 +5623,8 @@
                     const finalRawContent = finalMessageData.content || '';
                     if (contentDiv && typeof marked !== 'undefined') {
                          try {
-                             const rawHtml = marked.parse(finalRawContent);
-                             contentDiv.innerHTML = rawHtml;
+                             const safeHtml = this._sanitizeAndParseMarkdown(finalRawContent);
+                             contentDiv.innerHTML = safeHtml;
                              this.processInteractivePlaceholders(contentDiv);
                              this.processInteractiveTitles(contentDiv);
                              this.addCopyButtonsToCodeBlocks(contentDiv);
@@ -7067,7 +7081,7 @@
                     if (state.deepSeekContentDisplayIndex < state.deepSeekRawTextBuffer.length) {
                         const currentTextToParse = state.deepSeekRawTextBuffer.substring(0, state.deepSeekContentDisplayIndex + 1);
                         try {
-                            contentDiv.innerHTML = marked.parse(currentTextToParse || '');
+                            contentDiv.innerHTML = this._sanitizeAndParseMarkdown(currentTextToParse || '');
                             this.addCopyButtonsToCodeBlocks(contentDiv);
                         } catch (e) {
                             contentDiv.textContent = currentTextToParse;
@@ -7078,7 +7092,7 @@
                             state.deepSeekContentTimerId = setTimeout(animate, state.settings.deepSeekStreamingSpeed);
                         } else {
                             try {
-                                contentDiv.innerHTML = marked.parse(state.deepSeekRawTextBuffer || '');
+                                contentDiv.innerHTML = this._sanitizeAndParseMarkdown(state.deepSeekRawTextBuffer || '');
                                 this.addCopyButtonsToCodeBlocks(contentDiv);
                             } catch (e) {
                                 contentDiv.textContent = state.deepSeekRawTextBuffer;
@@ -7088,7 +7102,7 @@
                         }
                     } else {
                         try {
-                            contentDiv.innerHTML = marked.parse(state.deepSeekRawTextBuffer || '');
+                            contentDiv.innerHTML = this._sanitizeAndParseMarkdown(state.deepSeekRawTextBuffer || '');
                             this.addCopyButtonsToCodeBlocks(contentDiv);
                         } catch (e) {
                             contentDiv.textContent = state.deepSeekRawTextBuffer;
@@ -7120,7 +7134,7 @@
                     const contentDiv = this.getDeepSeekContentElement(messageIndex);
                     if (contentDiv) {
                         try {
-                            contentDiv.innerHTML = marked.parse(messageData.content || state.deepSeekRawTextBuffer || '');
+                            contentDiv.innerHTML = this._sanitizeAndParseMarkdown(messageData.content || state.deepSeekRawTextBuffer || '');
                             this.addCopyButtonsToCodeBlocks(contentDiv);
                         } catch (e) {
                             contentDiv.textContent = messageData.content || state.deepSeekRawTextBuffer;
@@ -7135,7 +7149,10 @@
             initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
-                        breaks: true, gfm: true, sanitize: true, smartypants: false
+                        breaks: true,
+                        gfm: true,
+                        sanitize: false,
+                        smartypants: false
                     });
                 }
                 elements.appVersionSpan.textContent = APP_VERSION;
@@ -10342,7 +10359,7 @@
                         defaultSettingsCopy.thoughtSummaryOpacity = DEFAULT_THOUGHT_SUMMARY_OPACITY;
                         defaultSettingsCopy.settingsUIDetailsOpenStates = {};
                         defaultSettingsCopy.showApiProviderToggleHeader = false;
-                        defaultSettingsCopy.showApiProviderToggleFooter = false;
+                        defaultSettingsCopy.showApiProviderToggleFooter = true;
                         defaultSettingsCopy.apiProviderCycle = { gemini: true, deepseek: true, claude: true };
 
                         state.settings = defaultSettingsCopy;
@@ -10580,9 +10597,9 @@
                 const contentDiv = messageElement.querySelector('.message-content');
                 if (contentDiv && typeof marked !== 'undefined' && originalMessage.role === 'model') {
                     try {
-                        const rawHtml = marked.parse(newRawContent || '');
+                        const safeHtml = uiUtils._sanitizeAndParseMarkdown(newRawContent || '');
                         const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = rawHtml;
+                        tempDiv.innerHTML = safeHtml;
                         uiUtils.processInteractivePlaceholders(tempDiv);
                         uiUtils.processInteractiveTitles(tempDiv);
                         contentDiv.innerHTML = tempDiv.innerHTML;
