@@ -3029,6 +3029,17 @@
                             <option value="claude">Claude (Anthropic API)</option>
                         </select>
                     </div>
+                    <details id="settings-group-common-system-prompt" style="margin-top:15px;">
+                        <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor:pointer; font-weight: normal;">共通システムプロンプト設定</summary>
+                        <div style="padding-top:10px; padding-left:15px;">
+                            <label for="common-system-prompt-default">共通システムプロンプト (全API共通):</label>
+                            <textarea id="common-system-prompt-default" placeholder="例: あなたは優秀なアシスタントです。ここに設定した内容は、APIごとの設定より優先されます。" aria-label="共通システムプロンプト (デフォルト)"></textarea>
+                            <label class="checkbox-label" style="margin-top: -5px; margin-bottom: 15px;">
+                                <input type="checkbox" id="enable-common-system-prompt-default">
+                                この共通システムプロンプトを有効にする (API別設定より優先)
+                            </label>
+                        </div>
+                    </details>
                 </details>
 
                 <details id="gemini-settings-group" class="settings-group" open>
@@ -4061,6 +4072,8 @@
             saveSystemPromptBtn: document.getElementById('save-system-prompt-btn'),
             cancelSystemPromptBtn: document.getElementById('cancel-system-prompt-btn'),
             apiProviderSelect: document.getElementById('api-provider-select'),
+            commonSystemPromptDefaultTextarea: document.getElementById('common-system-prompt-default'),
+            enableCommonSystemPromptDefaultCheckbox: document.getElementById('enable-common-system-prompt-default'),
             geminiSettingsGroup: document.getElementById('gemini-settings-group'),
             geminiApiKeyInput: document.getElementById('gemini-api-key'),
             geminiModelNameSelect: document.getElementById('gemini-model-name'),
@@ -4299,6 +4312,8 @@
                 apiKey: '',
                 modelName: DEFAULT_MODEL,
                 additionalModels: '',
+                commonSystemPrompt: '',
+                enableCommonSystemPromptDefault: false,
                 geminiSystemPrompt: '',
                 geminiEnableSystemPromptDefault: true,
                 geminiTemperature: null,
@@ -6082,6 +6097,8 @@
             applySettingsToUI() {
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
                 elements.apiProviderSelect.value = state.settings.apiProvider;
+                elements.commonSystemPromptDefaultTextarea.value = state.settings.commonSystemPrompt || '';
+                elements.enableCommonSystemPromptDefaultCheckbox.checked = state.settings.enableCommonSystemPromptDefault;
 
                 elements.geminiApiKeyInput.value = state.settings.apiKey || '';
                 elements.geminiModelNameSelect.value = state.settings.modelName || DEFAULT_MODEL;
@@ -8064,7 +8081,9 @@
                 state.currentChatId = null;
                 state.currentMessages = [];
                 const currentProvider = state.settings.apiProvider;
-                if (currentProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
+                if (state.settings.enableCommonSystemPromptDefault) {
+                    state.currentSystemPrompt = state.settings.commonSystemPrompt || '';
+                } else if (currentProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
                     state.currentSystemPrompt = state.settings.geminiSystemPrompt || '';
                 } else if (currentProvider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
                     state.currentSystemPrompt = state.settings.deepSeekSystemPrompt || '';
@@ -8459,7 +8478,20 @@
                 if (isBackgroundProcess) {
                     currentContextSystemPrompt = sourceSessionContext.systemPrompt;
                 } else {
-                    currentContextSystemPrompt = state.currentSystemPrompt;
+                    const chatSystemPrompt = state.currentSystemPrompt.trim();
+                    if (chatSystemPrompt) {
+                        currentContextSystemPrompt = chatSystemPrompt;
+                    } else if (selectedApiProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
+                        currentContextSystemPrompt = state.settings.geminiSystemPrompt;
+                    } else if (selectedApiProvider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
+                        currentContextSystemPrompt = state.settings.deepSeekSystemPrompt;
+                    } else if (selectedApiProvider === 'claude' && state.settings.claudeEnableSystemPromptDefault) {
+                        currentContextSystemPrompt = state.settings.claudeSystemPrompt;
+                    } else if (state.settings.enableCommonSystemPromptDefault) {
+                        currentContextSystemPrompt = state.settings.commonSystemPrompt;
+                    } else {
+                        currentContextSystemPrompt = '';
+                    }
                 }
 
                 let contextTemperature, contextMaxTokens, contextTopP,
@@ -8510,7 +8542,7 @@
                         contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.deepSeekDummyModel;
                         contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.deepSeekEnableDummyModel;
                         contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.deepSeekConcatDummyModel;
-                    } else if (providerForBgSettings === 'claude') {
+                    } else if (providerForSettingsB === 'claude') {
                         contextTemperature = sourceSessionContext.temperature ?? state.settings.claudeTemperature;
                         contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.claudeMaxTokens;
                         contextClaudeTopK = sourceSessionContext.topK ?? state.settings.claudeTopK;
@@ -9446,16 +9478,20 @@
                 }
             },
             updateSystemPromptBasedOnProvider() {
-                 const currentProvider = state.settings.apiProvider;
-                 if (currentProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
-                     state.currentSystemPrompt = state.settings.geminiSystemPrompt;
-                 } else if (currentProvider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
-                     state.currentSystemPrompt = state.settings.deepSeekSystemPrompt;
-                 } else if (currentProvider === 'claude' && state.settings.claudeEnableSystemPromptDefault) {
-                     state.currentSystemPrompt = state.settings.claudeSystemPrompt;
-                 } else {
-                     state.currentSystemPrompt = '';
-                 }
+                if (state.settings.enableCommonSystemPromptDefault) {
+                    state.currentSystemPrompt = state.settings.commonSystemPrompt;
+                } else {
+                    const currentProvider = state.settings.apiProvider;
+                    if (currentProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
+                        state.currentSystemPrompt = state.settings.geminiSystemPrompt;
+                    } else if (currentProvider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
+                        state.currentSystemPrompt = state.settings.deepSeekSystemPrompt;
+                    } else if (currentProvider === 'claude' && state.settings.claudeEnableSystemPromptDefault) {
+                        state.currentSystemPrompt = state.settings.claudeSystemPrompt;
+                    } else {
+                        state.currentSystemPrompt = '';
+                    }
+                }
                  uiUtils.updateSystemPromptUI();
                  if (state.currentChatId) {
                      dbUtils.saveChat();
@@ -9882,6 +9918,8 @@
                  newSettings.apiKey = elements.geminiApiKeyInput.value.trim();
                  newSettings.modelName = elements.geminiModelNameSelect.value;
                  newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
+                 newSettings.commonSystemPrompt = elements.commonSystemPromptDefaultTextarea.value.trim();
+                 newSettings.enableCommonSystemPromptDefault = elements.enableCommonSystemPromptDefaultCheckbox.checked;
                  newSettings.deepSeekApiKey = elements.deepSeekApiKeyInput.value.trim();
                  newSettings.deepSeekModelName = elements.deepSeekModelNameSelect.value;
                  newSettings.deepSeekAdditionalModels = elements.deepSeekAdditionalModelsTextarea.value.trim();
@@ -10218,6 +10256,8 @@
                         defaultSettingsCopy.apiKey = '';
                         defaultSettingsCopy.modelName = DEFAULT_MODEL;
                         defaultSettingsCopy.additionalModels = '';
+                        defaultSettingsCopy.commonSystemPrompt = '';
+                        defaultSettingsCopy.enableCommonSystemPromptDefault = false;
                         defaultSettingsCopy.deepSeekApiKey = '';
                         defaultSettingsCopy.deepSeekModelName = DEFAULT_DEEPSEEK_MODEL;
                         defaultSettingsCopy.deepSeekAdditionalModels = '';
