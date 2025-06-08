@@ -8080,18 +8080,25 @@
             startNewChat() {
                 state.currentChatId = null;
                 state.currentMessages = [];
+                state.currentSystemPrompt = '';
+
                 const currentProvider = state.settings.apiProvider;
+                let initialPrompt = '';
+                
                 if (currentProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
-                    state.currentSystemPrompt = state.settings.geminiSystemPrompt;
+                    initialPrompt = state.settings.geminiSystemPrompt;
                 } else if (currentProvider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
-                    state.currentSystemPrompt = state.settings.deepSeekSystemPrompt;
+                    initialPrompt = state.settings.deepSeekSystemPrompt;
                 } else if (currentProvider === 'claude' && state.settings.claudeEnableSystemPromptDefault) {
-                    state.currentSystemPrompt = state.settings.claudeSystemPrompt;
+                    initialPrompt = state.settings.claudeSystemPrompt;
                 } else if (state.settings.enableCommonSystemPromptDefault) {
-                    state.currentSystemPrompt = state.settings.commonSystemPrompt;
-                } else {
-                    state.currentSystemPrompt = '';
+                    initialPrompt = state.settings.commonSystemPrompt;
                 }
+
+                if (initialPrompt) {
+                     state.currentSystemPrompt = initialPrompt;
+                }
+                
                 state.pendingAttachments = [];
                 state.isMemoVisible = false;
                 elements.memoArea.classList.add('hidden');
@@ -8471,38 +8478,29 @@
                 const isBackgroundProcess = !!sourceSessionContext;
                 let currentContextSessionId = isBackgroundProcess ? sourceSessionContext.sessionId : state.currentChatId;
                 let currentContextMessages = isBackgroundProcess ? [...sourceSessionContext.messages] : [...state.currentMessages];
-                let currentContextSystemPrompt = '';
-
+                
                 const selectedApiProvider = isBackgroundProcess ? (sourceSessionContext.apiProvider || state.settings.apiProvider) : state.settings.apiProvider;
 
+                let systemPromptToUse = '';
                 if (isBackgroundProcess) {
-                    currentContextSystemPrompt = sourceSessionContext.systemPrompt || '';
+                    systemPromptToUse = sourceSessionContext.systemPrompt || '';
                 } else {
-                    const chatSystemPrompt = state.currentSystemPrompt.trim();
-                    let individualPrompt = '';
-                    let commonPrompt = '';
-
-                    if (selectedApiProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
-                        individualPrompt = state.settings.geminiSystemPrompt.trim();
-                    } else if (selectedApiProvider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
-                        individualPrompt = state.settings.deepSeekSystemPrompt.trim();
-                    } else if (selectedApiProvider === 'claude' && state.settings.claudeEnableSystemPromptDefault) {
-                        individualPrompt = state.settings.claudeSystemPrompt.trim();
-                    }
-                    
-                    if (state.settings.enableCommonSystemPromptDefault) {
-                        commonPrompt = state.settings.commonSystemPrompt.trim();
-                    }
-
-                    if (individualPrompt) {
-                        currentContextSystemPrompt = individualPrompt;
-                    } else if (commonPrompt) {
-                        currentContextSystemPrompt = commonPrompt;
+                    const provider = state.settings.apiProvider;
+                    if (provider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
+                        systemPromptToUse = state.settings.geminiSystemPrompt;
+                    } else if (provider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
+                        systemPromptToUse = state.settings.deepSeekSystemPrompt;
+                    } else if (provider === 'claude' && state.settings.claudeEnableSystemPromptDefault) {
+                        systemPromptToUse = state.settings.claudeSystemPrompt;
+                    } else if (state.settings.enableCommonSystemPromptDefault) {
+                        systemPromptToUse = state.settings.commonSystemPrompt;
                     } else {
-                        currentContextSystemPrompt = chatSystemPrompt;
+                        systemPromptToUse = state.currentSystemPrompt;
                     }
                 }
+                const currentContextSystemPrompt = systemPromptToUse;
                 
+
                 let contextTemperature, contextMaxTokens, contextTopP,
                     contextPresencePenalty, contextFrequencyPenalty,
                     contextStreamingOutput, contextStreamingSpeed,
@@ -8785,7 +8783,7 @@
                             ...(msg.usageMetadata && { usageMetadata: msg.usageMetadata }),
                             ...(msg.thoughtSummaryOpen !== undefined && { thoughtSummaryOpen: msg.thoughtSummaryOpen }),
                         })),
-                        systemPrompt: currentContextSystemPrompt,
+                        systemPrompt: state.currentSystemPrompt,
                         updatedAt: Date.now(),
                         title: titleToSave
                     };
@@ -9489,20 +9487,12 @@
             updateSystemPromptBasedOnProvider() {
                 const currentProvider = state.settings.apiProvider;
                 if (currentProvider === 'gemini' && state.settings.geminiEnableSystemPromptDefault) {
-                    state.currentSystemPrompt = state.settings.geminiSystemPrompt;
                 } else if (currentProvider === 'deepseek' && state.settings.deepSeekEnableSystemPromptDefault) {
-                    state.currentSystemPrompt = state.settings.deepSeekSystemPrompt;
                 } else if (currentProvider === 'claude' && state.settings.claudeEnableSystemPromptDefault) {
-                    state.currentSystemPrompt = state.settings.claudeSystemPrompt;
                 } else if (state.settings.enableCommonSystemPromptDefault) {
-                    state.currentSystemPrompt = state.settings.commonSystemPrompt;
                 } else {
-                    state.currentSystemPrompt = '';
                 }
                  uiUtils.updateSystemPromptUI();
-                 if (state.currentChatId) {
-                     dbUtils.saveChat();
-                 }
             },
             abortRequest() {
                 if (state.abortController) {
@@ -9927,6 +9917,7 @@
                  newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
                  newSettings.commonSystemPrompt = elements.commonSystemPromptDefaultTextarea.value.trim();
                  newSettings.enableCommonSystemPromptDefault = elements.enableCommonSystemPromptDefaultCheckbox.checked;
+                 
                  newSettings.deepSeekApiKey = elements.deepSeekApiKeyInput.value.trim();
                  newSettings.deepSeekModelName = elements.deepSeekModelNameSelect.value;
                  newSettings.deepSeekAdditionalModels = elements.deepSeekAdditionalModelsTextarea.value.trim();
