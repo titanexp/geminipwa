@@ -4506,6 +4506,11 @@
             isAiToAiChatProcessing: false,
         };
 
+        function sanitizeText(text, maxLength = 255) {
+            if (typeof text !== 'string') return '';
+            return text.replace(/[<>'"&]/g, '').substring(0, maxLength);
+        }
+
         function updateMessageMaxWidthVar() {
             const container = elements.messageContainer;
             if (!container) return;
@@ -5204,8 +5209,8 @@
                     list.classList.add('attachment-list');
                     attachments.forEach(att => {
                         const listItem = document.createElement('li');
-                        listItem.textContent = att.name;
-                        listItem.title = `${att.name} (${att.mimeType})`;
+                        listItem.textContent = sanitizeText(att.name);
+                        listItem.title = `${sanitizeText(att.name)} (${sanitizeText(att.mimeType)})`;
                         list.appendChild(listItem);
                     });
                     details.appendChild(list);
@@ -6759,8 +6764,8 @@
                     infoDiv.classList.add('selected-file-info');
                     const nameSpan = document.createElement('span');
                     nameSpan.classList.add('selected-file-name');
-                    nameSpan.textContent = item.file.name;
-                    nameSpan.title = item.file.name;
+                    nameSpan.textContent = sanitizeText(item.file.name);
+                    nameSpan.title = sanitizeText(item.file.name);
                     const sizeSpan = document.createElement('span');
                     sizeSpan.classList.add('selected-file-size');
                     sizeSpan.textContent = formatFileSize(item.file.size);
@@ -6806,7 +6811,7 @@
                         return;
                     }
 
-                    const titleText = link.getAttribute('title');
+                    const titleText = sanitizeText(link.getAttribute('title'));
                     if (titleText && titleText.trim() !== '') {
                         link.dataset.interactiveTitleProcessed = 'true';
 
@@ -6877,9 +6882,9 @@
                             fragment.appendChild(document.createTextNode(precedingText));
                         }
 
-                        const leadingTextContent = (match[1] || "").trim();
+                        const leadingTextContent = sanitizeText(match[1] || "").trim();
                         const clickableTextDisplay = leadingTextContent || "詳細";
-                        const detailText = match[2];
+                        const detailText = sanitizeText(match[2]);
 
                         const link = document.createElement('a');
                         link.href = "#";
@@ -8474,10 +8479,10 @@
             async editHistoryTitle(chatId, titleElement) {
                 const currentTitle = titleElement.textContent;
                 const newTitle = await uiUtils.showCustomPrompt("新しいタイトル:", currentTitle);
-                const trimmedTitle = (newTitle !== null) ? newTitle.trim() : '';
+                const trimmedTitle = (newTitle !== null) ? sanitizeText(newTitle, 100).trim() : '';
 
                 if (newTitle !== '' && trimmedTitle !== '' && trimmedTitle !== currentTitle) {
-                    const finalTitle = trimmedTitle.substring(0, 100);
+                    const finalTitle = trimmedTitle;
                     try {
                         await dbUtils.updateChatTitleDb(chatId, finalTitle);
                         titleElement.textContent = finalTitle;
