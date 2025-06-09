@@ -4449,6 +4449,7 @@
                 toggleButtonBottomFontSize: DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE,
                 toggleButtonBottomTextCollapse: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE,
                 toggleButtonBottomTextExpand: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND,
+                apiProvider: 'gemini',
                 thoughtSummaryOpacity: DEFAULT_THOUGHT_SUMMARY_OPACITY,
                 settingsUIDetailsOpenStates: {},
                 disableSaveSettingsConfirmation: false,
@@ -5264,6 +5265,7 @@
                     prevButton.title = '前の応答';
                     prevButton.classList.add('cascade-prev-btn');
                     prevButton.disabled = cascadeInfo.currentIndex <= 1;
+                    prevButton.onclick = () => appLogic.navigateCascade(index, 'prev');
                     cascadeControlsDiv.appendChild(prevButton);
 
                     const indicatorSpan = document.createElement('span');
@@ -5276,12 +5278,14 @@
                     nextButton.title = '次の応答';
                     nextButton.classList.add('cascade-next-btn');
                     nextButton.disabled = cascadeInfo.currentIndex >= cascadeInfo.total;
+                    nextButton.onclick = () => appLogic.navigateCascade(index, 'next');
                     cascadeControlsDiv.appendChild(nextButton);
 
                     const deleteCascadeButton = document.createElement('button');
                     deleteCascadeButton.textContent = '✕';
                     deleteCascadeButton.title = 'この応答を削除';
                     deleteCascadeButton.classList.add('cascade-delete-btn');
+                    deleteCascadeButton.onclick = () => appLogic.confirmDeleteCascadeResponse(index);
                     cascadeControlsDiv.appendChild(deleteCascadeButton);
 
                     messageDiv.appendChild(cascadeControlsDiv);
@@ -5309,16 +5313,22 @@
 
                     const editButton = document.createElement('button');
                     editButton.textContent = '編集'; editButton.title = 'メッセージを編集'; editButton.classList.add('js-edit-btn');
+                    editButton.onclick = () => appLogic.startEditMessage(index, messageDiv);
                     actionsDiv.appendChild(editButton);
 
                     const deleteButton = document.createElement('button');
                     deleteButton.textContent = '削除'; deleteButton.title = 'この会話ターンを削除'; deleteButton.classList.add('js-delete-btn');
+                    deleteButton.onclick = () => appLogic.deleteMessage(index);
                     actionsDiv.appendChild(deleteButton);
 
                     const copyButton = document.createElement('button');
                     copyButton.textContent = 'コピー';
                     copyButton.title = 'テキストをコピー';
                     copyButton.classList.add('js-copy-btn');
+                    copyButton.onclick = (event) => {
+                        event.stopPropagation();
+                        appLogic.copyMessageText(index, copyButton);
+                    };
                     actionsDiv.appendChild(copyButton);
 
                     if (role === 'user' || role === 'model') {
@@ -5326,6 +5336,10 @@
                         retryButton.textContent = 'リトライ';
                         retryButton.title = 'このメッセージから再生成';
                         retryButton.classList.add('js-retry-btn');
+                        retryButton.onclick = () => {
+                            const userIndexForRetry = (role === 'model' && index > 0) ? appLogic.findPreviousUserIndex(index) : index;
+                            if(userIndexForRetry !== -1) appLogic.retryFromMessage(userIndexForRetry);
+                        };
                         actionsDiv.appendChild(retryButton);
                     }
 
@@ -5480,6 +5494,26 @@
                         copyButton.textContent = 'コピー';
                         copyButton.classList.add('code-copy-button');
                         copyButton.title = 'コードをコピー';
+                        copyButton.onclick = (event) => {
+                            event.stopPropagation();
+                            navigator.clipboard.writeText(textToCopy).then(() => {
+                                const originalText = copyButton.textContent;
+                                copyButton.textContent = 'コピー完了!';
+                                copyButton.disabled = true;
+                                setTimeout(() => {
+                                    copyButton.textContent = originalText;
+                                    copyButton.disabled = false;
+                                }, 1500);
+                        }).catch(err => {
+                                const originalText = copyButton.textContent;
+                                copyButton.textContent = '失敗';
+                                copyButton.disabled = true;
+                                setTimeout(() => {
+                                    copyButton.textContent = originalText;
+                                    copyButton.disabled = false;
+                                }, 2000);
+                            });
+                        };
                         preElement.appendChild(copyButton);
                     }
                 });
@@ -5714,6 +5748,17 @@
                             li.querySelector('.created-date').textContent = `作成: ${this.formatDate(chat.createdAt)}`;
                             li.querySelector('.updated-date').textContent = `更新: ${this.formatDate(chat.updatedAt)}`;
 
+                            li.onclick = (event) => {
+                                if (!event.target.closest('.history-item-actions button')) {
+                                    appLogic.loadChat(chat.id);
+                                    this.showScreen('chat');
+                                }
+                            };
+                            li.querySelector('.js-edit-title-btn').onclick = (e) => { e.stopPropagation(); appLogic.editHistoryTitle(chat.id, titleEl); };
+                            li.querySelector('.js-export-btn').onclick = (e) => { e.stopPropagation(); appLogic.exportChat(chat.id, titleText); };
+                            li.querySelector('.js-duplicate-btn').onclick = (e) => { e.stopPropagation(); appLogic.duplicateChat(chat.id); };
+                            li.querySelector('.js-delete-btn').onclick = (e) => { e.stopPropagation(); appLogic.confirmDeleteChat(chat.id, titleText); };
+
                             const linkButton = li.querySelector('.js-link-session-btn');
                             if (linkButton) {
                                 if (sessionLinkingEnabled) {
@@ -5726,6 +5771,7 @@
                                             linkButton.classList.add('linked-b');
                                         }
                                     }
+                                    linkButton.onclick = (e) => { e.stopPropagation(); appLogic.toggleSessionLink(chat.id); };
                                 } else {
                                     linkButton.classList.add('hidden');
                                 }
@@ -6194,7 +6240,7 @@
                 elements.iconNameFontSizeInput.value = state.settings.iconNameFontSize ?? DEFAULT_ICON_NAME_FONT_SIZE;
                 elements.iconNameOffsetYInput.value = state.settings.iconNameOffsetY !== null ? (state.settings.iconNameOffsetY * -1) : (DEFAULT_ICON_NAME_OFFSET_Y * -1);
                 elements.messageIconSizeInput.value = state.settings.messageIconSize ?? DEFAULT_MESSAGE_ICON_SIZE;
-                elements.messageIconOffsetYInput.value = (state.settings.messageIconOffsetY !== null ? (state.settings.messageIconOffsetY * -1) : (DEFAULT_MESSAGE_ICON_OFFSET_Y * -1));
+                elements.messageIconOffsetYInput.value = state.settings.messageIconOffsetY !== null ? (state.settings.messageIconOffsetY * -1) : (DEFAULT_MESSAGE_ICON_OFFSET_Y * -1);
 
                 elements.userNameBubbleToggle.checked = state.settings.showUserNameBubble;
                 elements.userNameBubbleUseThemeColorToggle.checked = state.settings.userNameBubbleUseThemeColor;
@@ -7574,117 +7620,25 @@
                 });
 
                 elements.messageContainer.addEventListener('click', (event) => {
-                    const target = event.target;
-                    const messageElement = target.closest('.message');
-                    if (!messageElement) return;
-
-                    const messageIndex = parseInt(messageElement.dataset.index, 10);
-                    if (isNaN(messageIndex)) return;
-
-                    if (target.matches('.js-edit-btn')) {
-                        event.stopPropagation();
-                        this.startEditMessage(messageIndex, messageElement);
+                    const clickedMessage = event.target.closest('.message');
+                    if (event.target.closest('.message-actions button, .message-cascade-controls button, .message-toggle-button, .interactive-title-content, .code-copy-button, a[href="#"], .thought-summary-details summary')) {
                         return;
                     }
-                    if (target.matches('.js-delete-btn')) {
-                        event.stopPropagation();
-                        this.deleteMessage(messageIndex);
-                        return;
-                    }
-                    if (target.matches('.js-copy-btn')) {
-                        event.stopPropagation();
-                        this.copyMessageText(messageIndex, target);
-                        return;
-                    }
-                    if (target.matches('.js-retry-btn')) {
-                        event.stopPropagation();
-                        const message = state.currentMessages[messageIndex];
-                        const userIndexForRetry = (message.role === 'model' && messageIndex > 0) ? this.findPreviousUserIndex(messageIndex) : messageIndex;
-                        if(userIndexForRetry !== -1) this.retryFromMessage(userIndexForRetry);
-                        return;
-                    }
-                    if (target.matches('.cascade-prev-btn')) {
-                        event.stopPropagation();
-                        this.navigateCascade(messageIndex, 'prev');
-                        return;
-                    }
-                    if (target.matches('.cascade-next-btn')) {
-                        event.stopPropagation();
-                        this.navigateCascade(messageIndex, 'next');
-                        return;
-                    }
-                    if (target.matches('.cascade-delete-btn')) {
-                        event.stopPropagation();
-                        this.confirmDeleteCascadeResponse(messageIndex);
-                        return;
-                    }
-                    if (target.matches('.message-toggle-button[data-action="toggle-collapse"]')) {
-                        event.stopPropagation();
-                        this.toggleMessageCollapse(messageIndex);
-                        return;
-                    }
-                    if (target.matches('.code-copy-button')) {
-                        event.stopPropagation();
-                        const preElement = target.closest('pre');
-                        const codeElement = preElement?.querySelector('code');
-                        const textToCopy = codeElement ? codeElement.innerText : preElement?.innerText;
-                        if (textToCopy) {
-                            navigator.clipboard.writeText(textToCopy).then(() => {
-                                const originalText = target.textContent;
-                                target.textContent = 'コピー完了!';
-                                target.disabled = true;
-                                setTimeout(() => {
-                                    target.textContent = originalText;
-                                    target.disabled = false;
-                                }, 1500);
-                            });
-                        }
-                        return;
-                    }
-                    
-                    if (!target.closest('.message-actions button, .message-cascade-controls button, .message-toggle-button, .interactive-title-content, a[href="#"], .thought-summary-details summary')) {
+                    if (clickedMessage) {
                         const currentlyShown = elements.messageContainer.querySelector('.message.show-actions');
-                        if (currentlyShown && currentlyShown !== messageElement) {
-                                                        currentlyShown.classList.remove('show-actions');
+                        if (currentlyShown && currentlyShown !== clickedMessage) {
+                                                currentlyShown.classList.remove('show-actions');
                         }
-                        if (!messageElement.classList.contains('editing')) {
-                            messageElement.classList.toggle('show-actions');
+                        if (!clickedMessage.classList.contains('editing')) {
+                            clickedMessage.classList.toggle('show-actions');
                         }
-                    }
-                });
-
-                elements.historyList.addEventListener('click', (event) => {
-                    const target = event.target;
-                    const historyItem = target.closest('.history-item');
-                    if (!historyItem) return;
-
-                    const chatId = parseInt(historyItem.dataset.chatId, 10);
-                    if (isNaN(chatId)) return;
-
-                    const titleEl = historyItem.querySelector('.history-item-title');
-                    const titleText = titleEl ? titleEl.textContent : `履歴 ${chatId}`;
-
-                    if (target.matches('.js-edit-title-btn')) {
-                        event.stopPropagation();
-                        this.editHistoryTitle(chatId, titleEl);
-                    } else if (target.matches('.js-export-btn')) {
-                        event.stopPropagation();
-                        this.exportChat(chatId, titleText);
-                    } else if (target.matches('.js-duplicate-btn')) {
-                        event.stopPropagation();
-                        this.duplicateChat(chatId);
-                    } else if (target.matches('.js-delete-btn')) {
-                        event.stopPropagation();
-                        this.confirmDeleteChat(chatId, titleText);
-                    } else if (target.matches('.js-link-session-btn')) {
-                        event.stopPropagation();
-                        this.toggleSessionLink(chatId);
                     } else {
-                        this.loadChat(chatId);
-                        uiUtils.showScreen('chat');
+                        const currentlyShown = elements.messageContainer.querySelector('.message.show-actions');
+                        if (currentlyShown) {
+                            currentlyShown.classList.remove('show-actions');
+                        }
                     }
-                });
-
+                }, true);
                 document.body.addEventListener('click', (event) => {
                     if (!elements.messageContainer.contains(event.target) &&
                         !elements.memoArea.contains(event.target) &&
@@ -7721,7 +7675,14 @@
                         this.cancelAttachment();
                     }
                 });
-                
+                elements.messageContainer.addEventListener('click', (event) => {
+                    const targetButton = event.target.closest('.message-toggle-button');
+                    if (targetButton && targetButton.dataset.action === 'toggle-collapse') {
+                        const index = parseInt(targetButton.dataset.index, 10);
+                        this.toggleMessageCollapse(index);
+                    }
+                });
+
                 document.querySelectorAll('#settings-screen details').forEach(details => {
                     details.addEventListener('toggle', (event) => {
                         if (details.id) {
