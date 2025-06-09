@@ -2904,57 +2904,7 @@
         .set-thinking-budget-btn, .set-claude-param-btn {
             flex-grow: 1;
         }
-        .memory-monitor {
-            display: flex;
-            align-items: center;
-            font-size: 10px;
-            color: var(--text-light);
-            background-color: rgba(0, 0, 0, 0.2);
-            padding: 2px 6px;
-            border-radius: 8px;
-            margin: 0 5px;
-            min-width: 45px;
-            text-align: center;
-            font-family: 'Courier New', monospace;
-            flex-shrink: 0;
-            line-height: 1.2;
-            white-space: nowrap;
-        }
-        .memory-monitor.warning {
-            background-color: rgba(255, 165, 0, 0.8);
-            color: #000;
-        }
-        .memory-monitor.critical {
-            background-color: rgba(255, 0, 0, 0.8);
-            color: #fff;
-            animation: memory-alert 1s infinite alternate;
-        }
-        @keyframes memory-alert {
-            0% { opacity: 0.8; }
-            100% { opacity: 1.0; }
-        }
-        .memory-monitor-detailed {
-            font-size: 9px;
-            line-height: 1.1;
-        }
-        body.pastel-yellow-mode .memory-monitor {
-            color: #424242;
-            background-color: rgba(0, 0, 0, 0.1);
-        }
-        body.pastel-yellow-mode .memory-monitor.warning {
-            background-color: rgba(255, 140, 0, 0.7);
-            color: #fff;
-        }
-        @media (max-width: 600px) {
-            .memory-monitor {
-                font-size: 9px;
-                padding: 1px 4px;
-                min-width: 35px;
-            }
-            .memory-monitor-detailed {
-                font-size: 8px;
-            }
-        }
+
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
@@ -2966,9 +2916,6 @@
             <header class="app-header">
                 <button id="goto-history-btn" class="header-button" aria-label="履歴一覧へ">☰</button>
                 <h1 id="chat-title">新規チャット</h1>
-                <div id="memory-monitor" class="memory-monitor hidden">
-                    <span id="memory-usage-text">0MB</span>
-                </div>
                 <button id="new-chat-btn" class="new-chat-button" title="新規チャットを開始">新</button>
                 <button id="delete-session-btn" class="action-button-in-header" title="現在のチャットを削除">削</button>
                 <button id="copy-session-btn" class="action-button-in-header" title="チャット全体をコピー">コ</button>
@@ -2978,6 +2925,7 @@
                 <button id="toggle-all-content-btn" class="header-button" aria-label="全メッセージ表示切替" title="全メッセージの表示/非表示を切り替え">🖼️</button>
                 <button id="toggle-clipboard-stack-btn" class="header-button" aria-label="クリップボードスタックを開閉">🗒️</button>
                 <button id="toggle-memo-btn" class="header-button" aria-label="メモを開閉">📝</button>
+                <span id="memory-usage-display" class="header-notice hidden" title="JavaScriptヒープメモリ使用量"></span>
                 <button id="goto-settings-btn" class="header-button" aria-label="設定へ">⚙</button>
             </header>
 
@@ -3901,48 +3849,18 @@
                                </label>
                     </div>
                 </details>
-                <details id="settings-group-debug" class="settings-group">
-                    <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">デバッグ機能</summary>
-                    <div style="margin-top:15px;">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="show-memory-monitor-toggle">
-                            メモリ使用量をヘッダーに表示する
-                        </label>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-                            ※ アプリのメモリ使用量をリアルタイムで監視します。パフォーマンスに若干の影響があります。
-                        </p>
-                        
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="show-event-listener-count-toggle">
-                            イベントリスナー数も表示する
-                        </label>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-                            ※ 登録されているイベントリスナーの数も併せて表示します。
-                        </p>
-                        
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="memory-monitor-detailed-toggle">
-                            詳細メモリ情報を表示する
-                        </label>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-                            ※ JSヒープ、DOM要素数なども表示します。（対応ブラウザのみ）
-                        </p>
-                        
-                        <div style="margin-top: 20px;">
-                            <button id="force-garbage-collection-btn" class="settings-action-button" type="button">手動ガベージコレクション実行</button>
-                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px;">
-                                ※ 開発者ツールが開いている場合のみ有効です。
-                            </p>
-                        </div>
-                        
-                        <div style="margin-top: 15px;">
-                            <button id="memory-usage-report-btn" class="settings-action-button" type="button">メモリ使用量レポート出力</button>
-                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px;">
-                                ※ 詳細なメモリ使用状況をコンソールに出力します。
-                            </p>
-                        </div>
-                    </div>
-                </details>
+
+                <div class="settings-group" id="settings-group-debug">
+                    <h3>デバッグ機能</h3>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-memory-monitor-toggle">
+                        ヘッダーにメモリ使用量を表示する
+                    </label>
+                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                        ※ 一部のブラウザでのみ利用可能です (Chromeなど)。<br>
+                        ※ `performance.memory` APIが利用できない場合は表示されません。
+                    </p>
+                </div>
 
                 <div class="danger-zone">
 
@@ -4151,255 +4069,6 @@
             'wav': 'audio/wav', 'mp3': 'audio/mp3', 'aiff': 'audio/aiff', 'aac': 'audio/aac',
             'ogg': 'audio/ogg', 'flac': 'audio/flac',
         };
-        class MemoryMonitor {
-            constructor() {
-                this.isEnabled = false;
-                this.showEventListeners = false;
-                this.showDetailed = false;
-                this.updateInterval = 2000;
-                this.intervalId = null;
-                this.eventListenerCount = 0;
-                this.memoryThresholds = {
-                    warning: 100,
-                    critical: 200
-                };
-                this.lastMemoryUsage = 0;
-                this.memoryHistory = [];
-                this.maxHistoryLength = 30;
-            }
-
-            start() {
-                if (this.intervalId) {
-                    this.stop();
-                }
-                
-                this.isEnabled = true;
-                this.updateMemoryDisplay();
-                this.intervalId = setInterval(() => {
-                    this.updateMemoryDisplay();
-                }, this.updateInterval);
-                
-            }
-
-            stop() {
-                this.isEnabled = false;
-                if (this.intervalId) {
-                    clearInterval(this.intervalId);
-                    this.intervalId = null;
-                }
-            }
-
-            updateMemoryDisplay() {
-                if (!this.isEnabled) return;
-
-                const memoryInfo = this.getMemoryInfo();
-                const displayElement = document.getElementById('memory-usage-text');
-                
-                if (!displayElement) return;
-
-                this.memoryHistory.push({
-                    timestamp: Date.now(),
-                    ...memoryInfo
-                });
-                
-                if (this.memoryHistory.length > this.maxHistoryLength) {
-                    this.memoryHistory.shift();
-                }
-
-                let displayText = '';
-                
-                if (this.showDetailed && memoryInfo.detailed) {
-                    displayText = `JS:${this.formatBytes(memoryInfo.jsHeapUsed)}/${this.formatBytes(memoryInfo.jsHeapTotal)}`;
-                    if (this.showEventListeners) {
-                        displayText += `\nDOM:${memoryInfo.domElements} EL:${this.eventListenerCount}`;
-                    } else {
-                        displayText += `\nDOM:${memoryInfo.domElements}`;
-                    }
-                } else {
-                    displayText = this.formatBytes(memoryInfo.estimated);
-                    if (this.showEventListeners) {
-                        displayText += `\nEL:${this.eventListenerCount}`;
-                    }
-                }
-
-                displayElement.innerHTML = displayText.replace(/\n/g, '<br>');
-
-                this.updateWarningLevel(memoryInfo.estimated);
-            }
-
-            getMemoryInfo() {
-                const info = {
-                    estimated: 0,
-                    detailed: false,
-                    jsHeapUsed: 0,
-                    jsHeapTotal: 0,
-                    jsHeapLimit: 0,
-                    domElements: 0
-                };
-
-                if ('memory' in performance) {
-                    info.jsHeapUsed = performance.memory.usedJSHeapSize;
-                    info.jsHeapTotal = performance.memory.totalJSHeapSize;
-                    info.jsHeapLimit = performance.memory.jsHeapSizeLimit;
-                    info.estimated = info.jsHeapUsed;
-                    info.detailed = true;
-                } else {
-                    info.estimated = this.estimateMemoryUsage();
-                }
-
-                info.domElements = document.querySelectorAll('*').length;
-
-                return info;
-            }
-
-            estimateMemoryUsage() {
-                let estimated = 0;
-
-                const domElements = document.querySelectorAll('*').length;
-                estimated += domElements * 1000;
-
-                const messageCount = state.currentMessages.length;
-                estimated += messageCount * 5000;
-
-                const attachmentCount = state.pendingAttachments.length;
-                estimated += attachmentCount * 50000;
-
-                estimated += JSON.stringify(state.settings).length * 2;
-
-                return estimated;
-            }
-
-            updateWarningLevel(memoryUsage) {
-                const monitorElement = document.getElementById('memory-monitor');
-                if (!monitorElement) return;
-
-                const memoryMB = memoryUsage / (1024 * 1024);
-                
-                monitorElement.classList.remove('warning', 'critical');
-                
-                if (memoryMB > this.memoryThresholds.critical) {
-                    monitorElement.classList.add('critical');
-                } else if (memoryMB > this.memoryThresholds.warning) {
-                    monitorElement.classList.add('warning');
-                }
-            }
-
-            formatBytes(bytes) {
-                if (bytes === 0) return '0B';
-                
-                const k = 1024;
-                const sizes = ['B', 'KB', 'MB', 'GB'];
-                const i = Math.floor(Math.log(bytes) / Math.log(k));
-                
-                if (i >= 2) {
-                    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i];
-                } else {
-                    return Math.round(bytes / Math.pow(k, i)) + sizes[i];
-                }
-            }
-
-            incrementEventListener() {
-                this.eventListenerCount++;
-            }
-
-            decrementEventListener() {
-                this.eventListenerCount = Math.max(0, this.eventListenerCount - 1);
-            }
-
-            forceGarbageCollection() {
-                if (window.gc) {
-                    window.gc();
-                    setTimeout(() => {
-                        this.updateMemoryDisplay();
-                    }, 100);
-                }
-            }
-
-            generateMemoryReport() {
-                const memoryInfo = this.getMemoryInfo();
-                const report = {
-                    timestamp: new Date().toISOString(),
-                    currentMemory: memoryInfo,
-                    memoryHistory: this.memoryHistory.slice(-10),
-                    eventListenerCount: this.eventListenerCount,
-                    domElementCount: memoryInfo.domElements,
-                    stateSize: {
-                        messages: state.currentMessages.length,
-                        attachments: state.pendingAttachments.length,
-                        collapsedStates: state.messageCollapsedStates.size,
-                        thoughtSummaryStates: state.thoughtSummaryOpenStates.size
-                    },
-                    settingsSize: JSON.stringify(state.settings).length,
-                    browserInfo: {
-                        userAgent: navigator.userAgent,
-                        language: navigator.language,
-                        platform: navigator.platform,
-                        cookieEnabled: navigator.cookieEnabled,
-                        onLine: navigator.onLine
-                    }
-                };
-
-                console.group('📊 メモリ使用量レポート');
-                console.log('生成時刻:', report.timestamp);
-                console.log('現在のメモリ使用量:', this.formatBytes(memoryInfo.estimated));
-                
-                if (memoryInfo.detailed) {
-                    console.log('JSヒープ使用量:', this.formatBytes(memoryInfo.jsHeapUsed));
-                    console.log('JSヒープ総量:', this.formatBytes(memoryInfo.jsHeapTotal));
-                    console.log('JSヒープ上限:', this.formatBytes(memoryInfo.jsHeapLimit));
-                }
-                
-                console.log('DOM要素数:', memoryInfo.domElements);
-                console.log('イベントリスナー数:', this.eventListenerCount);
-                console.log('メッセージ数:', state.currentMessages.length);
-                console.log('添付ファイル数:', state.pendingAttachments.length);
-                console.log('設定データサイズ:', this.formatBytes(report.settingsSize));
-                
-                if (this.memoryHistory.length > 1) {
-                    const oldestMemory = this.memoryHistory[0].estimated;
-                    const latestMemory = this.memoryHistory[this.memoryHistory.length - 1].estimated;
-                    const memoryDelta = latestMemory - oldestMemory;
-                    console.log('メモリ使用量変化:', memoryDelta > 0 ? '+' : '', this.formatBytes(memoryDelta));
-                }
-                
-                console.log('詳細レポート:', report);
-                console.groupEnd();
-
-                return report;
-            }
-
-            setDetailedMode(enabled) {
-                this.showDetailed = enabled;
-                const monitorElement = document.getElementById('memory-monitor');
-                if (monitorElement) {
-                    monitorElement.classList.toggle('memory-monitor-detailed', enabled);
-                }
-                if (this.isEnabled) {
-                    this.updateMemoryDisplay();
-                }
-            }
-
-            setEventListenerDisplay(enabled) {
-                this.showEventListeners = enabled;
-                if (this.isEnabled) {
-                    this.updateMemoryDisplay();
-                }
-            }
-        }
-        const memoryMonitor = new MemoryMonitor();
-        const originalAddEventListener = EventTarget.prototype.addEventListener;
-        const originalRemoveEventListener = EventTarget.prototype.removeEventListener;
-
-        EventTarget.prototype.addEventListener = function(...args) {
-            memoryMonitor.incrementEventListener();
-            originalAddEventListener.apply(this, args);
-        };
-
-        EventTarget.prototype.removeEventListener = function(...args) {
-            memoryMonitor.decrementEventListener();
-            originalRemoveEventListener.apply(this, args);
-        };
-
 
         const elements = {
             appContainer: document.querySelector('.app-container'),
@@ -4488,8 +4157,8 @@
 
             claudeSystemPromptDefaultTextarea: document.getElementById('claude-system-prompt-default'),
             claudeEnableSystemPromptDefaultCheckbox: document.getElementById('claude-enable-system-prompt-default'),
-            claudeMaxTokensInput: document.getElementById('claude-max-tokens'),
             claudeTemperatureInput: document.getElementById('claude-temperature'),
+            claudeMaxTokensInput: document.getElementById('claude-max-tokens'),
             claudeTopKInput: document.getElementById('claude-top-k'),
             claudeTopPInput: document.getElementById('claude-top-p'),
             claudeStreamingOutputCheckbox: document.getElementById('claude-streaming-output'),
@@ -4651,13 +4320,8 @@
             apiProviderCycleGeminiCheckbox: document.getElementById('api-provider-cycle-gemini'),
             apiProviderCycleDeepSeekCheckbox: document.getElementById('api-provider-cycle-deepseek'),
             apiProviderCycleClaudeCheckbox: document.getElementById('api-provider-cycle-claude'),
-            memoryMonitor: document.getElementById('memory-monitor'),
-            memoryUsageText: document.getElementById('memory-usage-text'),
+            memoryUsageDisplay: document.getElementById('memory-usage-display'),
             showMemoryMonitorToggle: document.getElementById('show-memory-monitor-toggle'),
-            showEventListenerCountToggle: document.getElementById('show-event-listener-count-toggle'),
-            memoryMonitorDetailedToggle: document.getElementById('memory-monitor-detailed-toggle'),
-            forceGarbageCollectionBtn: document.getElementById('force-garbage-collection-btn'),
-            memoryUsageReportBtn: document.getElementById('memory-usage-report-btn'),
         };
 
         const state = {
@@ -4812,8 +4476,6 @@
                     claude: true,
                 },
                 showMemoryMonitor: false,
-                showEventListenerCount: false,
-                memoryMonitorDetailed: false,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -4858,6 +4520,7 @@
             thoughtSummaryOpenStates: new Map(),
             linkedSessionIds: [],
             isAiToAiChatProcessing: false,
+            memoryMonitorInterval: null,
         };
 
         function sanitizeText(text, maxLength = 255) {
@@ -6581,6 +6244,7 @@
                  elements.apiProviderCycleGeminiCheckbox.checked = state.settings.apiProviderCycle.gemini;
                  elements.apiProviderCycleDeepSeekCheckbox.checked = state.settings.apiProviderCycle.deepseek;
                  elements.apiProviderCycleClaudeCheckbox.checked = state.settings.apiProviderCycle.claude;
+                elements.showMemoryMonitorToggle.checked = state.settings.showMemoryMonitor;
 
                 elements.showMemoButtonToggle.checked = state.settings.showMemoButton;
                 elements.memoHeightInput.value = state.settings.memoHeight || '';
@@ -6632,9 +6296,6 @@
                 document.documentElement.style.setProperty('--message-toggle-button-top-opacity', state.settings.toggleButtonTopOpacity);
                 document.documentElement.style.setProperty('--message-toggle-button-bottom-font-size', `${state.settings.toggleButtonBottomFontSize || DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--thought-summary-opacity', state.settings.thoughtSummaryOpacity || DEFAULT_THOUGHT_SUMMARY_OPACITY);
-                elements.showMemoryMonitorToggle.checked = state.settings.showMemoryMonitor;
-                elements.showEventListenerCountToggle.checked = state.settings.showEventListenerCount;
-                elements.memoryMonitorDetailedToggle.checked = state.settings.memoryMonitorDetailed;
 
                 this.applySettingsUIDetailsOpenStates();
                 this.updateChatScreenElementVisibility();
@@ -6648,10 +6309,8 @@
                 this.applyFontFamily();
                 this.toggleSystemPromptVisibility();
                 this.applySidePanelSettingsToUI();
+                this.toggleMemoryMonitorVisibility();
                 this.updateSessionLinkingUI();
-                appLogic.updateMemoryMonitorVisibility();
-                memoryMonitor.setEventListenerDisplay(state.settings.showEventListenerCount);
-                memoryMonitor.setDetailedMode(state.settings.memoryMonitorDetailed);
             },
             applySettingsUIDetailsOpenStates() {
                 const detailsElements = document.querySelectorAll('#settings-screen details[id]');
@@ -6683,11 +6342,11 @@
             },
             updateChatScreenElementVisibility() {
                 const header = elements.chatScreen.querySelector('.app-header');
-                const allButtons = Array.from(header.querySelectorAll('button, div'));
+                const allButtons = Array.from(header.querySelectorAll('button'));
                 allButtons.forEach(btn => btn.classList.remove('layout-hidden'));
             
                 const updateVisibility = () => {
-                    const toggleableItems = [
+                    const toggleableButtons = [
                         { id: '#show-chat-title-toggle', element: elements.chatTitle },
                         { id: '#show-new-chat-button-toggle', element: elements.newChatBtn },
                         { id: '#show-delete-session-button-toggle', element: elements.deleteSessionBtn },
@@ -6698,10 +6357,9 @@
                         { id: '#show-toggle-all-content-button-toggle', element: elements.toggleAllContentBtn },
                         { id: '#show-memo-button-toggle', element: elements.toggleMemoBtn },
                         { id: '#show-clipboard-stack-button-toggle', element: elements.toggleClipboardStackBtn },
-                        { id: '#show-memory-monitor-toggle', element: elements.memoryMonitor }
                     ];
 
-                    toggleableItems.forEach(item => {
+                    toggleableButtons.forEach(item => {
                         const checkbox = document.querySelector(item.id);
                         if (item.element) {
                             item.element.classList.toggle('hidden', !checkbox.checked);
@@ -6735,8 +6393,8 @@
                 const header = elements.chatScreen.querySelector('.app-header');
                 if (!header) return;
             
-                const allItems = Array.from(header.querySelectorAll('button:not(#goto-history-btn):not(#goto-settings-btn), .memory-monitor'));
-                allItems.forEach(item => item.classList.remove('layout-hidden'));
+                const allButtons = Array.from(header.querySelectorAll('button:not(#goto-history-btn):not(#goto-settings-btn)'));
+                allButtons.forEach(btn => btn.classList.remove('layout-hidden'));
             
                 requestAnimationFrame(() => {
                     let containerWidth = header.offsetWidth;
@@ -6744,17 +6402,17 @@
                     let headerRect = header.getBoundingClientRect();
                     let isOverflowing = settingsBtnRect.right > headerRect.right - 5;
             
-                    const itemPriority = [
+                    const buttonPriority = [
                         '#toggle-clipboard-stack-btn', '#toggle-memo-btn', '#scroll-to-top-btn',
                         '#scroll-to-bottom-btn', '#toggle-all-content-btn', '#header-api-provider-toggle-btn',
-                        '#copy-session-btn', '#delete-session-btn', '#new-chat-btn', '#memory-monitor'
+                        '#copy-session-btn', '#delete-session-btn', '#new-chat-btn'
                     ];
 
                     if (isOverflowing) {
-                        for (const selector of itemPriority) {
-                            const item = header.querySelector(selector);
-                            if (item && !item.classList.contains('hidden') && !item.classList.contains('layout-hidden')) {
-                                item.classList.add('layout-hidden');
+                        for (const selector of buttonPriority) {
+                            const btn = header.querySelector(selector);
+                            if (btn && !btn.classList.contains('hidden') && !btn.classList.contains('layout-hidden')) {
+                                btn.classList.add('layout-hidden');
                                 settingsBtnRect = elements.gotoSettingsBtn.getBoundingClientRect();
                                 isOverflowing = settingsBtnRect.right > headerRect.right - 5;
                                 if (!isOverflowing) break;
@@ -7508,7 +7166,37 @@
                     }
                     this.finalizeStreamingMessage(messageIndex);
                 }
-            }
+            },
+            updateMemoryDisplay() {
+                if (performance.memory) {
+                    const usedHeap = performance.memory.usedJSHeapSize;
+                    const formattedMemory = (usedHeap / 1024 / 1024).toFixed(1) + ' MB';
+                    elements.memoryUsageDisplay.textContent = formattedMemory;
+                } else {
+                    elements.memoryUsageDisplay.classList.add('hidden');
+                    if (state.memoryMonitorInterval) {
+                        clearInterval(state.memoryMonitorInterval);
+                        state.memoryMonitorInterval = null;
+                    }
+                }
+            },
+            toggleMemoryMonitorVisibility() {
+                const shouldShow = state.settings.showMemoryMonitor && ('performance' in window && 'memory' in performance);
+
+                if (shouldShow) {
+                    elements.memoryUsageDisplay.classList.remove('hidden');
+                    if (!state.memoryMonitorInterval) {
+                        this.updateMemoryDisplay(); 
+                        state.memoryMonitorInterval = setInterval(() => this.updateMemoryDisplay(), 1000);
+                    }
+                } else {
+                    elements.memoryUsageDisplay.classList.add('hidden');
+                    if (state.memoryMonitorInterval) {
+                        clearInterval(state.memoryMonitorInterval);
+                        state.memoryMonitorInterval = null;
+                    }
+                }
+            },
         };
 
         const appLogic = {
@@ -7556,11 +7244,6 @@
                             }
     
                             uiUtils.applySettingsToUI();
-                            if (state.settings.showMemoryMonitor) {
-                                memoryMonitor.start();
-                            }
-                            memoryMonitor.setEventListenerDisplay(state.settings.showEventListenerCount);
-                            memoryMonitor.setDetailedMode(state.settings.memoryMonitorDetailed);
     
                             dbUtils.getAllChats(state.settings.historySortOrder).then(chats => {
                                 if (chats && chats.length > 0) {
@@ -7619,6 +7302,10 @@
                 elements.toggleAllContentBtn.addEventListener('click', () => this.toggleAllMessagesVisibility());
                 elements.headerApiProviderToggleBtn.addEventListener('click', () => this.toggleApiProvider());
                 elements.footerApiProviderToggleBtn.addEventListener('click', () => this.toggleApiProvider());
+                elements.showMemoryMonitorToggle.addEventListener('change', () => {
+                    state.settings.showMemoryMonitor = elements.showMemoryMonitorToggle.checked;
+                    uiUtils.toggleMemoryMonitorVisibility();
+                });
                 elements.sendButton.addEventListener('click', () => {
                     if (state.isSending) this.abortRequest();
                     else this.handleSend();
@@ -8057,39 +7744,7 @@
                     });
                 });
                 window.addEventListener('resize', uiUtils.adjustHeaderLayout);
-                elements.showMemoryMonitorToggle.addEventListener('change', () => {
-                    state.settings.showMemoryMonitor = elements.showMemoryMonitorToggle.checked;
-                    this.updateMemoryMonitorVisibility();
-                });
-
-                elements.showEventListenerCountToggle.addEventListener('change', () => {
-                    state.settings.showEventListenerCount = elements.showEventListenerCountToggle.checked;
-                    memoryMonitor.setEventListenerDisplay(state.settings.showEventListenerCount);
-                });
-
-                elements.memoryMonitorDetailedToggle.addEventListener('change', () => {
-                    state.settings.memoryMonitorDetailed = elements.memoryMonitorDetailedToggle.checked;
-                    memoryMonitor.setDetailedMode(state.settings.memoryMonitorDetailed);
-                });
-
-                elements.forceGarbageCollectionBtn.addEventListener('click', () => {
-                    memoryMonitor.forceGarbageCollection();
-                });
-
-                elements.memoryUsageReportBtn.addEventListener('click', () => {
-                    memoryMonitor.generateMemoryReport();
-                });
                 uiUtils.adjustHeaderLayout();
-            },
-            updateMemoryMonitorVisibility() {
-                if (state.settings.showMemoryMonitor) {
-                    elements.memoryMonitor.classList.remove('hidden');
-                    memoryMonitor.start();
-                } else {
-                    elements.memoryMonitor.classList.add('hidden');
-                    memoryMonitor.stop();
-                }
-                this.updateChatScreenElementVisibility();
             },
             handlePopState(event) {
                 const targetScreen = event.state?.screen || 'chat';
@@ -10480,9 +10135,7 @@
                      deepseek: elements.apiProviderCycleDeepSeekCheckbox.checked,
                      claude: elements.apiProviderCycleClaudeCheckbox.checked,
                  };
-                 newSettings.showMemoryMonitor = elements.showMemoryMonitorToggle.checked;
-                 newSettings.showEventListenerCount = elements.showEventListenerCountToggle.checked;
-                 newSettings.memoryMonitorDetailed = elements.memoryMonitorDetailedToggle.checked;
+                newSettings.showMemoryMonitor = elements.showMemoryMonitorToggle.checked;
 
 
                 const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
@@ -10768,8 +10421,6 @@
                         defaultSettingsCopy.showApiProviderToggleFooter = true;
                         defaultSettingsCopy.apiProviderCycle = { gemini: true, deepseek: true, claude: true };
                         defaultSettingsCopy.showMemoryMonitor = false;
-                        defaultSettingsCopy.showEventListenerCount = false;
-                        defaultSettingsCopy.memoryMonitorDetailed = false;
 
                         state.settings = defaultSettingsCopy;
 
