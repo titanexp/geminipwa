@@ -2925,7 +2925,6 @@
                 <button id="toggle-all-content-btn" class="header-button" aria-label="全メッセージ表示切替" title="全メッセージの表示/非表示を切り替え">🖼️</button>
                 <button id="toggle-clipboard-stack-btn" class="header-button" aria-label="クリップボードスタックを開閉">🗒️</button>
                 <button id="toggle-memo-btn" class="header-button" aria-label="メモを開閉">📝</button>
-                <span id="memory-usage-display" class="header-notice hidden" title="JavaScriptヒープメモリ使用量"></span>
                 <button id="goto-settings-btn" class="header-button" aria-label="設定へ">⚙</button>
             </header>
 
@@ -3850,18 +3849,6 @@
                     </div>
                 </details>
 
-                <div class="settings-group" id="settings-group-debug">
-                    <h3>デバッグ機能</h3>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="show-memory-monitor-toggle">
-                        ヘッダーにメモリ使用量を表示する
-                    </label>
-                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                        ※ 一部のブラウザでのみ利用可能です (Chromeなど)。<br>
-                        ※ `performance.memory` APIが利用できない場合は表示されません。
-                    </p>
-                </div>
-
                 <div class="danger-zone">
 
                      <p style="text-align: center; color: var(--text-secondary); font-size: 12px; margin-bottom: 10px;">
@@ -4157,8 +4144,8 @@
 
             claudeSystemPromptDefaultTextarea: document.getElementById('claude-system-prompt-default'),
             claudeEnableSystemPromptDefaultCheckbox: document.getElementById('claude-enable-system-prompt-default'),
-            claudeTemperatureInput: document.getElementById('claude-temperature'),
             claudeMaxTokensInput: document.getElementById('claude-max-tokens'),
+            claudeTemperatureInput: document.getElementById('claude-temperature'),
             claudeTopKInput: document.getElementById('claude-top-k'),
             claudeTopPInput: document.getElementById('claude-top-p'),
             claudeStreamingOutputCheckbox: document.getElementById('claude-streaming-output'),
@@ -4320,8 +4307,6 @@
             apiProviderCycleGeminiCheckbox: document.getElementById('api-provider-cycle-gemini'),
             apiProviderCycleDeepSeekCheckbox: document.getElementById('api-provider-cycle-deepseek'),
             apiProviderCycleClaudeCheckbox: document.getElementById('api-provider-cycle-claude'),
-            memoryUsageDisplay: document.getElementById('memory-usage-display'),
-            showMemoryMonitorToggle: document.getElementById('show-memory-monitor-toggle'),
         };
 
         const state = {
@@ -4475,7 +4460,6 @@
                     deepseek: true,
                     claude: true,
                 },
-                showMemoryMonitor: false,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -4520,7 +4504,6 @@
             thoughtSummaryOpenStates: new Map(),
             linkedSessionIds: [],
             isAiToAiChatProcessing: false,
-            memoryMonitorInterval: null,
         };
 
         function sanitizeText(text, maxLength = 255) {
@@ -6244,7 +6227,6 @@
                  elements.apiProviderCycleGeminiCheckbox.checked = state.settings.apiProviderCycle.gemini;
                  elements.apiProviderCycleDeepSeekCheckbox.checked = state.settings.apiProviderCycle.deepseek;
                  elements.apiProviderCycleClaudeCheckbox.checked = state.settings.apiProviderCycle.claude;
-                elements.showMemoryMonitorToggle.checked = state.settings.showMemoryMonitor;
 
                 elements.showMemoButtonToggle.checked = state.settings.showMemoButton;
                 elements.memoHeightInput.value = state.settings.memoHeight || '';
@@ -6309,7 +6291,6 @@
                 this.applyFontFamily();
                 this.toggleSystemPromptVisibility();
                 this.applySidePanelSettingsToUI();
-                this.toggleMemoryMonitorVisibility();
                 this.updateSessionLinkingUI();
             },
             applySettingsUIDetailsOpenStates() {
@@ -7166,37 +7147,7 @@
                     }
                     this.finalizeStreamingMessage(messageIndex);
                 }
-            },
-            updateMemoryDisplay() {
-                if (performance.memory) {
-                    const usedHeap = performance.memory.usedJSHeapSize;
-                    const formattedMemory = (usedHeap / 1024 / 1024).toFixed(1) + ' MB';
-                    elements.memoryUsageDisplay.textContent = formattedMemory;
-                } else {
-                    elements.memoryUsageDisplay.classList.add('hidden');
-                    if (state.memoryMonitorInterval) {
-                        clearInterval(state.memoryMonitorInterval);
-                        state.memoryMonitorInterval = null;
-                    }
-                }
-            },
-            toggleMemoryMonitorVisibility() {
-                const shouldShow = state.settings.showMemoryMonitor && ('performance' in window && 'memory' in performance);
-
-                if (shouldShow) {
-                    elements.memoryUsageDisplay.classList.remove('hidden');
-                    if (!state.memoryMonitorInterval) {
-                        this.updateMemoryDisplay(); 
-                        state.memoryMonitorInterval = setInterval(() => this.updateMemoryDisplay(), 1000);
-                    }
-                } else {
-                    elements.memoryUsageDisplay.classList.add('hidden');
-                    if (state.memoryMonitorInterval) {
-                        clearInterval(state.memoryMonitorInterval);
-                        state.memoryMonitorInterval = null;
-                    }
-                }
-            },
+            }
         };
 
         const appLogic = {
@@ -7302,10 +7253,6 @@
                 elements.toggleAllContentBtn.addEventListener('click', () => this.toggleAllMessagesVisibility());
                 elements.headerApiProviderToggleBtn.addEventListener('click', () => this.toggleApiProvider());
                 elements.footerApiProviderToggleBtn.addEventListener('click', () => this.toggleApiProvider());
-                elements.showMemoryMonitorToggle.addEventListener('change', () => {
-                    state.settings.showMemoryMonitor = elements.showMemoryMonitorToggle.checked;
-                    uiUtils.toggleMemoryMonitorVisibility();
-                });
                 elements.sendButton.addEventListener('click', () => {
                     if (state.isSending) this.abortRequest();
                     else this.handleSend();
@@ -10135,7 +10082,6 @@
                      deepseek: elements.apiProviderCycleDeepSeekCheckbox.checked,
                      claude: elements.apiProviderCycleClaudeCheckbox.checked,
                  };
-                newSettings.showMemoryMonitor = elements.showMemoryMonitorToggle.checked;
 
 
                 const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
@@ -10420,7 +10366,6 @@
                         defaultSettingsCopy.showApiProviderToggleHeader = false;
                         defaultSettingsCopy.showApiProviderToggleFooter = true;
                         defaultSettingsCopy.apiProviderCycle = { gemini: true, deepseek: true, claude: true };
-                        defaultSettingsCopy.showMemoryMonitor = false;
 
                         state.settings = defaultSettingsCopy;
 
