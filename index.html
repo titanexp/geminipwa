@@ -3830,6 +3830,9 @@
                                            </label>
                                            <div id="api-provider-cycle-settings" style="margin-left: 20px; border-left: 1px solid var(--border-secondary); padding-left: 15px; margin-top: 5px;">
                                                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 5px;">切替対象のAPI:</p>
+                                                <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 5px;">
+                                                   ※ここで選択を外したAPIは、上の「使用するAPIプロバイダー」の選択肢からも非表示になります。
+                                               </p>
                                                <label class="checkbox-label" style="font-size: 12px;">
                                                    <input type="checkbox" id="api-provider-cycle-gemini">
                                                    Google Gemini
@@ -3846,9 +3849,6 @@
                                                    <input type="checkbox" id="api-provider-cycle-openai">
                                                    OpenAI
                                                </label>
-                                               <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px; margin-bottom: 10px;">
-                                                   ※ここで選択を外したAPIは、上の「使用するAPIプロバイダー」の選択肢からも非表示になります。
-                                               </p>
                                            </div>
                                        </div>
                                    </details>
@@ -3902,6 +3902,7 @@
                                             <input type="text" id="toggle-button-top-text-collapse" placeholder="例: -">
                                             <label for="toggle-button-top-text-expand">右上ボタン 展開時テキスト:</label>
                                             <input type="text" id="toggle-button-top-text-expand" placeholder="例: □">
+
                                             <hr style="margin: 15px 0;">
 
                                             <label for="toggle-button-bottom-font-size">下部ボタン フォントサイズ (px):</label>
@@ -6470,7 +6471,7 @@
                 elements.toggleButtonBottomFontSizeInput.value = state.settings.toggleButtonBottomFontSize ?? DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE;
                 elements.toggleButtonBottomTextCollapseInput.value = state.settings.toggleButtonBottomTextCollapse || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 elements.toggleButtonBottomTextExpandInput.value = state.settings.toggleButtonBottomTextExpand || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
-                
+
                 document.documentElement.style.setProperty('--message-body-font-size', `${state.settings.messageBodyFontSize || DEFAULT_MESSAGE_BODY_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--code-block-font-size', `${state.settings.codeBlockFontSize || DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--thought-summary-font-size', `${state.settings.thoughtSummaryFontSize || DEFAULT_THOUGHT_SUMMARY_FONT_SIZE}px`);
@@ -6495,7 +6496,7 @@
                 this.toggleSystemPromptVisibility();
                 this.applySidePanelSettingsToUI();
                 this.updateSessionLinkingUI();
-                this.updateApiProviderSelector();
+                this.updateApiProviderOptionsVisibility();
             },
             applySettingsUIDetailsOpenStates() {
                 const detailsElements = document.querySelectorAll('#settings-screen details[id]');
@@ -7930,16 +7931,11 @@
                     });
                 });
                 
-                const cycleCheckboxes = [
-                    elements.apiProviderCycleGeminiCheckbox,
-                    elements.apiProviderCycleDeepSeekCheckbox,
-                    elements.apiProviderCycleClaudeCheckbox,
-                    elements.apiProviderCycleOpenAICheckbox
-                ];
-                cycleCheckboxes.forEach(checkbox => {
-                    checkbox.addEventListener('change', () => {
-                        this.updateApiProviderSelector();
-                    });
+                ['gemini', 'deepseek', 'claude', 'openai'].forEach(provider => {
+                    const checkbox = document.getElementById(`api-provider-cycle-${provider}`);
+                    if (checkbox) {
+                        checkbox.addEventListener('change', () => uiUtils.updateApiProviderOptionsVisibility());
+                    }
                 });
 
                 window.addEventListener('resize', uiUtils.adjustHeaderLayout);
@@ -9231,9 +9227,9 @@
                     } else if (selectedApiProvider === 'deepseek') {
                         apiResponseObject = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                     } else if (selectedApiProvider === 'claude') {
-                        apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall);
+                        apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                     } else if (selectedApiProvider === 'openai') {
-                        apiResponseObject = await apiUtils.callOpenAiApi(apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, contextOpenAIVisionEnable);
+                        apiResponseObject = await apiUtils.callOpenAiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, contextOpenAIVisionEnable);
                     } else {
                         throw new Error("不明なAPIプロバイダーが選択されています。");
                     }
