@@ -2910,9 +2910,6 @@
         .set-thinking-budget-btn, .set-claude-param-btn {
             flex-grow: 1;
         }
-        option.hidden {
-            display: none !important;
-        }
 
     </style>
     <script src="marked.js"></script>
@@ -3162,6 +3159,10 @@
                                 <option value="gpt-4.1">gpt-4.1</option>
                                 <option value="gpt-4.1-mini">gpt-4.1-mini</option>
                             </optgroup>
+                            <optgroup label="GPT-4.5">
+                                <option value="gpt-4.5">gpt-4.5</option>
+                                <option value="gpt-4.5-mini">gpt-4.5-mini</option>
+                            </optgroup>
                             <optgroup label="GPT-4o & Mini">
                                 <option value="gpt-4o">gpt-4o (2024-05-13)</option>
                                 <option value="gpt-4o-2024-08-06">gpt-4o-2024-08-06</option>
@@ -3173,6 +3174,7 @@
                                 <option value="o1-2024-12-17">o1-2024-12-17</option>
                                 <option value="o1-mini">o1-mini</option>
                                 <option value="o1-mini-2024-09-12">o1-mini-2024-09-12</option>
+                                <option value="o3">o3</option>
                                 <option value="o3-mini-2025-01-31">o3-mini-2025-01-31</option>
                             </optgroup>
                             <optgroup label="GPT-4 Turbo">
@@ -3183,9 +3185,6 @@
                                 <option value="gpt-4.5-preview">gpt-4.5-preview</option>
                                 <option value="chatgpt-4o-latest">chatgpt-4o-latest</option>
                                 <option value="o1-preview">o1-preview</option>
-                                <option value="gpt-4o-realtime-preview">gpt-4o-realtime-preview</option>
-                                <option value="gpt-4o-mini-realtime-preview">gpt-4o-mini-realtime-preview</option>
-                                <option value="gpt-4o-audio-preview">gpt-4o-audio-preview</option>
                             </optgroup>
                         </select>
                         <label for="openai-additional-models" style="margin-top:10px;">追加モデル (カンマ区切り):</label>
@@ -3849,10 +3848,6 @@
                                                    <input type="checkbox" id="api-provider-cycle-openai">
                                                    OpenAI
                                                </label>
-                                               <p style="font-size: 11px; color: var(--text-secondary); margin-top: 8px; margin-bottom: 0;">
-                                                    ※ チェックを外したAPIプロバイダーは、切替ボタンの対象から除外され、<br>
-                                                    「使用するAPIプロバイダー」の選択肢からも非表示になります。
-                                               </p>
                                            </div>
                                        </div>
                                    </details>
@@ -4022,6 +4017,7 @@
             </main>
         </div>
     </div>
+
     <dialog id="alertDialog" class="custom-dialog">
         <p class="dialog-message"></p>
         <div class="dialog-actions">
@@ -6499,7 +6495,6 @@
                 this.toggleSystemPromptVisibility();
                 this.applySidePanelSettingsToUI();
                 this.updateSessionLinkingUI();
-                this.updateApiProviderSelectOptions();
             },
             applySettingsUIDetailsOpenStates() {
                 const detailsElements = document.querySelectorAll('#settings-screen details[id]');
@@ -7386,36 +7381,7 @@
                     }
                     this.finalizeStreamingMessage(messageIndex);
                 }
-            },
-            updateApiProviderSelectOptions() {
-                const apiProviderSelect = elements.apiProviderSelect;
-                if (!apiProviderSelect) return;
-                
-                const cycleSettings = state.settings.apiProviderCycle;
-                const options = apiProviderSelect.querySelectorAll('option');
-                
-                options.forEach(option => {
-                    const provider = option.value;
-                    if (cycleSettings.hasOwnProperty(provider)) {
-                        option.classList.toggle('hidden', !cycleSettings[provider]);
-                        option.style.display = cycleSettings[provider] ? '' : 'none';
-                    }
-                });
-                
-                const currentProvider = state.settings.apiProvider;
-                if (!cycleSettings[currentProvider]) {
-                    const availableProviders = Object.entries(cycleSettings)
-                        .filter(([provider, enabled]) => enabled)
-                        .map(([provider]) => provider);
-                    
-                    if (availableProviders.length > 0) {
-                        state.settings.apiProvider = availableProviders[0];
-                        apiProviderSelect.value = availableProviders[0];
-                        uiUtils.toggleApiSettingsVisibility(availableProviders[0]);
-                        this.updateSystemPromptBasedOnProvider();
-                    }
-                }
-            },
+            }
         };
 
         const appLogic = {
@@ -7961,22 +7927,6 @@
                             state.settings.settingsUIDetailsOpenStates[details.id] = details.open;
                         }
                     });
-                });
-                elements.apiProviderCycleGeminiCheckbox.addEventListener('change', () => {
-                    state.settings.apiProviderCycle.gemini = elements.apiProviderCycleGeminiCheckbox.checked;
-                    uiUtils.updateApiProviderSelectOptions();
-                });
-                elements.apiProviderCycleDeepSeekCheckbox.addEventListener('change', () => {
-                    state.settings.apiProviderCycle.deepseek = elements.apiProviderCycleDeepSeekCheckbox.checked;
-                    uiUtils.updateApiProviderSelectOptions();
-                });
-                elements.apiProviderCycleClaudeCheckbox.addEventListener('change', () => {
-                    state.settings.apiProviderCycle.claude = elements.apiProviderCycleClaudeCheckbox.checked;
-                    uiUtils.updateApiProviderSelectOptions();
-                });
-                elements.apiProviderCycleOpenAICheckbox.addEventListener('change', () => {
-                    state.settings.apiProviderCycle.openai = elements.apiProviderCycleOpenAICheckbox.checked;
-                    uiUtils.updateApiProviderSelectOptions();
                 });
                 window.addEventListener('resize', uiUtils.adjustHeaderLayout);
                 uiUtils.adjustHeaderLayout();
