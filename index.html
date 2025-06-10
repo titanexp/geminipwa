@@ -3825,10 +3825,7 @@
                                                フッターにAPI切替ボタンを表示する
                                            </label>
                                            <div id="api-provider-cycle-settings" style="margin-left: 20px; border-left: 1px solid var(--border-secondary); padding-left: 15px; margin-top: 5px;">
-                                               <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 5px;">
-                                                   切替対象のAPI:<br>
-                                                   <span style="font-size: 10px;">※ここでチェックを外したAPIは、上の「使用するAPIプロバイダー」選択肢からも非表示になります。</span>
-                                               </p>
+                                               <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 5px;">切替対象のAPI:</p>
                                                <label class="checkbox-label" style="font-size: 12px;">
                                                    <input type="checkbox" id="api-provider-cycle-gemini">
                                                    Google Gemini
@@ -3845,6 +3842,9 @@
                                                    <input type="checkbox" id="api-provider-cycle-openai">
                                                    OpenAI
                                                </label>
+                                               <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px;">
+                                                   ※ チェックを外したAPIプロバイダーは、メイン設定の選択肢からも非表示になります。
+                                               </p>
                                            </div>
                                        </div>
                                    </details>
@@ -6299,7 +6299,6 @@
             },
             applySettingsToUI() {
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
-                this.updateApiProviderOptions();
                 elements.apiProviderSelect.value = state.settings.apiProvider;
                 elements.commonSystemPromptDefaultTextarea.value = state.settings.commonSystemPrompt || '';
                 elements.enableCommonSystemPromptDefaultCheckbox.checked = state.settings.enableCommonSystemPromptDefault;
@@ -6468,7 +6467,6 @@
                 elements.toggleButtonBottomFontSizeInput.value = state.settings.toggleButtonBottomFontSize ?? DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE;
                 elements.toggleButtonBottomTextCollapseInput.value = state.settings.toggleButtonBottomTextCollapse || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 elements.toggleButtonBottomTextExpandInput.value = state.settings.toggleButtonBottomTextExpand || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
-                elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity ?? DEFAULT_THOUGHT_SUMMARY_OPACITY;
 
                 document.documentElement.style.setProperty('--message-body-font-size', `${state.settings.messageBodyFontSize || DEFAULT_MESSAGE_BODY_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--code-block-font-size', `${state.settings.codeBlockFontSize || DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
@@ -6494,6 +6492,36 @@
                 this.toggleSystemPromptVisibility();
                 this.applySidePanelSettingsToUI();
                 this.updateSessionLinkingUI();
+                this.updateApiProviderSelectOptions();
+            },
+            updateApiProviderSelectOptions() {
+                const apiProviderSelect = elements.apiProviderSelect;
+                const currentValue = apiProviderSelect.value;
+                
+                Array.from(apiProviderSelect.options).forEach(option => {
+                    option.style.display = '';
+                    option.disabled = false;
+                });
+                
+                const cycleSettings = state.settings.apiProviderCycle;
+                Array.from(apiProviderSelect.options).forEach(option => {
+                    const provider = option.value;
+                    if (cycleSettings.hasOwnProperty(provider) && !cycleSettings[provider]) {
+                        option.style.display = 'none';
+                        option.disabled = true;
+                    }
+                });
+                
+                if (cycleSettings.hasOwnProperty(currentValue) && !cycleSettings[currentValue]) {
+                    const availableOption = Array.from(apiProviderSelect.options).find(opt => 
+                        !opt.disabled && opt.style.display !== 'none'
+                    );
+                    if (availableOption) {
+                        apiProviderSelect.value = availableOption.value;
+                        state.settings.apiProvider = availableOption.value;
+                        uiUtils.toggleApiSettingsVisibility(availableOption.value);
+                    }
+                }
             },
             applySettingsUIDetailsOpenStates() {
                 const detailsElements = document.querySelectorAll('#settings-screen details[id]');
@@ -6769,9 +6797,8 @@
                 this.toggleSystemPromptVisibility();
             },
             toggleSystemPromptVisibility() {
-                const isCommonPromptEnabled = state.settings.enableCommonSystemPromptDefault;
-                const hideSystemPromptArea = state.settings.hideSystemPromptInChat || !isCommonPromptEnabled;
-                elements.systemPromptArea.classList.toggle('hidden', hideSystemPromptArea);
+                const shouldHide = state.settings.hideSystemPromptInChat;
+                elements.systemPromptArea.classList.toggle('hidden', shouldHide);
             },
             showScreen(screenName, fromPopState = false) {
                 if (state.editingMessageIndex !== null) {
@@ -7706,10 +7733,6 @@
                     state.settings.hideSystemPromptInChat = elements.hideSystemPromptToggle.checked;
                     uiUtils.toggleSystemPromptVisibility();
                 });
-                elements.enableCommonSystemPromptDefaultCheckbox.addEventListener('change', () => {
-                    state.settings.enableCommonSystemPromptDefault = elements.enableCommonSystemPromptDefaultCheckbox.checked;
-                    uiUtils.toggleSystemPromptVisibility();
-                });
                 elements.showChatTitleToggle.addEventListener('change', () => {
                     state.settings.showChatTitle = elements.showChatTitleToggle.checked;
                     uiUtils.updateChatScreenElementVisibility();
@@ -7765,20 +7788,6 @@
                 elements.preventZoomToggle.addEventListener('change', () => {
                     state.settings.preventZoom = elements.preventZoomToggle.checked;
                     uiUtils.applyZoomPreventionSetting();
-                });
-                [
-                    elements.apiProviderCycleGeminiCheckbox,
-                    elements.apiProviderCycleDeepSeekCheckbox,
-                    elements.apiProviderCycleClaudeCheckbox,
-                    elements.apiProviderCycleOpenAICheckbox
-                ].forEach(checkbox => {
-                    checkbox.addEventListener('change', () => {
-                        state.settings.apiProviderCycle.gemini = elements.apiProviderCycleGeminiCheckbox.checked;
-                        state.settings.apiProviderCycle.deepseek = elements.apiProviderCycleDeepSeekCheckbox.checked;
-                        state.settings.apiProviderCycle.claude = elements.apiProviderCycleClaudeCheckbox.checked;
-                        state.settings.apiProviderCycle.openai = elements.apiProviderCycleOpenAICheckbox.checked;
-                        uiUtils.updateApiProviderOptions();
-                    });
                 });
 
                 elements.memoHeightInput.addEventListener('input', () => {
@@ -7944,6 +7953,23 @@
                 });
                 window.addEventListener('resize', uiUtils.adjustHeaderLayout);
                 uiUtils.adjustHeaderLayout();
+                
+                elements.apiProviderCycleGeminiCheckbox.addEventListener('change', () => {
+                    state.settings.apiProviderCycle.gemini = elements.apiProviderCycleGeminiCheckbox.checked;
+                    uiUtils.updateApiProviderSelectOptions();
+                });
+                elements.apiProviderCycleDeepSeekCheckbox.addEventListener('change', () => {
+                    state.settings.apiProviderCycle.deepseek = elements.apiProviderCycleDeepSeekCheckbox.checked;
+                    uiUtils.updateApiProviderSelectOptions();
+                });
+                elements.apiProviderCycleClaudeCheckbox.addEventListener('change', () => {
+                    state.settings.apiProviderCycle.claude = elements.apiProviderCycleClaudeCheckbox.checked;
+                    uiUtils.updateApiProviderSelectOptions();
+                });
+                elements.apiProviderCycleOpenAICheckbox.addEventListener('change', () => {
+                    state.settings.apiProviderCycle.openai = elements.apiProviderCycleOpenAICheckbox.checked;
+                    uiUtils.updateApiProviderSelectOptions();
+                });
             },
             handlePopState(event) {
                 const targetScreen = event.state?.screen || 'chat';
@@ -8773,8 +8799,10 @@
                         currentContextSystemPrompt = individualPrompt;
                     } else if (commonPrompt) {
                         currentContextSystemPrompt = commonPrompt;
-                    } else {
+                    } else if (state.settings.enableCommonSystemPromptDefault && chatSystemPrompt) {
                         currentContextSystemPrompt = chatSystemPrompt;
+                    } else {
+                        currentContextSystemPrompt = '';
                     }
                 }
                 
@@ -12184,7 +12212,7 @@
                         fullReasoningContent: accumulatedFullReasoningContent || null
                     };
                 } catch (error) {
-                    yield { type: 'error', error: { message: error.message }, message: error.message };
+                     yield { type: 'error', error: { message: error.message }, message: error.message };
                 } finally {
                     if (!reader.closed && !isCancelled) {
                         try { await reader.cancel("Stream processing ended."); } catch (e) { }
