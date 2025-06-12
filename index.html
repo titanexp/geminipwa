@@ -7193,26 +7193,45 @@
                 const apiProviderSelect = elements.apiProviderSelect;
                 if (!apiProviderSelect) return;
 
+                const allProviderOptions = [
+                    { value: 'gemini', text: 'Google Gemini' },
+                    { value: 'deepseek', text: 'DeepSeek' },
+                    { value: 'claude', text: 'Claude (Anthropic API)' },
+                    { value: 'openai', text: 'ChatGPT (OpenAI API)' }
+                ];
+
+                const currentValue = apiProviderSelect.value;
+                apiProviderSelect.innerHTML = '';
+
                 const cycleSettings = state.settings.apiProviderCycle;
-                
-                Array.from(apiProviderSelect.options).forEach(option => {
-                    const providerValue = option.value;
-                    if (cycleSettings.hasOwnProperty(providerValue) && !cycleSettings[providerValue]) {
-                        option.style.display = 'none';
-                    } else {
-                        option.style.display = '';
-                    }
+                const enabledOptions = allProviderOptions.filter(option => 
+                    cycleSettings[option.value] === true
+                );
+
+                enabledOptions.forEach(option => {
+                    const optionElement = document.createElement('option');
+                    optionElement.value = option.value;
+                    optionElement.textContent = option.text;
+                    apiProviderSelect.appendChild(optionElement);
                 });
 
-                const currentProvider = state.settings.apiProvider;
-                if (cycleSettings.hasOwnProperty(currentProvider) && !cycleSettings[currentProvider]) {
-                    const firstEnabledProvider = Array.from(apiProviderSelect.options).find(opt => opt.style.display !== 'none');
-                    if (firstEnabledProvider) {
-                        state.settings.apiProvider = firstEnabledProvider.value;
-                        apiProviderSelect.value = firstEnabledProvider.value;
-                        this.toggleApiSettingsVisibility(firstEnabledProvider.value);
-                        appLogic.updateSystemPromptBasedOnProvider();
-                    }
+                if (enabledOptions.some(option => option.value === currentValue)) {
+                    apiProviderSelect.value = currentValue;
+                } else if (enabledOptions.length > 0) {
+                    const newProvider = enabledOptions[0].value;
+                    state.settings.apiProvider = newProvider;
+                    apiProviderSelect.value = newProvider;
+                    this.toggleApiSettingsVisibility(newProvider);
+                    appLogic.updateSystemPromptBasedOnProvider();
+                }
+
+                if (enabledOptions.length === 0) {
+                    const warningOption = document.createElement('option');
+                    warningOption.value = '';
+                    warningOption.textContent = '有効なAPIプロバイダーがありません';
+                    warningOption.disabled = true;
+                    apiProviderSelect.appendChild(warningOption);
+                    apiProviderSelect.value = '';
                 }
             },
             getDeepSeekThoughtElement(messageIndex, ensurePre = false) {
@@ -10503,6 +10522,14 @@
                  document.querySelectorAll('#settings-screen details[id]').forEach(details => {
                     newSettings.settingsUIDetailsOpenStates[details.id] = details.open;
                  });
+                 if (!newSettings.apiProviderCycle[newSettings.apiProvider]) {
+                    const enabledProvider = Object.entries(newSettings.apiProviderCycle)
+                        .find(([provider, enabled]) => enabled)?.[0];
+                    if (enabledProvider) {
+                        newSettings.apiProvider = enabledProvider;
+                        elements.apiProviderSelect.value = enabledProvider;
+                    }
+                }
 
 
                  try {
