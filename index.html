@@ -3826,9 +3826,6 @@
                                            </label>
                                            <div id="api-provider-cycle-settings" style="margin-left: 20px; border-left: 1px solid var(--border-secondary); padding-left: 15px; margin-top: 5px;">
                                                <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 5px;">切替対象のAPI:</p>
-                                               <p style="font-size: 11px; color: var(--text-secondary); margin-top: -2px; margin-bottom: 8px;">
-                                                   ※ ここで未選択にした API は「APIプロバイダー設定」の「使用するAPIプロバイダー:」にも表示されません
-                                               </p>
                                                <label class="checkbox-label" style="font-size: 12px;">
                                                    <input type="checkbox" id="api-provider-cycle-gemini">
                                                    Google Gemini
@@ -6492,7 +6489,6 @@
                 this.toggleSystemPromptVisibility();
                 this.applySidePanelSettingsToUI();
                 this.updateSessionLinkingUI();
-                updateApiProviderSelectVisibility();
             },
             applySettingsUIDetailsOpenStates() {
                 const detailsElements = document.querySelectorAll('#settings-screen details[id]');
@@ -7383,6 +7379,39 @@
         };
 
         const appLogic = {
+            updateApiProviderSelectionAndVisibility() {
+                const cycleConfig = {
+                    gemini: elements.apiProviderCycleGeminiCheckbox.checked,
+                    deepseek: elements.apiProviderCycleDeepSeekCheckbox.checked,
+                    claude: elements.apiProviderCycleClaudeCheckbox.checked,
+                    openai: elements.apiProviderCycleOpenAICheckbox.checked,
+                };
+    
+                const selectElement = elements.apiProviderSelect;
+                for (const provider in cycleConfig) {
+                    const option = selectElement.querySelector(`option[value="${provider}"]`);
+                    if (option) {
+                        option.hidden = !cycleConfig[provider];
+                    }
+                }
+    
+                const currentOption = selectElement.options[selectElement.selectedIndex];
+                if (currentOption && currentOption.hidden) {
+                    const firstVisibleOption = selectElement.querySelector('option:not([hidden])');
+                    if (firstVisibleOption) {
+                        selectElement.value = firstVisibleOption.value;
+                    }
+                }
+    
+                const newProvider = selectElement.value;
+                if (state.settings.apiProvider !== newProvider) {
+                    state.settings.apiProvider = newProvider;
+                }
+
+                uiUtils.toggleApiSettingsVisibility(newProvider);
+                this.updateSystemPromptBasedOnProvider();
+                uiUtils.updateProviderToggleButtons();
+            },
             initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
@@ -7427,6 +7456,7 @@
                             }
     
                             uiUtils.applySettingsToUI();
+                            this.updateApiProviderSelectionAndVisibility();
     
                             dbUtils.getAllChats(state.settings.historySortOrder).then(chats => {
                                 if (chats && chats.length > 0) {
@@ -7542,12 +7572,24 @@
                 }
                 if (elements.apiProviderSelect) {
                     elements.apiProviderSelect.addEventListener('change', (event) => {
-                        const selectedProvider = event.target.value;
-                        state.settings.apiProvider = selectedProvider;
-                        uiUtils.toggleApiSettingsVisibility(selectedProvider);
-                        this.updateSystemPromptBasedOnProvider();
+                        this.updateApiProviderSelectionAndVisibility();
                     });
                 }
+                const apiCycleCheckboxes = [
+                    elements.apiProviderCycleGeminiCheckbox,
+                    elements.apiProviderCycleDeepSeekCheckbox,
+                    elements.apiProviderCycleClaudeCheckbox,
+                    elements.apiProviderCycleOpenAICheckbox,
+                ];
+                apiCycleCheckboxes.forEach(checkbox => {
+                    if (checkbox) {
+                        checkbox.addEventListener('change', () => {
+                            const provider = checkbox.id.replace('api-provider-cycle-', '');
+                            state.settings.apiProviderCycle[provider] = checkbox.checked;
+                            this.updateApiProviderSelectionAndVisibility();
+                        });
+                    }
+                });
                 if (elements.enableSessionLinkingCheckbox) {
                     elements.enableSessionLinkingCheckbox.addEventListener('change', () => {
                         state.settings.enableSessionLinking = elements.enableSessionLinkingCheckbox.checked;
@@ -8748,6 +8790,7 @@
                     } else if (selectedApiProvider === 'openai' && state.settings.openaiEnableSystemPromptDefault) {
                         individualPrompt = state.settings.openaiSystemPrompt.trim();
                     }
+                    
                     if (state.settings.enableCommonSystemPromptDefault) {
                         commonPrompt = state.settings.commonSystemPrompt.trim();
                     }
@@ -10384,10 +10427,7 @@
                      claude: elements.apiProviderCycleClaudeCheckbox.checked,
                      openai: elements.apiProviderCycleOpenAICheckbox.checked,
                  };
-                if (!newSettings.apiProviderCycle[newSettings.apiProvider]) {
-                    const firstVisible = Object.keys(newSettings.apiProviderCycle).find(k => newSettings.apiProviderCycle[k]);
-                    newSettings.apiProvider = firstVisible || 'gemini';
-                }
+
 
                 const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
                     let num = isInteger ? parseInt(value, 10) : parseFloat(value);
@@ -10501,16 +10541,18 @@
 
 
                      if (!state.isSending && !state.isAiToAiChatProcessing) {
-                        uiUtils.applySettingsToUI();
-                        uiUtils.renderChatMessages(true);
+                         uiUtils.applySettingsToUI();
+                         this.updateApiProviderSelectionAndVisibility();
+                         uiUtils.renderChatMessages(true);
                      } else {
-                        uiUtils.applyTheme();
-                        uiUtils.applyFontFamily();
-                        uiUtils.applySidePanelSettingsToUI();
-                        uiUtils.updateChatScreenElementVisibility();
-                        uiUtils.updateHistoryHeaderButtonVisibility();
-                        uiUtils.toggleApiSettingsVisibility(state.settings.apiProvider);
-                        uiUtils.applySettingsUIDetailsOpenStates();
+                         uiUtils.applyTheme();
+                         uiUtils.applyFontFamily();
+                         uiUtils.applySidePanelSettingsToUI();
+                         uiUtils.updateChatScreenElementVisibility();
+                         uiUtils.updateHistoryHeaderButtonVisibility();
+                         uiUtils.toggleApiSettingsVisibility(state.settings.apiProvider);
+                         this.updateApiProviderSelectionAndVisibility();
+                         uiUtils.applySettingsUIDetailsOpenStates();
                      }
 
                     if (!state.settings.disableSaveSettingsConfirmation) {
@@ -12499,49 +12541,8 @@
                 }
             }
         };
-        
-        function updateApiProviderSelectVisibility() {
-            const cycle = state.settings.apiProviderCycle;
-            const select = elements.apiProviderSelect;
-            
-            Array.from(select.options).forEach(opt => { opt.hidden = false; });
-            
-            if (!cycle.gemini)  select.querySelector('option[value="gemini"]').hidden = true;
-            if (!cycle.deepseek)select.querySelector('option[value="deepseek"]').hidden = true;
-            if (!cycle.claude)  select.querySelector('option[value="claude"]').hidden = true;
-            if (!cycle.openai)  select.querySelector('option[value="openai"]').hidden = true;
 
-            if (select.selectedOptions[0]?.hidden) {
-                const firstVisible = Array.from(select.options).find(o => !o.hidden);
-                if (firstVisible) {
-                    select.value = firstVisible.value;
-                    state.settings.apiProvider = firstVisible.value;
-                    uiUtils.toggleApiSettingsVisibility(firstVisible.value);
-                }
-            }
-            uiUtils.updateProviderToggleButtons();
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            elements.apiProviderCycleGeminiCheckbox.addEventListener('change', () => {
-                state.settings.apiProviderCycle.gemini = elements.apiProviderCycleGeminiCheckbox.checked;
-                updateApiProviderSelectVisibility();
-            });
-            elements.apiProviderCycleDeepSeekCheckbox.addEventListener('change', () => {
-                state.settings.apiProviderCycle.deepseek = elements.apiProviderCycleDeepSeekCheckbox.checked;
-                updateApiProviderSelectVisibility();
-            });
-            elements.apiProviderCycleClaudeCheckbox.addEventListener('change', () => {
-                state.settings.apiProviderCycle.claude = elements.apiProviderCycleClaudeCheckbox.checked;
-                updateApiProviderSelectVisibility();
-            });
-            elements.apiProviderCycleOpenAICheckbox.addEventListener('change', () => {
-                state.settings.apiProviderCycle.openai = elements.apiProviderCycleOpenAICheckbox.checked;
-                updateApiProviderSelectVisibility();
-            });
-            appLogic.initializeApp();
-        });
+        appLogic.initializeApp();
     </script>
 </body>
 </html>
-
