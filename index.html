@@ -7193,28 +7193,24 @@
                 const apiProviderSelect = elements.apiProviderSelect;
                 if (!apiProviderSelect) return;
 
-                Array.from(apiProviderSelect.options).forEach(option => {
-                    option.style.display = '';
-                    option.disabled = false;
-                });
-
                 const cycleSettings = state.settings.apiProviderCycle;
                 
                 Array.from(apiProviderSelect.options).forEach(option => {
                     const providerValue = option.value;
                     if (cycleSettings.hasOwnProperty(providerValue) && !cycleSettings[providerValue]) {
                         option.style.display = 'none';
-                        option.disabled = true;
+                    } else {
+                        option.style.display = '';
                     }
                 });
 
                 const currentProvider = state.settings.apiProvider;
                 if (cycleSettings.hasOwnProperty(currentProvider) && !cycleSettings[currentProvider]) {
-                    const enabledProvider = Object.entries(cycleSettings).find(([provider, enabled]) => enabled)?.[0];
-                    if (enabledProvider) {
-                        state.settings.apiProvider = enabledProvider;
-                        apiProviderSelect.value = enabledProvider;
-                        this.toggleApiSettingsVisibility(enabledProvider);
+                    const firstEnabledProvider = Array.from(apiProviderSelect.options).find(opt => opt.style.display !== 'none');
+                    if (firstEnabledProvider) {
+                        state.settings.apiProvider = firstEnabledProvider.value;
+                        apiProviderSelect.value = firstEnabledProvider.value;
+                        this.toggleApiSettingsVisibility(firstEnabledProvider.value);
                         appLogic.updateSystemPromptBasedOnProvider();
                     }
                 }
