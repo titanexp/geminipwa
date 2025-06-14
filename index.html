@@ -3817,6 +3817,11 @@
                                    </label>
                                    <p style="height:10px"></p>
                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="add-prefix-on-import-toggle">
+                                        履歴インポート時に(取込)接頭辞を付与する
+                                   </label>
+                                   <p style="height:10px"></p>
+                                   <label class="checkbox-label">
                                        <input type="checkbox" id="hide-system-prompt-toggle">
                                        システムプロンプト非表示
                                    </label>
@@ -3983,7 +3988,6 @@
                                         </div>
                                    </details>
                                 </div>
-                                </p>
                            </details>
 
                            <details id="settings-group-font">
@@ -4169,7 +4173,8 @@
         const CLAUDE_API_BASE_URL = 'https://api.anthropic.com/v1/messages';
         const OPENAI_API_BASE_URL = 'https://api.openai.com/v1/chat/completions';
         const DUPLICATE_SUFFIX = ' (コピー)';
-        const IMPORT_PREFIX = '(取込) ';
+        const IMPORT_PREFIX = '(取込)';
+        const IMPORT_ALL_PREFIX = '(取込)(全)';
 
         const LIGHT_THEME_COLOR = '#4a90e2';
         const DARK_THEME_COLOR = '#007aff';
@@ -4399,6 +4404,7 @@
             codeBlockFontSizeInput: document.getElementById('code-block-font-size-input'),
             thoughtSummaryFontSizeInput: document.getElementById('thought-summary-font-size'),
             hideSystemPromptToggle: document.getElementById('hide-system-prompt-toggle'),
+            addPrefixOnImportToggle: document.getElementById('add-prefix-on-import-toggle'),
             enableSessionLinkingCheckbox: document.getElementById('enable-session-linking'),
             swipeNavigationToggle: document.getElementById('swipe-navigation-toggle'),
             preventZoomToggle: document.getElementById('prevent-zoom-toggle'),
@@ -4632,6 +4638,7 @@
                 autoScrollOnThought: false,
                 historySortOrder: 'updatedAt',
                 theme: 'light',
+                addPrefixOnImport: true,
                 backgroundImageBlob: null,
                 fontFamily: '',
                 messageBodyFontSize: DEFAULT_MESSAGE_BODY_FONT_SIZE,
@@ -5084,8 +5091,16 @@
                             title = existingChatData.title;
                         } else {
                             const firstUserMessage = state.currentMessages.find(m => m.role === 'user');
-                            title = firstUserMessage ? firstUserMessage.content.substring(0, 50) : "無題のチャット";
+                            let baseTitle = firstUserMessage ? firstUserMessage.content.substring(0, 50) : "無題のチャット";
+                            if (state.settings.addPrefixOnImport && baseTitle.startsWith(IMPORT_PREFIX)) {
+                                title = baseTitle;
+                            } else if (state.settings.addPrefixOnImport) {
+                                title = baseTitle;
+                            } else {
+                                title = baseTitle.replace(new RegExp(`^${IMPORT_PREFIX.replace(/([().])/g, '\\$1')}\\s*`), '');
+                            }
                         }
+
                         const chatIdForOperation = existingChatData ? existingChatData.id : state.currentChatId;
                         const chatData = {
                             messages: messagesToSave, systemPrompt: state.currentSystemPrompt,
@@ -5950,11 +5965,12 @@
                     }
 
                     if(baseTitle) {
-                        const displayBase = baseTitle.startsWith(IMPORT_PREFIX) ? baseTitle.substring(IMPORT_PREFIX.length) : baseTitle;
+                        const importPrefix = state.settings.addPrefixOnImport ? IMPORT_PREFIX : '';
+                        const displayBase = baseTitle.startsWith(importPrefix) ? baseTitle.substring(importPrefix.length) : baseTitle;
                         const truncated = displayBase.substring(0, CHAT_TITLE_LENGTH);
                         titleText = truncated + (displayBase.length > CHAT_TITLE_LENGTH ? '...' : '');
-                        if (baseTitle.startsWith(IMPORT_PREFIX)) {
-                            titleText = IMPORT_PREFIX + titleText;
+                        if (baseTitle.startsWith(importPrefix)) {
+                            titleText = importPrefix + titleText;
                         }
                     } else if(state.currentMessages.length > 0) {
                         titleText = 'チャット履歴';
@@ -6468,6 +6484,7 @@
                  elements.autoScrollOnThoughtCheckbox.checked = state.settings.autoScrollOnThought;
                  elements.historySortOrderSelect.value = state.settings.historySortOrder || 'updatedAt';
                  if (elements.themeSelect) elements.themeSelect.value = state.settings.theme || 'light';
+                 elements.addPrefixOnImportToggle.checked = state.settings.addPrefixOnImport;
                  elements.enableSessionLinkingCheckbox.checked = state.settings.enableSessionLinking;
                  elements.fontFamilyInput.value = state.settings.fontFamily || '';
                  elements.messageBodyFontSizeInput.value = state.settings.messageBodyFontSize ?? '';
@@ -10018,7 +10035,10 @@
 
 
                         const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
-                        const newTitle = IMPORT_PREFIX + (fileNameWithoutExt || `Imported_${Date.now()}`);
+                        let newTitle = fileNameWithoutExt || `Imported_${Date.now()}`;
+                        if (state.settings.addPrefixOnImport) {
+                            newTitle = IMPORT_PREFIX + " " + newTitle;
+                        }
 
                         const newChatData = {
                             messages: importedMessages, systemPrompt: importedSystemPrompt || '',
@@ -10183,9 +10203,14 @@
                                 skippedCount++;
                                 continue;
                             }
+                            
+                            let newTitle = chatData.title;
+                            if (state.settings.addPrefixOnImport) {
+                                newTitle = `${IMPORT_ALL_PREFIX} ${newTitle}`;
+                            }
 
                             const newChat = {
-                                title: `${IMPORT_PREFIX}(全) ${chatData.title}`.substring(0,100),
+                                title: newTitle.substring(0,100),
                                 systemPrompt: chatData.systemPrompt || '',
                                 messages: (chatData.messages || []).map(msg => ({
                                     role: msg.role,
@@ -10459,6 +10484,7 @@
                  newSettings.autoScrollOnThought = elements.autoScrollOnThoughtCheckbox.checked;
                  newSettings.historySortOrder = elements.historySortOrderSelect.value;
                  newSettings.theme = elements.themeSelect.value;
+                 newSettings.addPrefixOnImport = elements.addPrefixOnImportToggle.checked;
                  newSettings.enableSessionLinking = elements.enableSessionLinkingCheckbox.checked;
                  newSettings.fontFamily = elements.fontFamilyInput.value.trim();
                  newSettings.messageBodyFontSize = elements.messageBodyFontSizeInput.value === '' ? null : parseInt(elements.messageBodyFontSizeInput.value, 10);
@@ -10760,6 +10786,7 @@
                         defaultSettingsCopy.autoScrollOnThought = false;
                         defaultSettingsCopy.historySortOrder = 'updatedAt';
                         defaultSettingsCopy.theme = window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'dark' : 'light';
+                        defaultSettingsCopy.addPrefixOnImport = true;
                         defaultSettingsCopy.backgroundImageBlob = null;
                         defaultSettingsCopy.fontFamily = '';
                         defaultSettingsCopy.messageBodyFontSize = DEFAULT_MESSAGE_BODY_FONT_SIZE;
