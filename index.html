@@ -3825,6 +3825,11 @@
                                    </label>
                                    <p style="height:10px"></p>
                                    <label class="checkbox-label">
+                                       <input type="checkbox" id="add-prefix-on-import-toggle">
+                                       履歴インポート時にタイトルへ接頭辞「(取込)」を付与する
+                                   </label>
+                                   <p style="height:10px"></p>
+                                   <label class="checkbox-label">
                                        <input type="checkbox" id="hide-system-prompt-toggle">
                                        システムプロンプト非表示
                                    </label>
@@ -4487,6 +4492,7 @@
             disableRetryConfirmationToggle: document.getElementById('disable-retry-confirmation-toggle'),
             disableLoadChatConfirmationWhileSendingToggle: document.getElementById('disable-load-chat-confirmation-while-sending-toggle'),
             disableDeleteMessageConfirmationToggle: document.getElementById('disable-delete-message-confirmation-toggle'),
+            addPrefixOnImportToggle: document.getElementById('add-prefix-on-import-toggle'),
             showTopCollapseButtonToggle: document.getElementById('show-top-collapse-button-toggle'),
             showBottomCollapseButtonToggle: document.getElementById('show-bottom-collapse-button-toggle'),
             persistMessageCollapseStateCheckbox: document.getElementById('persist-message-collapse-state'),
@@ -4691,6 +4697,7 @@
                 disableRetryConfirmation: false,
                 disableLoadChatConfirmationWhileSending: false,
                 disableDeleteMessageConfirmation: false,
+                addPrefixOnImport: true,
                 showTopCollapseButton: true,
                 showBottomCollapseButton: true,
                 persistMessageCollapseState: DEFAULT_PERSIST_MESSAGE_COLLAPSE_STATE,
@@ -6538,6 +6545,7 @@
                 elements.disableRetryConfirmationToggle.checked = state.settings.disableRetryConfirmation;
                 elements.disableLoadChatConfirmationWhileSendingToggle.checked = state.settings.disableLoadChatConfirmationWhileSending;
                 elements.disableDeleteMessageConfirmationToggle.checked = state.settings.disableDeleteMessageConfirmation;
+                elements.addPrefixOnImportToggle.checked = state.settings.addPrefixOnImport;
                 elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
                 elements.showBottomCollapseButtonToggle.checked = state.settings.showBottomCollapseButton;
@@ -10035,7 +10043,8 @@
 
 
                         const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
-                        const newTitle = IMPORT_PREFIX + (fileNameWithoutExt || `Imported_${Date.now()}`);
+                        const titlePrefix = state.settings.addPrefixOnImport ? IMPORT_PREFIX : '';
+                        const newTitle = titlePrefix + (fileNameWithoutExt || `Imported_${Date.now()}`);
 
                         const newChatData = {
                             messages: importedMessages, systemPrompt: importedSystemPrompt || '',
@@ -10201,8 +10210,9 @@
                                 continue;
                             }
 
+                            const titlePrefix = state.settings.addPrefixOnImport ? `${IMPORT_PREFIX}(全) ` : '';
                             const newChat = {
-                                title: `${IMPORT_PREFIX}(全) ${chatData.title}`.substring(0,100),
+                                title: `${titlePrefix}${chatData.title}`.substring(0,100),
                                 systemPrompt: chatData.systemPrompt || '',
                                 messages: (chatData.messages || []).map(msg => ({
                                     role: msg.role,
@@ -10523,6 +10533,7 @@
                  newSettings.disableRetryConfirmation = elements.disableRetryConfirmationToggle.checked;
                  newSettings.disableLoadChatConfirmationWhileSending = elements.disableLoadChatConfirmationWhileSendingToggle.checked;
                  newSettings.disableDeleteMessageConfirmation = elements.disableDeleteMessageConfirmationToggle.checked;
+                 newSettings.addPrefixOnImport = elements.addPrefixOnImportToggle.checked;
                  newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
                  newSettings.showTopCollapseButton = elements.showTopCollapseButtonToggle.checked;
                  newSettings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
@@ -10827,6 +10838,7 @@
                         defaultSettingsCopy.disableRetryConfirmation = false;
                         defaultSettingsCopy.disableLoadChatConfirmationWhileSending = false;
                         defaultSettingsCopy.disableDeleteMessageConfirmation = false;
+                        defaultSettingsCopy.addPrefixOnImport = true;
                         defaultSettingsCopy.disableSaveSettingsConfirmation = false;
                         defaultSettingsCopy.showTopCollapseButton = true;
                         defaultSettingsCopy.showBottomCollapseButton = true;
@@ -12535,7 +12547,7 @@
                 } catch (error) {
                      yield { type: 'error', error: { message: error.message }, message: error.message };
                 } finally {
-                                    if (!reader.closed && !isCancelled) {
+                    if (!reader.closed && !isCancelled) {
                         try { await reader.cancel("Stream processing ended."); } catch (e) { }
                     }
                 }
