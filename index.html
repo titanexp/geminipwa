@@ -2987,43 +2987,9 @@
             font-size: 16px;
         }
 
-        .mermaid-container {
-            transition: background-color 0.3s ease, border-color 0.3s ease;
-        }
-
-        .mermaid-diagram svg {
-            max-width: 100% !important;
-            height: auto !important;
-        }
-
-        .mermaid-toggle-button:hover {
-            background-color: var(--bg-button-action-hover) !important;
-        }
-
-        .mermaid-copy-button:hover {
-            background-color: var(--bg-button-copy-hover) !important;
-        }
-
-        body.dark-mode .mermaid-diagram {
-            background-color: #f8f9fa !important;
-        }
-
-        body.dark-mode .mermaid-diagram svg {
-            filter: none;
-        }
-
-        body.pastel-pink-mode .mermaid-diagram,
-        body.pastel-blue-mode .mermaid-diagram,
-        body.pastel-yellow-mode .mermaid-diagram,
-        body.pastel-purple-mode .mermaid-diagram,
-        body.pastel-rainbow-mode .mermaid-diagram {
-            background-color: #fefefe !important;
-        }
-
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -5789,12 +5755,6 @@
             addCopyButtonsToCodeBlocks(contentDiv) {
                 const codeBlocks = contentDiv.querySelectorAll('pre');
                 codeBlocks.forEach(preElement => {
-                    if (this.isMermaidCode(preElement)) {
-                        const codeElement = preElement.querySelector('code');
-                        const mermaidCode = codeElement ? codeElement.innerText : preElement.innerText;
-                        this.processMermaidBlock(preElement, mermaidCode);
-                        return;
-                    }
                     const codeElement = preElement.querySelector('code');
                     const textToCopy = codeElement ? codeElement.innerText : preElement.innerText;
 
@@ -5826,172 +5786,6 @@
                         preElement.appendChild(copyButton);
                     }
                 });
-            },
-            isMermaidCode(preElement) {
-                const codeElement = preElement.querySelector('code');
-                if (codeElement && (
-                    codeElement.classList.contains('language-mermaid') ||
-                    codeElement.classList.contains('mermaid')
-                )) {
-                    return true;
-                }
-
-                const content = preElement.textContent.trim();
-                const mermaidKeywords = [
-                    'graph', 'flowchart', 'sequenceDiagram', 'classDiagram',
-                    'stateDiagram', 'journey', 'gantt', 'pie', 'gitgraph',
-                    'erDiagram', 'mindmap', 'timeline', 'sankey'
-                ];
-                
-                return mermaidKeywords.some(keyword => content.includes(keyword));
-            },
-            async processMermaidBlock(preElement, mermaidCode) {
-                if (typeof mermaid === 'undefined') {
-                    return;
-                }
-                const container = document.createElement('div');
-                container.classList.add('mermaid-container');
-                container.style.cssText = `
-                    position: relative;
-                    background-color: var(--bg-tertiary);
-                    border: 1px solid var(--border-secondary);
-                    border-radius: 8px;
-                    padding: 15px;
-                    margin: 10px 0;
-                    overflow: auto;
-                `;
-                const diagramDiv = document.createElement('div');
-                diagramDiv.classList.add('mermaid-diagram');
-                diagramDiv.style.cssText = `
-                    text-align: center;
-                    min-height: 100px;
-                    background-color: white;
-                    border-radius: 5px;
-                    padding: 10px;
-                    margin-bottom: 10px;
-                `;
-                const codeDiv = document.createElement('div');
-                codeDiv.classList.add('mermaid-code');
-                codeDiv.style.cssText = `
-                    display: none;
-                    background-color: var(--bg-secondary);
-                    border-radius: 5px;
-                    padding: 10px;
-                    font-family: monospace;
-                    font-size: 13px;
-                    white-space: pre-wrap;
-                    word-break: break-all;
-                    margin-bottom: 10px;
-                    color: var(--text-secondary);
-                `;
-                codeDiv.textContent = mermaidCode;
-                const buttonContainer = document.createElement('div');
-                buttonContainer.style.cssText = `
-                    display: flex;
-                    gap: 8px;
-                    justify-content: flex-end;
-                    flex-wrap: wrap;
-                `;
-                const toggleButton = document.createElement('button');
-                toggleButton.textContent = 'コード表示';
-                toggleButton.classList.add('mermaid-toggle-button');
-                toggleButton.style.cssText = `
-                    padding: 4px 10px;
-                    font-size: 12px;
-                    background-color: var(--bg-button-action);
-                    color: var(--text-light);
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                `;
-                const copyButton = document.createElement('button');
-                copyButton.textContent = 'コピー';
-                copyButton.classList.add('mermaid-copy-button');
-                copyButton.style.cssText = `
-                    padding: 4px 10px;
-                    font-size: 12px;
-                    background-color: var(--bg-button-copy);
-                    color: var(--text-light);
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                `;
-                const errorDiv = document.createElement('div');
-                errorDiv.classList.add('mermaid-error');
-                errorDiv.style.cssText = `
-                    display: none;
-                    background-color: var(--bg-error-message);
-                    color: var(--text-error);
-                    padding: 10px;
-                    border-radius: 5px;
-                    margin-bottom: 10px;
-                    font-size: 13px;
-                `;
-
-                toggleButton.onclick = () => {
-                    const isCodeVisible = codeDiv.style.display !== 'none';
-                    if (isCodeVisible) {
-                        codeDiv.style.display = 'none';
-                        diagramDiv.style.display = 'block';
-                        toggleButton.textContent = 'コード表示';
-                    } else {
-                        codeDiv.style.display = 'block';
-                        diagramDiv.style.display = 'none';
-                        toggleButton.textContent = '図表表示';
-                    }
-                };
-
-                copyButton.onclick = async () => {
-                    try {
-                        await navigator.clipboard.writeText(mermaidCode);
-                        const originalText = copyButton.textContent;
-                        copyButton.textContent = 'コピー完了!';
-                        copyButton.disabled = true;
-                        setTimeout(() => {
-                            copyButton.textContent = originalText;
-                            copyButton.disabled = false;
-                        }, 1500);
-                    } catch (err) {
-                        const originalText = copyButton.textContent;
-                        copyButton.textContent = '失敗';
-                        copyButton.disabled = true;
-                        setTimeout(() => {
-                            copyButton.textContent = originalText;
-                            copyButton.disabled = false;
-                        }, 2000);
-                    }
-                };
-
-                buttonContainer.appendChild(toggleButton);
-                buttonContainer.appendChild(copyButton);
-                container.appendChild(errorDiv);
-                container.appendChild(diagramDiv);
-                container.appendChild(codeDiv);
-                container.appendChild(buttonContainer);
-                try {
-                    const uniqueId = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                    diagramDiv.id = uniqueId;
-                    
-                    const { svg } = await mermaid.render(uniqueId + '-svg', mermaidCode);
-                    diagramDiv.innerHTML = svg;
-                    
-                    const svgElement = diagramDiv.querySelector('svg');
-                    if (svgElement) {
-                        svgElement.style.maxWidth = '100%';
-                        svgElement.style.height = 'auto';
-                    }
-                    
-                    errorDiv.style.display = 'none';
-                } catch (error) {
-                    errorDiv.textContent = `図表の描画に失敗しました: ${error.message}`;
-                    errorDiv.style.display = 'block';
-                    diagramDiv.style.display = 'none';
-                    
-                    codeDiv.style.display = 'block';
-                    toggleButton.textContent = '図表表示';
-                }
-
-                preElement.parentNode.replaceChild(container, preElement);
             },
             async updateStreamingMessage(index, newCharOrChunk, isThoughtSummary = false) {
                 const messageDiv = document.getElementById(`streaming-message-${index}`);
@@ -6766,7 +6560,6 @@
                 elements.toggleButtonBottomFontSizeInput.value = state.settings.toggleButtonBottomFontSize ?? DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE;
                 elements.toggleButtonBottomTextCollapseInput.value = state.settings.toggleButtonBottomTextCollapse || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 elements.toggleButtonBottomTextExpandInput.value = state.settings.toggleButtonBottomTextExpand || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
-                elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity ?? DEFAULT_THOUGHT_SUMMARY_OPACITY;
 
                 document.documentElement.style.setProperty('--message-body-font-size', `${state.settings.messageBodyFontSize || DEFAULT_MESSAGE_BODY_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--code-block-font-size', `${state.settings.codeBlockFontSize || DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
@@ -7741,20 +7534,6 @@
                         smartypants: false
                     });
                 }
-                if (typeof mermaid !== 'undefined') {
-                    mermaid.initialize({
-                        startOnLoad: false,
-                        theme: 'default',
-                        securityLevel: 'loose',
-                        fontFamily: 'var(--font-family)',
-                        flowchart: { useMaxWidth: true, htmlLabels: true },
-                        sequence: { useMaxWidth: true },
-                        gantt: { useMaxWidth: true },
-                        journey: { useMaxWidth: true },
-                        pie: { useMaxWidth: true }
-                    });
-                }
-
                 elements.appVersionSpan.textContent = APP_VERSION;
 
                 window.addEventListener('beforeinstallprompt', (event) => {
