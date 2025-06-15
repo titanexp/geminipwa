@@ -5789,12 +5789,6 @@
             addCopyButtonsToCodeBlocks(contentDiv) {
                 const codeBlocks = contentDiv.querySelectorAll('pre');
                 codeBlocks.forEach(preElement => {
-                    if (this.isMermaidCode(preElement)) {
-                        const codeElement = preElement.querySelector('code');
-                        const mermaidCode = codeElement ? codeElement.innerText : preElement.innerText;
-                        this.processMermaidBlock(preElement, mermaidCode);
-                        return;
-                    }
                     const codeElement = preElement.querySelector('code');
                     const textToCopy = codeElement ? codeElement.innerText : preElement.innerText;
 
@@ -5835,15 +5829,13 @@
                 )) {
                     return true;
                 }
-
                 const content = preElement.textContent.trim();
                 const mermaidKeywords = [
                     'graph', 'flowchart', 'sequenceDiagram', 'classDiagram',
                     'stateDiagram', 'journey', 'gantt', 'pie', 'gitgraph',
                     'erDiagram', 'mindmap', 'timeline', 'sankey'
                 ];
-                
-                return mermaidKeywords.some(keyword => content.includes(keyword));
+                return mermaidKeywords.some(keyword => content.startsWith(keyword));
             },
             async processMermaidBlock(preElement, mermaidCode) {
                 if (typeof mermaid === 'undefined') {
@@ -5971,26 +5963,21 @@
                 try {
                     const uniqueId = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
                     diagramDiv.id = uniqueId;
-                    
                     const { svg } = await mermaid.render(uniqueId + '-svg', mermaidCode);
                     diagramDiv.innerHTML = svg;
-                    
                     const svgElement = diagramDiv.querySelector('svg');
                     if (svgElement) {
                         svgElement.style.maxWidth = '100%';
                         svgElement.style.height = 'auto';
                     }
-                    
                     errorDiv.style.display = 'none';
                 } catch (error) {
                     errorDiv.textContent = `図表の描画に失敗しました: ${error.message}`;
                     errorDiv.style.display = 'block';
                     diagramDiv.style.display = 'none';
-                    
                     codeDiv.style.display = 'block';
                     toggleButton.textContent = '図表表示';
                 }
-
                 preElement.parentNode.replaceChild(container, preElement);
             },
             async updateStreamingMessage(index, newCharOrChunk, isThoughtSummary = false) {
@@ -6031,12 +6018,6 @@
                         try {
                             const safeHtml = this._sanitizeAndParseMarkdown(contentToRender || '');
                             targetContentDiv.innerHTML = safeHtml;
-
-                            if (!isThoughtSummary) {
-                                this.processInteractivePlaceholders(targetContentDiv);
-                                this.processInteractiveTitles(targetContentDiv);
-                                this.addCopyButtonsToCodeBlocks(targetContentDiv);
-                            }
                         } catch (e) {
                             targetContentDiv.textContent = contentToRender;
                         }
@@ -11433,7 +11414,7 @@
                 if (state.isSending) {
                     await uiUtils.showCustomAlert("送信中は削除できません。");
                     return;
-                }
+                                    }
                 if (state.isEditingSystemPrompt) {
                     await uiUtils.showCustomAlert("システムプロンプト編集中は削除できません。");
                     return;
