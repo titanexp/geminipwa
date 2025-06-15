@@ -2986,10 +2986,39 @@
         .app-container.minimized-ui .chat-input-area button#send-button {
             font-size: 16px;
         }
+        .diagram-placeholder {
+            padding: 1em;
+            background-color: var(--bg-tertiary);
+            border: 1px dashed var(--border-secondary);
+            border-radius: 5px;
+            color: var(--text-secondary);
+            font-family: monospace;
+        }
+        .mermaid-diagram-container,
+        .markmap-diagram-container,
+        .plantuml-diagram-container {
+            background-color: var(--bg-primary);
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 1em 0;
+            text-align: center;
+        }
+        .mermaid-diagram-container svg,
+        .markmap-diagram-container svg,
+        .plantuml-diagram-container img {
+            max-width: none;
+            display: block;
+            margin: 0 auto;
+        }
 
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markmap-lib"></script>
+    <script src="https://cdn.jsdelivr.net/npm/markmap-view"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
 </head>
 <body>
     <div class="app-container">
@@ -4142,6 +4171,48 @@
     </dialog>
 
     <script>
+        const plantUMLUtils = {
+            encode(text) {
+                if (typeof pako === 'undefined') {
+                    console.error("pako.js is not loaded. Cannot encode PlantUML.");
+                    return '';
+                }
+                const compressed = pako.deflate(text, { level: 9 });
+                return this.encode64(compressed);
+            },
+            encode64(data) {
+                let r = "";
+                for (let i = 0; i < data.length; i += 3) {
+                    if (i + 2 === data.length) {
+                        r += this.append3bytes(data[i], data[i + 1], 0);
+                    } else if (i + 1 === data.length) {
+                        r += this.append3bytes(data[i], 0, 0);
+                    } else {
+                        r += this.append3bytes(data[i], data[i + 1], data[i + 2]);
+                    }
+                }
+                return r;
+            },
+            append3bytes(b1, b2, b3) {
+                const c1 = b1 >> 2;
+                const c2 = ((b1 & 0x3) << 4) | (b2 >> 4);
+                const c3 = ((b2 & 0xF) << 2) | (b3 >> 6);
+                const c4 = b3 & 0x3F;
+                return this.encode6bit(c1 & 0x3F) + this.encode6bit(c2 & 0x3F) + this.encode6bit(c3 & 0x3F) + this.encode6bit(c4 & 0x3F);
+            },
+            encode6bit(b) {
+                if (b < 10) return String.fromCharCode(48 + b);
+                b -= 10;
+                if (b < 26) return String.fromCharCode(65 + b);
+                b -= 26;
+                if (b < 26) return String.fromCharCode(97 + b);
+                b -= 26;
+                if (b === 0) return '-';
+                if (b === 1) return '_';
+                return '?';
+            }
+        };
+
         const DB_NAME = 'GeminiPWA_DB';
         const DB_VERSION = 8;
         const SETTINGS_STORE = 'settings';
@@ -5264,12 +5335,83 @@
                     div.textContent = content || '';
                     return div.innerHTML;
                 }
-                const rawHtml = marked.parse(content || '');
+                const renderer = new marked.Renderer();
+                const originalCodeRenderer = renderer.code.bind(renderer);
+                renderer.code = (code, lang, escaped) => {
+                    lang = (lang || '').toLowerCase();
+                    const supportedDiagrams = ['mermaid', 'markmap', 'plantuml'];
+                    if (supportedDiagrams.includes(lang)) {
+                        const sanitizedCode = DOMPurify.sanitize(code, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+                        return `<div class="diagram-placeholder" data-diagram-type="${lang}" data-code="${escape(sanitizedCode)}">Now rendering ${lang} diagram...</div>`;
+                    }
+                    return originalCodeRenderer(code, lang, escaped);
+                };
+                const escape = (str) => {
+                    return str.replace(/&/g, '&amp;')
+                              .replace(/"/g, '&quot;')
+                              .replace(/'/g, '&#39;')
+                              .replace(/</g, '&lt;')
+                              .replace(/>/g, '&gt;');
+                };
+                const rawHtml = marked.parse(content || '', { renderer });
                 const cleanHtml = DOMPurify.sanitize(rawHtml, {
-                    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'code', 'a', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr', 'img'],
-                    ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'src', 'alt']
+                    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'code', 'a', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr', 'img', 'div'],
+                    ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'src', 'alt', 'data-diagram-type', 'data-code', 'class']
                 });
                 return cleanHtml;
+            },
+            async renderDiagrams(messageContentElement) {
+                const placeholders = messageContentElement.querySelectorAll('.diagram-placeholder');
+                if (placeholders.length === 0) return;
+                const mermaidPlaceholders = Array.from(placeholders).filter(p => p.dataset.diagramType === 'mermaid');
+                if (mermaidPlaceholders.length > 0) {
+                    for (const placeholder of mermaidPlaceholders) {
+                        try {
+                            const code = placeholder.dataset.code;
+                            const { svg } = await mermaid.render(`mermaid-${Date.now()}-${Math.random()}`, code);
+                            placeholder.innerHTML = svg;
+                            placeholder.classList.add('mermaid-diagram-container');
+                            placeholder.classList.remove('diagram-placeholder');
+                        } catch(e) {
+                            placeholder.innerHTML = `<pre>Mermaid render error:\n${e.message}</pre>`;
+                        }
+                    }
+                }
+                const markmapPlaceholders = Array.from(placeholders).filter(p => p.dataset.diagramType === 'markmap');
+                if (markmapPlaceholders.length > 0 && typeof window.markmap !== 'undefined') {
+                    const { Markmap, transformer } = window.markmap;
+                    for (const placeholder of markmapPlaceholders) {
+                        try {
+                             const code = placeholder.dataset.code;
+                             const { root } = transformer.transform(code);
+                             const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                             svgEl.style.width = '100%';
+                             svgEl.style.height = '400px';
+                             placeholder.innerHTML = '';
+                             placeholder.appendChild(svgEl);
+                             Markmap.create(svgEl, null, root);
+                             placeholder.classList.add('markmap-diagram-container');
+                             placeholder.classList.remove('diagram-placeholder');
+                        } catch(e) {
+                             placeholder.innerHTML = `<pre>Markmap render error:\n${e.message}</pre>`;
+                        }
+                    }
+                }
+                const plantumlPlaceholders = Array.from(placeholders).filter(p => p.dataset.diagramType === 'plantuml');
+                if (plantumlPlaceholders.length > 0 && typeof plantUMLUtils !== 'undefined') {
+                     for (const placeholder of plantumlPlaceholders) {
+                         try {
+                             const code = placeholder.dataset.code;
+                             const encoded = plantUMLUtils.encode(code);
+                             const url = `https://kroki.io/plantuml/svg/${encoded}`;
+                             placeholder.innerHTML = `<img src="${url}" alt="PlantUML Diagram" class="plantuml-diagram">`;
+                             placeholder.classList.add('plantuml-diagram-container');
+                             placeholder.classList.remove('diagram-placeholder');
+                         } catch(e) {
+                             placeholder.innerHTML = `<pre>PlantUML render error:\n${e.message}</pre>`;
+                         }
+                     }
+                }
             },
             renderChatMessages(maintainScroll = false) {
                 const mainContent = elements.chatScreen.querySelector('.main-content');
@@ -5497,6 +5639,7 @@
                             this.processInteractivePlaceholders(contentDiv);
                             this.processInteractiveTitles(contentDiv);
                             this.addCopyButtonsToCodeBlocks(contentDiv);
+                            this.renderDiagrams(contentDiv);
                         } else if (role === 'user') {
                             const pre = document.createElement('pre'); pre.textContent = content; contentDiv.appendChild(pre);
                         } else if (role === 'error') {
@@ -5830,6 +5973,7 @@
                                 this.processInteractivePlaceholders(targetContentDiv);
                                 this.processInteractiveTitles(targetContentDiv);
                                 this.addCopyButtonsToCodeBlocks(targetContentDiv);
+                                this.renderDiagrams(targetContentDiv);
                             }
                         } catch (e) {
                             targetContentDiv.textContent = contentToRender;
@@ -5903,6 +6047,7 @@
                              this.processInteractivePlaceholders(contentDiv);
                              this.processInteractiveTitles(contentDiv);
                              this.addCopyButtonsToCodeBlocks(contentDiv);
+                             this.renderDiagrams(contentDiv);
                          } catch (e) {
                              contentDiv.textContent = finalRawContent;
                          }
@@ -6334,6 +6479,8 @@
                 let themeColorMetaValue;
                 let currentThemeUserMessageBgRgb = this.hexToRgb(LIGHT_MODE_USER_MESSAGE_COLOR) || {r:220,g:248,b:198};
                 let currentThemeModelMessageBgRgb = this.hexToRgb(LIGHT_MODE_MODEL_MESSAGE_COLOR) || {r:229,g:229,b:234};
+                let mermaidTheme = 'default';
+                let mermaidFontColor = '#333333';
 
                 switch (theme) {
                     case 'dark':
@@ -6341,43 +6488,72 @@
                         themeColorMetaValue = DARK_THEME_COLOR;
                         currentThemeUserMessageBgRgb = this.hexToRgb(DARK_MODE_USER_MESSAGE_COLOR) || {r:5,g:97,b:98};
                         currentThemeModelMessageBgRgb = this.hexToRgb(DARK_MODE_MODEL_MESSAGE_COLOR) || {r:58,g:58,b:60};
+                        mermaidTheme = 'dark';
+                        mermaidFontColor = '#e0e0e0';
                         break;
                     case 'pastel-pink':
                         document.body.classList.add('pastel-pink-mode');
                         themeColorMetaValue = PASTEL_PINK_THEME_COLOR;
                         currentThemeUserMessageBgRgb = this.hexToRgb(PASTEL_PINK_USER_MESSAGE_COLOR) || {r:255,g:221,b:238};
                         currentThemeModelMessageBgRgb = this.hexToRgb(PASTEL_PINK_MODEL_MESSAGE_COLOR) || {r:243,g:232,b:255};
+                        mermaidTheme = 'neutral';
+                        mermaidFontColor = '#5c3c45';
                         break;
                     case 'pastel-blue':
                         document.body.classList.add('pastel-blue-mode');
                         themeColorMetaValue = PASTEL_BLUE_THEME_COLOR;
                         currentThemeUserMessageBgRgb = this.hexToRgb(PASTEL_BLUE_USER_MESSAGE_COLOR) || {r:207,g:241,b:239};
                         currentThemeModelMessageBgRgb = this.hexToRgb(PASTEL_BLUE_MODEL_MESSAGE_COLOR) || {r:224,g:232,b:255};
+                        mermaidTheme = 'neutral';
+                        mermaidFontColor = '#3a5679';
                         break;
                     case 'pastel-yellow':
                         document.body.classList.add('pastel-yellow-mode');
                         themeColorMetaValue = PASTEL_YELLOW_THEME_COLOR;
                         currentThemeUserMessageBgRgb = this.hexToRgb(PASTEL_YELLOW_USER_MESSAGE_COLOR) || {r:255,g:245,b:186};
                         currentThemeModelMessageBgRgb = this.hexToRgb(PASTEL_YELLOW_MODEL_MESSAGE_COLOR) || {r:255,g:228,b:181};
+                        mermaidTheme = 'default';
+                        mermaidFontColor = '#5d4037';
                         break;
                     case 'pastel-purple':
                         document.body.classList.add('pastel-purple-mode');
                         themeColorMetaValue = PASTEL_PURPLE_THEME_COLOR;
                         currentThemeUserMessageBgRgb = this.hexToRgb(PASTEL_PURPLE_USER_MESSAGE_COLOR) || {r:209,g:196,b:233};
                         currentThemeModelMessageBgRgb = this.hexToRgb(PASTEL_PURPLE_MODEL_MESSAGE_COLOR) || {r:197,g:202,b:233};
+                        mermaidTheme = 'neutral';
+                        mermaidFontColor = '#4a148c';
                         break;
                     case 'pastel-rainbow':
                         document.body.classList.add('pastel-rainbow-mode');
                         themeColorMetaValue = PASTEL_RAINBOW_THEME_COLOR;
                         currentThemeUserMessageBgRgb = this.hexToRgb(PASTEL_RAINBOW_USER_MESSAGE_COLOR) || {r:224,g:255,b:240};
                         currentThemeModelMessageBgRgb = this.hexToRgb(PASTEL_RAINBOW_MODEL_MESSAGE_COLOR) || {r:224,g:240,b:255};
+                        mermaidTheme = 'default';
+                        mermaidFontColor = '#333';
                         break;
                     case 'light':
                     default:
                         document.body.classList.add('light-mode-forced');
                         themeColorMetaValue = LIGHT_THEME_COLOR;
+                        mermaidTheme = 'default';
+                        mermaidFontColor = '#333333';
                         break;
                 }
+                if (window.mermaid && typeof mermaid.initialize === 'function') {
+                    mermaid.initialize({
+                        startOnLoad: false,
+                        theme: mermaidTheme,
+                        fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-family') || DEFAULT_FONT_FAMILY,
+                        themeVariables: {
+                            textColor: mermaidFontColor,
+                            lineColor: getComputedStyle(document.documentElement).getPropertyValue('--border-primary'),
+                            primaryColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-tertiary'),
+                            primaryBorderColor: getComputedStyle(document.documentElement).getPropertyValue('--border-primary'),
+                            secondaryColor: getComputedStyle(document.documentElement).getPropertyValue('--bg-secondary'),
+                        }
+                    });
+                }
+
                 if (elements.themeColorMeta) {
                     elements.themeColorMeta.content = themeColorMetaValue;
                 }
@@ -7532,6 +7708,13 @@
                         gfm: true,
                         sanitize: false,
                         smartypants: false
+                    });
+                }
+                if (window.mermaid) {
+                    mermaid.initialize({
+                        startOnLoad: false,
+                        theme: 'default',
+                        fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-family')
                     });
                 }
                 elements.appVersionSpan.textContent = APP_VERSION;
@@ -9687,7 +9870,7 @@
                             if (data.usage) {
                                 finalUsageMetadataFromStream = {
                                     candidatesTokenCount: data.usage.completion_tokens,
-                                    totalTokenCount: data.usage.prompt_tokens + data.usage.completion_tokens
+                                    totalTokenCount: data.usage.prompt_tokens + data.choices[0].message.content.length
                                 };
                             }
                             if (!rawContentFromApi && modelResponseMetadata.finishReason === 'stop') {
