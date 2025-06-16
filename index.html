@@ -59,7 +59,6 @@
             --bg-code-copy-button-hover: var(--bg-button-action-hover);
             --text-code-copy-button: var(--text-light);
 
-
             --text-primary: #333333;
             --text-secondary: #777777;
             --text-light: #ffffff;
@@ -70,7 +69,6 @@
             --text-system: #555;
             --text-memo: #000000;
             --bg-memo: #ffffff;
-
 
             --border-primary: #cccccc;
             --border-secondary: #dddddd;
@@ -406,7 +404,6 @@
             --text-system: #5a7698;
             --text-memo: #3a5679;
 
-
             --border-primary: #b0dfff;
             --border-secondary: #d5eaff;
             --border-tertiary: #eaf5ff;
@@ -499,7 +496,6 @@
             --bg-code-copy-button: var(--bg-button-action);
             --bg-code-copy-button-hover: var(--bg-button-action-hover);
             --text-code-copy-button: var(--text-light);
-
 
             --text-primary: #5d4037;
             --text-secondary: #8d6e63;
@@ -2725,9 +2721,6 @@
             font-size: 10px;
             color: var(--text-attachment-filename);
             overflow-wrap: break-word;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
             line-height: 1.4;
         }
 
@@ -3075,6 +3068,54 @@
         body.pastel-rainbow-mode .mermaid-diagram svg .node polygon {
             fill: #f0f8ff !important;
             stroke: #4a90e2 !important;
+        }
+        .attachment-actions {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-left: auto;
+        }
+        .attachment-actions button {
+            padding: 2px 6px;
+            font-size: 10px;
+            border-radius: 3px;
+            line-height: 1.2;
+            min-width: 0;
+        }
+        .attachment-edit-btn {
+            background-color: var(--bg-button-edit);
+        }
+        .attachment-edit-btn:hover {
+            background-color: var(--bg-button-edit-hover);
+        }
+        .attachment-remove-btn {
+            background-color: var(--bg-button-delete);
+        }
+        .attachment-remove-btn:hover {
+            background-color: var(--bg-button-delete-hover);
+        }
+        .add-more-attachments-btn {
+            display: block;
+            width: calc(100% - 10px);
+            margin: 8px 5px 0 5px;
+            padding: 4px;
+            font-size: 12px;
+            background-color: var(--bg-button-save);
+        }
+        .add-more-attachments-btn:hover {
+            background-color: var(--bg-button-save-hover);
+        }
+        .attachment-list-item-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .attachment-list-item-name {
+            flex-grow: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-right: 10px;
         }
     </style>
     <script src="marked.js"></script>
@@ -5552,16 +5593,60 @@
                     const summary = document.createElement('summary');
                     summary.textContent = `添付ファイル (${attachments.length}件)`;
                     details.appendChild(summary);
+
                     const list = document.createElement('ul');
                     list.classList.add('attachment-list');
-                    attachments.forEach(att => {
+
+                    attachments.forEach((att, attachmentIndex) => {
                         const listItem = document.createElement('li');
-                        listItem.textContent = sanitizeText(att.name);
-                        listItem.title = `${sanitizeText(att.name)} (${sanitizeText(att.mimeType)})`;
+                        const itemContainer = document.createElement('div');
+                        itemContainer.classList.add('attachment-list-item-container');
+
+                        const nameSpan = document.createElement('span');
+                        nameSpan.classList.add('attachment-list-item-name');
+                        nameSpan.textContent = sanitizeText(att.name);
+                        nameSpan.title = `${sanitizeText(att.name)} (${sanitizeText(att.mimeType)})`;
+
+                        const actionsDiv = document.createElement('div');
+                        actionsDiv.classList.add('attachment-actions');
+
+                        const editBtn = document.createElement('button');
+                        editBtn.textContent = '編集';
+                        editBtn.classList.add('attachment-edit-btn');
+                        editBtn.onclick = (e) => {
+                            e.preventDefault();
+                            appLogic.editAttachment(index, attachmentIndex);
+                        };
+
+                        const removeBtn = document.createElement('button');
+                        removeBtn.textContent = '削除';
+                        removeBtn.classList.add('attachment-remove-btn');
+                        removeBtn.onclick = (e) => {
+                            e.preventDefault();
+                            appLogic.removeAttachment(index, attachmentIndex);
+                        };
+                        
+                        actionsDiv.appendChild(editBtn);
+                        actionsDiv.appendChild(removeBtn);
+                        itemContainer.appendChild(nameSpan);
+                        itemContainer.appendChild(actionsDiv);
+                        listItem.appendChild(itemContainer);
                         list.appendChild(listItem);
                     });
+
                     details.appendChild(list);
+                    
+                    const addMoreBtn = document.createElement('button');
+                    addMoreBtn.textContent = 'ファイルを追加';
+                    addMoreBtn.classList.add('add-more-attachments-btn');
+                    addMoreBtn.onclick = (e) => {
+                        e.preventDefault();
+                        appLogic.addMoreAttachments(index);
+                    };
+                    details.appendChild(addMoreBtn);
+
                     contentDiv.appendChild(details);
+
                     if (content && content.trim() !== '') {
                         const pre = document.createElement('pre');
                         pre.textContent = content;
@@ -8209,6 +8294,15 @@
                     uiUtils.updateChatScreenElementVisibility();
                     document.getElementById('dice-value-settings').classList.toggle('hidden', !state.settings.showDiceButton);
                 });
+                elements.preventZoomToggle.addEventListener('change', () => {
+                    state.settings.preventZoom = elements.preventZoomToggle.checked;
+                    uiUtils.applyZoomPreventionSetting();
+                });
+                document.getElementById('minimize-header-footer-toggle').addEventListener('change', (e) => {
+                    state.settings.minimizeHeaderFooter = e.target.checked;
+                    uiUtils.applyMinimizeUI();
+                });
+
                 elements.memoHeightInput.addEventListener('input', () => {
                     const newHeight = elements.memoHeightInput.value.trim();
                     if (newHeight) {
@@ -8301,7 +8395,7 @@
 
                 elements.messageContainer.addEventListener('click', (event) => {
                     const clickedMessage = event.target.closest('.message');
-                    if (event.target.closest('.message-actions button, .message-cascade-controls button, .message-toggle-button, .interactive-title-content, .code-copy-button, a[href="#"], .thought-summary-details summary')) {
+                    if (event.target.closest('.message-actions button, .message-cascade-controls button, .message-toggle-button, .interactive-title-content, .code-copy-button, a[href="#"], .thought-summary-details summary, .attachment-actions button, .add-more-attachments-btn')) {
                         return;
                     }
                     if (clickedMessage) {
@@ -12204,6 +12298,124 @@
                     uiUtils.setAiToAiProcessingState(false);
                 }
             },
+            removeAttachment: async function(messageIndex, attachmentIndex) {
+                const message = state.currentMessages[messageIndex];
+                if (!message || !message.attachments || !message.attachments[attachmentIndex]) return;
+
+                const attachmentName = message.attachments[attachmentIndex].name;
+                const confirmed = await uiUtils.showCustomConfirm(`添付ファイル「${attachmentName}」を削除しますか？`);
+                
+                if (confirmed) {
+                    message.attachments.splice(attachmentIndex, 1);
+                    uiUtils.renderChatMessages(true);
+                    try {
+                        await dbUtils.saveChat();
+                    } catch(e) {
+                        await uiUtils.showCustomAlert('添付ファイルの削除状態の保存に失敗しました。');
+                    }
+                }
+            },
+
+            editAttachment: function(messageIndex, attachmentIndex) {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'file';
+                hiddenInput.accept = "image/*,text/*,application/pdf,video/*,audio/*";
+                hiddenInput.style.display = 'none';
+
+                hiddenInput.onchange = async (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    if (file.size > MAX_FILE_SIZE) {
+                        await uiUtils.showCustomAlert(`ファイルサイズが大きすぎます (${formatFileSize(MAX_FILE_SIZE)}以下)。`);
+                        return;
+                    }
+
+                    try {
+                        const base64Data = await fileToBase64(file);
+                        let browserMimeType = file.type || '';
+                        const fileName = file.name;
+                        const fileExtension = fileName.slice(((fileName.lastIndexOf(".") - 1) >>> 0) + 2).toLowerCase();
+                        let guessedMimeType = extensionToMimeTypeMap[fileExtension] || browserMimeType || 'application/octet-stream';
+
+                        const message = state.currentMessages[messageIndex];
+                        message.attachments[attachmentIndex] = {
+                            file: file,
+                            name: fileName,
+                            mimeType: guessedMimeType,
+                            base64Data: base64Data
+                        };
+                        
+                        uiUtils.renderChatMessages(true);
+                        await dbUtils.saveChat();
+
+                    } catch (error) {
+                        await uiUtils.showCustomAlert(`ファイルの処理中にエラーが発生しました: ${error.message}`);
+                    }
+                    document.body.removeChild(hiddenInput);
+                };
+                
+                document.body.appendChild(hiddenInput);
+                hiddenInput.click();
+            },
+
+            addMoreAttachments: function(messageIndex) {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'file';
+                hiddenInput.multiple = true;
+                hiddenInput.accept = "image/*,text/*,application/pdf,video/*,audio/*";
+                hiddenInput.style.display = 'none';
+
+                hiddenInput.onchange = async (event) => {
+                    const files = event.target.files;
+                    if (!files || files.length === 0) return;
+
+                    const message = state.currentMessages[messageIndex];
+                    let currentTotalSize = message.attachments.reduce((sum, att) => sum + (att.file?.size || 0), 0);
+                    let encodingError = false;
+
+                    for (const file of files) {
+                        if (file.size > MAX_FILE_SIZE) {
+                            await uiUtils.showCustomAlert(`ファイル "${file.name}" はサイズが大きすぎます。`);
+                            continue;
+                        }
+                        if (currentTotalSize + file.size > MAX_TOTAL_ATTACHMENT_SIZE) {
+                            await uiUtils.showCustomAlert('合計ファイルサイズの上限を超えたため、一部のファイルは追加されませんでした。');
+                            break;
+                        }
+                        
+                        try {
+                            const base64Data = await fileToBase64(file);
+                            let browserMimeType = file.type || '';
+                            const fileName = file.name;
+                            const fileExtension = fileName.slice(((fileName.lastIndexOf(".") - 1) >>> 0) + 2).toLowerCase();
+                            let guessedMimeType = extensionToMimeTypeMap[fileExtension] || browserMimeType || 'application/octet-stream';
+                            
+                            message.attachments.push({
+                                file: file,
+                                name: fileName,
+                                mimeType: guessedMimeType,
+                                base64Data: base64Data
+                            });
+                            currentTotalSize += file.size;
+                        } catch (error) {
+                            encodingError = true;
+                            await uiUtils.showCustomAlert(`ファイル "${file.name}" の処理中にエラーが発生しました。`);
+                            break;
+                        }
+                    }
+
+                    if (!encodingError) {
+                        uiUtils.renderChatMessages(true);
+                        await dbUtils.saveChat();
+                    }
+                    
+                    document.body.removeChild(hiddenInput);
+                };
+
+                document.body.appendChild(hiddenInput);
+                hiddenInput.click();
+            },
         };
 
         const apiUtils = {
@@ -12781,7 +12993,7 @@
                                                 output_tokens: chunk["amazon-bedrock-invocationMetrics"].outputTokenCount
                                             };
                                         } else if (chunk.usage) {
-                                                                                    finalUsage = chunk.usage;
+                                            finalUsage = chunk.usage;
                                         }
                                     } else if (chunk.type === 'message_delta' && chunk.usage) {
                                         finalUsage = chunk.usage;
