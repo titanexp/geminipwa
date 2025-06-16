@@ -4759,7 +4759,7 @@
                 deepSeekPresencePenalty: null,
                 deepSeekFrequencyPenalty: null,
                 deepSeekIncludeDeepSeekThoughts: false,
-                deepSeekExpandDeepSeekThoughtsByDefault: false,
+                deepSeekExpandThoughtsByDefault: false,
                 deepSeekStreamingOutput: true,
                 deepSeekStreamingSpeed: DEFAULT_STREAMING_SPEED,
                 deepSeekDummyUser: '',
@@ -5087,7 +5087,7 @@
                             state.settings.deepSeekIncludeDeepSeekThoughts = loadedSettings.includeDeepSeekThoughts;
                         }
                         if (loadedSettings.hasOwnProperty('expandDeepSeekThoughtsByDefault') && !loadedSettings.hasOwnProperty('deepSeekExpandDeepSeekThoughtsByDefault') && state.settings.hasOwnProperty('deepSeekExpandDeepSeekThoughtsByDefault')) {
-                            state.settings.deepSeekExpandDeepSeekThoughtsByDefault = loadedSettings.expandDeepSeekThoughtsByDefault;
+                            state.settings.deepSeekExpandThoughtsByDefault = loadedSettings.expandDeepSeekThoughtsByDefault;
                         }
 
                         for (const key in loadedSettings) {
@@ -5519,7 +5519,7 @@
                     initialThoughtOpenState = messageData.thoughtSummaryOpen;
                 } else if (includeThoughtsForProvider) {
                      initialThoughtOpenState = (messageApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) ||
-                                               (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault) ||
+                                               (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault);
                 }
 
@@ -6199,6 +6199,10 @@
                 let accumulatedContentForDisplay;
 
                 const selectedApiProvider = state.settings.apiProvider;
+                const streamSpeed = selectedApiProvider === 'gemini' ? state.settings.geminiStreamingSpeed : 
+                                  selectedApiProvider === 'deepseek' ? state.settings.deepSeekStreamingSpeed :
+                                  selectedApiProvider === 'claude' ? state.settings.claudeStreamingSpeed :
+                                  state.settings.openaiStreamingSpeed;
 
                 if (isThoughtSummary) {
                     if ((selectedApiProvider === 'gemini' && state.settings.geminiIncludeThoughts) ||
@@ -6822,7 +6826,7 @@
                 elements.deepSeekPresencePenaltyInput.value = state.settings.deepSeekPresencePenalty === null ? '' : state.settings.deepSeekPresencePenalty;
                 elements.deepSeekFrequencyPenaltyInput.value = state.settings.deepSeekFrequencyPenalty === null ? '' : state.settings.deepSeekFrequencyPenalty;
                 elements.deepSeekIncludeThoughtsToggle.checked = state.settings.deepSeekIncludeDeepSeekThoughts;
-                elements.deepSeekExpandThoughtsByDefaultToggle.checked = state.settings.deepSeekExpandDeepSeekThoughtsByDefault;
+                elements.deepSeekExpandThoughtsByDefaultToggle.checked = state.settings.deepSeekExpandThoughtsByDefault;
                 elements.deepSeekStreamingOutputCheckbox.checked = state.settings.deepSeekStreamingOutput;
                 elements.deepSeekStreamingSpeedInput.value = state.settings.deepSeekStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
                 elements.deepSeekDummyUserInput.value = state.settings.deepSeekDummyUser || '';
@@ -9588,7 +9592,7 @@
                             timestamp: Date.now(),
                             generatedByApiProvider: selectedApiProvider,
                             thoughtSummaryOpen: (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts && state.settings.geminiExpandThoughtsByDefault) ||
-                                                (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && state.settings.deepSeekExpandDeepSeekThoughtsByDefault) ||
+                                                (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                 (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && state.settings.claudeExpandThoughtsByDefault),
                         };
 
@@ -9828,7 +9832,7 @@
                              }
 
                               bgModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
-                                                                  (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault) ||
+                                                                  (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                                   (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault);
 
                              currentContextMessages.push(bgModelMessage);
@@ -9908,7 +9912,7 @@
                                  newModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
                             }
                             newModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
-                                                                 (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault) ||
+                                                                 (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                                  (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault);
 
                              const targetUserIndexForCascade = userMessageIndex;
@@ -10500,7 +10504,7 @@
                 newSettings.deepSeekPresencePenalty = elements.deepSeekPresencePenaltyInput.value === '' ? null : parseFloat(elements.deepSeekPresencePenaltyInput.value);
                 newSettings.deepSeekFrequencyPenalty = elements.deepSeekFrequencyPenaltyInput.value === '' ? null : parseFloat(elements.deepSeekFrequencyPenaltyInput.value);
                 newSettings.deepSeekIncludeDeepSeekThoughts = elements.deepSeekIncludeThoughtsToggle.checked;
-                newSettings.deepSeekExpandDeepSeekThoughtsByDefault = elements.deepSeekExpandThoughtsByDefaultToggle.checked;
+                newSettings.deepSeekExpandThoughtsByDefault = elements.deepSeekExpandThoughtsByDefaultToggle.checked;
                 newSettings.deepSeekStreamingOutput = elements.deepSeekStreamingOutputCheckbox.checked;
                 newSettings.deepSeekStreamingSpeed = elements.deepSeekStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.deepSeekStreamingSpeedInput.value);
                 newSettings.deepSeekDummyUser = elements.deepSeekDummyUserInput.value.trim();
@@ -10818,7 +10822,7 @@
                                 else if(key === 'geminiPseudoStreaming') defaultSettingsCopy[key] = false;
                                 else if(key === 'geminiEnableGrounding') defaultSettingsCopy[key] = false;
                                 else if(key === 'deepSeekIncludeDeepSeekThoughts') defaultSettingsCopy[key] = false;
-                                else if(key === 'deepSeekExpandDeepSeekThoughtsByDefault') defaultSettingsCopy[key] = false;
+                                else if(key === 'deepSeekExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeThinkingBudget') defaultSettingsCopy[key] = null;
@@ -11331,7 +11335,7 @@
                         } else {
                             const messageApiProvider = msg?.generatedByApiProvider || state.settings.apiProvider;
                             state.thoughtSummaryOpenStates.set(newIdx, (messageApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
-                                                                       (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault) ||
+                                                                       (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                                        (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault));
                         }
                     });
@@ -11561,7 +11565,7 @@
                         } else {
                             const messageApiProvider = msg?.generatedByApiProvider || state.settings.apiProvider;
                             state.thoughtSummaryOpenStates.set(newIdx, (messageApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
-                                                                       (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandDeepSeekThoughtsByDefault) ||
+                                                                       (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                                        (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault));
                         }
                     });
@@ -11966,7 +11970,9 @@
                         includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : 
                                          providerForSettingsB === 'deepseek' ? deepSeekIncludeThoughtsB : 
                                          providerForSettingsB === 'claude' ? claudeIncludeThoughtsB : undefined,
-                        expandThoughtsByDefault: providerForSettingsB === 'claude' ? claudeExpandThoughtsByDefaultB : undefined,
+                        expandThoughtsByDefault: (providerForSettingsB === 'gemini' && state.settings.geminiExpandThoughtsByDefault) ||
+                                                 (providerForSettingsB === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
+                                                 (providerForSettingsB === 'claude' ? claudeExpandThoughtsByDefaultB : undefined),
                         pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
                         enableGrounding: providerForSettingsB === 'gemini' ? geminiEnableGroundingB : undefined,
                         visionEnable: providerForSettingsB === 'openai' ? openaiVisionEnableB : undefined,
@@ -12783,7 +12789,7 @@
 
                 const headers = {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${state.settings.openaiApiKey}`
+                                        "Authorization": `Bearer ${state.settings.openaiApiKey}`
                 };
 
                 const oaMessages = [];
@@ -12856,7 +12862,7 @@
 
                         buffer += value;
                         let eolIndex;
-                                                while ((eolIndex = buffer.indexOf('\n')) >= 0) {
+                        while ((eolIndex = buffer.indexOf('\n')) >= 0) {
                             const line = buffer.slice(0, eolIndex).trim();
                             buffer = buffer.slice(eolIndex + 1);
 
