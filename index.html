@@ -5086,7 +5086,7 @@
                         if (loadedSettings.hasOwnProperty('includeDeepSeekThoughts') && !loadedSettings.hasOwnProperty('deepSeekIncludeDeepSeekThoughts') && state.settings.hasOwnProperty('deepSeekIncludeDeepSeekThoughts')) {
                             state.settings.deepSeekIncludeDeepSeekThoughts = loadedSettings.includeDeepSeekThoughts;
                         }
-                        if (loadedSettings.hasOwnProperty('expandDeepSeekThoughtsByDefault') && !loadedSettings.hasOwnProperty('deepSeekExpandDeepSeekThoughtsByDefault') && state.settings.hasOwnProperty('deepSeekExpandDeepSeekThoughtsByDefault')) {
+                        if (loadedSettings.hasOwnProperty('expandDeepSeekThoughtsByDefault') && !loadedSettings.hasOwnProperty('deepSeekExpandThoughtsByDefault') && state.settings.hasOwnProperty('deepSeekExpandThoughtsByDefault')) {
                             state.settings.deepSeekExpandThoughtsByDefault = loadedSettings.expandDeepSeekThoughtsByDefault;
                         }
 
@@ -6261,18 +6261,11 @@
                         const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
                         if (thoughtContentDiv && typeof marked !== 'undefined') {
                             const summaryContent = finalMessageData.thoughtSummary || finalMessageData.deepSeekThoughtSummary;
-                            if (messageApiProvider === 'deepseek') {
-                                const pre = document.createElement('pre');
-                                pre.textContent = summaryContent || '';
-                                thoughtContentDiv.innerHTML = '';
-                                thoughtContentDiv.appendChild(pre);
-                            } else {
-                                try {
-                                    thoughtContentDiv.innerHTML = this._sanitizeAndParseMarkdown(summaryContent || '');
-                                    this.addCopyButtonsToCodeBlocks(thoughtContentDiv, false);
-                                } catch (e) {
-                                    thoughtContentDiv.textContent = summaryContent || '';
-                                }
+                            try {
+                                thoughtContentDiv.innerHTML = this._sanitizeAndParseMarkdown(summaryContent || '');
+                                this.addCopyButtonsToCodeBlocks(thoughtContentDiv, false);
+                            } catch (e) {
+                                thoughtContentDiv.textContent = summaryContent || '';
                             }
                         }
                         if(thoughtContentDiv) thoughtContentDiv.removeAttribute('id');
@@ -11878,7 +11871,7 @@
                         temperatureB, maxTokensB, topPB, presencePenaltyB, frequencyPenaltyB,
                         streamingOutputB, streamingSpeedB, concatDummyModelB,
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
-                        deepSeekIncludeThoughtsB,
+                        deepSeekIncludeThoughtsB, deepSeekExpandThoughtsByDefaultB,
                         claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB,
                         openaiVisionEnableB;
 
@@ -11911,6 +11904,7 @@
                         presencePenaltyB = state.settings.deepSeekPresencePenalty;
                         frequencyPenaltyB = state.settings.deepSeekFrequencyPenalty;
                         deepSeekIncludeThoughtsB = state.settings.deepSeekIncludeDeepSeekThoughts;
+                        deepSeekExpandThoughtsByDefaultB = state.settings.deepSeekExpandThoughtsByDefault;
                         streamingOutputB = state.settings.deepSeekStreamingOutput;
                         streamingSpeedB = state.settings.deepSeekStreamingSpeed;
                         dummyUserB = state.settings.deepSeekDummyUser;
@@ -11970,7 +11964,7 @@
                         includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : 
                                          providerForSettingsB === 'deepseek' ? deepSeekIncludeThoughtsB : 
                                          providerForSettingsB === 'claude' ? claudeIncludeThoughtsB : undefined,
-                        expandThoughtsByDefault: (providerForSettingsB === 'gemini' && state.settings.geminiExpandThoughtsByDefault) ||
+                        expandThoughtsByDefault: (providerForSettingsB === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
                                                  (providerForSettingsB === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                  (providerForSettingsB === 'claude' ? claudeExpandThoughtsByDefaultB : undefined),
                         pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
@@ -12789,7 +12783,7 @@
 
                 const headers = {
                     "Content-Type": "application/json",
-                                        "Authorization": `Bearer ${state.settings.openaiApiKey}`
+                    "Authorization": `Bearer ${state.settings.openaiApiKey}`
                 };
 
                 const oaMessages = [];
