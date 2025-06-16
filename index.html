@@ -3083,14 +3083,10 @@
             min-width: 0;
         }
         .attachment-preview-btn {
-            background-color: var(--bg-button-action);
+            background-color: var(--bg-button-paste);
         }
         .attachment-preview-btn:hover {
-            background-color: var(--bg-button-action-hover);
-        }
-        .attachment-preview-btn:disabled {
-            background-color: var(--bg-button-disabled);
-            cursor: not-allowed;
+            background-color: var(--bg-button-paste-hover);
         }
         .attachment-edit-btn {
             background-color: var(--bg-button-edit);
@@ -3127,25 +3123,21 @@
             text-overflow: ellipsis;
             margin-right: 10px;
         }
-        #imagePreviewModal {
-            border: none;
-            background: rgba(0, 0, 0, 0.8);
+        #imagePreviewDialog .dialog-content {
             padding: 0;
-            margin: auto;
-            max-width: 90vw;
-            max-height: 90vh;
-            overflow: hidden;
+            margin: 0;
+            max-height: 80vh;
+            overflow: auto;
+            text-align: center;
         }
-        #imagePreviewModal::backdrop {
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(5px);
-        }
-        #imagePreviewModal img {
+        #imagePreviewDialog img {
             max-width: 100%;
-            max-height: 100%;
+            max-height: 75vh;
             display: block;
-            margin: auto;
-            object-fit: contain;
+            margin: 0 auto;
+        }
+        #imagePreviewDialog .dialog-actions {
+            margin-top: 15px;
         }
     </style>
     <script src="marked.js"></script>
@@ -3983,10 +3975,6 @@
                                    </label>
                                    <p style="height:10px"></p>
                                    <label class="checkbox-label">
-                                       <input type="checkbox" id="disable-delete-attachment-confirmation-toggle">
-                                       添付ファイル削除時の確認ダイアログを無効にする
-                                   </label>
-                                   <label class="checkbox-label">
                                        <input type="checkbox" id="add-prefix-on-import-toggle">
                                        履歴インポート時にタイトルへ接頭辞「(取込)」を付与する
                                    </label>
@@ -4302,9 +4290,14 @@
             <button id="confirm-attach-btn" value="ok" class="dialog-ok-btn" disabled>添付して閉じる</button>
         </div>
     </dialog>
-    
-    <dialog id="imagePreviewModal">
-        <img id="previewImage" src="" alt="画像プレビュー">
+
+    <dialog id="imagePreviewDialog" class="custom-dialog">
+        <div class="dialog-content">
+            <img src="" alt="画像プレビュー">
+        </div>
+        <div class="dialog-actions">
+            <button value="ok" class="dialog-ok-btn">閉じる</button>
+        </div>
     </dialog>
 
     <script>
@@ -4655,7 +4648,6 @@
             disableRetryConfirmationToggle: document.getElementById('disable-retry-confirmation-toggle'),
             disableLoadChatConfirmationWhileSendingToggle: document.getElementById('disable-load-chat-confirmation-while-sending-toggle'),
             disableDeleteMessageConfirmationToggle: document.getElementById('disable-delete-message-confirmation-toggle'),
-            disableDeleteAttachmentConfirmationToggle: document.getElementById('disable-delete-attachment-confirmation-toggle'),
             addPrefixOnImportToggle: document.getElementById('add-prefix-on-import-toggle'),
             showTopCollapseButtonToggle: document.getElementById('show-top-collapse-button-toggle'),
             showBottomCollapseButtonToggle: document.getElementById('show-bottom-collapse-button-toggle'),
@@ -4716,8 +4708,7 @@
             apiProviderCycleDeepSeekCheckbox: document.getElementById('api-provider-cycle-deepseek'),
             apiProviderCycleClaudeCheckbox: document.getElementById('api-provider-cycle-claude'),
             apiProviderCycleOpenAICheckbox: document.getElementById('api-provider-cycle-openai'),
-            imagePreviewModal: document.getElementById('imagePreviewModal'),
-            previewImage: document.getElementById('previewImage'),
+            imagePreviewDialog: document.getElementById('imagePreviewDialog'),
         };
 
         const state = {
@@ -4863,7 +4854,6 @@
                 disableRetryConfirmation: false,
                 disableLoadChatConfirmationWhileSending: false,
                 disableDeleteMessageConfirmation: false,
-                disableDeleteAttachmentConfirmation: false,
                 addPrefixOnImport: true,
                 showTopCollapseButton: true,
                 showBottomCollapseButton: true,
@@ -5442,11 +5432,6 @@
                 const oldScrollTop = maintainScroll ? mainContent.scrollTop : null;
                 const oldScrollHeight = maintainScroll ? mainContent.scrollHeight : null;
 
-                const openAttachmentDetails = new Set();
-                elements.messageContainer.querySelectorAll('.attachment-details[open]').forEach(details => {
-                    openAttachmentDetails.add(parseInt(details.dataset.messageIndex, 10));
-                });
-
                 if (state.editingMessageIndex !== null) {
                     const messageElement = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`);
                     if(messageElement) appLogic.cancelEditMessage(state.editingMessageIndex, messageElement);
@@ -5484,14 +5469,6 @@
                         this.appendMessage(msg.role, msg.content, i, false, null, msg.attachments);
                     }
                 }
-
-                openAttachmentDetails.forEach(messageIndex => {
-                    const details = elements.messageContainer.querySelector(`.attachment-details[data-message-index="${messageIndex}"]`);
-                    if (details) {
-                        details.open = true;
-                    }
-                });
-
                 if (maintainScroll && oldScrollTop !== null) {
                     requestAnimationFrame(() => {
                         const newScrollHeight = mainContent.scrollHeight;
@@ -5645,7 +5622,6 @@
                 if (role === 'user' && attachments && attachments.length > 0) {
                     const details = document.createElement('details');
                     details.classList.add('attachment-details');
-                    details.dataset.messageIndex = index;
                     const summary = document.createElement('summary');
                     summary.textContent = `添付ファイル (${attachments.length}件)`;
                     details.appendChild(summary);
@@ -5655,6 +5631,7 @@
 
                     attachments.forEach((att, attachmentIndex) => {
                         const listItem = document.createElement('li');
+                        listItem.dataset.attachmentIndex = attachmentIndex;
                         const itemContainer = document.createElement('div');
                         itemContainer.classList.add('attachment-list-item-container');
 
@@ -5666,15 +5643,16 @@
                         const actionsDiv = document.createElement('div');
                         actionsDiv.classList.add('attachment-actions');
 
-                        const previewBtn = document.createElement('button');
-                        previewBtn.textContent = '表示';
-                        previewBtn.classList.add('attachment-preview-btn');
-                        previewBtn.disabled = !att.mimeType.startsWith('image/');
-                        previewBtn.onclick = (e) => {
-                            e.preventDefault();
-                            appLogic.previewAttachment(index, attachmentIndex);
-                        };
-                        actionsDiv.appendChild(previewBtn);
+                        if (att.mimeType.startsWith('image/')) {
+                            const previewBtn = document.createElement('button');
+                            previewBtn.textContent = '表示';
+                            previewBtn.classList.add('attachment-preview-btn');
+                            previewBtn.onclick = (e) => {
+                                e.preventDefault();
+                                appLogic.previewAttachment(index, attachmentIndex);
+                            };
+                            actionsDiv.appendChild(previewBtn);
+                        }
 
                         const editBtn = document.createElement('button');
                         editBtn.textContent = '編集';
@@ -5689,7 +5667,7 @@
                         removeBtn.classList.add('attachment-remove-btn');
                         removeBtn.onclick = (e) => {
                             e.preventDefault();
-                            appLogic.removeAttachment(index, attachmentIndex);
+                            appLogic.removeAttachment(index, attachmentIndex, listItem);
                         };
                         
                         actionsDiv.appendChild(editBtn);
@@ -5707,7 +5685,7 @@
                     addMoreBtn.classList.add('add-more-attachments-btn');
                     addMoreBtn.onclick = (e) => {
                         e.preventDefault();
-                        appLogic.addMoreAttachments(index);
+                        appLogic.addMoreAttachments(index, list);
                     };
                     details.appendChild(addMoreBtn);
 
@@ -6984,7 +6962,6 @@
                 elements.disableRetryConfirmationToggle.checked = state.settings.disableRetryConfirmation;
                 elements.disableLoadChatConfirmationWhileSendingToggle.checked = state.settings.disableLoadChatConfirmationWhileSending;
                 elements.disableDeleteMessageConfirmationToggle.checked = state.settings.disableDeleteMessageConfirmation;
-                elements.disableDeleteAttachmentConfirmationToggle.checked = state.settings.disableDeleteAttachmentConfirmation;
                 elements.addPrefixOnImportToggle.checked = state.settings.addPrefixOnImport;
                 elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
@@ -8549,9 +8526,6 @@
                 elements.apiProviderCycleOpenAICheckbox.addEventListener('change', () => {
                     state.settings.apiProviderCycle.openai = elements.apiProviderCycleOpenAICheckbox.checked;
                     uiUtils.updateApiProviderSelectOptions();
-                });
-                elements.imagePreviewModal.addEventListener('click', () => {
-                    elements.imagePreviewModal.close();
                 });
             },
             handlePopState(event) {
@@ -10968,11 +10942,10 @@
                  newSettings.disableRetryConfirmation = elements.disableRetryConfirmationToggle.checked;
                  newSettings.disableLoadChatConfirmationWhileSending = elements.disableLoadChatConfirmationWhileSendingToggle.checked;
                  newSettings.disableDeleteMessageConfirmation = elements.disableDeleteMessageConfirmationToggle.checked;
-                 newSettings.disableDeleteAttachmentConfirmation = elements.disableDeleteAttachmentConfirmationToggle.checked;
                  newSettings.addPrefixOnImport = elements.addPrefixOnImportToggle.checked;
                  newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
                  newSettings.showTopCollapseButton = elements.showTopCollapseButtonToggle.checked;
-                 newSettings.showBottomCollapseButtonToggle.checked = elements.showBottomCollapseButtonToggle.checked;
+                 newSettings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
                  newSettings.persistMessageCollapseState = elements.persistMessageCollapseStateCheckbox.checked;
                  newSettings.messageBubbleOpacity = elements.messageBubbleOpacityInput.value === '' ? DEFAULT_MESSAGE_BUBBLE_OPACITY : parseFloat(elements.messageBubbleOpacityInput.value);
                  newSettings.chatOverlayOpacity = elements.chatOverlayOpacityInput.value === '' ? DEFAULT_CHAT_OVERLAY_OPACITY : parseFloat(elements.chatOverlayOpacityInput.value);
@@ -11270,7 +11243,6 @@
                         defaultSettingsCopy.disableRetryConfirmation = false;
                         defaultSettingsCopy.disableLoadChatConfirmationWhileSending = false;
                         defaultSettingsCopy.disableDeleteMessageConfirmation = false;
-                        defaultSettingsCopy.disableDeleteAttachmentConfirmation = false;
                         defaultSettingsCopy.addPrefixOnImport = true;
                         defaultSettingsCopy.disableSaveSettingsConfirmation = false;
                         defaultSettingsCopy.showTopCollapseButton = true;
@@ -12370,20 +12342,22 @@
                     uiUtils.setAiToAiProcessingState(false);
                 }
             },
-            removeAttachment: async function(messageIndex, attachmentIndex) {
+            removeAttachment: async function(messageIndex, attachmentIndex, listItemElement) {
                 const message = state.currentMessages[messageIndex];
                 if (!message || !message.attachments || !message.attachments[attachmentIndex]) return;
 
                 const attachmentName = message.attachments[attachmentIndex].name;
-                
-                let confirmed = true;
-                if (!state.settings.disableDeleteAttachmentConfirmation) {
-                    confirmed = await uiUtils.showCustomConfirm(`添付ファイル「${attachmentName}」を削除しますか？`);
-                }
+                const confirmed = await uiUtils.showCustomConfirm(`添付ファイル「${attachmentName}」を削除しますか？`);
                 
                 if (confirmed) {
                     message.attachments.splice(attachmentIndex, 1);
-                    uiUtils.renderChatMessages(true);
+                    
+                    const list = listItemElement.parentElement;
+                    listItemElement.remove();
+
+                    const summary = list.closest('.attachment-details').querySelector('summary');
+                    summary.textContent = `添付ファイル (${message.attachments.length}件)`;
+
                     try {
                         await dbUtils.saveChat();
                     } catch(e) {
@@ -12422,7 +12396,15 @@
                             base64Data: base64Data
                         };
                         
-                        uiUtils.renderChatMessages(true);
+                        const messageElement = elements.messageContainer.querySelector(`.message[data-index="${messageIndex}"]`);
+                        if(messageElement) {
+                            const listItem = messageElement.querySelector(`li[data-attachment-index="${attachmentIndex}"] .attachment-list-item-name`);
+                            if(listItem) {
+                                listItem.textContent = sanitizeText(fileName);
+                                listItem.title = `${sanitizeText(fileName)} (${sanitizeText(guessedMimeType)})`;
+                            }
+                        }
+
                         await dbUtils.saveChat();
 
                     } catch (error) {
@@ -12435,7 +12417,7 @@
                 hiddenInput.click();
             },
 
-            addMoreAttachments: function(messageIndex) {
+            addMoreAttachments: function(messageIndex, listElement) {
                 const hiddenInput = document.createElement('input');
                 hiddenInput.type = 'file';
                 hiddenInput.multiple = true;
@@ -12467,13 +12449,54 @@
                             const fileExtension = fileName.slice(((fileName.lastIndexOf(".") - 1) >>> 0) + 2).toLowerCase();
                             let guessedMimeType = extensionToMimeTypeMap[fileExtension] || browserMimeType || 'application/octet-stream';
                             
-                            message.attachments.push({
+                            const newAttachment = {
                                 file: file,
                                 name: fileName,
                                 mimeType: guessedMimeType,
                                 base64Data: base64Data
-                            });
+                            };
+                            message.attachments.push(newAttachment);
                             currentTotalSize += file.size;
+
+                            const newAttachmentIndex = message.attachments.length - 1;
+                            const listItem = document.createElement('li');
+                            listItem.dataset.attachmentIndex = newAttachmentIndex;
+                            const itemContainer = document.createElement('div');
+                            itemContainer.classList.add('attachment-list-item-container');
+
+                            const nameSpan = document.createElement('span');
+                            nameSpan.classList.add('attachment-list-item-name');
+                            nameSpan.textContent = sanitizeText(fileName);
+                            nameSpan.title = `${sanitizeText(fileName)} (${sanitizeText(guessedMimeType)})`;
+
+                            const actionsDiv = document.createElement('div');
+                            actionsDiv.classList.add('attachment-actions');
+
+                            if (guessedMimeType.startsWith('image/')) {
+                                const previewBtn = document.createElement('button');
+                                previewBtn.textContent = '表示';
+                                previewBtn.classList.add('attachment-preview-btn');
+                                previewBtn.onclick = (e) => { e.preventDefault(); appLogic.previewAttachment(messageIndex, newAttachmentIndex); };
+                                actionsDiv.appendChild(previewBtn);
+                            }
+
+                            const editBtn = document.createElement('button');
+                            editBtn.textContent = '編集';
+                            editBtn.classList.add('attachment-edit-btn');
+                            editBtn.onclick = (e) => { e.preventDefault(); appLogic.editAttachment(messageIndex, newAttachmentIndex); };
+
+                            const removeBtn = document.createElement('button');
+                            removeBtn.textContent = '削除';
+                            removeBtn.classList.add('attachment-remove-btn');
+                            removeBtn.onclick = (e) => { e.preventDefault(); appLogic.removeAttachment(messageIndex, newAttachmentIndex, listItem); };
+
+                            actionsDiv.appendChild(editBtn);
+                            actionsDiv.appendChild(removeBtn);
+                            itemContainer.appendChild(nameSpan);
+                            itemContainer.appendChild(actionsDiv);
+                            listItem.appendChild(itemContainer);
+                            listElement.appendChild(listItem);
+
                         } catch (error) {
                             encodingError = true;
                             await uiUtils.showCustomAlert(`ファイル "${file.name}" の処理中にエラーが発生しました。`);
@@ -12482,7 +12505,8 @@
                     }
 
                     if (!encodingError) {
-                        uiUtils.renderChatMessages(true);
+                        const summary = listElement.closest('.attachment-details').querySelector('summary');
+                        summary.textContent = `添付ファイル (${message.attachments.length}件)`;
                         await dbUtils.saveChat();
                     }
                     
@@ -12493,14 +12517,21 @@
                 hiddenInput.click();
             },
             
-            previewAttachment: function(messageIndex, attachmentIndex) {
+            previewAttachment: async function(messageIndex, attachmentIndex) {
                 const message = state.currentMessages[messageIndex];
                 const attachment = message?.attachments?.[attachmentIndex];
-
-                if (attachment && attachment.base64Data && attachment.mimeType.startsWith('image/')) {
-                    elements.previewImage.src = `data:${attachment.mimeType};base64,${attachment.base64Data}`;
-                    elements.imagePreviewModal.showModal();
-                }
+                if (!attachment || !attachment.mimeType.startsWith('image/')) return;
+                
+                const dialog = elements.imagePreviewDialog;
+                const img = dialog.querySelector('img');
+                const okBtn = dialog.querySelector('.dialog-ok-btn');
+                
+                img.src = `data:${attachment.mimeType};base64,${attachment.base64Data}`;
+                img.alt = attachment.name;
+                
+                okBtn.onclick = () => dialog.close();
+                
+                dialog.showModal();
             },
         };
 
