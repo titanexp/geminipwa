@@ -3082,6 +3082,16 @@
             line-height: 1.2;
             min-width: 0;
         }
+        .attachment-preview-btn {
+            background-color: var(--bg-button-action);
+        }
+        .attachment-preview-btn:hover {
+            background-color: var(--bg-button-action-hover);
+        }
+        .attachment-preview-btn:disabled {
+            background-color: var(--bg-button-disabled);
+            cursor: not-allowed;
+        }
         .attachment-edit-btn {
             background-color: var(--bg-button-edit);
         }
@@ -3116,6 +3126,26 @@
             overflow: hidden;
             text-overflow: ellipsis;
             margin-right: 10px;
+        }
+        #imagePreviewModal {
+            border: none;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 0;
+            margin: auto;
+            max-width: 90vw;
+            max-height: 90vh;
+            overflow: hidden;
+        }
+        #imagePreviewModal::backdrop {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+        }
+        #imagePreviewModal img {
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+            margin: auto;
+            object-fit: contain;
         }
     </style>
     <script src="marked.js"></script>
@@ -3953,6 +3983,10 @@
                                    </label>
                                    <p style="height:10px"></p>
                                    <label class="checkbox-label">
+                                       <input type="checkbox" id="disable-delete-attachment-confirmation-toggle">
+                                       添付ファイル削除時の確認ダイアログを無効にする
+                                   </label>
+                                   <label class="checkbox-label">
                                        <input type="checkbox" id="add-prefix-on-import-toggle">
                                        履歴インポート時にタイトルへ接頭辞「(取込)」を付与する
                                    </label>
@@ -4267,6 +4301,10 @@
             <button id="cancel-attach-btn" value="cancel" class="dialog-cancel-btn">キャンセル</button>
             <button id="confirm-attach-btn" value="ok" class="dialog-ok-btn" disabled>添付して閉じる</button>
         </div>
+    </dialog>
+    
+    <dialog id="imagePreviewModal">
+        <img id="previewImage" src="" alt="画像プレビュー">
     </dialog>
 
     <script>
@@ -4617,6 +4655,7 @@
             disableRetryConfirmationToggle: document.getElementById('disable-retry-confirmation-toggle'),
             disableLoadChatConfirmationWhileSendingToggle: document.getElementById('disable-load-chat-confirmation-while-sending-toggle'),
             disableDeleteMessageConfirmationToggle: document.getElementById('disable-delete-message-confirmation-toggle'),
+            disableDeleteAttachmentConfirmationToggle: document.getElementById('disable-delete-attachment-confirmation-toggle'),
             addPrefixOnImportToggle: document.getElementById('add-prefix-on-import-toggle'),
             showTopCollapseButtonToggle: document.getElementById('show-top-collapse-button-toggle'),
             showBottomCollapseButtonToggle: document.getElementById('show-bottom-collapse-button-toggle'),
@@ -4677,6 +4716,8 @@
             apiProviderCycleDeepSeekCheckbox: document.getElementById('api-provider-cycle-deepseek'),
             apiProviderCycleClaudeCheckbox: document.getElementById('api-provider-cycle-claude'),
             apiProviderCycleOpenAICheckbox: document.getElementById('api-provider-cycle-openai'),
+            imagePreviewModal: document.getElementById('imagePreviewModal'),
+            previewImage: document.getElementById('previewImage'),
         };
 
         const state = {
@@ -4822,6 +4863,7 @@
                 disableRetryConfirmation: false,
                 disableLoadChatConfirmationWhileSending: false,
                 disableDeleteMessageConfirmation: false,
+                disableDeleteAttachmentConfirmation: false,
                 addPrefixOnImport: true,
                 showTopCollapseButton: true,
                 showBottomCollapseButton: true,
@@ -5400,6 +5442,11 @@
                 const oldScrollTop = maintainScroll ? mainContent.scrollTop : null;
                 const oldScrollHeight = maintainScroll ? mainContent.scrollHeight : null;
 
+                const openAttachmentDetails = new Set();
+                elements.messageContainer.querySelectorAll('.attachment-details[open]').forEach(details => {
+                    openAttachmentDetails.add(parseInt(details.dataset.messageIndex, 10));
+                });
+
                 if (state.editingMessageIndex !== null) {
                     const messageElement = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`);
                     if(messageElement) appLogic.cancelEditMessage(state.editingMessageIndex, messageElement);
@@ -5437,6 +5484,14 @@
                         this.appendMessage(msg.role, msg.content, i, false, null, msg.attachments);
                     }
                 }
+
+                openAttachmentDetails.forEach(messageIndex => {
+                    const details = elements.messageContainer.querySelector(`.attachment-details[data-message-index="${messageIndex}"]`);
+                    if (details) {
+                        details.open = true;
+                    }
+                });
+
                 if (maintainScroll && oldScrollTop !== null) {
                     requestAnimationFrame(() => {
                         const newScrollHeight = mainContent.scrollHeight;
@@ -5590,6 +5645,7 @@
                 if (role === 'user' && attachments && attachments.length > 0) {
                     const details = document.createElement('details');
                     details.classList.add('attachment-details');
+                    details.dataset.messageIndex = index;
                     const summary = document.createElement('summary');
                     summary.textContent = `添付ファイル (${attachments.length}件)`;
                     details.appendChild(summary);
@@ -5609,6 +5665,16 @@
 
                         const actionsDiv = document.createElement('div');
                         actionsDiv.classList.add('attachment-actions');
+
+                        const previewBtn = document.createElement('button');
+                        previewBtn.textContent = '表示';
+                        previewBtn.classList.add('attachment-preview-btn');
+                        previewBtn.disabled = !att.mimeType.startsWith('image/');
+                        previewBtn.onclick = (e) => {
+                            e.preventDefault();
+                            appLogic.previewAttachment(index, attachmentIndex);
+                        };
+                        actionsDiv.appendChild(previewBtn);
 
                         const editBtn = document.createElement('button');
                         editBtn.textContent = '編集';
@@ -6918,6 +6984,7 @@
                 elements.disableRetryConfirmationToggle.checked = state.settings.disableRetryConfirmation;
                 elements.disableLoadChatConfirmationWhileSendingToggle.checked = state.settings.disableLoadChatConfirmationWhileSending;
                 elements.disableDeleteMessageConfirmationToggle.checked = state.settings.disableDeleteMessageConfirmation;
+                elements.disableDeleteAttachmentConfirmationToggle.checked = state.settings.disableDeleteAttachmentConfirmation;
                 elements.addPrefixOnImportToggle.checked = state.settings.addPrefixOnImport;
                 elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
@@ -8482,6 +8549,9 @@
                 elements.apiProviderCycleOpenAICheckbox.addEventListener('change', () => {
                     state.settings.apiProviderCycle.openai = elements.apiProviderCycleOpenAICheckbox.checked;
                     uiUtils.updateApiProviderSelectOptions();
+                });
+                elements.imagePreviewModal.addEventListener('click', () => {
+                    elements.imagePreviewModal.close();
                 });
             },
             handlePopState(event) {
@@ -10898,10 +10968,11 @@
                  newSettings.disableRetryConfirmation = elements.disableRetryConfirmationToggle.checked;
                  newSettings.disableLoadChatConfirmationWhileSending = elements.disableLoadChatConfirmationWhileSendingToggle.checked;
                  newSettings.disableDeleteMessageConfirmation = elements.disableDeleteMessageConfirmationToggle.checked;
+                 newSettings.disableDeleteAttachmentConfirmation = elements.disableDeleteAttachmentConfirmationToggle.checked;
                  newSettings.addPrefixOnImport = elements.addPrefixOnImportToggle.checked;
                  newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
                  newSettings.showTopCollapseButton = elements.showTopCollapseButtonToggle.checked;
-                 newSettings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
+                 newSettings.showBottomCollapseButtonToggle.checked = elements.showBottomCollapseButtonToggle.checked;
                  newSettings.persistMessageCollapseState = elements.persistMessageCollapseStateCheckbox.checked;
                  newSettings.messageBubbleOpacity = elements.messageBubbleOpacityInput.value === '' ? DEFAULT_MESSAGE_BUBBLE_OPACITY : parseFloat(elements.messageBubbleOpacityInput.value);
                  newSettings.chatOverlayOpacity = elements.chatOverlayOpacityInput.value === '' ? DEFAULT_CHAT_OVERLAY_OPACITY : parseFloat(elements.chatOverlayOpacityInput.value);
@@ -11199,6 +11270,7 @@
                         defaultSettingsCopy.disableRetryConfirmation = false;
                         defaultSettingsCopy.disableLoadChatConfirmationWhileSending = false;
                         defaultSettingsCopy.disableDeleteMessageConfirmation = false;
+                        defaultSettingsCopy.disableDeleteAttachmentConfirmation = false;
                         defaultSettingsCopy.addPrefixOnImport = true;
                         defaultSettingsCopy.disableSaveSettingsConfirmation = false;
                         defaultSettingsCopy.showTopCollapseButton = true;
@@ -12303,7 +12375,11 @@
                 if (!message || !message.attachments || !message.attachments[attachmentIndex]) return;
 
                 const attachmentName = message.attachments[attachmentIndex].name;
-                const confirmed = await uiUtils.showCustomConfirm(`添付ファイル「${attachmentName}」を削除しますか？`);
+                
+                let confirmed = true;
+                if (!state.settings.disableDeleteAttachmentConfirmation) {
+                    confirmed = await uiUtils.showCustomConfirm(`添付ファイル「${attachmentName}」を削除しますか？`);
+                }
                 
                 if (confirmed) {
                     message.attachments.splice(attachmentIndex, 1);
@@ -12415,6 +12491,16 @@
 
                 document.body.appendChild(hiddenInput);
                 hiddenInput.click();
+            },
+            
+            previewAttachment: function(messageIndex, attachmentIndex) {
+                const message = state.currentMessages[messageIndex];
+                const attachment = message?.attachments?.[attachmentIndex];
+
+                if (attachment && attachment.base64Data && attachment.mimeType.startsWith('image/')) {
+                    elements.previewImage.src = `data:${attachment.mimeType};base64,${attachment.base64Data}`;
+                    elements.imagePreviewModal.showModal();
+                }
             },
         };
 
