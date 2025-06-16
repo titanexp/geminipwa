@@ -3975,6 +3975,11 @@
                                    </label>
                                    <p style="height:10px"></p>
                                    <label class="checkbox-label">
+                                       <input type="checkbox" id="disable-attachment-confirmation-toggle">
+                                       添付ファイル削除時の確認ダイアログを無効にする
+                                   </label>
+                                   <p style="height:10px"></p>
+                                   <label class="checkbox-label">
                                        <input type="checkbox" id="add-prefix-on-import-toggle">
                                        履歴インポート時にタイトルへ接頭辞「(取込)」を付与する
                                    </label>
@@ -4290,7 +4295,6 @@
             <button id="confirm-attach-btn" value="ok" class="dialog-ok-btn" disabled>添付して閉じる</button>
         </div>
     </dialog>
-
     <dialog id="imagePreviewDialog" class="custom-dialog">
         <div class="dialog-content">
             <img src="" alt="画像プレビュー">
@@ -4648,6 +4652,7 @@
             disableRetryConfirmationToggle: document.getElementById('disable-retry-confirmation-toggle'),
             disableLoadChatConfirmationWhileSendingToggle: document.getElementById('disable-load-chat-confirmation-while-sending-toggle'),
             disableDeleteMessageConfirmationToggle: document.getElementById('disable-delete-message-confirmation-toggle'),
+            disableAttachmentConfirmationToggle: document.getElementById('disable-attachment-confirmation-toggle'),
             addPrefixOnImportToggle: document.getElementById('add-prefix-on-import-toggle'),
             showTopCollapseButtonToggle: document.getElementById('show-top-collapse-button-toggle'),
             showBottomCollapseButtonToggle: document.getElementById('show-bottom-collapse-button-toggle'),
@@ -4854,6 +4859,7 @@
                 disableRetryConfirmation: false,
                 disableLoadChatConfirmationWhileSending: false,
                 disableDeleteMessageConfirmation: false,
+                disableAttachmentConfirmation: false,
                 addPrefixOnImport: true,
                 showTopCollapseButton: true,
                 showBottomCollapseButton: true,
@@ -6962,6 +6968,7 @@
                 elements.disableRetryConfirmationToggle.checked = state.settings.disableRetryConfirmation;
                 elements.disableLoadChatConfirmationWhileSendingToggle.checked = state.settings.disableLoadChatConfirmationWhileSending;
                 elements.disableDeleteMessageConfirmationToggle.checked = state.settings.disableDeleteMessageConfirmation;
+                elements.disableAttachmentConfirmationToggle.checked = state.settings.disableAttachmentConfirmation;
                 elements.addPrefixOnImportToggle.checked = state.settings.addPrefixOnImport;
                 elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
@@ -10942,6 +10949,7 @@
                  newSettings.disableRetryConfirmation = elements.disableRetryConfirmationToggle.checked;
                  newSettings.disableLoadChatConfirmationWhileSending = elements.disableLoadChatConfirmationWhileSendingToggle.checked;
                  newSettings.disableDeleteMessageConfirmation = elements.disableDeleteMessageConfirmationToggle.checked;
+                 newSettings.disableAttachmentConfirmation = elements.disableAttachmentConfirmationToggle.checked;
                  newSettings.addPrefixOnImport = elements.addPrefixOnImportToggle.checked;
                  newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
                  newSettings.showTopCollapseButton = elements.showTopCollapseButtonToggle.checked;
@@ -11243,6 +11251,7 @@
                         defaultSettingsCopy.disableRetryConfirmation = false;
                         defaultSettingsCopy.disableLoadChatConfirmationWhileSending = false;
                         defaultSettingsCopy.disableDeleteMessageConfirmation = false;
+                        defaultSettingsCopy.disableAttachmentConfirmation = false;
                         defaultSettingsCopy.addPrefixOnImport = true;
                         defaultSettingsCopy.disableSaveSettingsConfirmation = false;
                         defaultSettingsCopy.showTopCollapseButton = true;
@@ -11486,7 +11495,7 @@
                     this.cancelEditMessage(index, messageElement);
                     return;
                 }
-                const newRawContent = textarea.value.trim();
+                const newRawContent = textarea.value;
                 const originalMessage = state.currentMessages[index];
 
                 if (newRawContent === originalMessage.content) {
@@ -11499,29 +11508,34 @@
                 delete originalMessage.error;
 
                 const contentDiv = messageElement.querySelector('.message-content');
-                if (contentDiv && typeof marked !== 'undefined' && originalMessage.role === 'model') {
-                    try {
-                        const safeHtml = uiUtils._sanitizeAndParseMarkdown(newRawContent || '');
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = safeHtml;
-                        uiUtils.processInteractivePlaceholders(tempDiv);
-                        uiUtils.processInteractiveTitles(tempDiv);
-                        contentDiv.innerHTML = tempDiv.innerHTML;
-                        uiUtils.addCopyButtonsToCodeBlocks(contentDiv, false);
-                    } catch (e) {
-                        contentDiv.textContent = newRawContent;
+                
+                if (originalMessage.role === 'user') {
+                    let preElement = contentDiv.querySelector('pre');
+                    if (!preElement) {
+                        preElement = document.createElement('pre');
+                        preElement.style.marginTop = '8px';
+                        contentDiv.appendChild(preElement);
                     }
-                } else if (contentDiv) {
-                    const pre = contentDiv.querySelector('pre') || document.createElement('pre');
-                    pre.textContent = newRawContent;
-                    if (!contentDiv.querySelector('pre')) {
-                        contentDiv.innerHTML = '';
-                        contentDiv.appendChild(pre);
+                    preElement.textContent = newRawContent;
+                } else if (originalMessage.role === 'model') {
+                    if (contentDiv && typeof marked !== 'undefined') {
+                        try {
+                            const safeHtml = uiUtils._sanitizeAndParseMarkdown(newRawContent || '');
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = safeHtml;
+                            uiUtils.processInteractivePlaceholders(tempDiv);
+                            uiUtils.processInteractiveTitles(tempDiv);
+                            contentDiv.innerHTML = tempDiv.innerHTML;
+                            uiUtils.addCopyButtonsToCodeBlocks(contentDiv, false);
+                        } catch (e) {
+                            contentDiv.textContent = newRawContent;
+                        }
+                    } else if (contentDiv) {
+                        contentDiv.textContent = newRawContent;
                     }
                 }
 
                 this.finishEditing(messageElement);
-                this.uncollapseMessage(index, messageElement);
 
                 const isFirstUserMessage = (index === state.currentMessages.findIndex(m => m.role === 'user'));
                 let titleForSave = null;
@@ -11533,9 +11547,6 @@
                     await dbUtils.saveChat(titleForSave);
                     if (isFirstUserMessage) {
                         uiUtils.updateChatTitle(titleForSave);
-                    }
-                    if (state.currentMessages.length === 0 && !state.currentSystemPrompt && state.currentChatId) {
-                        this.startNewChat();
                     }
                 } catch (error) {
                     await uiUtils.showCustomAlert("メッセージ編集後のチャット保存に失敗しました。");
@@ -12347,7 +12358,11 @@
                 if (!message || !message.attachments || !message.attachments[attachmentIndex]) return;
 
                 const attachmentName = message.attachments[attachmentIndex].name;
-                const confirmed = await uiUtils.showCustomConfirm(`添付ファイル「${attachmentName}」を削除しますか？`);
+                
+                let confirmed = true;
+                if (!state.settings.disableAttachmentConfirmation) {
+                    confirmed = await uiUtils.showCustomConfirm(`添付ファイル「${attachmentName}」を削除しますか？`);
+                }
                 
                 if (confirmed) {
                     message.attachments.splice(attachmentIndex, 1);
@@ -12365,7 +12380,6 @@
                     }
                 }
             },
-
             editAttachment: function(messageIndex, attachmentIndex) {
                 const hiddenInput = document.createElement('input');
                 hiddenInput.type = 'file';
@@ -12416,7 +12430,6 @@
                 document.body.appendChild(hiddenInput);
                 hiddenInput.click();
             },
-
             addMoreAttachments: function(messageIndex, listElement) {
                 const hiddenInput = document.createElement('input');
                 hiddenInput.type = 'file';
