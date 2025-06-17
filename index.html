@@ -8593,8 +8593,42 @@
              if (dummyUserTextToUse) internalMessages.push({ role: 'user', parts: [{ text: dummyUserTextToUse }] });
              if (dummyModelTextToUse) internalMessages.push({ role: 'model', parts: [{ text: dummyModelTextToUse }] });
 
-             const requestBody = apiUtils._prepareApiRequest(selectedApiProvider, internalMessages, currentContextSystemPrompt);
-            
+             const commonGenerationConfig = {};
+             if (providerSettings.temperature !== null) commonGenerationConfig.temperature = providerSettings.temperature;
+             if (providerSettings.maxTokens !== null) commonGenerationConfig.maxOutputTokens = providerSettings.maxTokens;
+             if (providerSettings.topP !== null) commonGenerationConfig.topP = providerSettings.topP;
+             if (providerSettings.presencePenalty !== null) commonGenerationConfig.presencePenalty = providerSettings.presencePenalty;
+             if (providerSettings.frequencyPenalty !== null) commonGenerationConfig.frequencyPenalty = providerSettings.frequencyPenalty;
+
+             if (selectedApiProvider === 'gemini') {
+                 if (providerSettings.topK !== null) commonGenerationConfig.topK = providerSettings.topK;
+                 if (providerSettings.thinkingBudget !== null || providerSettings.includeThoughts) {
+                     commonGenerationConfig.thinkingConfig = commonGenerationConfig.thinkingConfig || {};
+                     if (providerSettings.thinkingBudget !== null && Number.isInteger(providerSettings.thinkingBudget) && providerSettings.thinkingBudget >= 0) {
+                         commonGenerationConfig.thinkingConfig.thinkingBudget = providerSettings.thinkingBudget;
+                     }
+                     if (providerSettings.includeThoughts) {
+                         commonGenerationConfig.thinkingConfig.includeThoughts = true;
+                     }
+                      if (Object.keys(commonGenerationConfig.thinkingConfig).length === 0) delete commonGenerationConfig.thinkingConfig;
+                 }
+             } else if (selectedApiProvider === 'claude') {
+                 if (providerSettings.topK !== null) commonGenerationConfig.topK = providerSettings.topK;
+                 if(providerSettings.includeThoughts) {
+                     commonGenerationConfig.thinkingConfig = { "type": "enabled" };
+                     if (providerSettings.thinkingBudget !== null && Number.isInteger(providerSettings.thinkingBudget) && providerSettings.thinkingBudget >= 1024) {
+                         commonGenerationConfig.thinkingConfig.budget_tokens = providerSettings.thinkingBudget;
+                     }
+                 }
+             }
+
+             const { messages: apiMessages, systemInstruction: systemInstructionForProvider } = apiUtils._prepareApiRequest(
+                selectedApiProvider,
+                internalMessages,
+                currentContextSystemPrompt,
+                commonGenerationConfig
+            );
+
              let modelResponseRawContent = '';
              let modelThoughtSummaryContent = '';
              let modelResponseMetadata = {};
@@ -8607,7 +8641,18 @@
              let modelMessageObjectForStream = null;
 
              try {
-                let apiResponseObject = await apiUtils[`call${selectedApiProvider.charAt(0).toUpperCase() + selectedApiProvider.slice(1)}Api`](requestBody);
+                 let apiResponseObject;
+                 if (selectedApiProvider === 'gemini') {
+                     apiResponseObject = await apiUtils.callGeminiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, usePseudoForThisCall, providerSettings.enableGrounding);
+                 } else if (selectedApiProvider === 'deepseek') {
+                     apiResponseObject = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
+                 } else if (selectedApiProvider === 'claude') {
+                     apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
+                 } else if (selectedApiProvider === 'openai') {
+                     apiResponseObject = await apiUtils.callOpenAiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, providerSettings.visionEnable);
+                 } else {
+                     throw new Error("不明なAPIプロバイダーが選択されています。");
+                 }
 
                  const dummyModelPrefix = (providerSettings.concatDummyModel && dummyModelTextToUse) ? dummyModelTextToUse : '';
                   if (!isBackgroundProcess) {
@@ -9071,7 +9116,6 @@
              let systemPrompt = '';
              const blockRegex = /<\|#\|(system|user|model)\|#\|([^>]*)>([\s\S]*?)<\|#\|\/\1\|#\|>/g;
              let match;
-
              while ((match = blockRegex.exec(text)) !== null) {
                  const role = match[1];
                  const attributesString = match[2].trim();
@@ -10862,230 +10906,164 @@
                     throw error;
                 });
         },
-        _prepareApiRequest(providerName, internalMessages, internalSystemPrompt) {
+        _prepareApiRequest(providerName, internalMessages, internalSystemPrompt, generationConfig) {
             const providerSettings = state.settings.providers[providerName];
             const isVisionEnabled = providerSettings.visionEnable || false;
-            
-            const apiMessages = this._formatMessagesForApi(providerName, internalMessages);
-            const systemInstruction = this._formatSystemInstructionForApi(providerName, internalSystemPrompt);
-            const generationConfig = this._formatGenerationConfigForApi(providerName, providerSettings);
-            
-            const requestBody = {
-                model: providerSettings.modelName,
-                stream: providerSettings.streamingOutput,
-                ...generationConfig
-            };
 
-            if (providerName === 'gemini') {
-                requestBody.contents = apiMessages;
-                if (systemInstruction) {
-                    requestBody.systemInstruction = systemInstruction;
-                }
-            } else {
-                requestBody.messages = apiMessages;
-                if (systemInstruction) {
-                    requestBody.system = systemInstruction.content;
-                }
-            }
-
-            if (providerName === 'gemini' && providerSettings.enableGrounding) {
-                requestBody.tools = [{ "google_search": {} }];
-            }
-            
-            if (providerName === 'gemini' || providerName === 'claude') {
-                if (providerSettings.includeThoughts) {
-                    if(providerName === 'gemini') {
-                        requestBody.thinkingConfig = { includeThoughts: true };
-                        const budget = providerSettings.thinkingBudget;
-                        if (budget !== null && Number.isInteger(budget) && budget >= 0) {
-                            requestBody.thinkingConfig.thinkingBudget = budget;
-                        }
-                    } else if(providerName === 'claude') {
-                        requestBody.thinking = { "type": "enabled" };
-                        const budget = providerSettings.thinkingBudget;
-                        if (budget !== null && Number.isInteger(budget) && budget >= 1024) {
-                            requestBody.thinking.budget_tokens = budget;
-                        }
-                    }
-                }
-            }
-
-            return requestBody;
-        },
-        _formatMessagesForApi(providerName, internalMessages) {
-            const providerSettings = state.settings.providers[providerName];
-            const isVisionEnabled = providerName === 'openai' && providerSettings.visionEnable;
-
-            return internalMessages.map(msg => {
+            const apiMessages = internalMessages.map(msg => {
                 const role = (providerName === 'claude' || providerName === 'openai' || providerName === 'deepseek') && msg.role === 'model'
                     ? 'assistant'
                     : msg.role;
 
                 const contentParts = [];
-                const textContent = msg.parts.filter(p => p.text).map(p => p.text).join('\n');
+                const textContent = msg.parts.filter(p => p.text).map(p => p.text).join('\n').trim();
 
                 if (providerName === 'gemini') {
-                    if (textContent.trim()) contentParts.push({ text: textContent });
+                    if (textContent) contentParts.push({ text: textContent });
                     msg.parts.forEach(p => {
                         if (p.inlineData) contentParts.push({ inlineData: p.inlineData });
                     });
                     if (contentParts.length === 0) contentParts.push({ text: '' });
-                    return { role: msg.role, parts: contentParts };
-                } 
-                
-                if (providerName === 'claude') {
-                    if (textContent.trim()) contentParts.push({ type: 'text', text: textContent });
+                } else if (providerName === 'claude') {
+                    if (textContent) contentParts.push({ type: 'text', text: textContent });
                     msg.parts.forEach(p => {
                         if (p.inlineData) contentParts.push({ type: 'image', source: { type: 'base64', media_type: p.inlineData.mimeType, data: p.inlineData.data } });
                     });
-                    return { role: role, content: contentParts };
-                }
-
-                if (isVisionEnabled) {
-                    if (textContent.trim()) contentParts.push({ type: 'text', text: textContent });
+                } else if (providerName === 'openai' && isVisionEnabled) {
+                    if (textContent) contentParts.push({ type: 'text', text: textContent });
                     msg.parts.forEach(p => {
                         if (p.inlineData?.mimeType?.startsWith('image/')) {
                             contentParts.push({ type: 'image_url', image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` } });
                         }
                     });
-                    return { role: role, content: contentParts };
-                }
-
-                return { role: role, content: textContent };
-            });
-        },
-        _formatSystemInstructionForApi(providerName, internalSystemPrompt) {
-            if (!internalSystemPrompt) return null;
-
-            if (providerName === 'gemini') {
-                return { role: "system", parts: [{ text: internalSystemPrompt }] };
-            }
-            return { content: internalSystemPrompt };
-        },
-        _formatGenerationConfigForApi(providerName, providerSettings) {
-            const config = {};
-            
-            if (providerSettings.maxTokens !== null) config[providerName === 'gemini' ? 'maxOutputTokens' : 'max_tokens'] = providerSettings.maxTokens;
-            if (providerSettings.temperature !== null) config.temperature = providerSettings.temperature;
-            if (providerSettings.topP !== null) config[providerName === 'gemini' ? 'topP' : 'top_p'] = providerSettings.topP;
-            
-            if (providerName === 'gemini' || providerName === 'claude') {
-                if (providerSettings.topK !== null) config[providerName === 'gemini' ? 'topK' : 'top_k'] = providerSettings.topK;
-            }
-            if (providerName !== 'claude') {
-                if (providerSettings.presencePenalty !== null) config[providerName === 'deepseek' || providerName === 'openai' ? 'presence_penalty' : 'presencePenalty'] = providerSettings.presencePenalty;
-                if (providerSettings.frequencyPenalty !== null) config[providerName === 'deepseek' || providerName === 'openai' ? 'frequency_penalty' : 'frequencyPenalty'] = providerSettings.frequencyPenalty;
-            }
-            
-            if (providerName === 'claude' && providerSettings.temperature === null) config.temperature = DEFAULT_CLAUDE_TEMPERATURE;
-            if (providerName === 'claude' && providerSettings.maxTokens === null) config.max_tokens = DEFAULT_CLAUDE_MAX_TOKENS;
-
-            return config;
-        },
-        _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, generationConfig, useStreaming, enableVision) {
-             const oaMessages = [];
-             if (systemInstruction && systemInstruction.content) {
-                 oaMessages.push({ role: "system", content: systemInstruction.content });
-             }
-
-             messagesForApi.forEach(m => {
-                if(enableVision) {
-                    oaMessages.push(m);
                 } else {
-                    oaMessages.push({ role: m.role, content: m.content });
+                    contentParts.push(textContent);
                 }
-             });
-             
-             const body = {
-                 model: model,
-                 messages: oaMessages,
-                 stream: useStreaming,
-                 ...generationConfig
-             };
-             
-             return body;
-        },
-        async callGeminiApi(requestBody) {
-            const providerSettings = state.settings.providers.gemini;
-            if (!providerSettings.apiKey) throw new Error("APIキーが設定されていません。");
+                
+                const finalContent = (providerName === 'openai' && !isVisionEnabled) || providerName === 'deepseek'
+                    ? contentParts.join('\n')
+                    : contentParts;
 
-            const model = requestBody.model || DEFAULT_MODEL;
-            const apiKey = providerSettings.apiKey;
-            const useStreaming = requestBody.stream;
-            const usePseudo = providerSettings.pseudoStreaming;
-
-            let endpointMethod = useStreaming ? (usePseudo ? 'generateContent?alt=sse&' : 'streamGenerateContent?alt=sse&') : 'generateContent?';
-            const endpoint = `${GEMINI_API_BASE_URL}${model}:${endpointMethod}key=${apiKey}`;
+                return { role: role, content: finalContent };
+            });
             
-            requestBody.safetySettings = [
-                { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
-            ];
+            let systemInstruction = null;
+            if (internalSystemPrompt) {
+                if (providerName === 'gemini') {
+                    systemInstruction = { role: "system", parts: [{ text: internalSystemPrompt }] };
+                } else {
+                    systemInstruction = { content: internalSystemPrompt };
+                }
+            }
+            
+            return {
+                messages: apiMessages,
+                systemInstruction: systemInstruction,
+            };
+        },
+        _parseFullResponse(providerName, responseData) {
+            let content = '', thought = '', finishReason = 'unknown', usage = null, safetyRatings = null, groundingMetadata = null;
+            
+            try {
+                if (providerName === 'gemini') {
+                    const candidate = responseData.candidates?.[0];
+                    if (candidate) {
+                        candidate.content?.parts?.forEach(part => {
+                            if (part.thought) thought += (part.text || '');
+                            else content += (part.text || '');
+                        });
+                        finishReason = candidate.finishReason || 'stop';
+                        safetyRatings = candidate.safetyRatings;
+                        groundingMetadata = candidate.groundingMetadata;
+                    }
+                    if (responseData.usageMetadata) {
+                        usage = {
+                            candidatesTokenCount: responseData.usageMetadata.candidatesTokenCount,
+                            totalTokenCount: responseData.usageMetadata.totalTokenCount
+                        };
+                    }
+                } else if (providerName === 'claude') {
+                    responseData.content?.forEach(block => {
+                        if (block.type === 'text') content += block.text;
+                        else if (block.type === 'thinking') thought += block.thinking;
+                    });
+                    finishReason = responseData.stop_reason || 'stop';
+                    if (responseData.usage) {
+                        usage = {
+                            candidatesTokenCount: responseData.usage.output_tokens,
+                            totalTokenCount: responseData.usage.input_tokens + responseData.usage.output_tokens
+                        };
+                    }
+                } else {
+                    const choice = responseData.choices?.[0];
+                    if (choice) {
+                        content = choice.message?.content || '';
+                        if(providerName === 'deepseek') {
+                            thought = choice.message?.reasoning_content || '';
+                        }
+                        finishReason = choice.finish_reason || 'stop';
+                    }
+                    if (responseData.usage) {
+                        usage = {
+                            candidatesTokenCount: responseData.usage.completion_tokens,
+                            totalTokenCount: responseData.usage.total_tokens
+                        };
+                    }
+                }
+            } catch(e) {
+                content = "レスポンスの解析に失敗しました。";
+                finishReason = "error";
+            }
+
+            return {
+                content: content.trim(),
+                thought: thought.trim(),
+                metadata: {
+                    finishReason,
+                    safetyRatings,
+                    groundingMetadata,
+                    usageMetadata: usage
+                }
+            };
+        },
+        async callGeminiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding) {
+            const providerSettings = state.settings.providers.gemini;
+            if (!providerSettings.apiKey) {
+                throw new Error("APIキーが設定されていません。");
+            }
+
+            const model = providerSettings.modelName || DEFAULT_MODEL;
+            const apiKey = providerSettings.apiKey;
+
+            let endpointMethod = useStreaming
+                ? (usePseudo ? 'generateContent?alt=sse&' : 'streamGenerateContent?alt=sse&')
+                : 'generateContent?';
+
+            const endpoint = `${GEMINI_API_BASE_URL}${model}:${endpointMethod}key=${apiKey}`;
+
+            const requestBody = {
+                contents: messagesForApi,
+                ...(Object.keys(generationConfig).length > 0 && { generationConfig }),
+                ...(systemInstruction && { systemInstruction }),
+                safetySettings: [
+                    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+                    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+                ]
+            };
+
+            if (enableGrounding) {
+                requestBody.tools = [{ "google_search": {} }];
+            }
 
             const options = {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestBody),
             };
+
             return this._callApi(endpoint, options, 'Gemini');
-        },
-        async callDeepSeekApi(requestBody) {
-            const providerSettings = state.settings.providers.deepseek;
-            if (!providerSettings.apiKey) throw new Error("DeepSeek APIキーが設定されていません。");
-
-            const apiKey = providerSettings.apiKey;
-            const baseUrl = providerSettings.apiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
-            const endpoint = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
-
-            const options = {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify(requestBody),
-            };
-            
-            const response = await this._callApi(endpoint, options, 'DeepSeek');
-            if (!requestBody.stream) {
-                const data = await response.json();
-                const choice = data.choices?.[0];
-                if (choice && choice.message && choice.message.reasoning_content) {
-                    data.parsedReasoningContent = choice.message.reasoning_content;
-                }
-                response.json = async () => data;
-            }
-            return response;
-        },
-        async callClaudeApi(requestBody) {
-            const providerSettings = state.settings.providers.claude;
-            if (!providerSettings.apiKey) throw new Error("Claude APIキーが設定されていません。");
-
-            const apiKey = providerSettings.apiKey;
-            const options = {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'anthropic-version': '2023-06-01',
-                    'anthropic-dangerous-direct-browser-access': 'true'
-                },
-                body: JSON.stringify(requestBody),
-            };
-            return this._callApi(CLAUDE_API_BASE_URL, options, 'Claude');
-        },
-        async callOpenAiApi(requestBody) {
-            const providerSettings = state.settings.providers.openai;
-            if (!providerSettings.apiKey) throw new Error("ChatGPT APIキーが設定されていません。");
-
-            const options = {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${providerSettings.apiKey}`},
-                body: JSON.stringify(requestBody)
-            };
-            return this._callApi(OPENAI_API_BASE_URL, options, 'OpenAI');
         },
         async * _handleStreamingResponse(response, parser) {
             if (!response.body) {
@@ -11243,14 +11221,168 @@
         async *handleGeminiStreamingResponse(response) {
             yield* this._handleStreamingResponse(response, (data, final) => this._parseGeminiChunk(data, final));
         },
+        async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
+            const providerSettings = state.settings.providers.deepseek;
+            if (!providerSettings.apiKey) {
+                throw new Error("DeepSeek APIキーが設定されていません。");
+            }
+
+            const apiKey = providerSettings.apiKey;
+            const baseUrl = providerSettings.apiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
+            const endpoint = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
+
+            const requestBody = this._createOpenAICompatibleRequestBody(
+                providerSettings.modelName,
+                messagesForApi,
+                systemInstruction,
+                generationConfig,
+                useStreaming,
+                false
+            );
+
+            const options = {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify(requestBody),
+            };
+
+            const response = await this._callApi(endpoint, options, 'DeepSeek');
+            
+            if (!useStreaming) {
+                const data = await response.json();
+                const choice = data.choices?.[0];
+                if (choice && choice.message && choice.message.reasoning_content) {
+                    data.parsedReasoningContent = choice.message.reasoning_content;
+                }
+                response.json = async () => data;
+            }
+            
+            return response;
+        },
         async *handleDeepSeekStreamingResponse(response) {
             this._openAIUsage = null;
             yield* this._handleStreamingResponse(response, (data, final) => this._parseOpenAICompatibleChunk(data, final));
+        },
+        async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
+            const providerSettings = state.settings.providers.claude;
+            if (!providerSettings.apiKey) {
+                throw new Error("Claude APIキーが設定されていません。");
+            }
+            const model = providerSettings.modelName || DEFAULT_CLAUDE_MODEL;
+            const apiKey = providerSettings.apiKey;
+            
+            const claudeMessages = messagesForApi.map(msg => {
+                const contentParts = msg.parts.map(part => {
+                    if (part.text) {
+                        return { type: 'text', text: part.text };
+                    }
+                    if (part.inlineData && part.inlineData.mimeType.startsWith('image/')) {
+                        return {
+                            type: 'image',
+                            source: {
+                                type: 'base64',
+                                media_type: part.inlineData.mimeType,
+                                data: part.inlineData.data
+                            }
+                        };
+                    }
+                    return null;
+                }).filter(Boolean);
+
+                return {
+                    role: msg.role === 'model' ? 'assistant' : 'user',
+                    content: contentParts
+                };
+            });
+            
+            const requestBody = {
+                model: model,
+                messages: claudeMessages,
+                stream: useStreaming,
+                max_tokens: generationConfig.maxOutputTokens || providerSettings.maxTokens || DEFAULT_CLAUDE_MAX_TOKENS
+            };
+
+            if (systemInstruction && systemInstruction.content) {
+                requestBody.system = systemInstruction.content;
+            }
+            
+            if (generationConfig.temperature !== undefined && generationConfig.temperature !== null) {
+                requestBody.temperature = generationConfig.temperature;
+            } else if (providerSettings.temperature !== null) {
+                requestBody.temperature = providerSettings.temperature;
+            } else {
+                requestBody.temperature = DEFAULT_CLAUDE_TEMPERATURE;
+            }
+
+            if (generationConfig.topK !== undefined && generationConfig.topK !== null) {
+                requestBody.top_k = generationConfig.topK;
+            } else if (providerSettings.topK !== null) {
+                requestBody.top_k = providerSettings.topK;
+            }
+
+            if (generationConfig.topP !== undefined && generationConfig.topP !== null) {
+                requestBody.top_p = generationConfig.topP;
+            } else if (providerSettings.topP !== null) {
+                requestBody.top_p = providerSettings.topP;
+            } else {
+                requestBody.top_p = DEFAULT_CLAUDE_TOP_P;
+            }
+            
+            if (providerSettings.includeThoughts) {
+                requestBody.thinking = { "type": "enabled" };
+                const budget = providerSettings.thinkingBudget;
+                if (budget !== null && Number.isInteger(budget) && budget >= 1024) {
+                    requestBody.thinking.budget_tokens = budget;
+                }
+            }
+
+            const options = {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01',
+                    'anthropic-dangerous-direct-browser-access': 'true'
+                },
+                body: JSON.stringify(requestBody),
+            };
+
+            return this._callApi(CLAUDE_API_BASE_URL, options, 'Claude');
         },
         async *handleClaudeStreamingResponse(response) {
             this._claudeUsage = null;
             this._claudeFinishReason = null;
             yield* this._handleStreamingResponse(response, (data, final) => this._parseClaudeChunk(data, final));
+        },
+        async callOpenAiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
+            const providerSettings = state.settings.providers.openai;
+            if (!providerSettings.apiKey) {
+                throw new Error("ChatGPT APIキーが設定されていません。");
+            }
+            
+            const body = this._createOpenAICompatibleRequestBody(
+                providerSettings.modelName,
+                messagesForApi,
+                systemInstruction,
+                generationConfig,
+                useStreaming,
+                enableVision
+            );
+            body.temperature = body.temperature ?? providerSettings.temperature ?? 1;
+
+            const options = {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${providerSettings.apiKey}`
+                },
+                body: JSON.stringify(body)
+            };
+            
+            return this._callApi(OPENAI_API_BASE_URL, options, 'OpenAI');
         },
         async *handleOpenAiStreamingResponse(response) {
             this._openAIUsage = null;
