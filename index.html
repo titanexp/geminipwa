@@ -8561,77 +8561,40 @@
                  }
              }
 
-             const apiMessages = messagesToProcess
-                 .filter(msg => {
-                     if (msg.role === 'user') return true;
-                     if (msg.role === 'model') return !msg.isCascaded || (msg.isCascaded && msg.isSelected);
-                     return false;
-                 })
-                 .map(msg => {
-                     const parts = [];
-                     if (msg.content && msg.content.trim() !== '') {
-                         parts.push({ text: msg.content });
-                     }
-                     if (msg.role === 'user' && msg.attachments && msg.attachments.length > 0) {
-                         msg.attachments.forEach(att => {
-                             if(att.base64Data) {
-                                 parts.push({
-                                     inlineData: {
-                                         mimeType: att.mimeType,
-                                         data: att.base64Data
-                                     }
-                                 });
-                             }
-                         });
-                     }
-                     return { role: msg.role, parts: parts.length > 0 ? parts : [{text: ''}] };
-                 });
+            const internalMessages = messagesToProcess
+                .filter(msg => {
+                    if (msg.role === 'user') return true;
+                    if (msg.role === 'model') return !msg.isCascaded || (msg.isCascaded && msg.isSelected);
+                    return false;
+                })
+                .map(msg => {
+                    const parts = [];
+                    if (msg.content && msg.content.trim() !== '') {
+                        parts.push({ text: msg.content });
+                    }
+                    if (msg.role === 'user' && msg.attachments && msg.attachments.length > 0) {
+                        msg.attachments.forEach(att => {
+                            if(att.base64Data) {
+                                parts.push({
+                                    inlineData: {
+                                        mimeType: att.mimeType,
+                                        data: att.base64Data
+                                    }
+                                });
+                            }
+                        });
+                    }
+                    return { role: msg.role, parts: parts.length > 0 ? parts : [{text: ''}] };
+                });
+
              const dummyUserTextToUse = providerSettings.enableDummyUser && providerSettings.dummyUser?.trim() ? providerSettings.dummyUser.trim() : null;
              const dummyModelTextToUse = providerSettings.enableDummyModel && providerSettings.dummyModel?.trim() ? providerSettings.dummyModel.trim() : null;
 
-             if (dummyUserTextToUse) apiMessages.push({ role: 'user', parts: [{ text: dummyUserTextToUse }] });
-             if (dummyModelTextToUse) apiMessages.push({ role: 'model', parts: [{ text: dummyModelTextToUse }] });
+             if (dummyUserTextToUse) internalMessages.push({ role: 'user', parts: [{ text: dummyUserTextToUse }] });
+             if (dummyModelTextToUse) internalMessages.push({ role: 'model', parts: [{ text: dummyModelTextToUse }] });
 
-             const commonGenerationConfig = {};
-             if (providerSettings.temperature !== null) commonGenerationConfig.temperature = providerSettings.temperature;
-             if (providerSettings.maxTokens !== null) commonGenerationConfig.maxOutputTokens = providerSettings.maxTokens;
-             if (providerSettings.topP !== null) commonGenerationConfig.topP = providerSettings.topP;
-             if (providerSettings.presencePenalty !== null) commonGenerationConfig.presencePenalty = providerSettings.presencePenalty;
-             if (providerSettings.frequencyPenalty !== null) commonGenerationConfig.frequencyPenalty = providerSettings.frequencyPenalty;
-
-             if (selectedApiProvider === 'gemini') {
-                 if (providerSettings.topK !== null) commonGenerationConfig.topK = providerSettings.topK;
-                 if (providerSettings.thinkingBudget !== null || providerSettings.includeThoughts) {
-                     commonGenerationConfig.thinkingConfig = commonGenerationConfig.thinkingConfig || {};
-                     if (providerSettings.thinkingBudget !== null && Number.isInteger(providerSettings.thinkingBudget) && providerSettings.thinkingBudget >= 0) {
-                         commonGenerationConfig.thinkingConfig.thinkingBudget = providerSettings.thinkingBudget;
-                     }
-                     if (providerSettings.includeThoughts) {
-                         commonGenerationConfig.thinkingConfig.includeThoughts = true;
-                     }
-                      if (Object.keys(commonGenerationConfig.thinkingConfig).length === 0) delete commonGenerationConfig.thinkingConfig;
-                 }
-             } else if (selectedApiProvider === 'claude') {
-                 if (providerSettings.topK !== null) commonGenerationConfig.topK = providerSettings.topK;
-                 if(providerSettings.includeThoughts) {
-                     commonGenerationConfig.thinkingConfig = { "type": "enabled" };
-                     if (providerSettings.thinkingBudget !== null && Number.isInteger(providerSettings.thinkingBudget) && providerSettings.thinkingBudget >= 1024) {
-                         commonGenerationConfig.thinkingConfig.budget_tokens = providerSettings.thinkingBudget;
-                     }
-                 }
-             }
-
-             let systemInstructionForProvider = null;
-             const systemPromptTextToUseForApi = currentContextSystemPrompt?.trim() ? currentContextSystemPrompt.trim() : null;
-
-             if (systemPromptTextToUseForApi) {
-                 if (selectedApiProvider === 'gemini') {
-                     systemInstructionForProvider = { role: "system", parts: [{ text: systemPromptTextToUseForApi }] };
-                 } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'claude' || selectedApiProvider === 'openai') {
-                     systemInstructionForProvider = { content: systemPromptTextToUseForApi, parts: [{ text: systemPromptTextToUseForApi }] };
-                 }
-             }
-
+             const requestBody = apiUtils._prepareApiRequest(selectedApiProvider, internalMessages, currentContextSystemPrompt);
+            
              let modelResponseRawContent = '';
              let modelThoughtSummaryContent = '';
              let modelResponseMetadata = {};
@@ -8644,18 +8607,7 @@
              let modelMessageObjectForStream = null;
 
              try {
-                 let apiResponseObject;
-                 if (selectedApiProvider === 'gemini') {
-                     apiResponseObject = await apiUtils.callGeminiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, usePseudoForThisCall, providerSettings.enableGrounding);
-                 } else if (selectedApiProvider === 'deepseek') {
-                     apiResponseObject = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
-                 } else if (selectedApiProvider === 'claude') {
-                     apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
-                 } else if (selectedApiProvider === 'openai') {
-                     apiResponseObject = await apiUtils.callOpenAiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, providerSettings.visionEnable);
-                 } else {
-                     throw new Error("不明なAPIプロバイダーが選択されています。");
-                 }
+                let apiResponseObject = await apiUtils[`call${selectedApiProvider.charAt(0).toUpperCase() + selectedApiProvider.slice(1)}Api`](requestBody);
 
                  const dummyModelPrefix = (providerSettings.concatDummyModel && dummyModelTextToUse) ? dummyModelTextToUse : '';
                   if (!isBackgroundProcess) {
@@ -8789,103 +8741,26 @@
                      }
 
                  } else {
-                     const data = await apiResponseObject.json();
-                     if (selectedApiProvider === 'gemini') {
-                         const candidate = data.candidates?.[0];
-                         let rawContentFromApi = "";
-                         if (candidate) {
-                             modelResponseMetadata = { finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings };
-                             candidate.content?.parts?.forEach(part => {
-                                 if (part.thought === true && providerSettings.includeThoughts) {
-                                     modelThoughtSummaryContent += (part.text || "") + "\n\n";
-                                 } else if (part.thought !== true){
-                                     rawContentFromApi += (part.text || "") + "\n\n";
-                                 }
-                             });
-                             modelThoughtSummaryContent = modelThoughtSummaryContent.trim();
-                             rawContentFromApi = rawContentFromApi.trim();
+                    const data = await apiResponseObject.json();
+                    const { content, thought, metadata } = apiUtils._parseFullResponse(selectedApiProvider, data);
 
-                             currentGroundingMetadata = candidate.groundingMetadata || null;
-                             finalUsageMetadataFromStream = data.usageMetadata || null;
-                             if (candidate.finishReason && candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") {
-                                 rawContentFromApi += `\n\n(理由: ${candidate.finishReason})`;
-                             }
-                             if (!rawContentFromApi && candidate.finishReason === "STOP" && !modelThoughtSummaryContent) {
-                                 rawContentFromApi = "(応答が空です)";
-                             }
-                         } else {
-                             rawContentFromApi = "応答候補がありません";
-                             if(data.promptFeedback) {
-                                 rawContentFromApi += ` (理由: ${data.promptFeedback.blockReason || '不明'})`;
-                                 modelResponseMetadata.promptFeedback = data.promptFeedback;
-                                 modelResponseMetadata.finishReason = data.promptFeedback.blockReason || 'ERROR';
-                             } else {
-                                 modelResponseMetadata.finishReason = 'ERROR';
-                             }
-                             finalUsageMetadataFromStream = data.usageMetadata || null;
-                         }
-                          modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
-                     } else if (selectedApiProvider === 'deepseek') {
-                         const choice = data.choices?.[0];
-                         let rawContentFromApi = "";
-                         if (choice) {
-                             rawContentFromApi = choice.message?.content || "";
-                             modelResponseMetadata = { finishReason: choice.finish_reason };
-                             if (data.usage) {
-                                finalUsageMetadataFromStream = {
-                                     candidatesTokenCount: data.usage.completion_tokens,
-                                     totalTokenCount: data.usage.total_tokens,
-                                 };
-                             }
-                             if (providerSettings.includeThoughts && data.parsedReasoningContent) {
-                                 modelThoughtSummaryContent = data.parsedReasoningContent;
-                             }
-                         } else {
-                             rawContentFromApi = "DeepSeekからの応答がありません。";
-                             modelResponseMetadata = { finishReason: 'ERROR' };
-                             if (data.error) rawContentFromApi += ` (エラー: ${data.error.message})`;
-                         }
-                         modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
-                     } else if (selectedApiProvider === 'claude') {
-                         let rawContentFromApi = "";
-                         if (data.content && data.content.length > 0) {
-                             data.content.forEach(block => {
-                                 if (block.type === 'text') {
-                                     rawContentFromApi += block.text;
-                                 } else if (block.type === 'thinking' && providerSettings.includeThoughts) {
-                                     modelThoughtSummaryContent += (block.thinking || "") + "\n\n";
-                                 }
-                             });
-                             modelThoughtSummaryContent = modelThoughtSummaryContent.trim();
-                         }
-                         modelResponseMetadata = { finishReason: data.stop_reason || 'stop' };
-                         if (data.usage) {
-                             finalUsageMetadataFromStream = {
-                                 candidatesTokenCount: data.usage.output_tokens,
-                                 totalTokenCount: data.usage.input_tokens + data.usage.output_tokens,
-                             };
-                         }
-                         if (!rawContentFromApi && data.stop_reason === 'end_turn') {
-                             rawContentFromApi = "(応答が空です)";
-                         }
-                         modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
-                     } else if (selectedApiProvider === 'openai') {
-                         let rawContentFromApi = "";
-                         if (data.choices && data.choices.length > 0) {
-                             rawContentFromApi = data.choices[0].message?.content || "";
-                             modelResponseMetadata = { finishReason: data.choices[0].finish_reason };
-                         }
-                         if (data.usage) {
-                             finalUsageMetadataFromStream = {
-                                 candidatesTokenCount: data.usage.completion_tokens,
-                                 totalTokenCount: data.usage.prompt_tokens + data.usage.completion_tokens
-                             };
-                         }
-                         if (!rawContentFromApi && modelResponseMetadata.finishReason === 'stop') {
-                             rawContentFromApi = "(応答が空です)";
-                         }
-                         modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
-                     }
+                    const dummyModelPrefix = (providerSettings.concatDummyModel && dummyModelTextToUse) ? dummyModelTextToUse : '';
+                    
+                    modelResponseRawContent = dummyModelPrefix + content;
+                    modelThoughtSummaryContent = thought;
+                    modelResponseMetadata = { 
+                        finishReason: metadata.finishReason,
+                        safetyRatings: metadata.safetyRatings
+                    };
+                    currentGroundingMetadata = metadata.groundingMetadata;
+                    finalUsageMetadataFromStream = metadata.usageMetadata;
+
+                    if (providerSettings.includeThoughts && data.parsedReasoningContent) {
+                        modelThoughtSummaryContent = data.parsedReasoningContent;
+                    }
+                    if (!modelResponseRawContent && modelResponseMetadata.finishReason === 'stop') {
+                         modelResponseRawContent = "(応答が空です)";
+                    }
                  }
 
                  if (isBackgroundProcess) {
@@ -10987,112 +10862,182 @@
                     throw error;
                 });
         },
-        async callGeminiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding) {
-            const providerSettings = state.settings.providers.gemini;
-            if (!providerSettings.apiKey) {
-                throw new Error("APIキーが設定されていません。");
-            }
-
-            const model = providerSettings.modelName || DEFAULT_MODEL;
-            const apiKey = providerSettings.apiKey;
-
-            let endpointMethod = useStreaming
-                ? (usePseudo ? 'generateContent?alt=sse&' : 'streamGenerateContent?alt=sse&')
-                : 'generateContent?';
-
-            const endpoint = `${GEMINI_API_BASE_URL}${model}:${endpointMethod}key=${apiKey}`;
-
+        _prepareApiRequest(providerName, internalMessages, internalSystemPrompt) {
+            const providerSettings = state.settings.providers[providerName];
+            const isVisionEnabled = providerSettings.visionEnable || false;
+            
+            const apiMessages = this._formatMessagesForApi(providerName, internalMessages);
+            const systemInstruction = this._formatSystemInstructionForApi(providerName, internalSystemPrompt);
+            const generationConfig = this._formatGenerationConfigForApi(providerName, providerSettings);
+            
             const requestBody = {
-                contents: messagesForApi,
-                ...(Object.keys(generationConfig).length > 0 && { generationConfig }),
-                ...(systemInstruction && { systemInstruction }),
-                safetySettings: [
-                    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-                    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-                    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-                    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
-                ]
+                model: providerSettings.modelName,
+                stream: providerSettings.streamingOutput,
+                ...generationConfig
             };
 
-            if (enableGrounding) {
+            if (providerName === 'gemini') {
+                requestBody.contents = apiMessages;
+                if (systemInstruction) {
+                    requestBody.systemInstruction = systemInstruction;
+                }
+            } else {
+                requestBody.messages = apiMessages;
+                if (systemInstruction) {
+                    requestBody.system = systemInstruction.content;
+                }
+            }
+
+            if (providerName === 'gemini' && providerSettings.enableGrounding) {
                 requestBody.tools = [{ "google_search": {} }];
             }
+            
+            if (providerName === 'gemini' || providerName === 'claude') {
+                if (providerSettings.includeThoughts) {
+                    if(providerName === 'gemini') {
+                        requestBody.thinkingConfig = { includeThoughts: true };
+                        const budget = providerSettings.thinkingBudget;
+                        if (budget !== null && Number.isInteger(budget) && budget >= 0) {
+                            requestBody.thinkingConfig.thinkingBudget = budget;
+                        }
+                    } else if(providerName === 'claude') {
+                        requestBody.thinking = { "type": "enabled" };
+                        const budget = providerSettings.thinkingBudget;
+                        if (budget !== null && Number.isInteger(budget) && budget >= 1024) {
+                            requestBody.thinking.budget_tokens = budget;
+                        }
+                    }
+                }
+            }
 
-            const options = {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody),
-            };
+            return requestBody;
+        },
+        _formatMessagesForApi(providerName, internalMessages) {
+            const providerSettings = state.settings.providers[providerName];
+            const isVisionEnabled = providerName === 'openai' && providerSettings.visionEnable;
 
-            return this._callApi(endpoint, options, 'Gemini');
+            return internalMessages.map(msg => {
+                const role = (providerName === 'claude' || providerName === 'openai' || providerName === 'deepseek') && msg.role === 'model'
+                    ? 'assistant'
+                    : msg.role;
+
+                const contentParts = [];
+                const textContent = msg.parts.filter(p => p.text).map(p => p.text).join('\n');
+
+                if (providerName === 'gemini') {
+                    if (textContent.trim()) contentParts.push({ text: textContent });
+                    msg.parts.forEach(p => {
+                        if (p.inlineData) contentParts.push({ inlineData: p.inlineData });
+                    });
+                    if (contentParts.length === 0) contentParts.push({ text: '' });
+                    return { role: msg.role, parts: contentParts };
+                } 
+                
+                if (providerName === 'claude') {
+                    if (textContent.trim()) contentParts.push({ type: 'text', text: textContent });
+                    msg.parts.forEach(p => {
+                        if (p.inlineData) contentParts.push({ type: 'image', source: { type: 'base64', media_type: p.inlineData.mimeType, data: p.inlineData.data } });
+                    });
+                    return { role: role, content: contentParts };
+                }
+
+                if (isVisionEnabled) {
+                    if (textContent.trim()) contentParts.push({ type: 'text', text: textContent });
+                    msg.parts.forEach(p => {
+                        if (p.inlineData?.mimeType?.startsWith('image/')) {
+                            contentParts.push({ type: 'image_url', image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` } });
+                        }
+                    });
+                    return { role: role, content: contentParts };
+                }
+
+                return { role: role, content: textContent };
+            });
+        },
+        _formatSystemInstructionForApi(providerName, internalSystemPrompt) {
+            if (!internalSystemPrompt) return null;
+
+            if (providerName === 'gemini') {
+                return { role: "system", parts: [{ text: internalSystemPrompt }] };
+            }
+            return { content: internalSystemPrompt };
+        },
+        _formatGenerationConfigForApi(providerName, providerSettings) {
+            const config = {};
+            
+            if (providerSettings.maxTokens !== null) config[providerName === 'gemini' ? 'maxOutputTokens' : 'max_tokens'] = providerSettings.maxTokens;
+            if (providerSettings.temperature !== null) config.temperature = providerSettings.temperature;
+            if (providerSettings.topP !== null) config[providerName === 'gemini' ? 'topP' : 'top_p'] = providerSettings.topP;
+            
+            if (providerName === 'gemini' || providerName === 'claude') {
+                if (providerSettings.topK !== null) config[providerName === 'gemini' ? 'topK' : 'top_k'] = providerSettings.topK;
+            }
+            if (providerName !== 'claude') {
+                if (providerSettings.presencePenalty !== null) config[providerName === 'deepseek' || providerName === 'openai' ? 'presence_penalty' : 'presencePenalty'] = providerSettings.presencePenalty;
+                if (providerSettings.frequencyPenalty !== null) config[providerName === 'deepseek' || providerName === 'openai' ? 'frequency_penalty' : 'frequencyPenalty'] = providerSettings.frequencyPenalty;
+            }
+            
+            if (providerName === 'claude' && providerSettings.temperature === null) config.temperature = DEFAULT_CLAUDE_TEMPERATURE;
+            if (providerName === 'claude' && providerSettings.maxTokens === null) config.max_tokens = DEFAULT_CLAUDE_MAX_TOKENS;
+
+            return config;
         },
         _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, generationConfig, useStreaming, enableVision) {
              const oaMessages = [];
-             if (systemInstruction && systemInstruction.parts?.[0]?.text) {
-                 oaMessages.push({ role: "system", content: systemInstruction.parts[0].text });
+             if (systemInstruction && systemInstruction.content) {
+                 oaMessages.push({ role: "system", content: systemInstruction.content });
              }
 
              messagesForApi.forEach(m => {
-                 const role = m.role === "model" ? "assistant" : m.role;
-                 const contentParts = [];
-
-                 const textContent = m.parts.filter(p => p.text).map(p => p.text.trim()).join('\n').trim();
-
-                 if (enableVision) {
-                     if(textContent) {
-                         contentParts.push({ type: "text", text: textContent });
-                     }
-                     m.parts.forEach(p => {
-                         if (p.inlineData && p.inlineData.mimeType && p.inlineData.data && p.inlineData.mimeType.startsWith('image/')) {
-                             contentParts.push({
-                                 type: "image_url",
-                                 image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` }
-                             });
-                         }
-                     });
-                 } else {
-                     if (textContent) {
-                          contentParts.push(textContent);
-                     }
-                 }
-                 
-                 if (contentParts.length > 0) {
-                     oaMessages.push({ role: role, content: enableVision ? contentParts : contentParts.join('\n') });
-                 }
+                if(enableVision) {
+                    oaMessages.push(m);
+                } else {
+                    oaMessages.push({ role: m.role, content: m.content });
+                }
              });
              
              const body = {
                  model: model,
                  messages: oaMessages,
                  stream: useStreaming,
+                 ...generationConfig
              };
              
-             if (generationConfig.temperature != null) body.temperature = generationConfig.temperature;
-             if (generationConfig.maxOutputTokens != null) body.max_tokens = generationConfig.maxOutputTokens;
-             if (generationConfig.topP != null) body.top_p = generationConfig.topP;
-             if (generationConfig.presencePenalty != null) body.presence_penalty = generationConfig.presencePenalty;
-             if (generationConfig.frequencyPenalty != null) body.frequency_penalty = generationConfig.frequencyPenalty;
-
              return body;
         },
-        async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
+        async callGeminiApi(requestBody) {
+            const providerSettings = state.settings.providers.gemini;
+            if (!providerSettings.apiKey) throw new Error("APIキーが設定されていません。");
+
+            const model = requestBody.model || DEFAULT_MODEL;
+            const apiKey = providerSettings.apiKey;
+            const useStreaming = requestBody.stream;
+            const usePseudo = providerSettings.pseudoStreaming;
+
+            let endpointMethod = useStreaming ? (usePseudo ? 'generateContent?alt=sse&' : 'streamGenerateContent?alt=sse&') : 'generateContent?';
+            const endpoint = `${GEMINI_API_BASE_URL}${model}:${endpointMethod}key=${apiKey}`;
+            
+            requestBody.safetySettings = [
+                { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+            ];
+
+            const options = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
+            };
+            return this._callApi(endpoint, options, 'Gemini');
+        },
+        async callDeepSeekApi(requestBody) {
             const providerSettings = state.settings.providers.deepseek;
-            if (!providerSettings.apiKey) {
-                throw new Error("DeepSeek APIキーが設定されていません。");
-            }
+            if (!providerSettings.apiKey) throw new Error("DeepSeek APIキーが設定されていません。");
 
             const apiKey = providerSettings.apiKey;
             const baseUrl = providerSettings.apiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
             const endpoint = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
-
-            const requestBody = this._createOpenAICompatibleRequestBody(
-                providerSettings.modelName,
-                messagesForApi,
-                systemInstruction,
-                generationConfig,
-                useStreaming,
-                false
-            );
 
             const options = {
                 method: 'POST',
@@ -11102,10 +11047,9 @@
                 },
                 body: JSON.stringify(requestBody),
             };
-
+            
             const response = await this._callApi(endpoint, options, 'DeepSeek');
-
-            if (!useStreaming) {
+            if (!requestBody.stream) {
                 const data = await response.json();
                 const choice = data.choices?.[0];
                 if (choice && choice.message && choice.message.reasoning_content) {
@@ -11113,82 +11057,13 @@
                 }
                 response.json = async () => data;
             }
-
             return response;
         },
-        async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
+        async callClaudeApi(requestBody) {
             const providerSettings = state.settings.providers.claude;
-            if (!providerSettings.apiKey) {
-                throw new Error("Claude APIキーが設定されていません。");
-            }
-            const model = providerSettings.modelName || DEFAULT_CLAUDE_MODEL;
+            if (!providerSettings.apiKey) throw new Error("Claude APIキーが設定されていません。");
+
             const apiKey = providerSettings.apiKey;
-
-            const claudeMessages = messagesForApi.map(msg => {
-                const contentParts = msg.parts.map(part => {
-                    if (part.text) {
-                        return { type: 'text', text: part.text };
-                    }
-                    if (part.inlineData && part.inlineData.mimeType.startsWith('image/')) {
-                        return {
-                            type: 'image',
-                            source: {
-                                type: 'base64',
-                                media_type: part.inlineData.mimeType,
-                                data: part.inlineData.data
-                            }
-                        };
-                    }
-                    return null;
-                }).filter(Boolean);
-
-                return {
-                    role: msg.role === 'model' ? 'assistant' : 'user',
-                    content: contentParts
-                };
-            });
-            
-            const requestBody = {
-                model: model,
-                messages: claudeMessages,
-                stream: useStreaming,
-                max_tokens: generationConfig.maxOutputTokens || providerSettings.maxTokens || DEFAULT_CLAUDE_MAX_TOKENS
-            };
-
-            if (systemInstruction && systemInstruction.content) {
-                requestBody.system = systemInstruction.content;
-            }
-            
-            if (generationConfig.temperature !== undefined && generationConfig.temperature !== null) {
-                requestBody.temperature = generationConfig.temperature;
-            } else if (providerSettings.temperature !== null) {
-                requestBody.temperature = providerSettings.temperature;
-            } else {
-                requestBody.temperature = DEFAULT_CLAUDE_TEMPERATURE;
-            }
-
-            if (generationConfig.topK !== undefined && generationConfig.topK !== null) {
-                requestBody.top_k = generationConfig.topK;
-            } else if (providerSettings.topK !== null) {
-                requestBody.top_k = providerSettings.topK;
-            }
-
-            if (generationConfig.topP !== undefined && generationConfig.topP !== null) {
-                requestBody.top_p = generationConfig.topP;
-            } else if (providerSettings.topP !== null) {
-                requestBody.top_p = providerSettings.topP;
-            } else {
-                requestBody.top_p = DEFAULT_CLAUDE_TOP_P;
-            }
-            
-            if (providerSettings.includeThoughts) {
-                requestBody.thinking = { "type": "enabled" };
-                const budget = providerSettings.thinkingBudget;
-                if (budget !== null && Number.isInteger(budget) && budget >= 1024) {
-                    requestBody.thinking.budget_tokens = budget;
-                }
-            }
-
             const options = {
                 method: 'POST',
                 headers: {
@@ -11199,34 +11074,17 @@
                 },
                 body: JSON.stringify(requestBody),
             };
-
             return this._callApi(CLAUDE_API_BASE_URL, options, 'Claude');
         },
-        async callOpenAiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
+        async callOpenAiApi(requestBody) {
             const providerSettings = state.settings.providers.openai;
-            if (!providerSettings.apiKey) {
-                throw new Error("ChatGPT APIキーが設定されていません。");
-            }
-            
-            const body = this._createOpenAICompatibleRequestBody(
-                providerSettings.modelName,
-                messagesForApi,
-                systemInstruction,
-                generationConfig,
-                useStreaming,
-                enableVision
-            );
-            body.temperature = body.temperature ?? providerSettings.temperature ?? 1;
+            if (!providerSettings.apiKey) throw new Error("ChatGPT APIキーが設定されていません。");
 
             const options = {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${providerSettings.apiKey}`
-                },
-                body: JSON.stringify(body)
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${providerSettings.apiKey}`},
+                body: JSON.stringify(requestBody)
             };
-            
             return this._callApi(OPENAI_API_BASE_URL, options, 'OpenAI');
         },
         async * _handleStreamingResponse(response, parser) {
@@ -11382,7 +11240,7 @@
                 return null;
             }
         },
-        async handleGeminiStreamingResponse(response) {
+        async *handleGeminiStreamingResponse(response) {
             yield* this._handleStreamingResponse(response, (data, final) => this._parseGeminiChunk(data, final));
         },
         async *handleDeepSeekStreamingResponse(response) {
