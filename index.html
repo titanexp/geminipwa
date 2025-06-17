@@ -5699,11 +5699,11 @@
                         thoughtContentDiv.id = `streaming-thought-summary-${index}`;
                         thoughtContentDiv.innerHTML = '';
                     } else if (messageData?.thoughtSummary) {
-                        try {
-                            thoughtContentDiv.innerHTML = this._sanitizeAndParseMarkdown(messageData.thoughtSummary || '');
-                        } catch (e) {
-                            thoughtContentDiv.textContent = messageData.thoughtSummary || '';
-                        }
+                        const pre = document.createElement('pre');
+                        pre.textContent = messageData.thoughtSummary || '';
+                        pre.style.whiteSpace = 'pre-wrap';
+                        pre.style.wordBreak = 'break-all';
+                        thoughtContentDiv.appendChild(pre);
                     } else if (messageData?.deepSeekThoughtSummary) {
                         const pre = document.createElement('pre');
                         pre.textContent = messageData.deepSeekThoughtSummary || '';
@@ -6369,21 +6369,22 @@
                 }
 
                 if (targetContentDiv) {
-                    const renderCurrentState = (contentToRender) => {
-                        try {
-                            const safeHtml = this._sanitizeAndParseMarkdown(contentToRender || '');
-                            targetContentDiv.innerHTML = safeHtml;
-
-                            if (!isThoughtSummary) {
+                    if (isThoughtSummary) {
+                        targetContentDiv.textContent = accumulatedContentForDisplay;
+                    } else {
+                        const renderCurrentState = (contentToRender) => {
+                            try {
+                                const safeHtml = this._sanitizeAndParseMarkdown(contentToRender || '');
+                                targetContentDiv.innerHTML = safeHtml;
                                 this.processInteractivePlaceholders(targetContentDiv);
                                 this.processInteractiveTitles(targetContentDiv);
                                 this.addCopyButtonsToCodeBlocks(targetContentDiv, true);
+                            } catch (e) {
+                                targetContentDiv.textContent = contentToRender;
                             }
-                        } catch (e) {
-                            targetContentDiv.textContent = contentToRender;
-                        }
-                    };
-                    renderCurrentState(accumulatedContentForDisplay);
+                        };
+                        renderCurrentState(accumulatedContentForDisplay);
+                    }
                 }
                 if (!isThoughtSummary && state.currentMessages[index]?.groundingMetadata && selectedApiProvider === 'gemini') {
                     const citationContainer = messageDiv.querySelector(`#streaming-citations-${index}`);
@@ -6409,23 +6410,16 @@
 
                     if (finalMessageData.thoughtSummary || finalMessageData.deepSeekThoughtSummary) {
                         const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
-                        if (thoughtContentDiv && typeof marked !== 'undefined') {
+                        if (thoughtContentDiv) {
                             const summaryContent = finalMessageData.thoughtSummary || finalMessageData.deepSeekThoughtSummary;
-                            if (messageApiProvider === 'deepseek') {
-                                const pre = document.createElement('pre');
-                                pre.textContent = summaryContent || '';
-                                thoughtContentDiv.innerHTML = '';
-                                thoughtContentDiv.appendChild(pre);
-                            } else {
-                                try {
-                                    thoughtContentDiv.innerHTML = this._sanitizeAndParseMarkdown(summaryContent || '');
-                                    this.addCopyButtonsToCodeBlocks(thoughtContentDiv, false);
-                                } catch (e) {
-                                    thoughtContentDiv.textContent = summaryContent || '';
-                                }
-                            }
+                            thoughtContentDiv.innerHTML = '';
+                            const pre = document.createElement('pre');
+                            pre.textContent = summaryContent || '';
+                            pre.style.whiteSpace = 'pre-wrap';
+                            pre.style.wordBreak = 'break-all';
+                            thoughtContentDiv.appendChild(pre);
+                            thoughtContentDiv.removeAttribute('id');
                         }
-                        if(thoughtContentDiv) thoughtContentDiv.removeAttribute('id');
                     }
 
                     const thoughtDetailsElement = messageDiv.querySelector('.thought-summary-details');
@@ -9366,6 +9360,8 @@
                 let contextClaudeTopK, contextClaudeIncludeThoughts, contextClaudeThinkingBudget, contextClaudeExpandThoughtsByDefault;
                 
                 let contextOpenAIVisionEnable;
+                
+                let xaiPresencePenaltyB, xaiFrequencyPenaltyB;
 
                 if (isBackgroundProcess) {
                     const providerForSettingsB = sourceSessionContext.apiProvider || state.settings.apiProvider;
@@ -10197,7 +10193,7 @@
                          throw error;
                     }
 
-                    if ((partialContentOnError || partialThoughtContentOnError) && useStreamingForThisCall && modelMessageObjectForStream) {
+                    if ((partialContentOnError || partialContentOnError) && useStreamingForThisCall && modelMessageObjectForStream) {
                          const finalPartialContent = partialContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
                          let finalPartialThoughtValue = null;
                          if (selectedApiProvider === 'gemini' && partialThoughtContentOnError && contextGeminiIncludeThoughts) {
@@ -10788,7 +10784,7 @@
                 newSettings.openaiDummyModel = elements.openaiDummyModelInput.value.trim();
                 newSettings.openaiEnableDummyModel = elements.openaiEnableDummyModelCheckbox.checked;
                 newSettings.openaiConcatDummyModel = elements.openaiConcatDummyModelCheckbox.checked;
-                
+
                 newSettings.xaiSystemPrompt = elements.xaiSystemPromptDefaultTextarea.value.trim();
                 newSettings.xaiEnableSystemPromptDefault = elements.xaiEnableSystemPromptDefaultCheckbox.checked;
                 newSettings.xaiTemperature = elements.xaiTemperatureInput.value === '' ? null : parseFloat(elements.xaiTemperatureInput.value);
@@ -10895,38 +10891,30 @@
                     return num;
                 };
 
-                if(currentProvider === 'gemini') {
-                    newSettings.geminiStreamingSpeed = validateNumeric(newSettings.geminiStreamingSpeed, DEFAULT_STREAMING_SPEED, 0, Infinity, true);
-                    newSettings.geminiTemperature = validateNumeric(newSettings.geminiTemperature, null, 0, 2);
-                    newSettings.geminiMaxTokens = validateNumeric(newSettings.geminiMaxTokens, null, 1, Infinity, true);
-                    newSettings.geminiTopK = validateNumeric(newSettings.geminiTopK, null, 1, Infinity, true);
-                    newSettings.geminiTopP = validateNumeric(newSettings.geminiTopP, null, 0, 1);
-                    newSettings.geminiPresencePenalty = validateNumeric(newSettings.geminiPresencePenalty, null, -2.0, 1.9);
-                    newSettings.geminiFrequencyPenalty = validateNumeric(newSettings.geminiFrequencyPenalty, null, -2.0, 1.9);
-                    newSettings.geminiThinkingBudget = validateNumeric(newSettings.geminiThinkingBudget, null, 0, Infinity, true);
-                } else if (currentProvider === 'deepseek') {
-                    newSettings.deepSeekStreamingSpeed = validateNumeric(newSettings.deepSeekStreamingSpeed, DEFAULT_STREAMING_SPEED, 0, Infinity, true);
-                    newSettings.deepSeekTemperature = validateNumeric(newSettings.deepSeekTemperature, null, 0, 2);
-                    newSettings.deepSeekMaxTokens = validateNumeric(newSettings.deepSeekMaxTokens, null, 1, Infinity, true);
-                    newSettings.deepSeekTopP = validateNumeric(newSettings.deepSeekTopP, null, 0, 1);
-                    newSettings.deepSeekPresencePenalty = validateNumeric(newSettings.deepSeekPresencePenalty, null, -2.0, 2.0);
-                    newSettings.deepSeekFrequencyPenalty = validateNumeric(newSettings.deepSeekFrequencyPenalty, null, -2.0, 2.0);
-                } else if (currentProvider === 'claude') {
-                    newSettings.claudeStreamingSpeed = validateNumeric(newSettings.claudeStreamingSpeed, DEFAULT_STREAMING_SPEED, 0, Infinity, true);
-                    newSettings.claudeTemperature = validateNumeric(newSettings.claudeTemperature, null, 0, 1);
-                    newSettings.claudeMaxTokens = validateNumeric(newSettings.claudeMaxTokens, null, 1, Infinity, true);
-                    newSettings.claudeTopK = validateNumeric(newSettings.claudeTopK, null, 1, Infinity, true);
-                    newSettings.claudeTopP = validateNumeric(newSettings.claudeTopP, null, 0, 1);
-                    newSettings.claudeThinkingBudget = validateNumeric(newSettings.claudeThinkingBudget, null, 1024, Infinity, true);
-                } else if (currentProvider === 'openai' || currentProvider === 'xai') {
-                    const providerPrefix = currentProvider;
-                    newSettings[`${providerPrefix}StreamingSpeed`] = validateNumeric(newSettings[`${providerPrefix}StreamingSpeed`], DEFAULT_STREAMING_SPEED, 0, Infinity, true);
-                    newSettings[`${providerPrefix}Temperature`] = validateNumeric(newSettings[`${providerPrefix}Temperature`], null, 0, 2);
-                    newSettings[`${providerPrefix}MaxTokens`] = validateNumeric(newSettings[`${providerPrefix}MaxTokens`], null, 1, Infinity, true);
-                    newSettings[`${providerPrefix}TopP`] = validateNumeric(newSettings[`${providerPrefix}TopP`], null, 0, 1);
-                    newSettings[`${providerPrefix}PresencePenalty`] = validateNumeric(newSettings[`${providerPrefix}PresencePenalty`], null, -2.0, 2.0);
-                    newSettings[`${providerPrefix}FrequencyPenalty`] = validateNumeric(newSettings[`${providerPrefix}FrequencyPenalty`], null, -2.0, 2.0);
-                }
+                const providers = ['gemini', 'deepSeek', 'claude', 'openai', 'xai'];
+                providers.forEach(provider => {
+                    const prefix = provider;
+                    const streamingSpeedKey = `${prefix}StreamingSpeed`;
+                    newSettings[streamingSpeedKey] = validateNumeric(newSettings[streamingSpeedKey], DEFAULT_STREAMING_SPEED, 0, Infinity, true);
+                    const tempKey = `${prefix}Temperature`;
+                    newSettings[tempKey] = validateNumeric(newSettings[tempKey], null, 0, 2);
+                    const maxTokensKey = `${prefix}MaxTokens`;
+                    newSettings[maxTokensKey] = validateNumeric(newSettings[maxTokensKey], null, 1, Infinity, true);
+                    const topPKey = `${prefix}TopP`;
+                    newSettings[topPKey] = validateNumeric(newSettings[topPKey], null, 0, 1);
+                    const presencePenaltyKey = `${prefix}PresencePenalty`;
+                    newSettings[presencePenaltyKey] = validateNumeric(newSettings[presencePenaltyKey], null, -2.0, 2.0);
+                    const frequencyPenaltyKey = `${prefix}FrequencyPenalty`;
+                    newSettings[frequencyPenaltyKey] = validateNumeric(newSettings[frequencyPenaltyKey], null, -2.0, 2.0);
+
+                    if (provider === 'gemini') {
+                        newSettings.geminiTopK = validateNumeric(newSettings.geminiTopK, null, 1, Infinity, true);
+                        newSettings.geminiThinkingBudget = validateNumeric(newSettings.geminiThinkingBudget, null, 0, Infinity, true);
+                    } else if (provider === 'claude') {
+                        newSettings.claudeTopK = validateNumeric(newSettings.claudeTopK, null, 1, Infinity, true);
+                        newSettings.claudeThinkingBudget = validateNumeric(newSettings.claudeThinkingBudget, null, 1024, Infinity, true);
+                    }
+                });
 
                  newSettings.messageBodyFontSize = validateNumeric(newSettings.messageBodyFontSize, null, 1, 100, true);
                  newSettings.codeBlockFontSize = validateNumeric(newSettings.codeBlockFontSize, null, 1, 100, true);
@@ -12139,13 +12127,12 @@
 
                     let providerForSettingsB = state.settings.apiProvider;
                     let systemPromptB, enableSystemPromptDefaultB, dummyUserB, enableDummyUserB, dummyModelB, enableDummyModelB,
-                        temperatureB, maxTokensB, topPB, presencePenaltyB, frequencyPenaltyB,
+                        temperatureB, maxTokensB, topPB,
                         streamingOutputB, streamingSpeedB, concatDummyModelB,
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
-                        deepSeekIncludeThoughtsB,
+                        deepSeekIncludeThoughtsB, presencePenaltyB, frequencyPenaltyB,
                         claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB,
-                        openaiVisionEnableB,
-                        xaiPresencePenaltyB, xaiFrequencyPenaltyB;
+                        openaiVisionEnableB;
 
                     if (providerForSettingsB === 'gemini') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
@@ -12184,7 +12171,7 @@
                         enableDummyModelB = state.settings.deepSeekEnableDummyModel;
                         concatDummyModelB = state.settings.deepSeekConcatDummyModel;
                     } else if (providerForSettingsB === 'claude') {
-                                            systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.claudeSystemPrompt;
+                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.claudeSystemPrompt;
                         enableSystemPromptDefaultB = state.settings.claudeEnableSystemPromptDefault;
                         temperatureB = state.settings.claudeTemperature;
                         maxTokensB = state.settings.claudeMaxTokens;
@@ -12931,7 +12918,7 @@
                         try {
                             const errorData = await response.json();
                             if (errorData.error && errorData.error.message) {
-                                errorMsg = `Claude APIエラー (${response.status}): ${errorData.error.message} (Type: ${errorData.error.type || 'N/A'})`;
+                                                            errorMsg = `Claude APIエラー (${response.status}): ${errorData.error.message} (Type: ${errorData.error.type || 'N/A'})`;
                             }
                         } catch (e) {}
                         throw new Error(errorMsg);
@@ -13208,7 +13195,12 @@
 
                 messagesForApi.forEach(m => {
                     const role = m.role === "model" ? "assistant" : m.role;
-                    const contentParts = m.parts.filter(p => p.text).map(p => ({ type: "text", text: p.text }));
+                    const contentParts = m.parts.map(p => {
+                        if (p.text) {
+                            return { type: "text", text: p.text };
+                        }
+                        return null;
+                    }).filter(Boolean);
 
                     if (contentParts.length > 0) {
                         oaMessages.push({ role: role, content: contentParts.map(p => p.text).join('\n') });
