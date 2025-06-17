@@ -8562,7 +8562,11 @@
              }
 
             const internalMessages = messagesToProcess
-                .filter(msg => (msg.role === 'user') || (msg.role === 'model' && (!msg.isCascaded || msg.isSelected)))
+                .filter(msg => {
+                    if (msg.role === 'user') return true;
+                    if (msg.role === 'model') return !msg.isCascaded || (msg.isCascaded && msg.isSelected);
+                    return false;
+                })
                 .map(msg => {
                     const parts = [];
                     if (msg.content && msg.content.trim() !== '') {
@@ -8572,33 +8576,37 @@
                         msg.attachments.forEach(att => {
                             if(att.base64Data) {
                                 parts.push({
-                                    inlineData: { mimeType: att.mimeType, data: att.base64Data }
+                                    inlineData: {
+                                        mimeType: att.mimeType,
+                                        data: att.base64Data
+                                    }
                                 });
                             }
                         });
                     }
-                    return { role: msg.role, parts: parts.length > 0 ? parts : [{ text: '' }] };
+                    return { role: msg.role, parts: parts.length > 0 ? parts : [{text: ''}] };
                 });
 
-            const dummyUserTextToUse = providerSettings.enableDummyUser && providerSettings.dummyUser?.trim() ? providerSettings.dummyUser.trim() : null;
-            const dummyModelTextToUse = providerSettings.enableDummyModel && providerSettings.dummyModel?.trim() ? providerSettings.dummyModel.trim() : null;
-            if (dummyUserTextToUse) internalMessages.push({ role: 'user', parts: [{ text: dummyUserTextToUse }] });
-            if (dummyModelTextToUse) internalMessages.push({ role: 'model', parts: [{ text: dummyModelTextToUse }] });
+             const dummyUserTextToUse = providerSettings.enableDummyUser && providerSettings.dummyUser?.trim() ? providerSettings.dummyUser.trim() : null;
+             const dummyModelTextToUse = providerSettings.enableDummyModel && providerSettings.dummyModel?.trim() ? providerSettings.dummyModel.trim() : null;
 
-            const requestBody = apiUtils._prepareApiRequest(selectedApiProvider, internalMessages, currentContextSystemPrompt);
+             if (dummyUserTextToUse) internalMessages.push({ role: 'user', parts: [{ text: dummyUserTextToUse }] });
+             if (dummyModelTextToUse) internalMessages.push({ role: 'model', parts: [{ text: dummyModelTextToUse }] });
 
-            let modelResponseRawContent = '';
-            let modelThoughtSummaryContent = '';
-            let modelResponseMetadata = {};
-            let currentGroundingMetadata = null;
-            let finalUsageMetadataFromStream = null;
+             const requestBody = apiUtils._prepareApiRequest(selectedApiProvider, internalMessages, currentContextSystemPrompt);
+            
+             let modelResponseRawContent = '';
+             let modelThoughtSummaryContent = '';
+             let modelResponseMetadata = {};
+             let currentGroundingMetadata = null;
+             let finalUsageMetadataFromStream = null;
 
-            let useStreamingForThisCall = isBackgroundProcess ? false : providerSettings.streamingOutput;
-            let usePseudoForThisCall = isBackgroundProcess ? false : (selectedApiProvider === 'gemini' && providerSettings.pseudoStreaming);
+             let useStreamingForThisCall = isBackgroundProcess ? false : providerSettings.streamingOutput;
+             let usePseudoForThisCall = isBackgroundProcess ? false : (selectedApiProvider === 'gemini' && providerSettings.pseudoStreaming);
 
-            let modelMessageObjectForStream = null;
+             let modelMessageObjectForStream = null;
 
-            try {
+             try {
                 let apiResponseObject = await apiUtils[`call${selectedApiProvider.charAt(0).toUpperCase() + selectedApiProvider.slice(1)}Api`](requestBody);
 
                  const dummyModelPrefix = (providerSettings.concatDummyModel && dummyModelTextToUse) ? dummyModelTextToUse : '';
@@ -10359,7 +10367,7 @@
                      skippedCount++;
                      continue;
                  }
-                                  if (currentTotalSize + file.size > MAX_TOTAL_ATTACHMENT_SIZE) {
+                 if (currentTotalSize + file.size > MAX_TOTAL_ATTACHMENT_SIZE) {
                      sizeError = true;
                      skippedCount++;
                      continue;
@@ -10856,10 +10864,12 @@
         },
         _prepareApiRequest(providerName, internalMessages, internalSystemPrompt) {
             const providerSettings = state.settings.providers[providerName];
+            const isVisionEnabled = providerSettings.visionEnable || false;
             
-            const { messages: apiMessages, systemInstruction } = this._formatMessagesAndSystemForApi(providerName, internalMessages, internalSystemPrompt);
+            const apiMessages = this._formatMessagesForApi(providerName, internalMessages);
+            const systemInstruction = this._formatSystemInstructionForApi(providerName, internalSystemPrompt);
             const generationConfig = this._formatGenerationConfigForApi(providerName, providerSettings);
-
+            
             const requestBody = {
                 model: providerSettings.modelName,
                 stream: providerSettings.streamingOutput,
@@ -10884,13 +10894,13 @@
             
             if (providerName === 'gemini' || providerName === 'claude') {
                 if (providerSettings.includeThoughts) {
-                    if (providerName === 'gemini') {
+                    if(providerName === 'gemini') {
                         requestBody.thinkingConfig = { includeThoughts: true };
                         const budget = providerSettings.thinkingBudget;
                         if (budget !== null && Number.isInteger(budget) && budget >= 0) {
-                             requestBody.thinkingConfig.thinkingBudget = budget;
+                            requestBody.thinkingConfig.thinkingBudget = budget;
                         }
-                    } else if (providerName === 'claude') {
+                    } else if(providerName === 'claude') {
                         requestBody.thinking = { "type": "enabled" };
                         const budget = providerSettings.thinkingBudget;
                         if (budget !== null && Number.isInteger(budget) && budget >= 1024) {
@@ -10899,20 +10909,21 @@
                     }
                 }
             }
+
             return requestBody;
         },
-        _formatMessagesAndSystemForApi(providerName, internalMessages, internalSystemPrompt) {
+        _formatMessagesForApi(providerName, internalMessages) {
             const providerSettings = state.settings.providers[providerName];
             const isVisionEnabled = providerName === 'openai' && providerSettings.visionEnable;
 
-            const apiMessages = internalMessages.map(msg => {
+            return internalMessages.map(msg => {
                 const role = (providerName === 'claude' || providerName === 'openai' || providerName === 'deepseek') && msg.role === 'model'
                     ? 'assistant'
                     : msg.role;
 
                 const contentParts = [];
                 const textContent = msg.parts.filter(p => p.text).map(p => p.text).join('\n');
-                
+
                 if (providerName === 'gemini') {
                     if (textContent.trim()) contentParts.push({ text: textContent });
                     msg.parts.forEach(p => {
@@ -10939,20 +10950,17 @@
                     });
                     return { role: role, content: contentParts };
                 }
-                
+
                 return { role: role, content: textContent };
             });
+        },
+        _formatSystemInstructionForApi(providerName, internalSystemPrompt) {
+            if (!internalSystemPrompt) return null;
 
-            let systemInstruction = null;
-            if (internalSystemPrompt) {
-                if (providerName === 'gemini') {
-                    systemInstruction = { role: "system", parts: [{ text: internalSystemPrompt }] };
-                } else {
-                    systemInstruction = { content: internalSystemPrompt };
-                }
+            if (providerName === 'gemini') {
+                return { role: "system", parts: [{ text: internalSystemPrompt }] };
             }
-            
-            return { messages: apiMessages, systemInstruction };
+            return { content: internalSystemPrompt };
         },
         _formatGenerationConfigForApi(providerName, providerSettings) {
             const config = {};
@@ -10974,75 +10982,33 @@
 
             return config;
         },
-        _parseFullResponse(providerName, responseData) {
-            let content = '', thought = '', finishReason = 'unknown', usage = null, safetyRatings = null, groundingMetadata = null;
-            
-            try {
-                if (providerName === 'gemini') {
-                    const candidate = responseData.candidates?.[0];
-                    if (candidate) {
-                        candidate.content?.parts?.forEach(part => {
-                            if (part.thought) thought += (part.text || '');
-                            else content += (part.text || '');
-                        });
-                        finishReason = candidate.finishReason || 'stop';
-                        safetyRatings = candidate.safetyRatings;
-                        groundingMetadata = candidate.groundingMetadata;
-                    }
-                    if (responseData.usageMetadata) {
-                        usage = {
-                            candidatesTokenCount: responseData.usageMetadata.candidatesTokenCount,
-                            totalTokenCount: responseData.usageMetadata.totalTokenCount
-                        };
-                    }
-                } else if (providerName === 'claude') {
-                    responseData.content?.forEach(block => {
-                        if (block.type === 'text') content += block.text;
-                        else if (block.type === 'thinking') thought += block.thinking;
-                    });
-                    finishReason = responseData.stop_reason || 'stop';
-                    if (responseData.usage) {
-                        usage = {
-                            candidatesTokenCount: responseData.usage.output_tokens,
-                            totalTokenCount: responseData.usage.input_tokens + responseData.usage.output_tokens
-                        };
-                    }
-                } else {
-                    const choice = responseData.choices?.[0];
-                    if (choice) {
-                        content = choice.message?.content || '';
-                        if(providerName === 'deepseek') {
-                            thought = choice.message?.reasoning_content || '';
-                        }
-                        finishReason = choice.finish_reason || 'stop';
-                    }
-                    if (responseData.usage) {
-                        usage = {
-                            candidatesTokenCount: responseData.usage.completion_tokens,
-                            totalTokenCount: responseData.usage.total_tokens
-                        };
-                    }
-                }
-            } catch(e) {
-                content = "レスポンスの解析に失敗しました。";
-                finishReason = "error";
-            }
+        _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, generationConfig, useStreaming, enableVision) {
+             const oaMessages = [];
+             if (systemInstruction && systemInstruction.content) {
+                 oaMessages.push({ role: "system", content: systemInstruction.content });
+             }
 
-            return {
-                content: content.trim(),
-                thought: thought.trim(),
-                metadata: {
-                    finishReason,
-                    safetyRatings,
-                    groundingMetadata,
-                    usageMetadata: usage
+             messagesForApi.forEach(m => {
+                if(enableVision) {
+                    oaMessages.push(m);
+                } else {
+                    oaMessages.push({ role: m.role, content: m.content });
                 }
-            };
+             });
+             
+             const body = {
+                 model: model,
+                 messages: oaMessages,
+                 stream: useStreaming,
+                 ...generationConfig
+             };
+             
+             return body;
         },
         async callGeminiApi(requestBody) {
             const providerSettings = state.settings.providers.gemini;
             if (!providerSettings.apiKey) throw new Error("APIキーが設定されていません。");
-            
+
             const model = requestBody.model || DEFAULT_MODEL;
             const apiKey = providerSettings.apiKey;
             const useStreaming = requestBody.stream;
@@ -11120,6 +11086,159 @@
                 body: JSON.stringify(requestBody)
             };
             return this._callApi(OPENAI_API_BASE_URL, options, 'OpenAI');
+        },
+        async * _handleStreamingResponse(response, parser) {
+            if (!response.body) {
+                throw new Error("レスポンスボディがありません。");
+            }
+            const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+            let buffer = '';
+            let isCancelled = false;
+
+            try {
+                while (true) {
+                    if (state.abortController?.signal.aborted) {
+                        isCancelled = true;
+                        await reader.cancel("User aborted").catch(() => {});
+                        throw new Error("リクエストがキャンセルされました。");
+                    }
+
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    buffer += value;
+                    let eolIndex;
+                    while ((eolIndex = buffer.indexOf('\n\n')) >= 0) {
+                        const eventBlock = buffer.substring(0, eolIndex);
+                        buffer = buffer.substring(eolIndex + 2);
+
+                        const lines = eventBlock.split('\n');
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                const jsonData = line.substring(6).trim();
+                                if (jsonData === '[DONE]') continue;
+                                
+                                const parsed = parser(jsonData);
+                                if (parsed) {
+                                    yield parsed;
+                                    if (parsed.type === 'metadata') {
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                const finalMetadata = parser(null, true);
+                if (finalMetadata) yield finalMetadata;
+                
+            } catch (error) {
+                yield { type: 'error', error: { message: error.message }, message: error.message };
+            } finally {
+                if (!reader.closed && !isCancelled) {
+                    try { await reader.cancel(); } catch (e) {}
+                }
+            }
+        },
+        _parseGeminiChunk(jsonString, isFinal = false) {
+            if (isFinal) {
+                return null; 
+            }
+            try {
+                const chunk = JSON.parse(jsonString);
+                if (chunk.error) {
+                    return { type: 'error', error: chunk.error, message: `モデルエラー: ${chunk.error.message}` };
+                }
+                
+                let contentText = '', thoughtText = '';
+                let groundingMetadata = null, usageMetadata = null;
+
+                if (chunk.candidates && chunk.candidates[0]) {
+                    const candidate = chunk.candidates[0];
+                    if (candidate.content?.parts) {
+                        candidate.content.parts.forEach(part => {
+                            if (part.text) {
+                                if(part.thought) thoughtText += part.text;
+                                else contentText += part.text;
+                            }
+                        });
+                    }
+                    if (candidate.groundingMetadata) groundingMetadata = candidate.groundingMetadata;
+
+                    if (candidate.finishReason) {
+                         return { type: 'metadata', finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings, groundingMetadata, usageMetadata: chunk.usageMetadata };
+                    }
+                }
+                if (chunk.usageMetadata) usageMetadata = chunk.usageMetadata;
+
+                return { type: 'chunk', contentText, thoughtText, groundingMetadata, usageMetadata };
+            } catch (e) {
+                return null;
+            }
+        },
+        _parseOpenAICompatibleChunk(jsonString, isFinal = false) {
+            if (isFinal) {
+                return { type: 'metadata', finishReason: 'stop', usageMetadata: this._openAIUsage || null };
+            }
+            try {
+                const chunk = JSON.parse(jsonString);
+                const delta = chunk.choices?.[0]?.delta;
+                
+                if (chunk.usage) this._openAIUsage = chunk.usage;
+                
+                const finishReason = chunk.choices?.[0]?.finish_reason;
+                if (finishReason) {
+                    const usageMeta = this._openAIUsage ? { candidatesTokenCount: this._openAIUsage.completion_tokens, totalTokenCount: this._openAIUsage.total_tokens } : null;
+                    this._openAIUsage = null;
+                    return { type: 'metadata', finishReason, usageMetadata: usageMeta };
+                }
+                
+                let contentText = null, thoughtText = null;
+                if (delta) {
+                     if (delta.content) contentText = delta.content;
+                     if (delta.reasoning_content) thoughtText = delta.reasoning_content;
+                }
+
+                if (contentText !== null || thoughtText !== null) {
+                    return { type: 'chunk', contentText, thoughtText };
+                }
+                return null;
+            } catch (e) {
+                return null;
+            }
+        },
+        _parseClaudeChunk(jsonString, isFinal = false) {
+            if (isFinal) {
+                return { type: 'metadata', finishReason: this._claudeFinishReason || 'stop', usageMetadata: this._claudeUsage || null };
+            }
+            try {
+                const chunk = JSON.parse(jsonString);
+                
+                if (chunk.type === 'message_stop') {
+                     const usage = chunk["amazon-bedrock-invocationMetrics"] 
+                         ? { input_tokens: chunk["amazon-bedrock-invocationMetrics"].inputTokenCount, output_tokens: chunk["amazon-bedrock-invocationMetrics"].outputTokenCount }
+                         : chunk.usage;
+                    const usageMeta = usage ? { candidatesTokenCount: usage.output_tokens, totalTokenCount: usage.input_tokens + usage.output_tokens } : null;
+                    return { type: 'metadata', finishReason: chunk.message?.stop_reason || 'stop', usageMetadata: usageMeta };
+                }
+                
+                if (chunk.type === 'message_delta' && chunk.usage) {
+                    this._claudeUsage = { candidatesTokenCount: chunk.usage.output_tokens, totalTokenCount: 0 };
+                    this._claudeFinishReason = chunk.delta.stop_reason;
+                }
+
+                if (chunk.type === 'content_block_delta' && chunk.delta) {
+                    if (chunk.delta.type === 'text_delta') {
+                        return { type: 'chunk', contentText: chunk.delta.text || '', thoughtText: null };
+                    }
+                    if (chunk.delta.type === 'thinking_delta') {
+                         return { type: 'chunk', contentText: null, thoughtText: chunk.delta.thinking || '' };
+                    }
+                }
+                return null;
+            } catch (e) {
+                return null;
+            }
         },
         async *handleGeminiStreamingResponse(response) {
             yield* this._handleStreamingResponse(response, (data, final) => this._parseGeminiChunk(data, final));
