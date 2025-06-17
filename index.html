@@ -11639,7 +11639,7 @@
                     currentTotalSize += file.size;
                     addedCount++;
                 }
-                elements.selectFilesBtn.disabled = false;
+                                elements.selectFilesBtn.disabled = false;
                 elements.selectFilesBtn.textContent = 'ファイルを選択';
 
                 if (sizeError) {
@@ -12536,15 +12536,41 @@
                 const model = state.settings.claudeModelName || DEFAULT_CLAUDE_MODEL;
                 const apiKey = state.settings.claudeApiKey;
 
-                const anthropicRequest = this.convertToClaudeRequest(messagesForApi, systemInstruction);
+                const claudeMessages = messagesForApi.map(msg => {
+                    const contentParts = msg.parts.map(part => {
+                        if (part.text) {
+                            return { type: 'text', text: part.text };
+                        }
+                        if (part.inlineData && part.inlineData.mimeType.startsWith('image/')) {
+                            return {
+                                type: 'image',
+                                source: {
+                                    type: 'base64',
+                                    media_type: part.inlineData.mimeType,
+                                    data: part.inlineData.data
+                                }
+                            };
+                        }
+                        return null;
+                    }).filter(Boolean);
+
+                    return {
+                        role: msg.role === 'model' ? 'assistant' : 'user',
+                        content: contentParts
+                    };
+                });
 
                 const requestBody = {
                     model: model,
-                    messages: anthropicRequest.messages,
+                    messages: claudeMessages,
                     stream: useStreaming,
                     max_tokens: generationConfig.maxOutputTokens || state.settings.claudeMaxTokens || DEFAULT_CLAUDE_MAX_TOKENS
                 };
-                if(anthropicRequest.system) requestBody.system = anthropicRequest.system;
+
+                if (systemInstruction && systemInstruction.content) {
+                    requestBody.system = systemInstruction.content;
+                }
+                
                 if (generationConfig.temperature !== undefined && generationConfig.temperature !== null) {
                     requestBody.temperature = generationConfig.temperature;
                 } else if (state.settings.claudeTemperature !== null) {
@@ -12605,46 +12631,6 @@
                     }
                     throw error;
                 }
-            },
-            convertToClaudeRequest(messagesForApi, systemInstruction) {
-                const claudeMessages = [];
-                let systemContent = '';
-
-                if (systemInstruction && systemInstruction.content) {
-                    systemContent = systemInstruction.content;
-                } else if (systemInstruction && systemInstruction.parts && systemInstruction.parts.length > 0 && systemInstruction.parts[0].text) {
-                    systemContent = systemInstruction.parts[0].text;
-                }
-
-                for (const msg of messagesForApi) {
-                    const claudeRole = msg.role === 'model' ? 'assistant' : 'user';
-                    const contentParts = [];
-                    msg.parts.forEach(part => {
-                        if (part.text) {
-                            contentParts.push({ type: 'text', text: part.text });
-                        } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
-                             contentParts.push({
-                                type: 'image',
-                                source: {
-                                    type: 'base64',
-                                    media_type: part.inlineData.mimeType,
-                                    data: part.inlineData.data
-                                }
-                            });
-                        }
-                    });
-
-                    if (contentParts.length > 0) {
-                        claudeMessages.push({
-                            role: claudeRole,
-                            content: contentParts
-                        });
-                    }
-                }
-                return {
-                    messages: claudeMessages,
-                    system: systemContent || undefined
-                };
             },
             async *handleClaudeStreamingResponse(response) {
                 if (!response.body) {
@@ -12822,7 +12808,6 @@
                         }
                         if (finishReason && finishReason !== 'null') break;
                     }
-
                     const metadata = {
                         type: "metadata",
                         finishReason: isCancelled ? "ABORTED" : finishReason || 'stop',
