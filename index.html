@@ -3431,8 +3431,12 @@
                         <label for="xai-model-name">モデル名:</label>
                         <select id="xai-model-name" aria-label="xAI モデル名">
                             <optgroup label="Grok">
-                                <option value="grok-beta">grok-beta</option>
-                                <option value="grok-vision-beta">grok-vision-beta</option>
+                                <option value="grok-3-mini">grok-3-mini</option>
+                                <option value="grok-3-mini-fast">grok-3-mini-fast</option>
+                                <option value="grok-3">grok-3</option>
+                                <option value="grok-3-fast">grok-3-fast</option>
+                                <option value="grok-2-vision-1212">grok-2-vision-1212</option>
+                                <option value="grok-2-1212">grok-2-1212</option>
                             </optgroup>
                             <optgroup label="ユーザー指定" id="xai-user-defined-models-group">
                             </optgroup>
@@ -3885,6 +3889,26 @@
                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                            ※チェック時、モデル応答の先頭に上記ダミーModelの内容を付与。
                        </p>
+                       <hr style="margin: 15px 0;">
+                       <div id="xai-thoughts-param" style="margin-top: 15px;">
+                          <h3 style="margin-top:15px; margin-bottom:10px; font-size:14px; border:0; padding:0;">思考プロセス (Reasoning)</h3>
+                          <label class="checkbox-label">
+                              <input type="checkbox" id="xai-include-thoughts-toggle">
+                              Include Thoughts
+                          </label>
+                          <label class="checkbox-label">
+                              <input type="checkbox" id="xai-expand-thoughts-by-default-toggle">
+                              💭思考プロセスを開いた状態にする
+                          </label>
+                          <label for="xai-reasoning-effort">Reasoning Effort:</label>
+                          <select id="xai-reasoning-effort">
+                              <option value="low">low</option>
+                              <option value="high">high</option>
+                          </select>
+                          <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                              ※ grok-3-mini, grok-3-mini-fast のみ対応。
+                          </p>
+                       </div>
                        <hr style="margin: 15px 0;">
                        <label class="checkbox-label">
                            <input type="checkbox" id="xai-streaming-output">
@@ -4417,7 +4441,7 @@
         const DEFAULT_DEEPSEEK_MODEL = 'deepseek-reasoner';
         const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-20250514';
         const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
-        const DEFAULT_XAI_MODEL = 'grok-beta';
+        const DEFAULT_XAI_MODEL = 'grok-3-mini';
         const DEFAULT_STREAMING_SPEED = 12;
         const DEFAULT_TEMPERATURE = 0.5;
         const DEFAULT_MAX_TOKENS = 4000;
@@ -4686,6 +4710,9 @@
             xaiDummyModelInput: document.getElementById('xai-dummy-model'),
             xaiEnableDummyModelCheckbox: document.getElementById('xai-enable-dummy-model'),
             xaiConcatDummyModelCheckbox: document.getElementById('xai-concat-dummy-model'),
+            xaiIncludeThoughtsToggle: document.getElementById('xai-include-thoughts-toggle'),
+            xaiExpandThoughtsByDefaultToggle: document.getElementById('xai-expand-thoughts-by-default-toggle'),
+            xaiReasoningEffortSelect: document.getElementById('xai-reasoning-effort'),
 
             setThinkingBudgetBtns: document.querySelectorAll('.set-thinking-budget-btn'),
             setClaudeParamBtns: document.querySelectorAll('.set-claude-param-btn'),
@@ -4830,6 +4857,7 @@
             geminiPseudoStreamingParam: document.getElementById('gemini-pseudo-streaming-param'),
             deepSeekThoughtsParam: document.getElementById('deepseek-thoughts-param'),
             claudeThoughtsParam: document.getElementById('claude-thoughts-param'),
+            xaiThoughtsParam: document.getElementById('xai-thoughts-param'),
             disableSaveSettingsConfirmationToggle: document.getElementById('disable-save-settings-confirmation-toggle'),
             headerApiProviderToggleBtn: document.getElementById('header-api-provider-toggle-btn'),
             footerApiProviderToggleBtn: document.getElementById('footer-api-provider-toggle-btn'),
@@ -4948,6 +4976,9 @@
                 xaiDummyModel: '',
                 xaiEnableDummyModel: true,
                 xaiConcatDummyModel: false,
+                xaiIncludeThoughts: false,
+                xaiExpandThoughtsByDefault: false,
+                xaiReasoningEffort: 'low',
                 enterToSend: true,
                 autoScrollOnNewMessage: DEFAULT_AUTO_SCROLL_ON_NEW_MESSAGE,
                 autoScrollOnThought: false,
@@ -5231,7 +5262,7 @@
                         if (loadedSettings.hasOwnProperty('includeDeepSeekThoughts') && !loadedSettings.hasOwnProperty('deepSeekIncludeDeepSeekThoughts') && state.settings.hasOwnProperty('deepSeekIncludeDeepSeekThoughts')) {
                             state.settings.deepSeekIncludeDeepSeekThoughts = loadedSettings.includeDeepSeekThoughts;
                         }
-                        if (loadedSettings.hasOwnProperty('expandDeepSeekThoughtsByDefault') && !loadedSettings.hasOwnProperty('deepSeekExpandDeepSeekThoughtsByDefault') && state.settings.hasOwnProperty('deepSeekExpandDeepSeekThoughtsByDefault')) {
+                        if (loadedSettings.hasOwnProperty('expandDeepSeekThoughtsByDefault') && !loadedSettings.hasOwnProperty('deepSeekExpandThoughtsByDefault') && state.settings.hasOwnProperty('deepSeekExpandThoughtsByDefault')) {
                             state.settings.deepSeekExpandThoughtsByDefault = loadedSettings.expandDeepSeekThoughtsByDefault;
                         }
 
@@ -5374,6 +5405,7 @@
                         role: msg.role, content: msg.content, timestamp: msg.timestamp,
                         thoughtSummary: msg.thoughtSummary || null,
                         deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
+                        xaiThoughtSummary: msg.xaiThoughtSummary || null,
                         generatedByApiProvider: msg.generatedByApiProvider || null,
                         ...(msg.finishReason && { finishReason: msg.finishReason }),
                         ...(msg.safetyRatings && { safetyRatings: msg.safetyRatings }),
@@ -5659,7 +5691,8 @@
                 const messageApiProvider = messageData?.generatedByApiProvider || state.settings.apiProvider;
                 const includeThoughtsForProvider = (messageApiProvider === 'gemini' && state.settings.geminiIncludeThoughts) ||
                                                  (messageApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) ||
-                                                 (messageApiProvider === 'claude' && state.settings.claudeIncludeThoughts);
+                                                 (messageApiProvider === 'claude' && state.settings.claudeIncludeThoughts) ||
+                                                 (messageApiProvider === 'xai' && state.settings.xaiIncludeThoughts);
 
                 let initialThoughtOpenState = false;
                 if (isStreamingPlaceholder) {
@@ -5669,10 +5702,11 @@
                 } else if (includeThoughtsForProvider) {
                      initialThoughtOpenState = (messageApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) ||
                                                (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                               (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault);
+                                               (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
+                                               (messageApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault);
                 }
 
-                if (role === 'model' && includeThoughtsForProvider && (messageData?.thoughtSummary || messageData?.deepSeekThoughtSummary || isStreamingPlaceholder)) {
+                if (role === 'model' && includeThoughtsForProvider && (messageData?.thoughtSummary || messageData?.deepSeekThoughtSummary || messageData?.xaiThoughtSummary || isStreamingPlaceholder)) {
                     const thoughtDetails = document.createElement('details');
                     thoughtDetails.classList.add('thought-summary-details');
                     thoughtDetails.dataset.messageIndex = index;
@@ -5698,9 +5732,9 @@
                     if (isStreamingPlaceholder) {
                         thoughtContentDiv.id = `streaming-thought-summary-${index}`;
                         thoughtContentDiv.innerHTML = '';
-                    } else if (messageData?.thoughtSummary) {
+                    } else if (messageData?.thoughtSummary || messageData?.xaiThoughtSummary) {
                         const pre = document.createElement('pre');
-                        pre.textContent = messageData.thoughtSummary || '';
+                        pre.textContent = messageData.thoughtSummary || messageData.xaiThoughtSummary || '';
                         pre.style.whiteSpace = 'pre-wrap';
                         pre.style.wordBreak = 'break-all';
                         thoughtContentDiv.appendChild(pre);
@@ -6357,7 +6391,8 @@
                 if (isThoughtSummary) {
                     if ((selectedApiProvider === 'gemini' && state.settings.geminiIncludeThoughts) ||
                         (selectedApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) ||
-                        (selectedApiProvider === 'claude' && state.settings.claudeIncludeThoughts)) {
+                        (selectedApiProvider === 'claude' && state.settings.claudeIncludeThoughts) ||
+                        (selectedApiProvider === 'xai' && state.settings.xaiIncludeThoughts)) {
                         targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
                         accumulatedContentForDisplay = state.partialThoughtStreamContent;
                     } else {
@@ -6408,10 +6443,10 @@
                     if (!finalMessageData) return;
                     const messageApiProvider = finalMessageData.generatedByApiProvider || state.settings.apiProvider;
 
-                    if (finalMessageData.thoughtSummary || finalMessageData.deepSeekThoughtSummary) {
+                    if (finalMessageData.thoughtSummary || finalMessageData.deepSeekThoughtSummary || finalMessageData.xaiThoughtSummary) {
                         const thoughtContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
                         if (thoughtContentDiv) {
-                            const summaryContent = finalMessageData.thoughtSummary || finalMessageData.deepSeekThoughtSummary;
+                            const summaryContent = finalMessageData.thoughtSummary || finalMessageData.deepSeekThoughtSummary || finalMessageData.xaiThoughtSummary;
                             thoughtContentDiv.innerHTML = '';
                             const pre = document.createElement('pre');
                             pre.textContent = summaryContent || '';
@@ -7029,6 +7064,9 @@
                 elements.xaiDummyModelInput.value = state.settings.xaiDummyModel || '';
                 elements.xaiEnableDummyModelCheckbox.checked = state.settings.xaiEnableDummyModel;
                 elements.xaiConcatDummyModelCheckbox.checked = state.settings.xaiConcatDummyModel;
+                elements.xaiIncludeThoughtsToggle.checked = state.settings.xaiIncludeThoughts;
+                elements.xaiExpandThoughtsByDefaultToggle.checked = state.settings.xaiExpandThoughtsByDefault;
+                elements.xaiReasoningEffortSelect.value = state.settings.xaiReasoningEffort;
 
                  elements.enterToSendCheckbox.checked = state.settings.enterToSend;
                  elements.autoScrollOnNewMessageCheckbox.checked = state.settings.autoScrollOnNewMessage;
@@ -9360,8 +9398,7 @@
                 let contextClaudeTopK, contextClaudeIncludeThoughts, contextClaudeThinkingBudget, contextClaudeExpandThoughtsByDefault;
                 
                 let contextOpenAIVisionEnable;
-                
-                let xaiPresencePenaltyB, xaiFrequencyPenaltyB;
+                let contextXaiIncludeThoughts, contextXaiReasoningEffort;
 
                 if (isBackgroundProcess) {
                     const providerForSettingsB = sourceSessionContext.apiProvider || state.settings.apiProvider;
@@ -9439,6 +9476,8 @@
                         contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.xaiDummyModel;
                         contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.xaiEnableDummyModel;
                         contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.xaiConcatDummyModel;
+                        contextXaiIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.xaiIncludeThoughts;
+                        contextXaiReasoningEffort = sourceSessionContext.reasoningEffort ?? state.settings.xaiReasoningEffort;
                     }
                 } else {
                     if (selectedApiProvider === 'gemini') {
@@ -9515,6 +9554,8 @@
                         contextDummyModel = state.settings.xaiDummyModel;
                         contextEnableDummyModel = state.settings.xaiEnableDummyModel;
                         contextConcatDummyModel = state.settings.xaiConcatDummyModel;
+                        contextXaiIncludeThoughts = state.settings.xaiIncludeThoughts;
+                        contextXaiReasoningEffort = state.settings.xaiReasoningEffort;
                     }
                 }
 
@@ -9655,6 +9696,7 @@
                             role: msg.role, content: msg.content, timestamp: msg.timestamp,
                             thoughtSummary: msg.thoughtSummary || null,
                             deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
+                            xaiThoughtSummary: msg.xaiThoughtSummary || null,
                             generatedByApiProvider: msg.generatedByApiProvider || null,
                             ...(msg.finishReason && { finishReason: msg.finishReason }),
                             ...(msg.safetyRatings && { safetyRatings: msg.safetyRatings }),
@@ -9822,11 +9864,13 @@
                             content: '',
                             thoughtSummary: null,
                             deepSeekThoughtSummary: null,
+                            xaiThoughtSummary: null,
                             timestamp: Date.now(),
                             generatedByApiProvider: selectedApiProvider,
                             thoughtSummaryOpen: (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts && state.settings.geminiExpandThoughtsByDefault) ||
                                                 (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && state.settings.claudeExpandThoughtsByDefault),
+                                                (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && state.settings.claudeExpandThoughtsByDefault) ||
+                                                (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && state.settings.xaiExpandThoughtsByDefault),
                         };
 
                         if (isRetry && firstResponseIndexForRetry !== -1) {
@@ -10035,11 +10079,18 @@
                             if (data.choices && data.choices.length > 0) {
                                 rawContentFromApi = data.choices[0].message?.content || "";
                                 modelResponseMetadata = { finishReason: data.choices[0].finish_reason };
+                                if(selectedApiProvider === 'xai' && data.choices[0].message.reasoning_content) {
+                                    modelThoughtSummaryContent = data.choices[0].message.reasoning_content;
+                                }
                             }
                             if (data.usage) {
+                                let reasoningTokens = 0;
+                                if (selectedApiProvider === 'xai' && data.usage.completion_tokens_details?.reasoning_tokens) {
+                                    reasoningTokens = data.usage.completion_tokens_details.reasoning_tokens;
+                                }
                                 finalUsageMetadataFromStream = {
-                                    candidatesTokenCount: data.usage.completion_tokens,
-                                    totalTokenCount: data.usage.prompt_tokens + data.usage.completion_tokens
+                                    candidatesTokenCount: data.usage.completion_tokens + reasoningTokens,
+                                    totalTokenCount: data.usage.prompt_tokens + data.usage.completion_tokens + reasoningTokens
                                 };
                             }
                             if (!rawContentFromApi && modelResponseMetadata.finishReason === 'stop') {
@@ -10065,11 +10116,14 @@
                                  bgModelMessage.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                              } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts) {
                                  bgModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
+                             } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts) {
+                                 bgModelMessage.xaiThoughtSummary = modelThoughtSummaryContent || null;
                              }
 
                               bgModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
                                                                   (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                                  (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault);
+                                                                  (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
+                                                                  (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault);
 
                              currentContextMessages.push(bgModelMessage);
                              const chatToSaveBg = {
@@ -10077,6 +10131,7 @@
                                     role: msg.role, content: msg.content, timestamp: msg.timestamp,
                                     thoughtSummary: msg.thoughtSummary || null,
                                     deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
+                                    xaiThoughtSummary: msg.xaiThoughtSummary || null,
                                     generatedByApiProvider: msg.generatedByApiProvider || null,
                                     ...(msg.finishReason && { finishReason: msg.finishReason }),
                                     ...(msg.safetyRatings && { safetyRatings: msg.safetyRatings }),
@@ -10127,6 +10182,8 @@
                                     msgToUpdate.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                                 } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.thoughtSummary = modelThoughtSummaryContent || null;
+                                } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && modelThoughtSummaryContent) {
+                                    msgToUpdate.xaiThoughtSummary = modelThoughtSummaryContent || null;
                                 }
                                 uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
                                 await dbUtils.saveChat();
@@ -10146,10 +10203,13 @@
                                  newModelMessage.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                             } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && modelThoughtSummaryContent) {
                                  newModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
+                            } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && modelThoughtSummaryContent) {
+                                 newModelMessage.xaiThoughtSummary = modelThoughtSummaryContent || null;
                             }
                             newModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
                                                                  (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                                 (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault);
+                                                                 (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
+                                                                 (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault);
 
                              const targetUserIndexForCascade = userMessageIndex;
                              if (targetUserIndexForCascade !== -1 && !isBackgroundProcess) {
@@ -10202,6 +10262,8 @@
                              finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
                          } else if (selectedApiProvider === 'claude' && partialThoughtContentOnError && contextClaudeIncludeThoughts) {
                              finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
+                         } else if (selectedApiProvider === 'xai' && partialThoughtContentOnError && contextXaiIncludeThoughts) {
+                             finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
                          }
 
                         const streamingMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
@@ -10222,6 +10284,8 @@
                                 msgToUpdate.deepSeekThoughtSummary = finalPartialThoughtValue;
                             } else if (selectedApiProvider === 'claude') {
                                 msgToUpdate.thoughtSummary = finalPartialThoughtValue;
+                            } else if (selectedApiProvider === 'xai') {
+                                msgToUpdate.xaiThoughtSummary = finalPartialThoughtValue;
                             }
 
                              try {
@@ -10784,7 +10848,7 @@
                 newSettings.openaiDummyModel = elements.openaiDummyModelInput.value.trim();
                 newSettings.openaiEnableDummyModel = elements.openaiEnableDummyModelCheckbox.checked;
                 newSettings.openaiConcatDummyModel = elements.openaiConcatDummyModelCheckbox.checked;
-
+                
                 newSettings.xaiSystemPrompt = elements.xaiSystemPromptDefaultTextarea.value.trim();
                 newSettings.xaiEnableSystemPromptDefault = elements.xaiEnableSystemPromptDefaultCheckbox.checked;
                 newSettings.xaiTemperature = elements.xaiTemperatureInput.value === '' ? null : parseFloat(elements.xaiTemperatureInput.value);
@@ -10799,6 +10863,9 @@
                 newSettings.xaiDummyModel = elements.xaiDummyModelInput.value.trim();
                 newSettings.xaiEnableDummyModel = elements.xaiEnableDummyModelCheckbox.checked;
                 newSettings.xaiConcatDummyModel = elements.xaiConcatDummyModelCheckbox.checked;
+                newSettings.xaiIncludeThoughts = elements.xaiIncludeThoughtsToggle.checked;
+                newSettings.xaiExpandThoughtsByDefault = elements.xaiExpandThoughtsByDefaultToggle.checked;
+                newSettings.xaiReasoningEffort = elements.xaiReasoningEffortSelect.value;
 
                  newSettings.enterToSend = elements.enterToSendCheckbox.checked;
                  newSettings.autoScrollOnNewMessage = elements.autoScrollOnNewMessageCheckbox.checked;
@@ -11075,6 +11142,9 @@
                                 else if(key === 'claudeExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeThinkingBudget') defaultSettingsCopy[key] = null;
                                 else if(key === 'openaiVisionEnable') defaultSettingsCopy[key] = false;
+                                else if(key === 'xaiIncludeThoughts') defaultSettingsCopy[key] = false;
+                                else if(key === 'xaiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
+                                else if(key === 'xaiReasoningEffort') defaultSettingsCopy[key] = 'low';
                             }
                         });
                         defaultSettingsCopy.apiKey = '';
@@ -12132,7 +12202,7 @@
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
                         deepSeekIncludeThoughtsB, presencePenaltyB, frequencyPenaltyB,
                         claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB,
-                        openaiVisionEnableB;
+                        openaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB;
 
                     if (providerForSettingsB === 'gemini') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
@@ -12218,6 +12288,8 @@
                         dummyModelB = state.settings.xaiDummyModel;
                         enableDummyModelB = state.settings.xaiEnableDummyModel;
                         concatDummyModelB = state.settings.xaiConcatDummyModel;
+                        xaiIncludeThoughtsB = state.settings.xaiIncludeThoughts;
+                        xaiReasoningEffortB = state.settings.xaiReasoningEffort;
                     }
 
                     const contextForB = {
@@ -12236,10 +12308,13 @@
                                         providerForSettingsB === 'claude' ? claudeThinkingBudgetB : undefined,
                         includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : 
                                          providerForSettingsB === 'deepseek' ? deepSeekIncludeThoughtsB : 
-                                         providerForSettingsB === 'claude' ? claudeIncludeThoughtsB : undefined,
+                                         providerForSettingsB === 'claude' ? claudeIncludeThoughtsB :
+                                         providerForSettingsB === 'xai' ? xaiIncludeThoughtsB : undefined,
                         expandThoughtsByDefault: (providerForSettingsB === 'gemini' && state.settings.geminiExpandThoughtsByDefault) ||
                                                  (providerForSettingsB === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                 (providerForSettingsB === 'claude' ? claudeExpandThoughtsByDefaultB : undefined),
+                                                 (providerForSettingsB === 'claude' ? claudeExpandThoughtsByDefaultB : undefined) ||
+                                                 (providerForSettingsB === 'xai' && state.settings.xaiExpandThoughtsByDefault),
+                        reasoningEffort: providerForSettingsB === 'xai' ? xaiReasoningEffortB : undefined,
                         pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
                         enableGrounding: providerForSettingsB === 'gemini' ? geminiEnableGroundingB : undefined,
                         visionEnable: providerForSettingsB === 'openai' ? openaiVisionEnableB : undefined,
@@ -12918,7 +12993,7 @@
                         try {
                             const errorData = await response.json();
                             if (errorData.error && errorData.error.message) {
-                                                            errorMsg = `Claude APIエラー (${response.status}): ${errorData.error.message} (Type: ${errorData.error.type || 'N/A'})`;
+                                errorMsg = `Claude APIエラー (${response.status}): ${errorData.error.message} (Type: ${errorData.error.type || 'N/A'})`;
                             }
                         } catch (e) {}
                         throw new Error(errorMsg);
@@ -13047,18 +13122,7 @@
                     }
                 }
             },
-            async callOpenAiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
-                if (!state.settings.openaiApiKey) {
-                    throw new Error("ChatGPT APIキーが設定されていません。");
-                }
-                state.abortController = new AbortController();
-                const { signal } = state.abortController;
-
-                const headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${state.settings.openaiApiKey}`
-                };
-
+            _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, generationConfig, useStreaming, enableVision) {
                 const oaMessages = [];
                 if (systemInstruction && systemInstruction.parts?.[0]?.text) {
                     oaMessages.push({ role: "system", content: systemInstruction.parts[0].text });
@@ -13085,16 +13149,39 @@
                 });
 
                 const body = {
-                    model: state.settings.openaiModelName,
+                    model: model,
                     messages: oaMessages,
                     stream: useStreaming,
-                    temperature: generationConfig.temperature ?? state.settings.openaiTemperature ?? 1,
                 };
+                if (generationConfig.temperature != null) body.temperature = generationConfig.temperature;
                 if (generationConfig.maxOutputTokens != null) body.max_tokens = generationConfig.maxOutputTokens;
                 if (generationConfig.topP != null) body.top_p = generationConfig.topP;
                 if (generationConfig.presencePenalty != null) body.presence_penalty = generationConfig.presencePenalty;
                 if (generationConfig.frequencyPenalty != null) body.frequency_penalty = generationConfig.frequencyPenalty;
 
+                return body;
+            },
+            async callOpenAiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
+                if (!state.settings.openaiApiKey) {
+                    throw new Error("ChatGPT APIキーが設定されていません。");
+                }
+                state.abortController = new AbortController();
+                const { signal } = state.abortController;
+
+                const headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${state.settings.openaiApiKey}`
+                };
+
+                const body = this._createOpenAICompatibleRequestBody(
+                    state.settings.openaiModelName,
+                    messagesForApi,
+                    systemInstruction,
+                    generationConfig,
+                    useStreaming,
+                    enableVision
+                );
+                
                 const response = await fetch(OPENAI_API_BASE_URL, { method: "POST", headers, body: JSON.stringify(body), signal });
                 if (!response.ok) {
                     let msg = `OpenAI API error ${response.status}`;
@@ -13106,9 +13193,9 @@
                 }
                 return response;
             },
-            async *handleOpenAiStreamingResponse(response) {
+            async *handleOpenAICompatibleStreamingResponse(response) {
                 if (!response.body) {
-                    throw new Error("OpenAIレスポンスボディがありません。");
+                    throw new Error("レスポンスボディがありません。");
                 }
                 const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
                 let buffer = '';
@@ -13144,15 +13231,29 @@
                                 const chunk = JSON.parse(data);
                                 if (chunk.choices?.[0]) {
                                     const delta = chunk.choices[0].delta;
+                                    let contentText = null;
+                                    let thoughtText = null;
+
                                     if (delta?.content) {
-                                        yield { type: "chunk", contentText: delta.content, thoughtText: null };
+                                        contentText = delta.content;
                                     }
+                                    if (delta?.reasoning_content) {
+                                        thoughtText = delta.reasoning_content;
+                                    }
+
+                                    if (contentText !== null || thoughtText !== null) {
+                                        yield { type: "chunk", contentText: contentText, thoughtText: thoughtText };
+                                    }
+                                    
                                     if (chunk.choices[0].finish_reason) {
                                         finishReason = chunk.choices[0].finish_reason;
                                     }
                                 }
                                 if (chunk.usage) {
                                     usage = chunk.usage;
+                                    if (usage.completion_tokens_details?.reasoning_tokens) {
+                                        usage.completion_tokens += usage.completion_tokens_details.reasoning_tokens;
+                                    }
                                 }
                             } catch (e) {}
                         }
@@ -13187,36 +13288,22 @@
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${state.settings.xaiApiKey}`
                 };
-
-                const oaMessages = [];
-                if (systemInstruction && systemInstruction.parts?.[0]?.text) {
-                    oaMessages.push({ role: "system", content: systemInstruction.parts[0].text });
-                }
-
-                messagesForApi.forEach(m => {
-                    const role = m.role === "model" ? "assistant" : m.role;
-                    const contentParts = m.parts.map(p => {
-                        if (p.text) {
-                            return { type: "text", text: p.text };
-                        }
-                        return null;
-                    }).filter(Boolean);
-
-                    if (contentParts.length > 0) {
-                        oaMessages.push({ role: role, content: contentParts.map(p => p.text).join('\n') });
-                    }
-                });
+                const model = state.settings.xaiModelName || DEFAULT_XAI_MODEL;
+                const enableVision = model === 'grok-2-vision-1212';
                 
-                const body = {
-                    model: state.settings.xaiModelName,
-                    messages: oaMessages,
-                    stream: useStreaming,
-                };
-                if (generationConfig.temperature != null) body.temperature = generationConfig.temperature;
-                if (generationConfig.maxOutputTokens != null) body.max_tokens = generationConfig.maxOutputTokens;
-                if (generationConfig.topP != null) body.top_p = generationConfig.topP;
-                if (generationConfig.presencePenalty != null) body.presence_penalty = generationConfig.presencePenalty;
-                if (generationConfig.frequencyPenalty != null) body.frequency_penalty = generationConfig.frequencyPenalty;
+                const body = this._createOpenAICompatibleRequestBody(
+                    model,
+                    messagesForApi,
+                    systemInstruction,
+                    generationConfig,
+                    useStreaming,
+                    enableVision
+                );
+
+                const reasoningModels = ['grok-3-mini', 'grok-3-mini-fast'];
+                if (state.settings.xaiIncludeThoughts && reasoningModels.includes(model)) {
+                    body.reasoning_effort = state.settings.xaiReasoningEffort;
+                }
 
                 const response = await fetch(XAI_API_BASE_URL, { 
                     method: "POST", 
@@ -13233,10 +13320,23 @@
                     } catch {}
                     throw new Error(msg);
                 }
+
+                if (!useStreaming) {
+                    const data = await response.json();
+                    let reasoningContent = null;
+                    const choice = data.choices?.[0];
+                    if (choice && choice.message && choice.message.reasoning_content) {
+                        reasoningContent = choice.message.reasoning_content;
+                    }
+                    if (data.usage?.completion_tokens_details?.reasoning_tokens) {
+                        data.usage.completion_tokens += data.usage.completion_tokens_details.reasoning_tokens;
+                    }
+                    response.json = async () => ({ ...data, xaiThoughtSummary: reasoningContent });
+                }
                 return response;
             },
             async *handleXaiStreamingResponse(response) {
-                yield* this.handleOpenAiStreamingResponse(response);
+                yield* this.handleOpenAICompatibleStreamingResponse(response);
             },
         };
 
