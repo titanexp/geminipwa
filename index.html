@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -3860,13 +3859,6 @@
                        </label>
                        <label for="openai-streaming-speed">文字送り速度 (ミリ秒/文字):</label>
                        <input type="number" id="openai-streaming-speed" min="0" step="1" placeholder="例: 30 (0で無効)" aria-label="OpenAI 文字送り速度">
-                       <label class="checkbox-label" style="margin-top: 15px;">
-                           <input type="checkbox" id="openai-vision-enable">
-                           Vision (画像入力) を有効にする
-                       </label>
-                       <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                           ※gpt-4-turbo, gpt-4o, gpt-4o-mini など画像入力対応モデルを選択してください。
-                       </p>
                     </div>
                 </details>
                 
@@ -4693,7 +4685,6 @@
             openaiFrequencyPenaltyInput: document.getElementById('openai-frequency-penalty'),
             openaiStreamingOutputCheckbox: document.getElementById('openai-streaming-output'),
             openaiStreamingSpeedInput: document.getElementById('openai-streaming-speed'),
-            openaiVisionEnableCheckbox: document.getElementById('openai-vision-enable'),
             openaiDummyUserInput: document.getElementById('openai-dummy-user'),
             openaiEnableDummyUserCheckbox: document.getElementById('openai-enable-dummy-user'),
             openaiDummyModelInput: document.getElementById('openai-dummy-model'),
@@ -4717,7 +4708,6 @@
             xaiIncludeThoughtsToggle: document.getElementById('xai-include-thoughts-toggle'),
             xaiExpandThoughtsByDefaultToggle: document.getElementById('xai-expand-thoughts-by-default-toggle'),
             xaiReasoningEffortSelect: document.getElementById('xai-reasoning-effort'),
-
             setThinkingBudgetBtns: document.querySelectorAll('.set-thinking-budget-btn'),
             setClaudeParamBtns: document.querySelectorAll('.set-claude-param-btn'),
             enterToSendCheckbox: document.getElementById('enter-to-send'),
@@ -4957,7 +4947,6 @@
                 openaiFrequencyPenalty: null,
                 openaiStreamingOutput: true,
                 openaiStreamingSpeed: DEFAULT_STREAMING_SPEED,
-                openaiVisionEnable: false,
                 openaiDummyUser: '',
                 openaiEnableDummyUser: true,
                 openaiDummyModel: '',
@@ -7053,7 +7042,6 @@
                 elements.openaiFrequencyPenaltyInput.value = state.settings.openaiFrequencyPenalty === null ? '' : state.settings.openaiFrequencyPenalty;
                 elements.openaiStreamingOutputCheckbox.checked = state.settings.openaiStreamingOutput;
                 elements.openaiStreamingSpeedInput.value = state.settings.openaiStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
-                elements.openaiVisionEnableCheckbox.checked = state.settings.openaiVisionEnable;
                 elements.openaiDummyUserInput.value = state.settings.openaiDummyUser || '';
                 elements.openaiEnableDummyUserCheckbox.checked = state.settings.openaiEnableDummyUser;
                 elements.openaiDummyModelInput.value = state.settings.openaiDummyModel || '';
@@ -9407,7 +9395,6 @@
 
                 let contextClaudeTopK, contextClaudeIncludeThoughts, contextClaudeThinkingBudget, contextClaudeExpandThoughtsByDefault;
                 
-                let contextOpenAIVisionEnable;
                 let contextXaiIncludeThoughts, contextXaiReasoningEffort;
 
                 if (isBackgroundProcess) {
@@ -9472,7 +9459,6 @@
                         contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.openaiDummyModel;
                         contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.openaiEnableDummyModel;
                         contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.openaiConcatDummyModel;
-                        contextOpenAIVisionEnable = sourceSessionContext.visionEnable ?? state.settings.openaiVisionEnable;
                     } else if (providerForSettingsB === 'xai') {
                         contextTemperature = sourceSessionContext.temperature ?? state.settings.xaiTemperature;
                         contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.xaiMaxTokens;
@@ -9550,7 +9536,6 @@
                         contextDummyModel = state.settings.openaiDummyModel;
                         contextEnableDummyModel = state.settings.openaiEnableDummyModel;
                         contextConcatDummyModel = state.settings.openaiConcatDummyModel;
-                        contextOpenAIVisionEnable = state.settings.openaiVisionEnable;
                     } else if (selectedApiProvider === 'xai') {
                         contextTemperature = state.settings.xaiTemperature;
                         contextMaxTokens = state.settings.xaiMaxTokens;
@@ -9854,7 +9839,7 @@
                     } else if (selectedApiProvider === 'claude') {
                         apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                     } else if (selectedApiProvider === 'openai') {
-                        apiResponseObject = await apiUtils.callOpenAiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, contextOpenAIVisionEnable);
+                        apiResponseObject = await apiUtils.callOpenAiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                     } else if (selectedApiProvider === 'xai') {
                         apiResponseObject = await apiUtils.callXaiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                     } else {
@@ -10852,7 +10837,6 @@
                 newSettings.openaiFrequencyPenalty = elements.openaiFrequencyPenaltyInput.value === '' ? null : parseFloat(elements.openaiFrequencyPenaltyInput.value);
                 newSettings.openaiStreamingOutput = elements.openaiStreamingOutputCheckbox.checked;
                 newSettings.openaiStreamingSpeed = elements.openaiStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.openaiStreamingSpeedInput.value);
-                newSettings.openaiVisionEnable = elements.openaiVisionEnableCheckbox.checked;
                 newSettings.openaiDummyUser = elements.openaiDummyUserInput.value.trim();
                 newSettings.openaiEnableDummyUser = elements.openaiEnableDummyUserCheckbox.checked;
                 newSettings.openaiDummyModel = elements.openaiDummyModelInput.value.trim();
@@ -11151,7 +11135,6 @@
                                 else if(key === 'claudeIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeThinkingBudget') defaultSettingsCopy[key] = null;
-                                else if(key === 'openaiVisionEnable') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiReasoningEffort') defaultSettingsCopy[key] = 'low';
@@ -12212,7 +12195,7 @@
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
                         deepSeekIncludeThoughtsB, presencePenaltyB, frequencyPenaltyB,
                         claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB,
-                        openaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB;
+                        xaiIncludeThoughtsB, xaiReasoningEffortB;
 
                     if (providerForSettingsB === 'gemini') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
@@ -12282,7 +12265,6 @@
                         dummyModelB = state.settings.openaiDummyModel;
                         enableDummyModelB = state.settings.openaiEnableDummyModel;
                         concatDummyModelB = state.settings.openaiConcatDummyModel;
-                        openaiVisionEnableB = state.settings.openaiVisionEnable;
                     } else if (providerForSettingsB === 'xai') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.xaiSystemPrompt;
                         enableSystemPromptDefaultB = state.settings.xaiEnableSystemPromptDefault;
@@ -12327,7 +12309,6 @@
                         reasoningEffort: providerForSettingsB === 'xai' ? xaiReasoningEffortB : undefined,
                         pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
                         enableGrounding: providerForSettingsB === 'gemini' ? geminiEnableGroundingB : undefined,
-                        visionEnable: providerForSettingsB === 'openai' ? openaiVisionEnableB : undefined,
                         inputText: inputForB,
                         attachments: [],
                         apiProvider: providerForSettingsB
@@ -13132,7 +13113,7 @@
                     }
                 }
             },
-            _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, generationConfig, useStreaming, enableVision) {
+            _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, generationConfig, useStreaming, enableVision, providerName) {
                 const oaMessages = [];
                 if (systemInstruction && systemInstruction.parts?.[0]?.text) {
                     oaMessages.push({ role: "system", content: systemInstruction.parts[0].text });
@@ -13145,6 +13126,12 @@
                             return { type: "text", text: p.text };
                         }
                         if (enableVision && p.inlineData && p.inlineData.mimeType && p.inlineData.data && p.inlineData.mimeType.startsWith('image/')) {
+                            if (providerName === 'xai') {
+                                const allowedMimeTypes = ['image/jpeg', 'image/png'];
+                                if (!allowedMimeTypes.includes(p.inlineData.mimeType)) {
+                                    return null; 
+                                }
+                            }
                             return {
                                 type: "image_url",
                                 image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` }
@@ -13171,7 +13158,7 @@
 
                 return body;
             },
-            async callOpenAiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
+            async callOpenAiApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
                 if (!state.settings.openaiApiKey) {
                     throw new Error("ChatGPT APIキーが設定されていません。");
                 }
@@ -13189,7 +13176,8 @@
                     systemInstruction,
                     generationConfig,
                     useStreaming,
-                    enableVision
+                    true, 
+                    'openai'
                 );
                 
                 const response = await fetch(OPENAI_API_BASE_URL, { method: "POST", headers, body: JSON.stringify(body), signal });
@@ -13299,7 +13287,7 @@
                     "Authorization": `Bearer ${state.settings.xaiApiKey}`
                 };
                 const model = state.settings.xaiModelName || DEFAULT_XAI_MODEL;
-                const enableVision = model === 'grok-2-vision-1212';
+                const enableVision = true;
                 
                 const body = this._createOpenAICompatibleRequestBody(
                     model,
@@ -13307,7 +13295,8 @@
                     systemInstruction,
                     generationConfig,
                     useStreaming,
-                    enableVision
+                    enableVision,
+                    'xai'
                 );
 
                 const reasoningModels = ['grok-3-mini', 'grok-3-mini-fast'];
