@@ -5735,7 +5735,10 @@
 
                     if (isStreamingPlaceholder) {
                         thoughtContentDiv.id = `streaming-thought-summary-${index}`;
-                        thoughtContentDiv.innerHTML = '';
+                        const pre = document.createElement('pre');
+                        pre.style.whiteSpace = 'pre-wrap';
+                        pre.style.wordBreak = 'break-all';
+                        thoughtContentDiv.appendChild(pre);
                     } else if (messageData?.thoughtSummary || messageData?.xaiThoughtSummary) {
                         const pre = document.createElement('pre');
                         pre.textContent = messageData.thoughtSummary || messageData.xaiThoughtSummary || '';
@@ -6130,47 +6133,44 @@
                 }
             },
             addCopyButtonsToCodeBlocks(contentDiv, isStreamingContext = false) {
-                const isInsideThoughtSummary = contentDiv.closest('.thought-summary-content') !== null;
                 const codeBlocks = contentDiv.querySelectorAll('pre');
                 codeBlocks.forEach(preElement => {
-                    if (!isInsideThoughtSummary && this.isMermaidCode(preElement) && !isStreamingContext) {
+                    if (this.isMermaidCode(preElement) && !isStreamingContext) {
                         const codeElement = preElement.querySelector('code');
                         const mermaidCode = codeElement ? codeElement.innerText : preElement.innerText;
                         this.processMermaidBlock(preElement, mermaidCode);
                         return;
                     }
-            
+
                     const codeElement = preElement.querySelector('code');
                     const textToCopy = codeElement ? codeElement.innerText : preElement.innerText;
-            
+
                     if (textToCopy && textToCopy.trim() !== '') {
-                        if (!preElement.querySelector('.code-copy-button')) {
-                            const copyButton = document.createElement('button');
-                            copyButton.textContent = 'コピー';
-                            copyButton.classList.add('code-copy-button');
-                            copyButton.title = 'コードをコピー';
-                            copyButton.onclick = (event) => {
-                                event.stopPropagation();
-                                navigator.clipboard.writeText(textToCopy).then(() => {
-                                    const originalText = copyButton.textContent;
-                                    copyButton.textContent = 'コピー完了!';
-                                    copyButton.disabled = true;
-                                    setTimeout(() => {
-                                        copyButton.textContent = originalText;
-                                        copyButton.disabled = false;
-                                    }, 1500);
-                                }).catch(err => {
-                                    const originalText = copyButton.textContent;
-                                    copyButton.textContent = '失敗';
-                                    copyButton.disabled = true;
-                                    setTimeout(() => {
-                                        copyButton.textContent = originalText;
-                                        copyButton.disabled = false;
-                                    }, 2000);
-                                });
-                            };
-                            preElement.appendChild(copyButton);
-                        }
+                        const copyButton = document.createElement('button');
+                        copyButton.textContent = 'コピー';
+                        copyButton.classList.add('code-copy-button');
+                        copyButton.title = 'コードをコピー';
+                        copyButton.onclick = (event) => {
+                            event.stopPropagation();
+                            navigator.clipboard.writeText(textToCopy).then(() => {
+                                const originalText = copyButton.textContent;
+                                copyButton.textContent = 'コピー完了!';
+                                copyButton.disabled = true;
+                                setTimeout(() => {
+                                    copyButton.textContent = originalText;
+                                    copyButton.disabled = false;
+                                }, 1500);
+                        }).catch(err => {
+                                const originalText = copyButton.textContent;
+                                copyButton.textContent = '失敗';
+                                copyButton.disabled = true;
+                                setTimeout(() => {
+                                    copyButton.textContent = originalText;
+                                    copyButton.disabled = false;
+                                }, 2000);
+                            });
+                        };
+                        preElement.appendChild(copyButton);
                     }
                 });
             },
@@ -6412,7 +6412,10 @@
 
                 if (targetContentDiv) {
                     if (isThoughtSummary) {
-                        targetContentDiv.textContent = accumulatedContentForDisplay;
+                        const pre = targetContentDiv.querySelector('pre');
+                        if (pre) {
+                            pre.textContent = accumulatedContentForDisplay;
+                        }
                     } else {
                         const renderCurrentState = (contentToRender) => {
                             try {
