@@ -13078,10 +13078,11 @@
                         if (done) break;
 
                         buffer += value;
-                        const lines = buffer.split('\n');
-                        buffer = lines.pop(); 
+                        let eolIndex;
+                        while ((eolIndex = buffer.indexOf('\n')) >= 0) {
+                            const line = buffer.substring(0, eolIndex).trim();
+                            buffer = buffer.substring(eolIndex + 1);
 
-                        for (const line of lines) {
                             if (line.startsWith('data: ')) {
                                 const jsonData = line.substring(6);
                                 if (jsonData.trim() === '[DONE]') {
@@ -13095,20 +13096,17 @@
                                     } else if (chunk.type === 'content_block_delta' && chunk.delta && chunk.delta.type === 'thinking_delta') {
                                         yield { type: 'chunk', contentText: null, thoughtText: chunk.delta.thinking || '' };
                                     } else if (chunk.type === 'message_stop') {
-                                        const bedrockMetrics = chunk["amazon-bedrock-invocationMetrics"];
-                                        if (bedrockMetrics) {
+                                        finalFinishReason = chunk.message?.stop_reason || 'stop';
+                                        if (chunk["amazon-bedrock-invocationMetrics"]) {
                                             finalUsage = {
-                                                input_tokens: bedrockMetrics.inputTokenCount,
-                                                output_tokens: bedrockMetrics.outputTokenCount
+                                                input_tokens: chunk["amazon-bedrock-invocationMetrics"].inputTokenCount,
+                                                output_tokens: chunk["amazon-bedrock-invocationMetrics"].outputTokenCount
                                             };
-                                        } else if (chunk.message && chunk.message.usage) {
-                                            finalUsage = chunk.message.usage;
                                         } else if (chunk.usage) {
                                             finalUsage = chunk.usage;
                                         }
-                                        finalFinishReason = chunk.message?.stop_reason || chunk.stop_reason || 'stop';
                                     } else if (chunk.type === 'message_delta' && chunk.usage) {
-                                         finalUsage = { ...finalUsage, ...chunk.usage };
+                                        finalUsage = chunk.usage;
                                     }
                                 } catch (e) {
                                 }
