@@ -9647,12 +9647,12 @@
                     userMessageIndex = currentContextMessages.length - 1;
                 } else if (isRetry) {
                     let siblingStartIndex = userMessageIndex + 1;
-                    while (siblingStartIndex < state.currentMessages.length && state.currentMessages[siblingStartIndex].role !== 'model') {
+                    while (siblingStartIndex < currentContextMessages.length && currentContextMessages[siblingStartIndex].role !== 'model') {
                         siblingStartIndex++;
                     }
-                    if (siblingStartIndex < state.currentMessages.length && state.currentMessages[siblingStartIndex].role === 'model') {
+                    if (siblingStartIndex < currentContextMessages.length && currentContextMessages[siblingStartIndex].role === 'model') {
                          firstResponseIndexForRetry = siblingStartIndex;
-                         const firstResponse = state.currentMessages[firstResponseIndexForRetry];
+                         const firstResponse = currentContextMessages[firstResponseIndexForRetry];
                          if (firstResponse.isCascaded && firstResponse.siblingGroupId) {
                              existingSiblingGroupId = firstResponse.siblingGroupId;
                              currentContextMessages.forEach(msg => {
@@ -9714,7 +9714,7 @@
                             ...(msg.isSelected !== undefined && { isSelected: msg.isSelected }),
                             ...(msg.siblingGroupId !== undefined && { siblingGroupId: msg.siblingGroupId }),
                             ...(msg.groundingMetadata && { groundingMetadata: msg.groundingMetadata }),
-                            ...(msg.attachments && msg.attachments.length > 0 && { attachments: msg.attachments.map(att => ({ name: att.name, mimeType: att.mimeType })) }),
+                            ...(msg.attachments && msg.attachments.length > 0 && { attachments: msg.attachments.map(att => ({ name: att.name, mimeType: att.mimeType, textData: att.textData })) }),
                             ...(msg.usageMetadata && { usageMetadata: msg.usageMetadata }),
                             ...(msg.thoughtSummaryOpen !== undefined && { thoughtSummaryOpen: msg.thoughtSummaryOpen }),
                         })),
@@ -9775,7 +9775,9 @@
                         }
                         if (msg.role === 'user' && msg.attachments && msg.attachments.length > 0) {
                             msg.attachments.forEach(att => {
-                                if(att.base64Data) {
+                                if (att.textData) {
+                                    parts.push({ text: att.textData });
+                                } else if (att.base64Data) {
                                     parts.push({
                                         inlineData: {
                                             mimeType: att.mimeType,
@@ -10152,7 +10154,7 @@
                                     ...(msg.isSelected !== undefined && { isSelected: msg.isSelected }),
                                     ...(msg.siblingGroupId !== undefined && { siblingGroupId: msg.siblingGroupId }),
                                     ...(msg.groundingMetadata && { groundingMetadata: msg.groundingMetadata }),
-                                    ...(msg.attachments && msg.attachments.length > 0 && { attachments: msg.attachments.map(att => ({ name: att.name, mimeType: att.mimeType })) }),
+                                    ...(msg.attachments && msg.attachments.length > 0 && { attachments: msg.attachments.map(att => ({ name: att.name, mimeType: att.mimeType, textData: att.textData })) }),
                                     ...(msg.usageMetadata && { usageMetadata: msg.usageMetadata }),
                                     ...(msg.thoughtSummaryOpen !== undefined && { thoughtSummaryOpen: msg.thoughtSummaryOpen }),
                                 })),
@@ -10524,7 +10526,7 @@
                             if (msg.deepSeekThoughtSummary) messageExport.deepSeekThoughtSummary = msg.deepSeekThoughtSummary;
                             if (msg.thoughtSummaryOpen !== undefined) messageExport.thoughtSummaryOpen = msg.thoughtSummaryOpen;
                             if (msg.attachments && msg.attachments.length > 0) {
-                                messageExport.attachments = msg.attachments.map(att => ({ name: att.name, mimeType: att.mimeType }));
+                                messageExport.attachments = msg.attachments.map(att => ({ name: att.name, mimeType: att.mimeType, textData: att.textData }));
                             }
                             return messageExport;
                         }),
@@ -10606,7 +10608,8 @@
                                     attachments: (msg.attachments || []).map(att => ({
                                         name: att.name || 'imported_file',
                                         mimeType: att.mimeType || 'application/octet-stream',
-                                        base64Data: ''
+                                        base64Data: '',
+                                        textData: att.textData || ''
                                     })),
                                     groundingMetadata: msg.groundingMetadata || undefined,
                                     usageMetadata: msg.usageMetadata || undefined,
@@ -12009,32 +12012,37 @@
                 let encodingError = false;
 
                 for (const item of state.selectedFilesForUpload) {
+                    const file = item.file;
                     try {
-                        const base64Data = await fileToBase64(item.file);
-                        let browserMimeType = item.file.type || '';
-                        const fileName = item.file.name;
+                        const fileName = file.name;
                         const fileExtension = fileName.slice(((fileName.lastIndexOf(".") - 1) >>> 0) + 2).toLowerCase();
+                        let browserMimeType = file.type || '';
+                        let guessedMimeType = extensionToMimeTypeMap[fileExtension] || browserMimeType || 'application/octet-stream';
 
-                        let guessedMimeType = null;
-                        if (fileExtension && extensionToMimeTypeMap[fileExtension]) {
-                            guessedMimeType = extensionToMimeTypeMap[fileExtension];
-                        }
-
-                        let finalMimeType;
-                        if (guessedMimeType) {
-                            finalMimeType = guessedMimeType;
-                        } else if (browserMimeType) {
-                            finalMimeType = browserMimeType;
+                        if (guessedMimeType.startsWith('text/')) {
+                            const textData = await new Promise((resolve, reject) => {
+                                const reader = new FileReader();
+                                reader.onload = () => resolve(reader.result);
+                                reader.onerror = (error) => reject(error);
+                                reader.readAsText(file);
+                            });
+                            attachmentsToAdd.push({
+                                file: file,
+                                name: fileName,
+                                mimeType: guessedMimeType,
+                                textData: textData,
+                                base64Data: null 
+                            });
                         } else {
-                            finalMimeType = 'application/octet-stream';
+                            const base64Data = await fileToBase64(file);
+                            attachmentsToAdd.push({
+                                file: file,
+                                name: fileName,
+                                mimeType: guessedMimeType,
+                                base64Data: base64Data,
+                                textData: null
+                            });
                         }
-
-                        attachmentsToAdd.push({
-                            file: item.file,
-                            name: fileName,
-                            mimeType: finalMimeType,
-                            base64Data: base64Data
-                        });
                     } catch (error) {
                         encodingError = true;
                         await uiUtils.showCustomAlert(`ファイル "${item.file.name}" の処理中にエラーが発生しました。`);
@@ -12401,18 +12409,31 @@
                     }
 
                     try {
-                        const base64Data = await fileToBase64(file);
-                        let browserMimeType = file.type || '';
+                        let textData = null;
+                        let base64Data = null;
                         const fileName = file.name;
                         const fileExtension = fileName.slice(((fileName.lastIndexOf(".") - 1) >>> 0) + 2).toLowerCase();
+                        let browserMimeType = file.type || '';
                         let guessedMimeType = extensionToMimeTypeMap[fileExtension] || browserMimeType || 'application/octet-stream';
+
+                        if (guessedMimeType.startsWith('text/')) {
+                            textData = await new Promise((resolve, reject) => {
+                                const reader = new FileReader();
+                                reader.onload = () => resolve(reader.result);
+                                reader.onerror = (error) => reject(error);
+                                reader.readAsText(file);
+                            });
+                        } else {
+                            base64Data = await fileToBase64(file);
+                        }
 
                         const message = state.currentMessages[messageIndex];
                         message.attachments[attachmentIndex] = {
                             file: file,
                             name: fileName,
                             mimeType: guessedMimeType,
-                            base64Data: base64Data
+                            base64Data: base64Data,
+                            textData: textData,
                         };
                         
                         const messageElement = elements.messageContainer.querySelector(`.message[data-index="${messageIndex}"]`);
@@ -12461,17 +12482,30 @@
                         }
                         
                         try {
-                            const base64Data = await fileToBase64(file);
-                            let browserMimeType = file.type || '';
+                            let textData = null;
+                            let base64Data = null;
                             const fileName = file.name;
                             const fileExtension = fileName.slice(((fileName.lastIndexOf(".") - 1) >>> 0) + 2).toLowerCase();
+                            let browserMimeType = file.type || '';
                             let guessedMimeType = extensionToMimeTypeMap[fileExtension] || browserMimeType || 'application/octet-stream';
                             
+                            if (guessedMimeType.startsWith('text/')) {
+                                textData = await new Promise((resolve, reject) => {
+                                    const reader = new FileReader();
+                                    reader.onload = () => resolve(reader.result);
+                                    reader.onerror = (error) => reject(error);
+                                    reader.readAsText(file);
+                                });
+                            } else {
+                                base64Data = await fileToBase64(file);
+                            }
+
                             const newAttachment = {
                                 file: file,
                                 name: fileName,
                                 mimeType: guessedMimeType,
-                                base64Data: base64Data
+                                base64Data: base64Data,
+                                textData: textData,
                             };
                             message.attachments.push(newAttachment);
                             currentTotalSize += file.size;
@@ -12594,8 +12628,7 @@
                      safetySettings : [
                          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
                          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-                         { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-                         { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+                         { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },                         { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
                      ]
                 };
 
@@ -13120,8 +13153,7 @@
                         type: 'metadata',
                         finishReason: isCancelled ? 'ABORTED' : finalFinishReason || 'stop',
                         safetyRatings: null,
-                        groundingMetadata: null,
-                        usageMetadata: finalUsage ? {
+                                                usageMetadata: finalUsage ? {
                             candidatesTokenCount: finalUsage.output_tokens,
                             totalTokenCount: finalUsage.input_tokens + finalUsage.output_tokens
                         } : null
@@ -13143,9 +13175,24 @@
                 messagesForApi.forEach(m => {
                     const role = m.role === "model" ? "assistant" : m.role;
                     const contentParts = [];
+                    let hasTextPart = false;
+
                     m.parts.forEach(p => {
                         if (p.text) {
-                            contentParts.push({ type: "text", text: p.text });
+                            if (hasTextPart) {
+                                contentParts[contentParts.length - 1].text += `\n${p.text}`;
+                            } else {
+                                contentParts.push({ type: "text", text: p.text });
+                                hasTextPart = true;
+                            }
+                        }
+                        if (p.textData) {
+                             if (hasTextPart) {
+                                contentParts[contentParts.length - 1].text += `\n\n--- ファイル内容 ---\n${p.textData}`;
+                            } else {
+                                contentParts.push({ type: "text", text: p.textData });
+                                hasTextPart = true;
+                            }
                         }
                         if (enableVision && p.inlineData && p.inlineData.mimeType && p.inlineData.data && p.inlineData.mimeType.startsWith('image/')) {
                             contentParts.push({
