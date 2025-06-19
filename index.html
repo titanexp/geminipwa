@@ -3860,13 +3860,6 @@
                        </label>
                        <label for="openai-streaming-speed">文字送り速度 (ミリ秒/文字):</label>
                        <input type="number" id="openai-streaming-speed" min="0" step="1" placeholder="例: 30 (0で無効)" aria-label="OpenAI 文字送り速度">
-                       <label class="checkbox-label" style="margin-top: 15px;">
-                           <input type="checkbox" id="openai-vision-enable">
-                           Vision (画像入力) を有効にする
-                       </label>
-                       <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                           ※gpt-4-turbo, gpt-4o, gpt-4o-mini など画像入力対応モデルを選択してください。
-                       </p>
                     </div>
                 </details>
                 
@@ -4700,7 +4693,6 @@
             openaiFrequencyPenaltyInput: document.getElementById('openai-frequency-penalty'),
             openaiStreamingOutputCheckbox: document.getElementById('openai-streaming-output'),
             openaiStreamingSpeedInput: document.getElementById('openai-streaming-speed'),
-            openaiVisionEnableCheckbox: document.getElementById('openai-vision-enable'),
             openaiDummyUserInput: document.getElementById('openai-dummy-user'),
             openaiEnableDummyUserCheckbox: document.getElementById('openai-enable-dummy-user'),
             openaiDummyModelInput: document.getElementById('openai-dummy-model'),
@@ -4965,7 +4957,6 @@
                 openaiFrequencyPenalty: null,
                 openaiStreamingOutput: true,
                 openaiStreamingSpeed: DEFAULT_STREAMING_SPEED,
-                openaiVisionEnable: false,
                 openaiDummyUser: '',
                 openaiEnableDummyUser: true,
                 openaiDummyModel: '',
@@ -7062,7 +7053,6 @@
                 elements.openaiFrequencyPenaltyInput.value = state.settings.openaiFrequencyPenalty === null ? '' : state.settings.openaiFrequencyPenalty;
                 elements.openaiStreamingOutputCheckbox.checked = state.settings.openaiStreamingOutput;
                 elements.openaiStreamingSpeedInput.value = state.settings.openaiStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
-                elements.openaiVisionEnableCheckbox.checked = state.settings.openaiVisionEnable;
                 elements.openaiDummyUserInput.value = state.settings.openaiDummyUser || '';
                 elements.openaiEnableDummyUserCheckbox.checked = state.settings.openaiEnableDummyUser;
                 elements.openaiDummyModelInput.value = state.settings.openaiDummyModel || '';
@@ -9417,7 +9407,6 @@
 
                 let contextClaudeTopK, contextClaudeIncludeThoughts, contextClaudeThinkingBudget, contextClaudeExpandThoughtsByDefault;
                 
-                let contextOpenAIVisionEnable;
                 let contextXaiVisionEnable, contextXaiIncludeThoughts, contextXaiReasoningEffort;
 
                 if (isBackgroundProcess) {
@@ -9482,7 +9471,6 @@
                         contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.openaiDummyModel;
                         contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.openaiEnableDummyModel;
                         contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.openaiConcatDummyModel;
-                        contextOpenAIVisionEnable = sourceSessionContext.visionEnable ?? state.settings.openaiVisionEnable;
                     } else if (providerForSettingsB === 'xai') {
                         contextTemperature = sourceSessionContext.temperature ?? state.settings.xaiTemperature;
                         contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.xaiMaxTokens;
@@ -9561,7 +9549,6 @@
                         contextDummyModel = state.settings.openaiDummyModel;
                         contextEnableDummyModel = state.settings.openaiEnableDummyModel;
                         contextConcatDummyModel = state.settings.openaiConcatDummyModel;
-                        contextOpenAIVisionEnable = state.settings.openaiVisionEnable;
                     } else if (selectedApiProvider === 'xai') {
                         contextTemperature = state.settings.xaiTemperature;
                         contextMaxTokens = state.settings.xaiMaxTokens;
@@ -9866,7 +9853,8 @@
                     } else if (selectedApiProvider === 'claude') {
                         apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                     } else if (selectedApiProvider === 'openai') {
-                        apiResponseObject = await apiUtils.callOpenAiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, contextOpenAIVisionEnable);
+                        const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
+                        apiResponseObject = await apiUtils.callOpenAiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, hasImage);
                     } else if (selectedApiProvider === 'xai') {
                         const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
                         const enableVisionForThisCall = contextXaiVisionEnable || hasImage;
@@ -10866,7 +10854,6 @@
                 newSettings.openaiFrequencyPenalty = elements.openaiFrequencyPenaltyInput.value === '' ? null : parseFloat(elements.openaiFrequencyPenaltyInput.value);
                 newSettings.openaiStreamingOutput = elements.openaiStreamingOutputCheckbox.checked;
                 newSettings.openaiStreamingSpeed = elements.openaiStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.openaiStreamingSpeedInput.value);
-                newSettings.openaiVisionEnable = elements.openaiVisionEnableCheckbox.checked;
                 newSettings.openaiDummyUser = elements.openaiDummyUserInput.value.trim();
                 newSettings.openaiEnableDummyUser = elements.openaiEnableDummyUserCheckbox.checked;
                 newSettings.openaiDummyModel = elements.openaiDummyModelInput.value.trim();
@@ -11166,7 +11153,6 @@
                                 else if(key === 'claudeIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeThinkingBudget') defaultSettingsCopy[key] = null;
-                                else if(key === 'openaiVisionEnable') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiVisionEnable') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
@@ -12228,7 +12214,7 @@
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
                         deepSeekIncludeThoughtsB, presencePenaltyB, frequencyPenaltyB,
                         claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB,
-                        openaiVisionEnableB, xaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB;
+                        xaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB;
 
                     if (providerForSettingsB === 'gemini') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
@@ -12298,7 +12284,6 @@
                         dummyModelB = state.settings.openaiDummyModel;
                         enableDummyModelB = state.settings.openaiEnableDummyModel;
                         concatDummyModelB = state.settings.openaiConcatDummyModel;
-                        openaiVisionEnableB = state.settings.openaiVisionEnable;
                     } else if (providerForSettingsB === 'xai') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.xaiSystemPrompt;
                         enableSystemPromptDefaultB = state.settings.xaiEnableSystemPromptDefault;
@@ -12344,8 +12329,7 @@
                         reasoningEffort: providerForSettingsB === 'xai' ? xaiReasoningEffortB : undefined,
                         pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
                         enableGrounding: providerForSettingsB === 'gemini' ? geminiEnableGroundingB : undefined,
-                        visionEnable: providerForSettingsB === 'openai' ? openaiVisionEnableB :
-                                      providerForSettingsB === 'xai' ? xaiVisionEnableB : undefined,
+                        visionEnable: providerForSettingsB === 'xai' ? xaiVisionEnableB : undefined,
                         inputText: inputForB,
                         attachments: [],
                         apiProvider: providerForSettingsB
@@ -12610,8 +12594,7 @@
                      safetySettings : [
                          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
                          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-                         { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-                         { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+                         { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },                         { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
                      ]
                 };
 
@@ -13116,7 +13099,7 @@
                                     } else if (chunk.type === 'message_stop') {
                                         finalFinishReason = chunk.message?.stop_reason || 'stop';
                                         if (chunk["amazon-bedrock-invocationMetrics"]) {
-                                                                                    finalUsage = {
+                                            finalUsage = {
                                                 input_tokens: chunk["amazon-bedrock-invocationMetrics"].inputTokenCount,
                                                 output_tokens: chunk["amazon-bedrock-invocationMetrics"].outputTokenCount
                                             };
@@ -13367,4 +13350,3 @@
     </script>
 </body>
 </html>
-
