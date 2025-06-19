@@ -3920,14 +3920,6 @@
                        </label>
                        <label for="xai-streaming-speed">文字送り速度 (ミリ秒/文字):</label>
                        <input type="number" id="xai-streaming-speed" min="0" step="1" placeholder="例: 30 (0で無効)" aria-label="xAI 文字送り速度">
-                       <label class="checkbox-label" style="margin-top: 15px;">
-                           <input type="checkbox" id="xai-vision-enable">
-                           Vision (画像入力) を有効にする
-                       </label>
-                       <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                           ※ grok-2-vision-1212 など画像入力対応モデルを選択してください。<br>
-                           ※ 対応形式: JPEG, PNG
-                       </p>
                     </div>
                 </details>
 
@@ -4725,7 +4717,6 @@
             xaiIncludeThoughtsToggle: document.getElementById('xai-include-thoughts-toggle'),
             xaiExpandThoughtsByDefaultToggle: document.getElementById('xai-expand-thoughts-by-default-toggle'),
             xaiReasoningEffortSelect: document.getElementById('xai-reasoning-effort'),
-            xaiVisionEnableCheckbox: document.getElementById('xai-vision-enable'),
 
             setThinkingBudgetBtns: document.querySelectorAll('.set-thinking-budget-btn'),
             setClaudeParamBtns: document.querySelectorAll('.set-claude-param-btn'),
@@ -4992,7 +4983,6 @@
                 xaiIncludeThoughts: false,
                 xaiExpandThoughtsByDefault: false,
                 xaiReasoningEffort: 'low',
-                xaiVisionEnable: false,
                 enterToSend: true,
                 autoScrollOnNewMessage: DEFAULT_AUTO_SCROLL_ON_NEW_MESSAGE,
                 autoScrollOnThought: false,
@@ -7087,7 +7077,6 @@
                 elements.xaiIncludeThoughtsToggle.checked = state.settings.xaiIncludeThoughts;
                 elements.xaiExpandThoughtsByDefaultToggle.checked = state.settings.xaiExpandThoughtsByDefault;
                 elements.xaiReasoningEffortSelect.value = state.settings.xaiReasoningEffort;
-                elements.xaiVisionEnableCheckbox.checked = state.settings.xaiVisionEnable;
 
                  elements.enterToSendCheckbox.checked = state.settings.enterToSend;
                  elements.autoScrollOnNewMessageCheckbox.checked = state.settings.autoScrollOnNewMessage;
@@ -9419,7 +9408,7 @@
                 let contextClaudeTopK, contextClaudeIncludeThoughts, contextClaudeThinkingBudget, contextClaudeExpandThoughtsByDefault;
                 
                 let contextOpenAIVisionEnable;
-                let contextXaiIncludeThoughts, contextXaiReasoningEffort, contextXaiVisionEnable;
+                let contextXaiIncludeThoughts, contextXaiReasoningEffort;
 
                 if (isBackgroundProcess) {
                     const providerForSettingsB = sourceSessionContext.apiProvider || state.settings.apiProvider;
@@ -9499,7 +9488,6 @@
                         contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.xaiConcatDummyModel;
                         contextXaiIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.xaiIncludeThoughts;
                         contextXaiReasoningEffort = sourceSessionContext.reasoningEffort ?? state.settings.xaiReasoningEffort;
-                        contextXaiVisionEnable = sourceSessionContext.visionEnable ?? state.settings.xaiVisionEnable;
                     }
                 } else {
                     if (selectedApiProvider === 'gemini') {
@@ -9578,7 +9566,6 @@
                         contextConcatDummyModel = state.settings.xaiConcatDummyModel;
                         contextXaiIncludeThoughts = state.settings.xaiIncludeThoughts;
                         contextXaiReasoningEffort = state.settings.xaiReasoningEffort;
-                        contextXaiVisionEnable = state.settings.xaiVisionEnable;
                     }
                 }
 
@@ -9789,18 +9776,36 @@
                         }
                         if (msg.role === 'user' && msg.attachments && msg.attachments.length > 0) {
                             msg.attachments.forEach(att => {
-                                if(att.base64Data) {
-                                    parts.push({
-                                        inlineData: {
-                                            mimeType: att.mimeType,
-                                            data: att.base64Data
-                                        }
-                                    });
+                                if (att.base64Data) {
+                                    if (selectedApiProvider === 'xai') {
+                                        parts.push({
+                                            type: "image_url",
+                                            image_url: {
+                                                url: `data:${att.mimeType};base64,${att.base64Data}`,
+                                                detail: "high"
+                                            }
+                                        });
+                                    } else {
+                                        parts.push({
+                                            inlineData: {
+                                                mimeType: att.mimeType,
+                                                data: att.base64Data
+                                            }
+                                        });
+                                    }
                                 }
                             });
+                            if (selectedApiProvider === 'xai') {
+                                const textPartIndex = parts.findIndex(p => p.type === 'text');
+                                if (textPartIndex !== -1) {
+                                    const textPart = parts.splice(textPartIndex, 1)[0];
+                                    parts.push(textPart);
+                                }
+                            }
                         }
-                        return { role: msg.role, parts: parts.length > 0 ? parts : [{text: ''}] };
+                        return { role: msg.role, parts: parts.length > 0 ? parts : [{ text: '' }] };
                     });
+
                 const dummyUserTextToUse = contextEnableDummyUser && contextDummyUser?.trim() ? contextDummyUser.trim() : null;
                 const dummyModelTextToUse = contextEnableDummyModel && contextDummyModel?.trim() ? contextDummyModel.trim() : null;
 
@@ -9869,7 +9874,7 @@
                     } else if (selectedApiProvider === 'openai') {
                         apiResponseObject = await apiUtils.callOpenAiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, contextOpenAIVisionEnable);
                     } else if (selectedApiProvider === 'xai') {
-                        apiResponseObject = await apiUtils.callXaiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, contextXaiVisionEnable);
+                        apiResponseObject = await apiUtils.callXaiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                     } else {
                         throw new Error("不明なAPIプロバイダーが選択されています。");
                     }
@@ -10889,7 +10894,6 @@
                 newSettings.xaiIncludeThoughts = elements.xaiIncludeThoughtsToggle.checked;
                 newSettings.xaiExpandThoughtsByDefault = elements.xaiExpandThoughtsByDefaultToggle.checked;
                 newSettings.xaiReasoningEffort = elements.xaiReasoningEffortSelect.value;
-                newSettings.xaiVisionEnable = elements.xaiVisionEnableCheckbox.checked;
 
                  newSettings.enterToSend = elements.enterToSendCheckbox.checked;
                  newSettings.autoScrollOnNewMessage = elements.autoScrollOnNewMessageCheckbox.checked;
@@ -11169,7 +11173,6 @@
                                 else if(key === 'xaiIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiReasoningEffort') defaultSettingsCopy[key] = 'low';
-                                else if(key === 'xaiVisionEnable') defaultSettingsCopy[key] = false;
                             }
                         });
                         defaultSettingsCopy.apiKey = '';
@@ -12227,7 +12230,7 @@
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
                         deepSeekIncludeThoughtsB, presencePenaltyB, frequencyPenaltyB,
                         claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB,
-                        openaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB, xaiVisionEnableB;
+                        openaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB;
 
                     if (providerForSettingsB === 'gemini') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
@@ -12315,7 +12318,6 @@
                         concatDummyModelB = state.settings.xaiConcatDummyModel;
                         xaiIncludeThoughtsB = state.settings.xaiIncludeThoughts;
                         xaiReasoningEffortB = state.settings.xaiReasoningEffort;
-                        xaiVisionEnableB = state.settings.xaiVisionEnable;
                     }
 
                     const contextForB = {
@@ -12343,8 +12345,7 @@
                         reasoningEffort: providerForSettingsB === 'xai' ? xaiReasoningEffortB : undefined,
                         pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
                         enableGrounding: providerForSettingsB === 'gemini' ? geminiEnableGroundingB : undefined,
-                        visionEnable: providerForSettingsB === 'openai' ? openaiVisionEnableB : 
-                                      providerForSettingsB === 'xai' ? xaiVisionEnableB : undefined,
+                        visionEnable: providerForSettingsB === 'openai' ? openaiVisionEnableB : undefined,
                         inputText: inputForB,
                         attachments: [],
                         apiProvider: providerForSettingsB
@@ -13021,7 +13022,7 @@
                             const errorData = await response.json();
                             if (errorData.error && errorData.error.message) {
                                 errorMsg = `Claude APIエラー (${response.status}): ${errorData.error.message} (Type: ${errorData.error.type || 'N/A'})`;
-                            }
+                                                            }
                         } catch (e) {}
                         throw new Error(errorMsg);
                     }
@@ -13149,7 +13150,7 @@
                     }
                 }
             },
-            _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, generationConfig, useStreaming, enableVision, providerName) {
+            _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, generationConfig, useStreaming, enableVision) {
                 const oaMessages = [];
                 if (systemInstruction && systemInstruction.parts?.[0]?.text) {
                     oaMessages.push({ role: "system", content: systemInstruction.parts[0].text });
@@ -13162,16 +13163,13 @@
                             return { type: "text", text: p.text };
                         }
                         if (enableVision && p.inlineData && p.inlineData.mimeType && p.inlineData.data && p.inlineData.mimeType.startsWith('image/')) {
-                            if (providerName === 'xai') {
-                                const allowedMimeTypes = ['image/jpeg', 'image/png'];
-                                if (!allowedMimeTypes.includes(p.inlineData.mimeType)) {
-                                    return null;
-                                }
-                            }
                             return {
                                 type: "image_url",
                                 image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` }
                             };
+                        }
+                        if (enableVision && p.type === 'image_url') {
+                            return p;
                         }
                         return null;
                     }).filter(Boolean);
@@ -13212,8 +13210,7 @@
                     systemInstruction,
                     generationConfig,
                     useStreaming,
-                    enableVision,
-                    'openai'
+                    enableVision
                 );
                 
                 const response = await fetch(OPENAI_API_BASE_URL, { method: "POST", headers, body: JSON.stringify(body), signal });
@@ -13311,7 +13308,7 @@
                     }
                 }
             },
-            async callXaiApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
+            async callXaiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
                 if (!state.settings.xaiApiKey) {
                     throw new Error("xAI APIキーが設定されていません。");
                 }
@@ -13323,7 +13320,6 @@
                     "Authorization": `Bearer ${state.settings.xaiApiKey}`
                 };
                 const model = state.settings.xaiModelName || DEFAULT_XAI_MODEL;
-                const enableVision = state.settings.xaiVisionEnable;
                 
                 const body = this._createOpenAICompatibleRequestBody(
                     model,
@@ -13331,8 +13327,7 @@
                     systemInstruction,
                     generationConfig,
                     useStreaming,
-                    enableVision,
-                    'xai'
+                    enableVision
                 );
 
                 const reasoningModels = ['grok-3-mini', 'grok-3-mini-fast'];
