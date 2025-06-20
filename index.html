@@ -3463,7 +3463,7 @@
                         <textarea id="xai-additional-models" placeholder="例: custom-grok-model" aria-label="xAI 追加モデル"></textarea>
                     </div>
                 </details>
-                
+
                 <details id="llmaggregator-settings-group" class="settings-group hidden" open>
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">LLM Aggregator 設定</summary>
                     <div style="margin-top:15px;">
@@ -3474,7 +3474,7 @@
 
                         <label for="llmaggregator-model-name">モデル名:</label>
                         <select id="llmaggregator-model-name" aria-label="LLM Aggregator モデル名">
-                            <optgroup label="基本モデル">
+                            <optgroup label="デフォルト">
                                 <option value="deepseek/deepseek-chat-v3-0324:free">deepseek/deepseek-chat-v3-0324:free</option>
                                 <option value="google/gemini-2.5-flash-lite-preview-06-17">google/gemini-2.5-flash-lite-preview-06-17</option>
                             </optgroup>
@@ -3482,9 +3482,9 @@
                             </optgroup>
                         </select>
                         <label for="llmaggregator-additional-models" style="margin-top:10px;">追加モデル (カンマ区切り):</label>
-                        <textarea id="llmaggregator-additional-models" placeholder="例: openai/gpt-4o,anthropic/claude-3-haiku" aria-label="LLM Aggregator 追加モデル"></textarea>
+                        <textarea id="llmaggregator-additional-models" placeholder="例: mistralai/Mixtral-8x7B-Instruct-v0.1,another/model" aria-label="LLM Aggregator 追加モデル"></textarea>
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                           ※ DeepSeek互換のAPIエンドポイントにリクエストします。
+                           ※ ChatGPT/DeepSeek互換のAPIエンドポイントにリクエストします。
                         </p>
                     </div>
                 </details>
@@ -3757,7 +3757,7 @@
                         </details>
                     </div>
                 </details>
-                
+
                 <details id="llmaggregator-params-group" class="settings-group hidden" open>
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">パラメータ (LLM Aggregator)</summary>
                     <div style="margin-top:15px;">
@@ -3793,6 +3793,17 @@
                                     <input type="number" id="llmaggregator-frequency-penalty" step="0.1" min="-2.0" max="2.0" placeholder="例:0.0 (-2.0～2.0)" aria-label="LLM Aggregator Frequency Penalty">
                                 </div>
                             </div>
+                            <div id="llmaggregator-thoughts-param">
+                               <h3 style="margin-top:15px; margin-bottom:10px; font-size:14px; border:0; padding:0;">思考プロセス</h3>
+                               <label class="checkbox-label">
+                                   <input type="checkbox" id="llmaggregator-include-thoughts-toggle">
+                                   Include Thoughts
+                               </label>
+                               <label class="checkbox-label">
+                                   <input type="checkbox" id="llmaggregator-expand-thoughts-by-default-toggle">
+                                   💭思考プロセスを開いた状態にする
+                               </label>
+                           </div>
                         </details>
                     </div>
                 </details>
@@ -4740,7 +4751,7 @@
             llmAggregatorModelNameSelect: document.getElementById('llmaggregator-model-name'),
             llmAggregatorUserDefinedModelsGroup: document.getElementById('llmaggregator-user-defined-models-group'),
             llmAggregatorAdditionalModelsTextarea: document.getElementById('llmaggregator-additional-models'),
-
+            
             geminiParamsGroup: document.getElementById('gemini-params-group'),
             deepseekParamsGroup: document.getElementById('deepseek-params-group'),
             claudeParamsGroup: document.getElementById('claude-params-group'),
@@ -4851,6 +4862,8 @@
             llmAggregatorTopPInput: document.getElementById('llmaggregator-top-p'),
             llmAggregatorPresencePenaltyInput: document.getElementById('llmaggregator-presence-penalty'),
             llmAggregatorFrequencyPenaltyInput: document.getElementById('llmaggregator-frequency-penalty'),
+            llmAggregatorIncludeThoughtsToggle: document.getElementById('llmaggregator-include-thoughts-toggle'),
+            llmAggregatorExpandThoughtsByDefaultToggle: document.getElementById('llmaggregator-expand-thoughts-by-default-toggle'),
             llmAggregatorStreamingOutputCheckbox: document.getElementById('llmaggregator-streaming-output'),
             llmAggregatorStreamingSpeedInput: document.getElementById('llmaggregator-streaming-speed'),
             llmAggregatorDummyUserInput: document.getElementById('llmaggregator-dummy-user'),
@@ -4858,8 +4871,6 @@
             llmAggregatorDummyModelInput: document.getElementById('llmaggregator-dummy-model'),
             llmAggregatorEnableDummyModelCheckbox: document.getElementById('llmaggregator-enable-dummy-model'),
             llmAggregatorConcatDummyModelCheckbox: document.getElementById('llmaggregator-concat-dummy-model'),
-            llmAggregatorIncludeThoughtsToggle: document.getElementById('llmaggregator-include-thoughts-toggle'),
-            llmAggregatorExpandThoughtsByDefaultToggle: document.getElementById('llmaggregator-expand-thoughts-by-default-toggle'),
 
             setThinkingBudgetBtns: document.querySelectorAll('.set-thinking-budget-btn'),
             setClaudeParamBtns: document.querySelectorAll('.set-claude-param-btn'),
@@ -7164,9 +7175,8 @@
                 elements.xaiAdditionalModelsTextarea.value = state.settings.xaiAdditionalModels || '';
                 elements.llmAggregatorApiBackendInput.value = state.settings.llmAggregatorApiBackend || '';
                 elements.llmAggregatorApiKeyInput.value = state.settings.llmAggregatorApiKey || '';
-                elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName || '';
+                elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
                 elements.llmAggregatorAdditionalModelsTextarea.value = state.settings.llmAggregatorAdditionalModels || '';
-                
 
                 elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPrompt || '';
                 elements.geminiEnableSystemPromptDefaultCheckbox.checked = state.settings.geminiEnableSystemPromptDefault;
@@ -7684,45 +7694,26 @@
                 }
             },
             updateLlmAggregatorUserModelOptions() {
-                const select = elements.llmAggregatorModelNameSelect;
-                const userDefinedOptgroup = select.querySelector('optgroup[label="ユーザー指定"]');
-                if (userDefinedOptgroup) {
-                    userDefinedOptgroup.remove();
-                }
-
-                const baseModelsOptgroup = select.querySelector('optgroup[label="基本モデル"]') || select;
-                baseModelsOptgroup.innerHTML = '';
-                const defaultLlmAggregatorModels = ['deepseek/deepseek-chat-v3-0324:free', 'google/gemini-2.5-flash-lite-preview-06-17'];
-                defaultLlmAggregatorModels.forEach(modelId => {
-                    const option = document.createElement('option');
-                    option.value = modelId;
-                    option.textContent = modelId;
-                    baseModelsOptgroup.appendChild(option);
-                });
-
-                const additionalModels = (state.settings.llmAggregatorAdditionalModels || '')
+                const group = elements.llmAggregatorUserDefinedModelsGroup;
+                group.innerHTML = '';
+                const models = (state.settings.llmAggregatorAdditionalModels || '')
                     .split(',')
                     .map(m => m.trim())
                     .filter(m => m !== '');
 
-                if (additionalModels.length > 0) {
-                    let optgroup = document.createElement('optgroup');
-                    optgroup.label = 'ユーザー指定';
-                    optgroup.id = 'llmaggregator-user-defined-models-group';
-                    additionalModels.forEach(modelId => {
+                if (models.length > 0) {
+                    group.disabled = false;
+                    models.forEach(modelId => {
                         const option = document.createElement('option');
                         option.value = modelId;
                         option.textContent = modelId;
-                        optgroup.appendChild(option);
+                        group.appendChild(option);
                     });
-                    select.appendChild(optgroup);
-                }
-
-                if (state.settings.llmAggregatorModelName && Array.from(select.options).some(opt => opt.value === state.settings.llmAggregatorModelName)) {
-                    select.value = state.settings.llmAggregatorModelName;
-                } else if (select.options.length > 0) {
-                    select.value = defaultLlmAggregatorModels[0];
-                    state.settings.llmAggregatorModelName = select.value;
+                    if (models.includes(state.settings.llmAggregatorModelName)) {
+                        elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName;
+                    }
+                } else {
+                    group.disabled = true;
                 }
             },
             applyFontFamily() {
@@ -9662,8 +9653,6 @@
                 
                 let contextXaiVisionEnable, contextXaiIncludeThoughts, contextXaiReasoningEffort;
 
-                let contextLlmAggregatorIncludeThoughts, contextLlmAggregatorExpandThoughtsByDefault;
-
                 if (isBackgroundProcess) {
                     const providerForSettingsB = sourceSessionContext.apiProvider || state.settings.apiProvider;
                     if (providerForSettingsB === 'gemini') {
@@ -9691,7 +9680,7 @@
                         contextTopP = sourceSessionContext.topP ?? state.settings[`${prefix}TopP`];
                         contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings[`${prefix}PresencePenalty`];
                         contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings[`${prefix}FrequencyPenalty`];
-                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeDeepSeekThoughts ?? state.settings[`${prefix}IncludeThoughts`];
+                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings[`${prefix}IncludeThoughts`];
                         contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings[`${prefix}StreamingOutput`];
                         contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings[`${prefix}StreamingSpeed`];
                         contextDummyUser = sourceSessionContext.dummyUser ?? state.settings[`${prefix}DummyUser`];
@@ -10104,12 +10093,12 @@
                     if (selectedApiProvider === 'gemini') {
                         apiResponseObject = await apiUtils.callGeminiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, usePseudoForThisCall, contextGeminiEnableGrounding);
                     } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
-                        apiResponseObject = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, selectedApiProvider === 'llmaggregator');
+                        apiResponseObject = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, selectedApiProvider);
                     } else if (selectedApiProvider === 'claude') {
                         apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                     } else if (selectedApiProvider === 'openai') {
                         const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
-                        apiResponseObject = await apiUtils.callOpenAICompatibleApi(selectedApiProvider, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, hasImage);
+                        apiResponseObject = await apiUtils.callOpenAICompatibleApi('openai', apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, hasImage);
                     } else if (selectedApiProvider === 'xai') {
                         const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
                         const enableVisionForThisCall = contextXaiVisionEnable || hasImage;
@@ -10126,11 +10115,6 @@
 
                     if (useStreamingForThisCall && !isBackgroundProcess) {
                         const tempPlaceholderIndex = state.currentMessages.length;
-                        const expandThoughts = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
-                                              (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                              (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
-                                              (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
-                                              (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault);
                         modelMessageObjectForStream = {
                             role: 'model',
                             content: '',
@@ -10139,7 +10123,11 @@
                             xaiThoughtSummary: null,
                             timestamp: Date.now(),
                             generatedByApiProvider: selectedApiProvider,
-                            thoughtSummaryOpen: expandThoughts,
+                            thoughtSummaryOpen: (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts && state.settings.geminiExpandThoughtsByDefault) ||
+                                                (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && state.settings.deepSeekExpandThoughtsByDefault) ||
+                                                (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && state.settings.claudeExpandThoughtsByDefault) ||
+                                                (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && state.settings.xaiExpandThoughtsByDefault) ||
+                                                (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorIncludeThoughts && state.settings.llmAggregatorExpandThoughtsByDefault),
                         };
 
                         if (isRetry && firstResponseIndexForRetry !== -1) {
@@ -10316,7 +10304,7 @@
                                     modelThoughtSummaryContent = data.parsedReasoningContent;
                                 }
                             } else {
-                                rawContentFromApi = `${selectedApiProvider}からの応答がありません。`;
+                                rawContentFromApi = `${provider.toUpperCase()}からの応答がありません。`;
                                 modelResponseMetadata = { finishReason: 'ERROR' };
                                 if (data.error) rawContentFromApi += ` (エラー: ${data.error.message})`;
                             }
@@ -11253,7 +11241,7 @@
                     return num;
                 };
 
-                const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'];
+                const providers = ['gemini', 'deepSeek', 'claude', 'openai', 'xai', 'llmaggregator'];
                 providers.forEach(provider => {
                     const prefix = provider;
                     const streamingSpeedKey = `${prefix}StreamingSpeed`;
@@ -11431,10 +11419,8 @@
                                 else if(key === 'geminiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'geminiPseudoStreaming') defaultSettingsCopy[key] = false;
                                 else if(key === 'geminiEnableGrounding') defaultSettingsCopy[key] = false;
-                                else if(key === 'deepSeekIncludeDeepSeekThoughts') defaultSettingsCopy[key] = false;
-                                else if(key === 'deepSeekExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
-                                else if(key === 'llmAggregatorIncludeThoughts') defaultSettingsCopy[key] = false;
-                                else if(key === 'llmAggregatorExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
+                                else if(key === 'deepSeekIncludeDeepSeekThoughts' || key === 'llmAggregatorIncludeThoughts') defaultSettingsCopy[key] = false;
+                                else if(key === 'deepSeekExpandThoughtsByDefault' || key === 'llmAggregatorExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeThinkingBudget') defaultSettingsCopy[key] = null;
@@ -11442,9 +11428,6 @@
                                 else if(key === 'xaiIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiReasoningEffort') defaultSettingsCopy[key] = 'low';
-                                else if(key.toLowerCase().includes('apibackend')) defaultSettingsCopy[key] = '';
-                                else if(key.toLowerCase().includes('enablecustombackend')) defaultSettingsCopy[key] = false;
-                                else if(key.toLowerCase().includes('custombackendapikey')) defaultSettingsCopy[key] = '';
                             }
                         });
                         defaultSettingsCopy.apiKey = '';
@@ -11465,8 +11448,8 @@
                         defaultSettingsCopy.xaiApiKey = '';
                         defaultSettingsCopy.xaiModelName = DEFAULT_XAI_MODEL;
                         defaultSettingsCopy.xaiAdditionalModels = '';
-                        defaultSettingsCopy.llmAggregatorApiKey = '';
                         defaultSettingsCopy.llmAggregatorApiBackend = '';
+                        defaultSettingsCopy.llmAggregatorApiKey = '';
                         defaultSettingsCopy.llmAggregatorModelName = DEFAULT_LLMAGGREGATOR_MODEL;
                         defaultSettingsCopy.llmAggregatorAdditionalModels = '';
                         defaultSettingsCopy.apiProvider = 'gemini';
@@ -11961,8 +11944,7 @@
                             const messageApiProvider = msg?.generatedByApiProvider || state.settings.apiProvider;
                             state.thoughtSummaryOpenStates.set(newIdx, (messageApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
                                                                        (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                                       (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
-                                                                       (messageApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault));
+                                                                       (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault));
                         }
                     });
 
@@ -12192,8 +12174,7 @@
                             const messageApiProvider = msg?.generatedByApiProvider || state.settings.apiProvider;
                             state.thoughtSummaryOpenStates.set(newIdx, (messageApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
                                                                        (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                                       (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
-                                                                       (messageApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault));
+                                                                       (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault));
                         }
                     });
 
@@ -12514,8 +12495,7 @@
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
                         deepSeekIncludeThoughtsB, presencePenaltyB, frequencyPenaltyB,
                         claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB,
-                        xaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB,
-                        llmAggregatorIncludeThoughtsB, llmAggregatorExpandThoughtsByDefaultB;
+                        xaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB;
 
                     if (providerForSettingsB === 'gemini') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
@@ -12546,7 +12526,7 @@
                         topPB = state.settings[`${prefix}TopP`];
                         presencePenaltyB = state.settings[`${prefix}PresencePenalty`];
                         frequencyPenaltyB = state.settings[`${prefix}FrequencyPenalty`];
-                        deepSeekIncludeThoughtsB = state.settings[`${prefix}IncludeThoughts`];
+                        contextDeepSeekIncludeThoughts = state.settings[`${prefix}IncludeThoughts`];
                         streamingOutputB = state.settings[`${prefix}StreamingOutput`];
                         streamingSpeedB = state.settings[`${prefix}StreamingSpeed`];
                         dummyUserB = state.settings[`${prefix}DummyUser`];
@@ -12621,7 +12601,7 @@
                         thinkingBudget: providerForSettingsB === 'gemini' ? geminiThinkingBudgetB : 
                                         providerForSettingsB === 'claude' ? claudeThinkingBudgetB : undefined,
                         includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : 
-                                         (providerForSettingsB === 'deepseek' || providerForSettingsB === 'llmaggregator') ? deepSeekIncludeThoughtsB : 
+                                         providerForSettingsB === 'deepseek' || providerForSettingsB === 'llmaggregator' ? contextDeepSeekIncludeThoughts : 
                                          providerForSettingsB === 'claude' ? claudeIncludeThoughtsB :
                                          providerForSettingsB === 'xai' ? xaiIncludeThoughtsB : undefined,
                         expandThoughtsByDefault: (providerForSettingsB === 'gemini' && state.settings.geminiExpandThoughtsByDefault) ||
@@ -13102,20 +13082,27 @@
                      }
                  }
             },
-            async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming, isAggregator = false) {
-                const apiKey = isAggregator ? state.settings.llmAggregatorApiKey : state.settings.deepSeekApiKey;
+            async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
+                let apiKey, model, baseUrl;
+                if (provider === 'llmaggregator') {
+                    apiKey = state.settings.llmAggregatorApiKey;
+                    model = state.settings.llmAggregatorModelName;
+                    baseUrl = state.settings.llmAggregatorApiBackend;
+                    if (!baseUrl) {
+                        throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
+                    }
+                } else {
+                    apiKey = state.settings.deepSeekApiKey;
+                    model = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
+                    baseUrl = state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
+                }
+
                 if (!apiKey) {
-                    throw new Error(`${isAggregator ? 'LLM Aggregator' : 'DeepSeek'} APIキーが設定されていません。`);
+                    throw new Error(`${provider} APIキーが設定されていません。`);
                 }
                 state.abortController = new AbortController();
                 const { signal } = state.abortController;
 
-                const model = isAggregator ? state.settings.llmAggregatorModelName : (state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL);
-                
-                const baseUrl = isAggregator ? state.settings.llmAggregatorApiBackend : (state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL);
-                if (!baseUrl) {
-                    throw new Error(`${isAggregator ? 'LLM Aggregator' : 'DeepSeek'} のAPIエンドポイントが設定されていません。`);
-                }
                 const endpoint = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
 
                 const dsMessages = [];
@@ -13158,11 +13145,11 @@
                     });
 
                     if (!response.ok) {
-                        let errorMsg = `APIエラー (${response.status}): ${response.statusText}`;
+                        let errorMsg = `${provider.toUpperCase()} APIエラー (${response.status}): ${response.statusText}`;
                         try {
                             const errorData = await response.json();
                             if (errorData.error && errorData.error.message) {
-                                errorMsg = `APIエラー (${response.status}): ${errorData.error.message} (Type: ${errorData.error.type || 'N/A'})`;
+                                errorMsg = `${provider.toUpperCase()} APIエラー (${response.status}): ${errorData.error.message} (Type: ${errorData.error.type || 'N/A'})`;
                             }
                         } catch (e) {  }
                         throw new Error(errorMsg);
@@ -13186,7 +13173,7 @@
             },
             async *handleDeepSeekStreamingResponse(response) {
                 if (!response.body) {
-                    throw new Error("レスポンスボディがありません。");
+                    throw new Error("DeepSeekレスポンスボディがありません。");
                 }
                 const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
                 let buffer = '';
@@ -13289,7 +13276,7 @@
                 };
                 if(anthropicRequest.system) requestBody.system = anthropicRequest.system;
                 if (generationConfig.temperature !== undefined && generationConfig.temperature !== null) {
-                                    requestBody.temperature = generationConfig.temperature;
+                    requestBody.temperature = generationConfig.temperature;
                 } else if (state.settings.claudeTemperature !== null) {
                     requestBody.temperature = state.settings.claudeTemperature;
                 } else {
@@ -13365,7 +13352,7 @@
                     msg.parts.forEach(part => {
                         if (part.text) {
                             contentParts.push({ type: 'text', text: part.text });
-                        } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
+                                                    } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
                              contentParts.push({
                                 type: 'image',
                                 source: {
@@ -13527,7 +13514,7 @@
                     baseUrl = OPENAI_API_BASE_URL;
                 } else if (provider === 'llmaggregator') {
                     apiKey = state.settings.llmAggregatorApiKey;
-                    model = state.settings.llmAggregatorModelName;
+                    model = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
                     baseUrl = state.settings.llmAggregatorApiBackend;
                     if (!baseUrl) {
                         throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
