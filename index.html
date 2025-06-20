@@ -3161,7 +3161,7 @@
             margin-top: 15px;
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
 </head>
@@ -3463,29 +3463,28 @@
                         <textarea id="xai-additional-models" placeholder="例: custom-grok-model" aria-label="xAI 追加モデル"></textarea>
                     </div>
                 </details>
-
+                
                 <details id="llmaggregator-settings-group" class="settings-group hidden" open>
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">LLM Aggregator 設定</summary>
                     <div style="margin-top:15px;">
                         <label for="llmaggregator-api-backend">API バックエンド URL:</label>
-                        <input type="text" id="llmaggregator-api-backend" placeholder="例: https://openrouter.ai/api/v1/chat/completions" aria-label="LLM Aggregator API バックエンド URL">
+                        <input type="text" id="llmaggregator-api-backend" placeholder="例: https://api.openrouter.ai/v1/chat/completions" aria-label="LLM Aggregator API バックエンド URL">
                         <label for="llmaggregator-api-key">APIキー:</label>
                         <input type="password" id="llmaggregator-api-key" placeholder="APIキーを入力" aria-label="LLM Aggregator APIキー">
+
                         <label for="llmaggregator-model-name">モデル名:</label>
                         <select id="llmaggregator-model-name" aria-label="LLM Aggregator モデル名">
-                            <optgroup label="推奨モデル">
-                                <option value="openai/gpt-4o">OpenAI: GPT-4o</option>
-                                <option value="google/gemini-pro">Google: Gemini Pro</option>
-                                <option value="anthropic/claude-3-sonnet">Anthropic: Claude 3 Sonnet</option>
-                                <option value="mistralai/mistral-7b-instruct">Mistral 7B Instruct</option>
+                            <optgroup label="基本モデル">
+                                <option value="deepseek/deepseek-chat-v3-0324:free">deepseek/deepseek-chat-v3-0324:free</option>
+                                <option value="google/gemini-2.5-flash-lite-preview-06-17">google/gemini-2.5-flash-lite-preview-06-17</option>
                             </optgroup>
                             <optgroup label="ユーザー指定" id="llmaggregator-user-defined-models-group">
                             </optgroup>
                         </select>
                         <label for="llmaggregator-additional-models" style="margin-top:10px;">追加モデル (カンマ区切り):</label>
-                        <textarea id="llmaggregator-additional-models" placeholder="例: openai/gpt-4o-2024-05-13,anthropic/claude-2.1" aria-label="LLM Aggregator 追加モデル"></textarea>
+                        <textarea id="llmaggregator-additional-models" placeholder="例: openai/gpt-4o,anthropic/claude-3-haiku" aria-label="LLM Aggregator 追加モデル"></textarea>
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                           ※ ChatGPT互換のAPIエンドポイントにリクエストします。
+                           ※ DeepSeek互換のAPIエンドポイントにリクエストします。
                         </p>
                     </div>
                 </details>
@@ -4002,7 +4001,7 @@
                        <input type="number" id="xai-streaming-speed" min="0" step="1" placeholder="例: 30 (0で無効)" aria-label="xAI 文字送り速度">
                     </div>
                 </details>
-                
+
                 <details id="llmaggregator-advanced-group" class="settings-group hidden" open>
                    <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">アドバンスド (LLM Aggregator)</summary>
                    <div style="margin-top:15px;">
@@ -4563,7 +4562,7 @@
         const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-20250514';
         const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
         const DEFAULT_XAI_MODEL = 'grok-3-mini';
-        const DEFAULT_LLMAGGREGATOR_MODEL = 'openai/gpt-4o';
+        const DEFAULT_LLMAGGREGATOR_MODEL = 'deepseek/deepseek-chat-v3-0324:free';
         const DEFAULT_STREAMING_SPEED = 12;
         const DEFAULT_TEMPERATURE = 0.5;
         const DEFAULT_MAX_TOKENS = 4000;
@@ -4844,7 +4843,7 @@
             xaiIncludeThoughtsToggle: document.getElementById('xai-include-thoughts-toggle'),
             xaiExpandThoughtsByDefaultToggle: document.getElementById('xai-expand-thoughts-by-default-toggle'),
             xaiReasoningEffortSelect: document.getElementById('xai-reasoning-effort'),
-
+            
             llmAggregatorSystemPromptDefaultTextarea: document.getElementById('llmaggregator-system-prompt-default'),
             llmAggregatorEnableSystemPromptDefaultCheckbox: document.getElementById('llmaggregator-enable-system-prompt-default'),
             llmAggregatorMaxTokensInput: document.getElementById('llmaggregator-max-tokens'),
@@ -4859,6 +4858,8 @@
             llmAggregatorDummyModelInput: document.getElementById('llmaggregator-dummy-model'),
             llmAggregatorEnableDummyModelCheckbox: document.getElementById('llmaggregator-enable-dummy-model'),
             llmAggregatorConcatDummyModelCheckbox: document.getElementById('llmaggregator-concat-dummy-model'),
+            llmAggregatorIncludeThoughtsToggle: document.getElementById('llmaggregator-include-thoughts-toggle'),
+            llmAggregatorExpandThoughtsByDefaultToggle: document.getElementById('llmaggregator-expand-thoughts-by-default-toggle'),
 
             setThinkingBudgetBtns: document.querySelectorAll('.set-thinking-budget-btn'),
             setClaudeParamBtns: document.querySelectorAll('.set-claude-param-btn'),
@@ -5004,6 +5005,7 @@
             deepSeekThoughtsParam: document.getElementById('deepseek-thoughts-param'),
             claudeThoughtsParam: document.getElementById('claude-thoughts-param'),
             xaiThoughtsParam: document.getElementById('xai-thoughts-param'),
+            llmAggregatorThoughtsParam: document.getElementById('llmaggregator-thoughts-param'),
             disableSaveSettingsConfirmationToggle: document.getElementById('disable-save-settings-confirmation-toggle'),
             headerApiProviderToggleBtn: document.getElementById('header-api-provider-toggle-btn'),
             footerApiProviderToggleBtn: document.getElementById('footer-api-provider-toggle-btn'),
@@ -5137,6 +5139,8 @@
                 llmAggregatorTopP: null,
                 llmAggregatorPresencePenalty: null,
                 llmAggregatorFrequencyPenalty: null,
+                llmAggregatorIncludeThoughts: false,
+                llmAggregatorExpandThoughtsByDefault: false,
                 llmAggregatorStreamingOutput: true,
                 llmAggregatorStreamingSpeed: DEFAULT_STREAMING_SPEED,
                 llmAggregatorDummyUser: '',
@@ -5144,14 +5148,6 @@
                 llmAggregatorDummyModel: '',
                 llmAggregatorEnableDummyModel: true,
                 llmAggregatorConcatDummyModel: false,
-                llmAggregatorIncludeThoughts: false,
-                llmAggregatorExpandThoughtsByDefault: false,
-                llmAggregatorStop: null,
-                llmAggregatorResponseFormat: false,
-                llmAggregatorTools: null,
-                llmAggregatorModels: null,
-                llmAggregatorProviderPrefs: null,
-                llmAggregatorUserId: null,
                 enterToSend: true,
                 autoScrollOnNewMessage: DEFAULT_AUTO_SCROLL_ON_NEW_MESSAGE,
                 autoScrollOnThought: false,
@@ -5444,7 +5440,6 @@
                              if (key === 'darkMode') continue;
                              if (key === 'memoWidth') continue;
                              if (key === 'showCollapseButtons') continue;
-                             if (key.includes('CustomBackend')) continue;
 
                              if (key in defaultSettings) {
                                 const loadedValue = loadedSettings[key];
@@ -7269,6 +7264,8 @@
                 elements.llmAggregatorTopPInput.value = state.settings.llmAggregatorTopP === null ? '' : state.settings.llmAggregatorTopP;
                 elements.llmAggregatorPresencePenaltyInput.value = state.settings.llmAggregatorPresencePenalty === null ? '' : state.settings.llmAggregatorPresencePenalty;
                 elements.llmAggregatorFrequencyPenaltyInput.value = state.settings.llmAggregatorFrequencyPenalty === null ? '' : state.settings.llmAggregatorFrequencyPenalty;
+                elements.llmAggregatorIncludeThoughtsToggle.checked = state.settings.llmAggregatorIncludeThoughts;
+                elements.llmAggregatorExpandThoughtsByDefaultToggle.checked = state.settings.llmAggregatorExpandThoughtsByDefault;
                 elements.llmAggregatorStreamingOutputCheckbox.checked = state.settings.llmAggregatorStreamingOutput;
                 elements.llmAggregatorStreamingSpeedInput.value = state.settings.llmAggregatorStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
                 elements.llmAggregatorDummyUserInput.value = state.settings.llmAggregatorDummyUser || '';
@@ -7381,7 +7378,7 @@
                 this.updateClaudeUserModelOptions();
                 this.updateOpenAIUserModelOptions();
                 this.updateXaiUserModelOptions();
-                this.updateLLMAggregatorUserModelOptions();
+                this.updateLlmAggregatorUserModelOptions();
                 this.updateBackgroundSettingsUI();
                 this.updateIconSettingsUI();
                 this.applyTheme();
@@ -7686,26 +7683,46 @@
                     group.disabled = true;
                 }
             },
-            updateLLMAggregatorUserModelOptions() {
-                const group = elements.llmAggregatorUserDefinedModelsGroup;
-                group.innerHTML = '';
-                const models = (state.settings.llmAggregatorAdditionalModels || '')
+            updateLlmAggregatorUserModelOptions() {
+                const select = elements.llmAggregatorModelNameSelect;
+                const userDefinedOptgroup = select.querySelector('optgroup[label="ユーザー指定"]');
+                if (userDefinedOptgroup) {
+                    userDefinedOptgroup.remove();
+                }
+
+                const baseModelsOptgroup = select.querySelector('optgroup[label="基本モデル"]') || select;
+                baseModelsOptgroup.innerHTML = '';
+                const defaultLlmAggregatorModels = ['deepseek/deepseek-chat-v3-0324:free', 'google/gemini-2.5-flash-lite-preview-06-17'];
+                defaultLlmAggregatorModels.forEach(modelId => {
+                    const option = document.createElement('option');
+                    option.value = modelId;
+                    option.textContent = modelId;
+                    baseModelsOptgroup.appendChild(option);
+                });
+
+                const additionalModels = (state.settings.llmAggregatorAdditionalModels || '')
                     .split(',')
                     .map(m => m.trim())
                     .filter(m => m !== '');
-                if (models.length > 0) {
-                    group.disabled = false;
-                    models.forEach(modelId => {
+
+                if (additionalModels.length > 0) {
+                    let optgroup = document.createElement('optgroup');
+                    optgroup.label = 'ユーザー指定';
+                    optgroup.id = 'llmaggregator-user-defined-models-group';
+                    additionalModels.forEach(modelId => {
                         const option = document.createElement('option');
                         option.value = modelId;
                         option.textContent = modelId;
-                        group.appendChild(option);
+                        optgroup.appendChild(option);
                     });
-                    if (models.includes(state.settings.llmAggregatorModelName)) {
-                        elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName;
-                    }
-                } else {
-                    group.disabled = true;
+                    select.appendChild(optgroup);
+                }
+
+                if (state.settings.llmAggregatorModelName && Array.from(select.options).some(opt => opt.value === state.settings.llmAggregatorModelName)) {
+                    select.value = state.settings.llmAggregatorModelName;
+                } else if (select.options.length > 0) {
+                    select.value = defaultLlmAggregatorModels[0];
+                    state.settings.llmAggregatorModelName = select.value;
                 }
             },
             applyFontFamily() {
@@ -8788,7 +8805,7 @@
                     state.settings.apiProviderCycle.xai = elements.apiProviderCycleXaiCheckbox.checked;
                     uiUtils.updateApiProviderSelectOptions();
                 });
-                elements.apiProviderCycleLlmAggregatorCheckbox.addEventListener('change', () => {
+                 elements.apiProviderCycleLlmAggregatorCheckbox.addEventListener('change', () => {
                     state.settings.apiProviderCycle.llmaggregator = elements.apiProviderCycleLlmAggregatorCheckbox.checked;
                     uiUtils.updateApiProviderSelectOptions();
                 });
@@ -9645,6 +9662,8 @@
                 
                 let contextXaiVisionEnable, contextXaiIncludeThoughts, contextXaiReasoningEffort;
 
+                let contextLlmAggregatorIncludeThoughts, contextLlmAggregatorExpandThoughtsByDefault;
+
                 if (isBackgroundProcess) {
                     const providerForSettingsB = sourceSessionContext.apiProvider || state.settings.apiProvider;
                     if (providerForSettingsB === 'gemini') {
@@ -9665,20 +9684,21 @@
                         contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.geminiConcatDummyModel;
                         contextGeminiPseudoStreaming = sourceSessionContext.pseudoStreaming ?? state.settings.geminiPseudoStreaming;
                         contextGeminiEnableGrounding = sourceSessionContext.enableGrounding ?? state.settings.geminiEnableGrounding;
-                    } else if (providerForSettingsB === 'deepseek') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.deepSeekTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.deepSeekMaxTokens;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.deepSeekTopP;
-                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.deepSeekPresencePenalty;
-                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.deepSeekFrequencyPenalty;
-                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeDeepSeekThoughts ?? state.settings.deepSeekIncludeDeepSeekThoughts;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.deepSeekStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.deepSeekStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.deepSeekDummyUser;
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.deepSeekEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.deepSeekDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.deepSeekEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.deepSeekConcatDummyModel;
+                    } else if (providerForSettingsB === 'deepseek' || providerForSettingsB === 'llmaggregator') {
+                        const prefix = providerForSettingsB;
+                        contextTemperature = sourceSessionContext.temperature ?? state.settings[`${prefix}Temperature`];
+                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings[`${prefix}MaxTokens`];
+                        contextTopP = sourceSessionContext.topP ?? state.settings[`${prefix}TopP`];
+                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings[`${prefix}PresencePenalty`];
+                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings[`${prefix}FrequencyPenalty`];
+                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeDeepSeekThoughts ?? state.settings[`${prefix}IncludeThoughts`];
+                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings[`${prefix}StreamingOutput`];
+                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings[`${prefix}StreamingSpeed`];
+                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings[`${prefix}DummyUser`];
+                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings[`${prefix}EnableDummyUser`];
+                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings[`${prefix}DummyModel`];
+                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings[`${prefix}EnableDummyModel`];
+                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings[`${prefix}ConcatDummyModel`];
                     } else if (providerForSettingsB === 'claude') {
                         contextTemperature = sourceSessionContext.temperature ?? state.settings.claudeTemperature;
                         contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.claudeMaxTokens;
@@ -9694,20 +9714,19 @@
                         contextClaudeIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.claudeIncludeThoughts;
                         contextClaudeThinkingBudget = sourceSessionContext.thinkingBudget ?? state.settings.claudeThinkingBudget;
                         contextClaudeExpandThoughtsByDefault = sourceSessionContext.expandThoughtsByDefault ?? state.settings.claudeExpandThoughtsByDefault;
-                    } else if (providerForSettingsB === 'openai' || providerForSettingsB === 'llmaggregator') {
-                        const prefix = providerForSettingsB;
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings[`${prefix}Temperature`];
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings[`${prefix}MaxTokens`];
-                        contextTopP = sourceSessionContext.topP ?? state.settings[`${prefix}TopP`];
-                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings[`${prefix}PresencePenalty`];
-                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings[`${prefix}FrequencyPenalty`];
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings[`${prefix}StreamingOutput`];
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings[`${prefix}StreamingSpeed`];
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings[`${prefix}DummyUser`];
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings[`${prefix}EnableDummyUser`];
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings[`${prefix}DummyModel`];
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings[`${prefix}EnableDummyModel`];
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings[`${prefix}ConcatDummyModel`];
+                    } else if (providerForSettingsB === 'openai') {
+                        contextTemperature = sourceSessionContext.temperature ?? state.settings.openaiTemperature;
+                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.openaiMaxTokens;
+                        contextTopP = sourceSessionContext.topP ?? state.settings.openaiTopP;
+                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.openaiPresencePenalty;
+                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.openaiFrequencyPenalty;
+                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.openaiStreamingOutput;
+                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.openaiStreamingSpeed;
+                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.openaiDummyUser;
+                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.openaiEnableDummyUser;
+                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.openaiDummyModel;
+                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.openaiEnableDummyModel;
+                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.openaiConcatDummyModel;
                     } else if (providerForSettingsB === 'xai') {
                         contextTemperature = sourceSessionContext.temperature ?? state.settings.xaiTemperature;
                         contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.xaiMaxTokens;
@@ -9744,20 +9763,21 @@
                         contextConcatDummyModel = state.settings.geminiConcatDummyModel;
                         contextGeminiPseudoStreaming = state.settings.geminiPseudoStreaming;
                         contextGeminiEnableGrounding = state.settings.geminiEnableGrounding;
-                    } else if (selectedApiProvider === 'deepseek') {
-                        contextTemperature = state.settings.deepSeekTemperature;
-                        contextMaxTokens = state.settings.deepSeekMaxTokens;
-                        contextTopP = state.settings.deepSeekTopP;
-                        contextPresencePenalty = state.settings.deepSeekPresencePenalty;
-                        contextFrequencyPenalty = state.settings.deepSeekFrequencyPenalty;
-                        contextDeepSeekIncludeThoughts = state.settings.deepSeekIncludeDeepSeekThoughts;
-                        contextStreamingOutput = state.settings.deepSeekStreamingOutput;
-                        contextStreamingSpeed = state.settings.deepSeekStreamingSpeed;
-                        contextDummyUser = state.settings.deepSeekDummyUser;
-                        contextEnableDummyUser = state.settings.deepSeekEnableDummyUser;
-                        contextDummyModel = state.settings.deepSeekDummyModel;
-                        contextEnableDummyModel = state.settings.deepSeekEnableDummyModel;
-                        contextConcatDummyModel = state.settings.deepSeekConcatDummyModel;
+                    } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
+                        const prefix = selectedApiProvider;
+                        contextTemperature = state.settings[`${prefix}Temperature`];
+                        contextMaxTokens = state.settings[`${prefix}MaxTokens`];
+                        contextTopP = state.settings[`${prefix}TopP`];
+                        contextPresencePenalty = state.settings[`${prefix}PresencePenalty`];
+                        contextFrequencyPenalty = state.settings[`${prefix}FrequencyPenalty`];
+                        contextDeepSeekIncludeThoughts = state.settings[`${prefix}IncludeThoughts`];
+                        contextStreamingOutput = state.settings[`${prefix}StreamingOutput`];
+                        contextStreamingSpeed = state.settings[`${prefix}StreamingSpeed`];
+                        contextDummyUser = state.settings[`${prefix}DummyUser`];
+                        contextEnableDummyUser = state.settings[`${prefix}EnableDummyUser`];
+                        contextDummyModel = state.settings[`${prefix}DummyModel`];
+                        contextEnableDummyModel = state.settings[`${prefix}EnableDummyModel`];
+                        contextConcatDummyModel = state.settings[`${prefix}ConcatDummyModel`];
                     } else if (selectedApiProvider === 'claude') {
                         contextTemperature = state.settings.claudeTemperature;
                         contextMaxTokens = state.settings.claudeMaxTokens;
@@ -9773,20 +9793,19 @@
                         contextClaudeIncludeThoughts = state.settings.claudeIncludeThoughts;
                         contextClaudeThinkingBudget = state.settings.claudeThinkingBudget;
                         contextClaudeExpandThoughtsByDefault = state.settings.claudeExpandThoughtsByDefault;
-                    } else if (selectedApiProvider === 'openai' || selectedApiProvider === 'llmaggregator') {
-                        const prefix = selectedApiProvider;
-                        contextTemperature = state.settings[`${prefix}Temperature`];
-                        contextMaxTokens = state.settings[`${prefix}MaxTokens`];
-                        contextTopP = state.settings[`${prefix}TopP`];
-                        contextPresencePenalty = state.settings[`${prefix}PresencePenalty`];
-                        contextFrequencyPenalty = state.settings[`${prefix}FrequencyPenalty`];
-                        contextStreamingOutput = state.settings[`${prefix}StreamingOutput`];
-                        contextStreamingSpeed = state.settings[`${prefix}StreamingSpeed`];
-                        contextDummyUser = state.settings[`${prefix}DummyUser`];
-                        contextEnableDummyUser = state.settings[`${prefix}EnableDummyUser`];
-                        contextDummyModel = state.settings[`${prefix}DummyModel`];
-                        contextEnableDummyModel = state.settings[`${prefix}EnableDummyModel`];
-                        contextConcatDummyModel = state.settings[`${prefix}ConcatDummyModel`];
+                    } else if (selectedApiProvider === 'openai') {
+                        contextTemperature = state.settings.openaiTemperature;
+                        contextMaxTokens = state.settings.openaiMaxTokens;
+                        contextTopP = state.settings.openaiTopP;
+                        contextPresencePenalty = state.settings.openaiPresencePenalty;
+                        contextFrequencyPenalty = state.settings.openaiFrequencyPenalty;
+                        contextStreamingOutput = state.settings.openaiStreamingOutput;
+                        contextStreamingSpeed = state.settings.openaiStreamingSpeed;
+                        contextDummyUser = state.settings.openaiDummyUser;
+                        contextEnableDummyUser = state.settings.openaiEnableDummyUser;
+                        contextDummyModel = state.settings.openaiDummyModel;
+                        contextEnableDummyModel = state.settings.openaiEnableDummyModel;
+                        contextConcatDummyModel = state.settings.openaiConcatDummyModel;
                     } else if (selectedApiProvider === 'xai') {
                         contextTemperature = state.settings.xaiTemperature;
                         contextMaxTokens = state.settings.xaiMaxTokens;
@@ -10084,11 +10103,11 @@
                     let apiResponseObject;
                     if (selectedApiProvider === 'gemini') {
                         apiResponseObject = await apiUtils.callGeminiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, usePseudoForThisCall, contextGeminiEnableGrounding);
-                    } else if (selectedApiProvider === 'deepseek') {
-                        apiResponseObject = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
+                    } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
+                        apiResponseObject = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, selectedApiProvider === 'llmaggregator');
                     } else if (selectedApiProvider === 'claude') {
                         apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
-                    } else if (selectedApiProvider === 'openai' || selectedApiProvider === 'llmaggregator') {
+                    } else if (selectedApiProvider === 'openai') {
                         const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
                         apiResponseObject = await apiUtils.callOpenAICompatibleApi(selectedApiProvider, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, hasImage);
                     } else if (selectedApiProvider === 'xai') {
@@ -10107,6 +10126,11 @@
 
                     if (useStreamingForThisCall && !isBackgroundProcess) {
                         const tempPlaceholderIndex = state.currentMessages.length;
+                        const expandThoughts = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
+                                              (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
+                                              (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
+                                              (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
+                                              (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault);
                         modelMessageObjectForStream = {
                             role: 'model',
                             content: '',
@@ -10115,11 +10139,7 @@
                             xaiThoughtSummary: null,
                             timestamp: Date.now(),
                             generatedByApiProvider: selectedApiProvider,
-                            thoughtSummaryOpen: (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts && state.settings.geminiExpandThoughtsByDefault) ||
-                                                (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && state.settings.claudeExpandThoughtsByDefault) ||
-                                                (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && state.settings.xaiExpandThoughtsByDefault) ||
-                                                (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorIncludeThoughts && state.settings.llmAggregatorExpandThoughtsByDefault),
+                            thoughtSummaryOpen: expandThoughts,
                         };
 
                         if (isRetry && firstResponseIndexForRetry !== -1) {
@@ -10146,12 +10166,12 @@
                         let responseStreamIterator;
                         if (selectedApiProvider === 'gemini') {
                             responseStreamIterator = apiUtils.handleGeminiStreamingResponse(apiResponseObject);
-                        } else if (selectedApiProvider === 'deepseek') {
+                        } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
                             responseStreamIterator = apiUtils.handleDeepSeekStreamingResponse(apiResponseObject);
                         } else if (selectedApiProvider === 'claude') {
                             responseStreamIterator = apiUtils.handleClaudeStreamingResponse(apiResponseObject);
-                        } else if (selectedApiProvider === 'openai' || selectedApiProvider === 'llmaggregator') {
-                            responseStreamIterator = apiUtils.handleOpenAICompatibleStreamingResponse(apiResponseObject, selectedApiProvider);
+                        } else if (selectedApiProvider === 'openai') {
+                            responseStreamIterator = apiUtils.handleOpenAICompatibleStreamingResponse(apiResponseObject, 'openai');
                         } else if (selectedApiProvider === 'xai') {
                             responseStreamIterator = apiUtils.handleOpenAICompatibleStreamingResponse(apiResponseObject, 'xai');
                         }
@@ -10218,12 +10238,12 @@
                                 if (selectedApiProvider === 'gemini') {
                                      if (streamData.groundingMetadata) currentGroundingMetadata = streamData.groundingMetadata;
                                      if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
-                                } else if (selectedApiProvider === 'deepseek') {
+                                } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
                                     if (streamData.fullReasoningContent && contextDeepSeekIncludeThoughts) {
                                         modelThoughtSummaryContent = streamData.fullReasoningContent;
                                     }
                                     if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
-                                } else if (selectedApiProvider === 'claude' || selectedApiProvider === 'openai' || selectedApiProvider === 'xai' || selectedApiProvider === 'llmaggregator') {
+                                } else if (selectedApiProvider === 'claude' || selectedApiProvider === 'openai' || selectedApiProvider === 'xai') {
                                     if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
                                 }
                                 break;
@@ -10280,7 +10300,7 @@
                                 finalUsageMetadataFromStream = data.usageMetadata || null;
                             }
                              modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
-                        } else if (selectedApiProvider === 'deepseek') {
+                        } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
                             const choice = data.choices?.[0];
                             let rawContentFromApi = "";
                             if (choice) {
@@ -10296,7 +10316,7 @@
                                     modelThoughtSummaryContent = data.parsedReasoningContent;
                                 }
                             } else {
-                                rawContentFromApi = "DeepSeekからの応答がありません。";
+                                rawContentFromApi = `${selectedApiProvider}からの応答がありません。`;
                                 modelResponseMetadata = { finishReason: 'ERROR' };
                                 if (data.error) rawContentFromApi += ` (エラー: ${data.error.message})`;
                             }
@@ -10324,7 +10344,7 @@
                                 rawContentFromApi = "(応答が空です)";
                             }
                             modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
-                        } else if (selectedApiProvider === 'openai' || selectedApiProvider === 'xai' || selectedApiProvider === 'llmaggregator') {
+                        } else if (selectedApiProvider === 'openai' || selectedApiProvider === 'xai') {
                             let rawContentFromApi = "";
                             if (data.choices && data.choices.length > 0) {
                                 rawContentFromApi = data.choices[0].message?.content || "";
@@ -10362,7 +10382,7 @@
                              if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
                                  bgModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
                                  bgModelMessage.groundingMetadata = currentGroundingMetadata;
-                             } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts) {
+                             } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts) {
                                  bgModelMessage.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                              } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts) {
                                  bgModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
@@ -10373,7 +10393,8 @@
                               bgModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
                                                                   (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                                   (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
-                                                                  (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault);
+                                                                  (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
+                                                                  (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault);
 
                              currentContextMessages.push(bgModelMessage);
                              const chatToSaveBg = {
@@ -10428,7 +10449,7 @@
                                 if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
                                     msgToUpdate.thoughtSummary = modelThoughtSummaryContent || null;
                                     msgToUpdate.groundingMetadata = currentGroundingMetadata;
-                                } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
+                                } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                                 } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.thoughtSummary = modelThoughtSummaryContent || null;
@@ -10449,7 +10470,7 @@
                             if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
                                  newModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
                                  newModelMessage.groundingMetadata = currentGroundingMetadata;
-                            } else if (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
+                            } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
                                  newModelMessage.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                             } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && modelThoughtSummaryContent) {
                                  newModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
@@ -10459,7 +10480,8 @@
                             newModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
                                                                  (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                                  (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
-                                                                 (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault);
+                                                                 (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
+                                                                 (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault);
 
                              const targetUserIndexForCascade = userMessageIndex;
                              if (targetUserIndexForCascade !== -1 && !isBackgroundProcess) {
@@ -10508,7 +10530,7 @@
                          let finalPartialThoughtValue = null;
                          if (selectedApiProvider === 'gemini' && partialThoughtContentOnError && contextGeminiIncludeThoughts) {
                              finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
-                         } else if (selectedApiProvider === 'deepseek' && partialThoughtContentOnError && contextDeepSeekIncludeThoughts) {
+                         } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && partialThoughtContentOnError && contextDeepSeekIncludeThoughts) {
                              finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
                          } else if (selectedApiProvider === 'claude' && partialThoughtContentOnError && contextClaudeIncludeThoughts) {
                              finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
@@ -10530,7 +10552,7 @@
                             if (selectedApiProvider === 'gemini') {
                                 msgToUpdate.thoughtSummary = finalPartialThoughtValue;
                                 msgToUpdate.groundingMetadata = currentGroundingMetadata;
-                            } else if (selectedApiProvider === 'deepseek') {
+                            } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
                                 msgToUpdate.deepSeekThoughtSummary = finalPartialThoughtValue;
                             } else if (selectedApiProvider === 'claude') {
                                 msgToUpdate.thoughtSummary = finalPartialThoughtValue;
@@ -11129,6 +11151,8 @@
                 newSettings.llmAggregatorTopP = elements.llmAggregatorTopPInput.value === '' ? null : parseFloat(elements.llmAggregatorTopPInput.value);
                 newSettings.llmAggregatorPresencePenalty = elements.llmAggregatorPresencePenaltyInput.value === '' ? null : parseFloat(elements.llmAggregatorPresencePenaltyInput.value);
                 newSettings.llmAggregatorFrequencyPenalty = elements.llmAggregatorFrequencyPenaltyInput.value === '' ? null : parseFloat(elements.llmAggregatorFrequencyPenaltyInput.value);
+                newSettings.llmAggregatorIncludeThoughts = elements.llmAggregatorIncludeThoughtsToggle.checked;
+                newSettings.llmAggregatorExpandThoughtsByDefault = elements.llmAggregatorExpandThoughtsByDefaultToggle.checked;
                 newSettings.llmAggregatorStreamingOutput = elements.llmAggregatorStreamingOutputCheckbox.checked;
                 newSettings.llmAggregatorStreamingSpeed = elements.llmAggregatorStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.llmAggregatorStreamingSpeedInput.value);
                 newSettings.llmAggregatorDummyUser = elements.llmAggregatorDummyUserInput.value.trim();
@@ -11229,7 +11253,7 @@
                     return num;
                 };
 
-                const providers = ['gemini', 'deepSeek', 'claude', 'openai', 'xai', 'llmaggregator'];
+                const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'];
                 providers.forEach(provider => {
                     const prefix = provider;
                     const streamingSpeedKey = `${prefix}StreamingSpeed`;
@@ -11409,6 +11433,8 @@
                                 else if(key === 'geminiEnableGrounding') defaultSettingsCopy[key] = false;
                                 else if(key === 'deepSeekIncludeDeepSeekThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'deepSeekExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
+                                else if(key === 'llmAggregatorIncludeThoughts') defaultSettingsCopy[key] = false;
+                                else if(key === 'llmAggregatorExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeThinkingBudget') defaultSettingsCopy[key] = null;
@@ -11416,6 +11442,9 @@
                                 else if(key === 'xaiIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiReasoningEffort') defaultSettingsCopy[key] = 'low';
+                                else if(key.toLowerCase().includes('apibackend')) defaultSettingsCopy[key] = '';
+                                else if(key.toLowerCase().includes('enablecustombackend')) defaultSettingsCopy[key] = false;
+                                else if(key.toLowerCase().includes('custombackendapikey')) defaultSettingsCopy[key] = '';
                             }
                         });
                         defaultSettingsCopy.apiKey = '';
@@ -11932,7 +11961,8 @@
                             const messageApiProvider = msg?.generatedByApiProvider || state.settings.apiProvider;
                             state.thoughtSummaryOpenStates.set(newIdx, (messageApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
                                                                        (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                                       (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault));
+                                                                       (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
+                                                                       (messageApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault));
                         }
                     });
 
@@ -12162,7 +12192,8 @@
                             const messageApiProvider = msg?.generatedByApiProvider || state.settings.apiProvider;
                             state.thoughtSummaryOpenStates.set(newIdx, (messageApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
                                                                        (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                                       (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault));
+                                                                       (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
+                                                                       (messageApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault));
                         }
                     });
 
@@ -12483,7 +12514,8 @@
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
                         deepSeekIncludeThoughtsB, presencePenaltyB, frequencyPenaltyB,
                         claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB,
-                        xaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB;
+                        xaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB,
+                        llmAggregatorIncludeThoughtsB, llmAggregatorExpandThoughtsByDefaultB;
 
                     if (providerForSettingsB === 'gemini') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
@@ -12505,22 +12537,23 @@
                         concatDummyModelB = state.settings.geminiConcatDummyModel;
                         geminiPseudoStreamingB = state.settings.geminiPseudoStreaming;
                         geminiEnableGroundingB = state.settings.geminiEnableGrounding;
-                    } else if (providerForSettingsB === 'deepseek') {
-                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.deepSeekSystemPrompt;
-                        enableSystemPromptDefaultB = state.settings.deepSeekEnableSystemPromptDefault;
-                        temperatureB = state.settings.deepSeekTemperature;
-                        maxTokensB = state.settings.deepSeekMaxTokens;
-                        topPB = state.settings.deepSeekTopP;
-                        presencePenaltyB = state.settings.deepSeekPresencePenalty;
-                        frequencyPenaltyB = state.settings.deepSeekFrequencyPenalty;
-                        deepSeekIncludeThoughtsB = state.settings.deepSeekIncludeDeepSeekThoughts;
-                        streamingOutputB = state.settings.deepSeekStreamingOutput;
-                        streamingSpeedB = state.settings.deepSeekStreamingSpeed;
-                        dummyUserB = state.settings.deepSeekDummyUser;
-                        enableDummyUserB = state.settings.deepSeekEnableDummyUser;
-                        dummyModelB = state.settings.deepSeekDummyModel;
-                        enableDummyModelB = state.settings.deepSeekEnableDummyModel;
-                        concatDummyModelB = state.settings.deepSeekConcatDummyModel;
+                    } else if (providerForSettingsB === 'deepseek' || providerForSettingsB === 'llmaggregator') {
+                        const prefix = providerForSettingsB;
+                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings[`${prefix}SystemPrompt`];
+                        enableSystemPromptDefaultB = state.settings[`${prefix}EnableSystemPromptDefault`];
+                        temperatureB = state.settings[`${prefix}Temperature`];
+                        maxTokensB = state.settings[`${prefix}MaxTokens`];
+                        topPB = state.settings[`${prefix}TopP`];
+                        presencePenaltyB = state.settings[`${prefix}PresencePenalty`];
+                        frequencyPenaltyB = state.settings[`${prefix}FrequencyPenalty`];
+                        deepSeekIncludeThoughtsB = state.settings[`${prefix}IncludeThoughts`];
+                        streamingOutputB = state.settings[`${prefix}StreamingOutput`];
+                        streamingSpeedB = state.settings[`${prefix}StreamingSpeed`];
+                        dummyUserB = state.settings[`${prefix}DummyUser`];
+                        enableDummyUserB = state.settings[`${prefix}EnableDummyUser`];
+                        dummyModelB = state.settings[`${prefix}DummyModel`];
+                        enableDummyModelB = state.settings[`${prefix}EnableDummyModel`];
+                        concatDummyModelB = state.settings[`${prefix}ConcatDummyModel`];
                     } else if (providerForSettingsB === 'claude') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.claudeSystemPrompt;
                         enableSystemPromptDefaultB = state.settings.claudeEnableSystemPromptDefault;
@@ -12538,22 +12571,21 @@
                         claudeIncludeThoughtsB = state.settings.claudeIncludeThoughts;
                         claudeThinkingBudgetB = state.settings.claudeThinkingBudget;
                         claudeExpandThoughtsByDefaultB = state.settings.claudeExpandThoughtsByDefault;
-                    } else if (providerForSettingsB === 'openai' || providerForSettingsB === 'llmaggregator') {
-                        const prefix = providerForSettingsB;
-                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings[`${prefix}SystemPrompt`];
-                        enableSystemPromptDefaultB = state.settings[`${prefix}EnableSystemPromptDefault`];
-                        temperatureB = state.settings[`${prefix}Temperature`];
-                        maxTokensB = state.settings[`${prefix}MaxTokens`];
-                        topPB = state.settings[`${prefix}TopP`];
-                        presencePenaltyB = state.settings[`${prefix}PresencePenalty`];
-                        frequencyPenaltyB = state.settings[`${prefix}FrequencyPenalty`];
-                        streamingOutputB = state.settings[`${prefix}StreamingOutput`];
-                        streamingSpeedB = state.settings[`${prefix}StreamingSpeed`];
-                        dummyUserB = state.settings[`${prefix}DummyUser`];
-                        enableDummyUserB = state.settings[`${prefix}EnableDummyUser`];
-                        dummyModelB = state.settings[`${prefix}DummyModel`];
-                        enableDummyModelB = state.settings[`${prefix}EnableDummyModel`];
-                        concatDummyModelB = state.settings[`${prefix}ConcatDummyModel`];
+                    } else if (providerForSettingsB === 'openai') {
+                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.openaiSystemPrompt;
+                        enableSystemPromptDefaultB = state.settings.openaiEnableSystemPromptDefault;
+                        temperatureB = state.settings.openaiTemperature;
+                        maxTokensB = state.settings.openaiMaxTokens;
+                        topPB = state.settings.openaiTopP;
+                        presencePenaltyB = state.settings.openaiPresencePenalty;
+                        frequencyPenaltyB = state.settings.openaiFrequencyPenalty;
+                        streamingOutputB = state.settings.openaiStreamingOutput;
+                        streamingSpeedB = state.settings.openaiStreamingSpeed;
+                        dummyUserB = state.settings.openaiDummyUser;
+                        enableDummyUserB = state.settings.openaiEnableDummyUser;
+                        dummyModelB = state.settings.openaiDummyModel;
+                        enableDummyModelB = state.settings.openaiEnableDummyModel;
+                        concatDummyModelB = state.settings.openaiConcatDummyModel;
                     } else if (providerForSettingsB === 'xai') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.xaiSystemPrompt;
                         enableSystemPromptDefaultB = state.settings.xaiEnableSystemPromptDefault;
@@ -12589,13 +12621,14 @@
                         thinkingBudget: providerForSettingsB === 'gemini' ? geminiThinkingBudgetB : 
                                         providerForSettingsB === 'claude' ? claudeThinkingBudgetB : undefined,
                         includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : 
-                                         providerForSettingsB === 'deepseek' ? deepSeekIncludeThoughtsB : 
+                                         (providerForSettingsB === 'deepseek' || providerForSettingsB === 'llmaggregator') ? deepSeekIncludeThoughtsB : 
                                          providerForSettingsB === 'claude' ? claudeIncludeThoughtsB :
                                          providerForSettingsB === 'xai' ? xaiIncludeThoughtsB : undefined,
                         expandThoughtsByDefault: (providerForSettingsB === 'gemini' && state.settings.geminiExpandThoughtsByDefault) ||
                                                  (providerForSettingsB === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                  (providerForSettingsB === 'claude' ? claudeExpandThoughtsByDefaultB : undefined) ||
-                                                 (providerForSettingsB === 'xai' && state.settings.xaiExpandThoughtsByDefault),
+                                                 (providerForSettingsB === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
+                                                 (providerForSettingsB === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault),
                         reasoningEffort: providerForSettingsB === 'xai' ? xaiReasoningEffortB : undefined,
                         pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
                         enableGrounding: providerForSettingsB === 'gemini' ? geminiEnableGroundingB : undefined,
@@ -13069,17 +13102,20 @@
                      }
                  }
             },
-            async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
-                const apiKey = state.settings.deepSeekApiKey;
+            async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming, isAggregator = false) {
+                const apiKey = isAggregator ? state.settings.llmAggregatorApiKey : state.settings.deepSeekApiKey;
                 if (!apiKey) {
-                    throw new Error("DeepSeek APIキーが設定されていません。");
+                    throw new Error(`${isAggregator ? 'LLM Aggregator' : 'DeepSeek'} APIキーが設定されていません。`);
                 }
                 state.abortController = new AbortController();
                 const { signal } = state.abortController;
 
-                const model = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
+                const model = isAggregator ? state.settings.llmAggregatorModelName : (state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL);
                 
-                const baseUrl = state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
+                const baseUrl = isAggregator ? state.settings.llmAggregatorApiBackend : (state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL);
+                if (!baseUrl) {
+                    throw new Error(`${isAggregator ? 'LLM Aggregator' : 'DeepSeek'} のAPIエンドポイントが設定されていません。`);
+                }
                 const endpoint = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
 
                 const dsMessages = [];
@@ -13122,11 +13158,11 @@
                     });
 
                     if (!response.ok) {
-                        let errorMsg = `DeepSeek APIエラー (${response.status}): ${response.statusText}`;
+                        let errorMsg = `APIエラー (${response.status}): ${response.statusText}`;
                         try {
                             const errorData = await response.json();
                             if (errorData.error && errorData.error.message) {
-                                errorMsg = `DeepSeek APIエラー (${response.status}): ${errorData.error.message} (Type: ${errorData.error.type || 'N/A'})`;
+                                errorMsg = `APIエラー (${response.status}): ${errorData.error.message} (Type: ${errorData.error.type || 'N/A'})`;
                             }
                         } catch (e) {  }
                         throw new Error(errorMsg);
@@ -13148,9 +13184,9 @@
                     throw error;
                 }
             },
-                        async *handleDeepSeekStreamingResponse(response) {
+            async *handleDeepSeekStreamingResponse(response) {
                 if (!response.body) {
-                    throw new Error("DeepSeekレスポンスボディがありません。");
+                    throw new Error("レスポンスボディがありません。");
                 }
                 const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
                 let buffer = '';
@@ -13253,7 +13289,7 @@
                 };
                 if(anthropicRequest.system) requestBody.system = anthropicRequest.system;
                 if (generationConfig.temperature !== undefined && generationConfig.temperature !== null) {
-                    requestBody.temperature = generationConfig.temperature;
+                                    requestBody.temperature = generationConfig.temperature;
                 } else if (state.settings.claudeTemperature !== null) {
                     requestBody.temperature = state.settings.claudeTemperature;
                 } else {
@@ -13511,10 +13547,6 @@
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${apiKey}`
                 };
-                if (provider === 'llmaggregator') {
-                    headers['HTTP-Referer'] = 'https://gemini-pwa-gold.web.app';
-                    headers['X-Title'] = 'GeminiPWA';
-                }
 
                 const body = this._createOpenAICompatibleRequestBody(
                     model,
