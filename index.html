@@ -1892,7 +1892,7 @@
         .chat-input-area .api-provider-toggle-btn.openai { background-color: #10A37F !important; color: #ffffff !important; }
         .chat-input-area .api-provider-toggle-btn.xai { background-color: #000000 !important; color: #ffffff !important; }
         .chat-input-area .api-provider-toggle-btn.llmaggregator { background-color: #e53935 !important; color: #ffffff !important; }
-
+        
         .attachment-badge {
             position: absolute;
             top: -4px;
@@ -2220,7 +2220,8 @@
         #deepseek-additional-models,
         #claude-additional-models,
         #openai-additional-models,
-        #xai-additional-models {
+        #xai-additional-models,
+        #llmaggregator-additional-models {
             height: 53px;
             max-height: 53px;
             resize: vertical;
@@ -3160,7 +3161,7 @@
             margin-top: 15px;
         }
     </style>
-    <script src="marked.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
 </head>
@@ -3467,11 +3468,22 @@
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">LLM Aggregator 設定</summary>
                     <div style="margin-top:15px;">
                         <label for="llmaggregator-api-backend">API バックエンド URL:</label>
-                        <input type="text" id="llmaggregator-api-backend" placeholder="例: https://api.openrouter.ai/v1/chat/completions" aria-label="LLM Aggregator API バックエンド URL">
+                        <input type="text" id="llmaggregator-api-backend" placeholder="例: https://openrouter.ai/api/v1/chat/completions" aria-label="LLM Aggregator API バックエンド URL">
                         <label for="llmaggregator-api-key">APIキー:</label>
                         <input type="password" id="llmaggregator-api-key" placeholder="APIキーを入力" aria-label="LLM Aggregator APIキー">
                         <label for="llmaggregator-model-name">モデル名:</label>
-                        <input type="text" id="llmaggregator-model-name" placeholder="例: mistralai/Mixtral-8x7B-Instruct-v0.1" aria-label="LLM Aggregator モデル名">
+                        <select id="llmaggregator-model-name" aria-label="LLM Aggregator モデル名">
+                            <optgroup label="推奨モデル">
+                                <option value="openai/gpt-4o">OpenAI: GPT-4o</option>
+                                <option value="google/gemini-pro">Google: Gemini Pro</option>
+                                <option value="anthropic/claude-3-sonnet">Anthropic: Claude 3 Sonnet</option>
+                                <option value="mistralai/mistral-7b-instruct">Mistral 7B Instruct</option>
+                            </optgroup>
+                            <optgroup label="ユーザー指定" id="llmaggregator-user-defined-models-group">
+                            </optgroup>
+                        </select>
+                        <label for="llmaggregator-additional-models" style="margin-top:10px;">追加モデル (カンマ区切り):</label>
+                        <textarea id="llmaggregator-additional-models" placeholder="例: openai/gpt-4o-2024-05-13,anthropic/claude-2.1" aria-label="LLM Aggregator 追加モデル"></textarea>
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                            ※ ChatGPT互換のAPIエンドポイントにリクエストします。
                         </p>
@@ -3746,7 +3758,7 @@
                         </details>
                     </div>
                 </details>
-
+                
                 <details id="llmaggregator-params-group" class="settings-group hidden" open>
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">パラメータ (LLM Aggregator)</summary>
                     <div style="margin-top:15px;">
@@ -3990,7 +4002,7 @@
                        <input type="number" id="xai-streaming-speed" min="0" step="1" placeholder="例: 30 (0で無効)" aria-label="xAI 文字送り速度">
                     </div>
                 </details>
-
+                
                 <details id="llmaggregator-advanced-group" class="settings-group hidden" open>
                    <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">アドバンスド (LLM Aggregator)</summary>
                    <div style="margin-top:15px;">
@@ -4551,6 +4563,7 @@
         const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-20250514';
         const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
         const DEFAULT_XAI_MODEL = 'grok-3-mini';
+        const DEFAULT_LLMAGGREGATOR_MODEL = 'openai/gpt-4o';
         const DEFAULT_STREAMING_SPEED = 12;
         const DEFAULT_TEMPERATURE = 0.5;
         const DEFAULT_MAX_TOKENS = 4000;
@@ -4725,7 +4738,9 @@
             llmAggregatorSettingsGroup: document.getElementById('llmaggregator-settings-group'),
             llmAggregatorApiBackendInput: document.getElementById('llmaggregator-api-backend'),
             llmAggregatorApiKeyInput: document.getElementById('llmaggregator-api-key'),
-            llmAggregatorModelNameInput: document.getElementById('llmaggregator-model-name'),
+            llmAggregatorModelNameSelect: document.getElementById('llmaggregator-model-name'),
+            llmAggregatorUserDefinedModelsGroup: document.getElementById('llmaggregator-user-defined-models-group'),
+            llmAggregatorAdditionalModelsTextarea: document.getElementById('llmaggregator-additional-models'),
 
             geminiParamsGroup: document.getElementById('gemini-params-group'),
             deepseekParamsGroup: document.getElementById('deepseek-params-group'),
@@ -4829,7 +4844,7 @@
             xaiIncludeThoughtsToggle: document.getElementById('xai-include-thoughts-toggle'),
             xaiExpandThoughtsByDefaultToggle: document.getElementById('xai-expand-thoughts-by-default-toggle'),
             xaiReasoningEffortSelect: document.getElementById('xai-reasoning-effort'),
-            
+
             llmAggregatorSystemPromptDefaultTextarea: document.getElementById('llmaggregator-system-prompt-default'),
             llmAggregatorEnableSystemPromptDefaultCheckbox: document.getElementById('llmaggregator-enable-system-prompt-default'),
             llmAggregatorMaxTokensInput: document.getElementById('llmaggregator-max-tokens'),
@@ -4844,7 +4859,6 @@
             llmAggregatorDummyModelInput: document.getElementById('llmaggregator-dummy-model'),
             llmAggregatorEnableDummyModelCheckbox: document.getElementById('llmaggregator-enable-dummy-model'),
             llmAggregatorConcatDummyModelCheckbox: document.getElementById('llmaggregator-concat-dummy-model'),
-
 
             setThinkingBudgetBtns: document.querySelectorAll('.set-thinking-budget-btn'),
             setClaudeParamBtns: document.querySelectorAll('.set-claude-param-btn'),
@@ -5114,7 +5128,8 @@
                 xaiReasoningEffort: 'low',
                 llmAggregatorApiBackend: '',
                 llmAggregatorApiKey: '',
-                llmAggregatorModelName: '',
+                llmAggregatorModelName: DEFAULT_LLMAGGREGATOR_MODEL,
+                llmAggregatorAdditionalModels: '',
                 llmAggregatorSystemPrompt: '',
                 llmAggregatorEnableSystemPromptDefault: true,
                 llmAggregatorTemperature: null,
@@ -5129,6 +5144,14 @@
                 llmAggregatorDummyModel: '',
                 llmAggregatorEnableDummyModel: true,
                 llmAggregatorConcatDummyModel: false,
+                llmAggregatorIncludeThoughts: false,
+                llmAggregatorExpandThoughtsByDefault: false,
+                llmAggregatorStop: null,
+                llmAggregatorResponseFormat: false,
+                llmAggregatorTools: null,
+                llmAggregatorModels: null,
+                llmAggregatorProviderPrefs: null,
+                llmAggregatorUserId: null,
                 enterToSend: true,
                 autoScrollOnNewMessage: DEFAULT_AUTO_SCROLL_ON_NEW_MESSAGE,
                 autoScrollOnThought: false,
@@ -5421,6 +5444,7 @@
                              if (key === 'darkMode') continue;
                              if (key === 'memoWidth') continue;
                              if (key === 'showCollapseButtons') continue;
+                             if (key.includes('CustomBackend')) continue;
 
                              if (key in defaultSettings) {
                                 const loadedValue = loadedSettings[key];
@@ -7145,7 +7169,8 @@
                 elements.xaiAdditionalModelsTextarea.value = state.settings.xaiAdditionalModels || '';
                 elements.llmAggregatorApiBackendInput.value = state.settings.llmAggregatorApiBackend || '';
                 elements.llmAggregatorApiKeyInput.value = state.settings.llmAggregatorApiKey || '';
-                elements.llmAggregatorModelNameInput.value = state.settings.llmAggregatorModelName || '';
+                elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName || '';
+                elements.llmAggregatorAdditionalModelsTextarea.value = state.settings.llmAggregatorAdditionalModels || '';
                 
 
                 elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPrompt || '';
@@ -7356,6 +7381,7 @@
                 this.updateClaudeUserModelOptions();
                 this.updateOpenAIUserModelOptions();
                 this.updateXaiUserModelOptions();
+                this.updateLLMAggregatorUserModelOptions();
                 this.updateBackgroundSettingsUI();
                 this.updateIconSettingsUI();
                 this.applyTheme();
@@ -7655,6 +7681,28 @@
                     });
                     if (models.includes(state.settings.xaiModelName)) {
                         elements.xaiModelNameSelect.value = state.settings.xaiModelName;
+                    }
+                } else {
+                    group.disabled = true;
+                }
+            },
+            updateLLMAggregatorUserModelOptions() {
+                const group = elements.llmAggregatorUserDefinedModelsGroup;
+                group.innerHTML = '';
+                const models = (state.settings.llmAggregatorAdditionalModels || '')
+                    .split(',')
+                    .map(m => m.trim())
+                    .filter(m => m !== '');
+                if (models.length > 0) {
+                    group.disabled = false;
+                    models.forEach(modelId => {
+                        const option = document.createElement('option');
+                        option.value = modelId;
+                        option.textContent = modelId;
+                        group.appendChild(option);
+                    });
+                    if (models.includes(state.settings.llmAggregatorModelName)) {
+                        elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName;
                     }
                 } else {
                     group.disabled = true;
@@ -8740,7 +8788,7 @@
                     state.settings.apiProviderCycle.xai = elements.apiProviderCycleXaiCheckbox.checked;
                     uiUtils.updateApiProviderSelectOptions();
                 });
-                 elements.apiProviderCycleLlmAggregatorCheckbox.addEventListener('change', () => {
+                elements.apiProviderCycleLlmAggregatorCheckbox.addEventListener('change', () => {
                     state.settings.apiProviderCycle.llmaggregator = elements.apiProviderCycleLlmAggregatorCheckbox.checked;
                     uiUtils.updateApiProviderSelectOptions();
                 });
@@ -10982,7 +11030,8 @@
                  newSettings.xaiAdditionalModels = elements.xaiAdditionalModelsTextarea.value.trim();
                  newSettings.llmAggregatorApiBackend = elements.llmAggregatorApiBackendInput.value.trim();
                  newSettings.llmAggregatorApiKey = elements.llmAggregatorApiKeyInput.value.trim();
-                 newSettings.llmAggregatorModelName = elements.llmAggregatorModelNameInput.value.trim();
+                 newSettings.llmAggregatorModelName = elements.llmAggregatorModelNameSelect.value;
+                 newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalModelsTextarea.value.trim();
 
                 newSettings.geminiSystemPrompt = elements.geminiSystemPromptDefaultTextarea.value.trim();
                 newSettings.geminiEnableSystemPromptDefault = elements.geminiEnableSystemPromptDefaultCheckbox.checked;
@@ -11367,9 +11416,6 @@
                                 else if(key === 'xaiIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiReasoningEffort') defaultSettingsCopy[key] = 'low';
-                                else if(key.toLowerCase().includes('apibackend')) defaultSettingsCopy[key] = '';
-                                else if(key.toLowerCase().includes('enablecustombackend')) defaultSettingsCopy[key] = false;
-                                else if(key.toLowerCase().includes('custombackendapikey')) defaultSettingsCopy[key] = '';
                             }
                         });
                         defaultSettingsCopy.apiKey = '';
@@ -11392,7 +11438,8 @@
                         defaultSettingsCopy.xaiAdditionalModels = '';
                         defaultSettingsCopy.llmAggregatorApiKey = '';
                         defaultSettingsCopy.llmAggregatorApiBackend = '';
-                        defaultSettingsCopy.llmAggregatorModelName = '';
+                        defaultSettingsCopy.llmAggregatorModelName = DEFAULT_LLMAGGREGATOR_MODEL;
+                        defaultSettingsCopy.llmAggregatorAdditionalModels = '';
                         defaultSettingsCopy.apiProvider = 'gemini';
                         defaultSettingsCopy.enterToSend = true;
                         defaultSettingsCopy.autoScrollOnNewMessage = DEFAULT_AUTO_SCROLL_ON_NEW_MESSAGE;
@@ -12177,7 +12224,7 @@
 
                 for (const file of newFiles) {
                     if (file.size > MAX_FILE_SIZE) {
-                                            await uiUtils.showCustomAlert(`ファイル "${file.name}" はサイズが大きすぎます (${formatFileSize(MAX_FILE_SIZE)}以下)。`);
+                        await uiUtils.showCustomAlert(`ファイル "${file.name}" はサイズが大きすぎます (${formatFileSize(MAX_FILE_SIZE)}以下)。`);
                         skippedCount++;
                         continue;
                     }
@@ -13101,7 +13148,7 @@
                     throw error;
                 }
             },
-            async *handleDeepSeekStreamingResponse(response) {
+                        async *handleDeepSeekStreamingResponse(response) {
                 if (!response.body) {
                     throw new Error("DeepSeekレスポンスボディがありません。");
                 }
@@ -13464,6 +13511,10 @@
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${apiKey}`
                 };
+                if (provider === 'llmaggregator') {
+                    headers['HTTP-Referer'] = 'https://gemini-pwa-gold.web.app';
+                    headers['X-Title'] = 'GeminiPWA';
+                }
 
                 const body = this._createOpenAICompatibleRequestBody(
                     model,
