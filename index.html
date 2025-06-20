@@ -3329,7 +3329,7 @@
                             <summary style="cursor: pointer; font-weight: normal; font-size: 14px; color: var(--text-link); list-style: revert; margin-bottom: 10px;">カスタム API バックエンド設定</summary>
                             <div style="padding:10px 15px;">
                                 <label for="gemini-api-backend">API バックエンド URL:</label>
-                                <input type="text" id="gemini-api-backend" placeholder="例: https://openrouter.ai/v1/chat/completions" aria-label="Gemini API バックエンド URL" style="width:100%;">
+                                <input type="text" id="gemini-api-backend" placeholder="例: https://openrouter.ai/api/v1/chat/completions" aria-label="Gemini API バックエンド URL" style="width:100%;">
                                 <label for="gemini-custom-backend-api-key">カスタムバックエンド用APIキー:</label>
                                 <input type="password" id="gemini-custom-backend-api-key" placeholder="カスタムバックエンドのAPIキーを入力" aria-label="Gemini カスタムバックエンド APIキー">
                                 <label class="checkbox-label" style="margin-top:5px;">
@@ -4627,6 +4627,14 @@
         const DEFAULT_DICE_MAX_VALUE = 100;
         const DEFAULT_THOUGHT_SUMMARY_OPACITY = 0.65;
         const DEFAULT_THOUGHT_SUMMARY_FONT_SIZE = 13;
+        
+        const CUSTOM_API_WHITELIST = {
+            gemini: ['googleapis.com', 'openrouter.ai'],
+            deepseek: ['api.deepseek.com', 'openrouter.ai'],
+            claude: ['api.anthropic.com', 'openrouter.ai'],
+            openai: ['api.openai.com', 'openrouter.ai'],
+            xai: ['api.x.ai', 'openrouter.ai']
+        };
 
         const extensionToMimeTypeMap = {
             'pdf': 'application/pdf', 'js': 'text/javascript', 'py': 'text/x-python',
@@ -9713,16 +9721,13 @@
                     return;
                 }
 
-                if ((selectedApiProvider === 'gemini' && !state.settings.apiKey && !state.settings.geminiEnableCustomBackend) ||
-                    (selectedApiProvider === 'deepseek' && !state.settings.deepSeekApiKey && !state.settings.deepSeekEnableCustomBackend) ||
-                    (selectedApiProvider === 'claude' && !state.settings.claudeApiKey && !state.settings.claudeEnableCustomBackend) ||
-                    (selectedApiProvider === 'openai' && !state.settings.openaiApiKey && !state.settings.openaiEnableCustomBackend) ||
-                    (selectedApiProvider === 'xai' && !state.settings.xaiApiKey && !state.settings.xaiEnableCustomBackend)) {
-                    if (!isBackgroundProcess) {
-                        await uiUtils.showCustomAlert(`${selectedApiProvider} APIキーが設定されていません。設定画面を開きます。`);
-                        uiUtils.showScreen('settings');
-                    }
-                    return "APIキー未設定";
+                const apiKeyToUse = apiUtils.getApiKeyForProvider(selectedApiProvider);
+                if (!apiKeyToUse) {
+                     if (!isBackgroundProcess) {
+                         await uiUtils.showCustomAlert(`${selectedApiProvider} のAPIキーが設定されていません。設定画面を開きます。`);
+                         uiUtils.showScreen('settings');
+                     }
+                     return "APIキー未設定";
                 }
 
                 if (!isBackgroundProcess) uiUtils.setSendingState(true);
@@ -11167,6 +11172,18 @@
                         elements.apiProviderSelect.value = enabledProvider;
                     }
                 }
+                
+                 try {
+                    for (const provider of providers) {
+                        const enableCheckbox = document.getElementById(`${provider}-enable-custom-backend`);
+                        if (enableCheckbox.checked) {
+                            appLogic.validateCustomEndpoint(provider);
+                        }
+                    }
+                } catch (err) {
+                    await uiUtils.showCustomAlert(`設定エラー: ${err.message}`);
+                    return;
+                }
 
                  try {
                      const oldSortOrder = state.settings.historySortOrder;
@@ -12324,12 +12341,7 @@
                     return;
                 }
                 const selectedApiProvider = state.settings.apiProvider;
-                 if ((selectedApiProvider === 'gemini' && !state.settings.apiKey) || 
-                     (selectedApiProvider === 'deepseek' && !state.settings.deepSeekApiKey) ||
-                     (selectedApiProvider === 'claude' && !state.settings.claudeApiKey) ||
-                     (selectedApiProvider === 'openai' && !state.settings.openaiApiKey) ||
-                     (selectedApiProvider === 'xai' && !state.settings.xaiApiKey)
-                    ) {
+                if (!apiUtils.getApiKeyForProvider(selectedApiProvider)) {
                     await uiUtils.showCustomAlert("選択中のAPIプロバイダーのAPIキーが設定されていません。");
                     uiUtils.showScreen('settings');
                     return;
@@ -12727,11 +12739,60 @@
                 
                 dialog.showModal();
             },
+             validateCustomEndpoint(provider) {
+                const enableCheck = document.getElementById(`${provider}-enable-custom-backend`);
+                if (!enableCheck.checked) return null;
+
+                const inputElem = document.getElementById(`${provider}-api-backend`);
+                const urlStr = inputElem.value.trim();
+                
+                if (!urlStr) {
+                    throw new Error(`${provider.toUpperCase()} のバックエンドURLを入力してください。`);
+                }
+
+                let url;
+                try {
+                    url = new URL(urlStr);
+                } catch (e) {
+                    throw new Error(`無効なURL形式です: ${urlStr}`);
+                }
+
+                if (url.protocol !== 'https:') {
+                    throw new Error('カスタムバックエンドはHTTPSプロトコルのみ許可されています。');
+                }
+
+                const allowedDomains = CUSTOM_API_WHITELIST[provider] || [];
+                const isAllowed = allowedDomains.some(domain => url.hostname.endsWith(domain));
+                
+                if (!isAllowed) {
+                    throw new Error(`許可されていないドメインです: ${url.hostname}。許可リスト: ${allowedDomains.join(', ')}`);
+                }
+
+                return urlStr;
+            }
         };
 
         const apiUtils = {
+            getApiKeyForProvider(provider) {
+                const settings = state.settings;
+                const customBackendEnabledKey = `${provider}EnableCustomBackend`;
+                const customApiKeyKey = `${provider}CustomBackendApiKey`;
+
+                if (settings[customBackendEnabledKey] && settings[customApiKeyKey]) {
+                    return settings[customApiKeyKey];
+                }
+
+                switch (provider) {
+                    case 'gemini': return settings.apiKey;
+                    case 'deepseek': return settings.deepSeekApiKey;
+                    case 'claude': return settings.claudeApiKey;
+                    case 'openai': return settings.openaiApiKey;
+                    case 'xai': return settings.xaiApiKey;
+                    default: return null;
+                }
+            },
             async callGeminiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding) {
-                const apiKey = state.settings.geminiEnableCustomBackend ? state.settings.geminiCustomBackendApiKey : state.settings.apiKey;
+                const apiKey = this.getApiKeyForProvider('gemini');
                 if (!apiKey) {
                     throw new Error("APIキーが設定されていません。");
                 }
@@ -12740,16 +12801,16 @@
 
                 const model = state.settings.modelName || DEFAULT_MODEL;
                 
-                let endpointMethod = useStreaming
-                    ? (usePseudo ? 'generateContent?alt=sse&' : 'streamGenerateContent?alt=sse&')
-                    : 'generateContent?';
-
-                if (!endpointMethod.endsWith('&') && !endpointMethod.endsWith('?')) {
-                    endpointMethod += endpointMethod.includes('?') ? '&' : '?';
+                let endpoint;
+                if(state.settings.geminiEnableCustomBackend) {
+                    endpoint = `${state.settings.geminiApiBackend}?key=${apiKey}`;
+                } else {
+                    let endpointMethod = useStreaming
+                        ? (usePseudo ? 'generateContent?alt=sse&' : 'streamGenerateContent?alt=sse&')
+                        : 'generateContent?';
+                    endpoint = `${GEMINI_API_BASE_URL}${model}:${endpointMethod}key=${apiKey}`;
                 }
-
-                const endpoint = `${GEMINI_API_BASE_URL}${model}:${endpointMethod}key=${apiKey}`;
-
+                
                 const finalGenerationConfig = { ...generationConfig };
 
                 if (state.settings.geminiThinkingBudget !== null || state.settings.geminiIncludeThoughts) {
@@ -12952,7 +13013,7 @@
                  }
             },
             async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
-                const apiKey = state.settings.deepSeekEnableCustomBackend ? state.settings.deepSeekCustomBackendApiKey : state.settings.deepSeekApiKey;
+                const apiKey = this.getApiKeyForProvider('deepseek');
                 if (!apiKey) {
                     throw new Error("DeepSeek APIキーが設定されていません。");
                 }
@@ -12960,7 +13021,6 @@
                 const { signal } = state.abortController;
 
                 const model = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
-                
                 const baseUrl = state.settings.deepSeekEnableCustomBackend && state.settings.deepSeekApiBackend 
                                 ? state.settings.deepSeekApiBackend 
                                 : state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
@@ -13117,7 +13177,7 @@
                 }
             },
             async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
-                const apiKey = state.settings.claudeEnableCustomBackend ? state.settings.claudeCustomBackendApiKey : state.settings.claudeApiKey;
+                const apiKey = this.getApiKeyForProvider('claude');
                 if (!apiKey) {
                     throw new Error("Claude APIキーが設定されていません。");
                 }
@@ -13367,7 +13427,7 @@
                 return body;
             },
             async callOpenAiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
-                const apiKey = state.settings.openaiEnableCustomBackend ? state.settings.openaiCustomBackendApiKey : state.settings.openaiApiKey;
+                const apiKey = this.getApiKeyForProvider('openai');
                 if (!apiKey) {
                     throw new Error("ChatGPT APIキーが設定されていません。");
                 }
@@ -13485,7 +13545,7 @@
                 }
             },
             async callXaiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
-                const apiKey = state.settings.xaiEnableCustomBackend ? state.settings.xaiCustomBackendApiKey : state.settings.xaiApiKey;
+                const apiKey = this.getApiKeyForProvider('xai');
                 if (!apiKey) {
                     throw new Error("xAI APIキーが設定されていません。");
                 }
