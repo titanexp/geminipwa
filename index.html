@@ -3780,10 +3780,6 @@
                                 <label for="llmaggregator-top-p">Top P:</label>
                                 <input type="number" id="llmaggregator-top-p" step="0.01" min="0" max="1" placeholder="例:1.0(0.0 - 1.0)" aria-label="LLM Aggregator Top P">
                             </div>
-                            <div>
-                                <label for="llmaggregator-top-k">Top K:</label>
-                                <input type="number" id="llmaggregator-top-k" step="1" min="1" placeholder="例:50" aria-label="LLM Aggregator Top K">
-                            </div>
                         </div>
                         <details id="settings-group-llmaggregator-other-params">
                             <summary style="cursor: pointer; font-weight: normal; font-size: 14px; color: var(--text-link); margin-bottom: 10px; list-style: revert;">その他パラメータ (LLM Aggregator)</summary>
@@ -3797,6 +3793,17 @@
                                     <input type="number" id="llmaggregator-frequency-penalty" step="0.1" min="-2.0" max="2.0" placeholder="例:0.0 (-2.0～2.0)" aria-label="LLM Aggregator Frequency Penalty">
                                 </div>
                             </div>
+                            <div id="llmaggregator-thoughts-param">
+                               <h3 style="margin-top:15px; margin-bottom:10px; font-size:14px; border:0; padding:0;">思考プロセス</h3>
+                               <label class="checkbox-label">
+                                   <input type="checkbox" id="llmaggregator-include-thoughts-toggle">
+                                   Include Thoughts
+                               </label>
+                               <label class="checkbox-label">
+                                   <input type="checkbox" id="llmaggregator-expand-thoughts-by-default-toggle">
+                                   💭思考プロセスを開いた状態にする
+                               </label>
+                           </div>
                         </details>
                     </div>
                 </details>
@@ -4853,7 +4860,6 @@
             llmAggregatorMaxTokensInput: document.getElementById('llmaggregator-max-tokens'),
             llmAggregatorTemperatureInput: document.getElementById('llmaggregator-temperature'),
             llmAggregatorTopPInput: document.getElementById('llmaggregator-top-p'),
-            llmAggregatorTopKInput: document.getElementById('llmaggregator-top-k'),
             llmAggregatorPresencePenaltyInput: document.getElementById('llmaggregator-presence-penalty'),
             llmAggregatorFrequencyPenaltyInput: document.getElementById('llmaggregator-frequency-penalty'),
             llmAggregatorIncludeThoughtsToggle: document.getElementById('llmaggregator-include-thoughts-toggle'),
@@ -5142,9 +5148,10 @@
                 llmAggregatorTemperature: null,
                 llmAggregatorMaxTokens: null,
                 llmAggregatorTopP: null,
-                llmAggregatorTopK: null,
                 llmAggregatorPresencePenalty: null,
                 llmAggregatorFrequencyPenalty: null,
+                llmAggregatorIncludeThoughts: false,
+                llmAggregatorExpandThoughtsByDefault: false,
                 llmAggregatorStreamingOutput: true,
                 llmAggregatorStreamingSpeed: DEFAULT_STREAMING_SPEED,
                 llmAggregatorDummyUser: '',
@@ -7259,15 +7266,16 @@
                 elements.xaiIncludeThoughtsToggle.checked = state.settings.xaiIncludeThoughts;
                 elements.xaiExpandThoughtsByDefaultToggle.checked = state.settings.xaiExpandThoughtsByDefault;
                 elements.xaiReasoningEffortSelect.value = state.settings.xaiReasoningEffort;
-                
+
                 elements.llmAggregatorSystemPromptDefaultTextarea.value = state.settings.llmAggregatorSystemPrompt || '';
                 elements.llmAggregatorEnableSystemPromptDefaultCheckbox.checked = state.settings.llmAggregatorEnableSystemPromptDefault;
                 elements.llmAggregatorTemperatureInput.value = state.settings.llmAggregatorTemperature === null ? '' : state.settings.llmAggregatorTemperature;
                 elements.llmAggregatorMaxTokensInput.value = state.settings.llmAggregatorMaxTokens === null ? '' : state.settings.llmAggregatorMaxTokens;
                 elements.llmAggregatorTopPInput.value = state.settings.llmAggregatorTopP === null ? '' : state.settings.llmAggregatorTopP;
-                elements.llmAggregatorTopKInput.value = state.settings.llmAggregatorTopK === null ? '' : state.settings.llmAggregatorTopK;
                 elements.llmAggregatorPresencePenaltyInput.value = state.settings.llmAggregatorPresencePenalty === null ? '' : state.settings.llmAggregatorPresencePenalty;
                 elements.llmAggregatorFrequencyPenaltyInput.value = state.settings.llmAggregatorFrequencyPenalty === null ? '' : state.settings.llmAggregatorFrequencyPenalty;
+                elements.llmAggregatorIncludeThoughtsToggle.checked = state.settings.llmAggregatorIncludeThoughts;
+                elements.llmAggregatorExpandThoughtsByDefaultToggle.checked = state.settings.llmAggregatorExpandThoughtsByDefault;
                 elements.llmAggregatorStreamingOutputCheckbox.checked = state.settings.llmAggregatorStreamingOutput;
                 elements.llmAggregatorStreamingSpeedInput.value = state.settings.llmAggregatorStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
                 elements.llmAggregatorDummyUserInput.value = state.settings.llmAggregatorDummyUser || '';
@@ -7686,28 +7694,26 @@
                 }
             },
             updateLlmAggregatorUserModelOptions() {
-                const select = elements.llmAggregatorModelNameSelect;
-                const userDefinedOptgroup = select.querySelector('#llmaggregator-user-defined-models-group');
-                userDefinedOptgroup.innerHTML = '';
-
+                const group = elements.llmAggregatorUserDefinedModelsGroup;
+                group.innerHTML = '';
                 const models = (state.settings.llmAggregatorAdditionalModels || '')
                     .split(',')
                     .map(m => m.trim())
                     .filter(m => m !== '');
 
                 if (models.length > 0) {
-                    userDefinedOptgroup.disabled = false;
+                    group.disabled = false;
                     models.forEach(modelId => {
                         const option = document.createElement('option');
                         option.value = modelId;
                         option.textContent = modelId;
-                        userDefinedOptgroup.appendChild(option);
+                        group.appendChild(option);
                     });
                     if (models.includes(state.settings.llmAggregatorModelName)) {
-                        select.value = state.settings.llmAggregatorModelName;
+                        elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName;
                     }
                 } else {
-                    userDefinedOptgroup.disabled = true;
+                    group.disabled = true;
                 }
             },
             applyFontFamily() {
@@ -9646,8 +9652,6 @@
                 let contextClaudeTopK, contextClaudeIncludeThoughts, contextClaudeThinkingBudget, contextClaudeExpandThoughtsByDefault;
                 
                 let contextXaiVisionEnable, contextXaiIncludeThoughts, contextXaiReasoningEffort;
-                
-                let contextLlmAggregatorTopK, contextLlmAggregatorIncludeThoughts, contextLlmAggregatorExpandThoughtsByDefault;
 
                 if (isBackgroundProcess) {
                     const providerForSettingsB = sourceSessionContext.apiProvider || state.settings.apiProvider;
@@ -9669,20 +9673,21 @@
                         contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.geminiConcatDummyModel;
                         contextGeminiPseudoStreaming = sourceSessionContext.pseudoStreaming ?? state.settings.geminiPseudoStreaming;
                         contextGeminiEnableGrounding = sourceSessionContext.enableGrounding ?? state.settings.geminiEnableGrounding;
-                    } else if (providerForSettingsB === 'deepseek') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.deepSeekTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.deepSeekMaxTokens;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.deepSeekTopP;
-                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.deepSeekPresencePenalty;
-                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.deepSeekFrequencyPenalty;
-                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeDeepSeekThoughts ?? state.settings.deepSeekIncludeDeepSeekThoughts;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.deepSeekStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.deepSeekStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.deepSeekDummyUser;
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.deepSeekEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.deepSeekDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.deepSeekEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.deepSeekConcatDummyModel;
+                    } else if (providerForSettingsB === 'deepseek' || providerForSettingsB === 'llmaggregator') {
+                        const prefix = providerForSettingsB;
+                        contextTemperature = sourceSessionContext.temperature ?? state.settings[`${prefix}Temperature`];
+                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings[`${prefix}MaxTokens`];
+                        contextTopP = sourceSessionContext.topP ?? state.settings[`${prefix}TopP`];
+                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings[`${prefix}PresencePenalty`];
+                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings[`${prefix}FrequencyPenalty`];
+                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings[`${prefix}IncludeThoughts`];
+                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings[`${prefix}StreamingOutput`];
+                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings[`${prefix}StreamingSpeed`];
+                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings[`${prefix}DummyUser`];
+                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings[`${prefix}EnableDummyUser`];
+                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings[`${prefix}DummyModel`];
+                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings[`${prefix}EnableDummyModel`];
+                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings[`${prefix}ConcatDummyModel`];
                     } else if (providerForSettingsB === 'claude') {
                         contextTemperature = sourceSessionContext.temperature ?? state.settings.claudeTemperature;
                         contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.claudeMaxTokens;
@@ -9698,23 +9703,19 @@
                         contextClaudeIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.claudeIncludeThoughts;
                         contextClaudeThinkingBudget = sourceSessionContext.thinkingBudget ?? state.settings.claudeThinkingBudget;
                         contextClaudeExpandThoughtsByDefault = sourceSessionContext.expandThoughtsByDefault ?? state.settings.claudeExpandThoughtsByDefault;
-                    } else if (providerForSettingsB === 'openai' || providerForSettingsB === 'llmaggregator') {
-                        const prefix = providerForSettingsB;
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings[`${prefix}Temperature`];
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings[`${prefix}MaxTokens`];
-                        contextTopP = sourceSessionContext.topP ?? state.settings[`${prefix}TopP`];
-                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings[`${prefix}PresencePenalty`];
-                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings[`${prefix}FrequencyPenalty`];
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings[`${prefix}StreamingOutput`];
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings[`${prefix}StreamingSpeed`];
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings[`${prefix}DummyUser`];
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings[`${prefix}EnableDummyUser`];
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings[`${prefix}DummyModel`];
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings[`${prefix}EnableDummyModel`];
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings[`${prefix}ConcatDummyModel`];
-                        if (providerForSettingsB === 'llmaggregator') {
-                           contextLlmAggregatorTopK = sourceSessionContext.topK ?? state.settings.llmAggregatorTopK;
-                        }
+                    } else if (providerForSettingsB === 'openai') {
+                        contextTemperature = sourceSessionContext.temperature ?? state.settings.openaiTemperature;
+                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.openaiMaxTokens;
+                        contextTopP = sourceSessionContext.topP ?? state.settings.openaiTopP;
+                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.openaiPresencePenalty;
+                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.openaiFrequencyPenalty;
+                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.openaiStreamingOutput;
+                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.openaiStreamingSpeed;
+                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.openaiDummyUser;
+                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.openaiEnableDummyUser;
+                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.openaiDummyModel;
+                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.openaiEnableDummyModel;
+                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.openaiConcatDummyModel;
                     } else if (providerForSettingsB === 'xai') {
                         contextTemperature = sourceSessionContext.temperature ?? state.settings.xaiTemperature;
                         contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.xaiMaxTokens;
@@ -9751,20 +9752,21 @@
                         contextConcatDummyModel = state.settings.geminiConcatDummyModel;
                         contextGeminiPseudoStreaming = state.settings.geminiPseudoStreaming;
                         contextGeminiEnableGrounding = state.settings.geminiEnableGrounding;
-                    } else if (selectedApiProvider === 'deepseek') {
-                        contextTemperature = state.settings.deepSeekTemperature;
-                        contextMaxTokens = state.settings.deepSeekMaxTokens;
-                        contextTopP = state.settings.deepSeekTopP;
-                        contextPresencePenalty = state.settings.deepSeekPresencePenalty;
-                        contextFrequencyPenalty = state.settings.deepSeekFrequencyPenalty;
-                        contextDeepSeekIncludeThoughts = state.settings.deepSeekIncludeDeepSeekThoughts;
-                        contextStreamingOutput = state.settings.deepSeekStreamingOutput;
-                        contextStreamingSpeed = state.settings.deepSeekStreamingSpeed;
-                        contextDummyUser = state.settings.deepSeekDummyUser;
-                        contextEnableDummyUser = state.settings.deepSeekEnableDummyUser;
-                        contextDummyModel = state.settings.deepSeekDummyModel;
-                        contextEnableDummyModel = state.settings.deepSeekEnableDummyModel;
-                        contextConcatDummyModel = state.settings.deepSeekConcatDummyModel;
+                    } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
+                        const prefix = selectedApiProvider;
+                        contextTemperature = state.settings[`${prefix}Temperature`];
+                        contextMaxTokens = state.settings[`${prefix}MaxTokens`];
+                        contextTopP = state.settings[`${prefix}TopP`];
+                        contextPresencePenalty = state.settings[`${prefix}PresencePenalty`];
+                        contextFrequencyPenalty = state.settings[`${prefix}FrequencyPenalty`];
+                        contextDeepSeekIncludeThoughts = state.settings[`${prefix}IncludeThoughts`];
+                        contextStreamingOutput = state.settings[`${prefix}StreamingOutput`];
+                        contextStreamingSpeed = state.settings[`${prefix}StreamingSpeed`];
+                        contextDummyUser = state.settings[`${prefix}DummyUser`];
+                        contextEnableDummyUser = state.settings[`${prefix}EnableDummyUser`];
+                        contextDummyModel = state.settings[`${prefix}DummyModel`];
+                        contextEnableDummyModel = state.settings[`${prefix}EnableDummyModel`];
+                        contextConcatDummyModel = state.settings[`${prefix}ConcatDummyModel`];
                     } else if (selectedApiProvider === 'claude') {
                         contextTemperature = state.settings.claudeTemperature;
                         contextMaxTokens = state.settings.claudeMaxTokens;
@@ -9780,23 +9782,19 @@
                         contextClaudeIncludeThoughts = state.settings.claudeIncludeThoughts;
                         contextClaudeThinkingBudget = state.settings.claudeThinkingBudget;
                         contextClaudeExpandThoughtsByDefault = state.settings.claudeExpandThoughtsByDefault;
-                    } else if (selectedApiProvider === 'openai' || selectedApiProvider === 'llmaggregator') {
-                        const prefix = selectedApiProvider;
-                        contextTemperature = state.settings[`${prefix}Temperature`];
-                        contextMaxTokens = state.settings[`${prefix}MaxTokens`];
-                        contextTopP = state.settings[`${prefix}TopP`];
-                        contextPresencePenalty = state.settings[`${prefix}PresencePenalty`];
-                        contextFrequencyPenalty = state.settings[`${prefix}FrequencyPenalty`];
-                        contextStreamingOutput = state.settings[`${prefix}StreamingOutput`];
-                        contextStreamingSpeed = state.settings[`${prefix}StreamingSpeed`];
-                        contextDummyUser = state.settings[`${prefix}DummyUser`];
-                        contextEnableDummyUser = state.settings[`${prefix}EnableDummyUser`];
-                        contextDummyModel = state.settings[`${prefix}DummyModel`];
-                        contextEnableDummyModel = state.settings[`${prefix}EnableDummyModel`];
-                        contextConcatDummyModel = state.settings[`${prefix}ConcatDummyModel`];
-                        if (selectedApiProvider === 'llmaggregator') {
-                            contextLlmAggregatorTopK = state.settings.llmAggregatorTopK;
-                        }
+                    } else if (selectedApiProvider === 'openai') {
+                        contextTemperature = state.settings.openaiTemperature;
+                        contextMaxTokens = state.settings.openaiMaxTokens;
+                        contextTopP = state.settings.openaiTopP;
+                        contextPresencePenalty = state.settings.openaiPresencePenalty;
+                        contextFrequencyPenalty = state.settings.openaiFrequencyPenalty;
+                        contextStreamingOutput = state.settings.openaiStreamingOutput;
+                        contextStreamingSpeed = state.settings.openaiStreamingSpeed;
+                        contextDummyUser = state.settings.openaiDummyUser;
+                        contextEnableDummyUser = state.settings.openaiEnableDummyUser;
+                        contextDummyModel = state.settings.openaiDummyModel;
+                        contextEnableDummyModel = state.settings.openaiEnableDummyModel;
+                        contextConcatDummyModel = state.settings.openaiConcatDummyModel;
                     } else if (selectedApiProvider === 'xai') {
                         contextTemperature = state.settings.xaiTemperature;
                         contextMaxTokens = state.settings.xaiMaxTokens;
@@ -10066,10 +10064,7 @@
                             commonGenerationConfig.thinkingConfig.budget_tokens = contextClaudeThinkingBudget;
                         }
                     }
-                } else if (selectedApiProvider === 'llmaggregator') {
-                    if (contextLlmAggregatorTopK !== null) commonGenerationConfig.topK = contextLlmAggregatorTopK;
                 }
-
 
                 let systemInstructionForProvider = null;
                 const systemPromptTextToUseForApi = currentContextSystemPrompt?.trim() ? currentContextSystemPrompt.trim() : null;
@@ -10097,17 +10092,13 @@
                     let apiResponseObject;
                     if (selectedApiProvider === 'gemini') {
                         apiResponseObject = await apiUtils.callGeminiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, usePseudoForThisCall, contextGeminiEnableGrounding);
-                    } else if (selectedApiProvider === 'deepseek') {
-                        apiResponseObject = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, 'deepseek');
+                    } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
+                        apiResponseObject = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, selectedApiProvider);
                     } else if (selectedApiProvider === 'claude') {
                         apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
-                    } else if (selectedApiProvider === 'openai' || selectedApiProvider === 'llmaggregator') {
+                    } else if (selectedApiProvider === 'openai') {
                         const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
-                        if (selectedApiProvider === 'llmaggregator' && 'topK' in commonGenerationConfig) {
-                            commonGenerationConfig.top_k = commonGenerationConfig.topK;
-                            delete commonGenerationConfig.topK;
-                        }
-                        apiResponseObject = await apiUtils.callOpenAICompatibleApi(selectedApiProvider, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, hasImage);
+                        apiResponseObject = await apiUtils.callOpenAICompatibleApi('openai', apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, hasImage);
                     } else if (selectedApiProvider === 'xai') {
                         const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
                         const enableVisionForThisCall = contextXaiVisionEnable || hasImage;
@@ -10163,12 +10154,12 @@
                         let responseStreamIterator;
                         if (selectedApiProvider === 'gemini') {
                             responseStreamIterator = apiUtils.handleGeminiStreamingResponse(apiResponseObject);
-                        } else if (selectedApiProvider === 'deepseek') {
+                        } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
                             responseStreamIterator = apiUtils.handleDeepSeekStreamingResponse(apiResponseObject);
                         } else if (selectedApiProvider === 'claude') {
                             responseStreamIterator = apiUtils.handleClaudeStreamingResponse(apiResponseObject);
-                        } else if (selectedApiProvider === 'openai' || selectedApiProvider === 'llmaggregator') {
-                            responseStreamIterator = apiUtils.handleOpenAICompatibleStreamingResponse(apiResponseObject, selectedApiProvider);
+                        } else if (selectedApiProvider === 'openai') {
+                            responseStreamIterator = apiUtils.handleOpenAICompatibleStreamingResponse(apiResponseObject, 'openai');
                         } else if (selectedApiProvider === 'xai') {
                             responseStreamIterator = apiUtils.handleOpenAICompatibleStreamingResponse(apiResponseObject, 'xai');
                         }
@@ -10313,7 +10304,7 @@
                                     modelThoughtSummaryContent = data.parsedReasoningContent;
                                 }
                             } else {
-                                rawContentFromApi = `${selectedApiProvider.toUpperCase()}からの応答がありません。`;
+                                rawContentFromApi = `${provider.toUpperCase()}からの応答がありません。`;
                                 modelResponseMetadata = { finishReason: 'ERROR' };
                                 if (data.error) rawContentFromApi += ` (エラー: ${data.error.message})`;
                             }
@@ -11146,9 +11137,10 @@
                 newSettings.llmAggregatorTemperature = elements.llmAggregatorTemperatureInput.value === '' ? null : parseFloat(elements.llmAggregatorTemperatureInput.value);
                 newSettings.llmAggregatorMaxTokens = elements.llmAggregatorMaxTokensInput.value === '' ? null : parseInt(elements.llmAggregatorMaxTokensInput.value);
                 newSettings.llmAggregatorTopP = elements.llmAggregatorTopPInput.value === '' ? null : parseFloat(elements.llmAggregatorTopPInput.value);
-                newSettings.llmAggregatorTopK = elements.llmAggregatorTopKInput.value === '' ? null : parseInt(elements.llmAggregatorTopKInput.value);
                 newSettings.llmAggregatorPresencePenalty = elements.llmAggregatorPresencePenaltyInput.value === '' ? null : parseFloat(elements.llmAggregatorPresencePenaltyInput.value);
                 newSettings.llmAggregatorFrequencyPenalty = elements.llmAggregatorFrequencyPenaltyInput.value === '' ? null : parseFloat(elements.llmAggregatorFrequencyPenaltyInput.value);
+                newSettings.llmAggregatorIncludeThoughts = elements.llmAggregatorIncludeThoughtsToggle.checked;
+                newSettings.llmAggregatorExpandThoughtsByDefault = elements.llmAggregatorExpandThoughtsByDefaultToggle.checked;
                 newSettings.llmAggregatorStreamingOutput = elements.llmAggregatorStreamingOutputCheckbox.checked;
                 newSettings.llmAggregatorStreamingSpeed = elements.llmAggregatorStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.llmAggregatorStreamingSpeedInput.value);
                 newSettings.llmAggregatorDummyUser = elements.llmAggregatorDummyUserInput.value.trim();
@@ -11271,8 +11263,6 @@
                     } else if (provider === 'claude') {
                         newSettings.claudeTopK = validateNumeric(newSettings.claudeTopK, null, 1, Infinity, true);
                         newSettings.claudeThinkingBudget = validateNumeric(newSettings.claudeThinkingBudget, null, 1024, Infinity, true);
-                    } else if (provider === 'llmaggregator') {
-                        newSettings.llmAggregatorTopK = validateNumeric(newSettings.llmAggregatorTopK, null, 1, Infinity, true);
                     }
                 });
 
@@ -12607,8 +12597,7 @@
                         dummyUser: dummyUserB, enableDummyUser: enableDummyUserB,
                         dummyModel: dummyModelB, enableDummyModel: enableDummyModelB, concatDummyModel: concatDummyModelB,
                         topK: providerForSettingsB === 'gemini' ? geminiTopKB :
-                              providerForSettingsB === 'claude' ? claudeTopKB : 
-                              providerForSettingsB === 'llmaggregator' ? contextLlmAggregatorTopK : undefined,
+                              providerForSettingsB === 'claude' ? claudeTopKB : undefined,
                         thinkingBudget: providerForSettingsB === 'gemini' ? geminiThinkingBudgetB : 
                                         providerForSettingsB === 'claude' ? claudeThinkingBudgetB : undefined,
                         includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : 
@@ -13363,7 +13352,7 @@
                     msg.parts.forEach(part => {
                         if (part.text) {
                             contentParts.push({ type: 'text', text: part.text });
-                        } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
+                                                    } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
                              contentParts.push({
                                 type: 'image',
                                 source: {
@@ -13511,7 +13500,6 @@
                 if (generationConfig.temperature != null) body.temperature = generationConfig.temperature;
                 if (generationConfig.maxOutputTokens != null) body.max_tokens = generationConfig.maxOutputTokens;
                 if (generationConfig.topP != null) body.top_p = generationConfig.topP;
-                if (generationConfig.topK != null) body.top_k = generationConfig.topK;
                 if (generationConfig.presencePenalty != null) body.presence_penalty = generationConfig.presencePenalty;
                 if (generationConfig.frequencyPenalty != null) body.frequency_penalty = generationConfig.frequencyPenalty;
 
