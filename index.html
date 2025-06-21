@@ -825,7 +825,7 @@
             margin-right: auto;
             flex-shrink: 1;
             min-width: 60px;
-            transition: font-size: 0.2s ease;
+            transition: font-size 0.2s ease;
         }
         .header-button {
             background: none;
@@ -6076,29 +6076,35 @@
                     };
                     details.appendChild(addMoreBtn);
 
-                    messageDiv.insertBefore(details, contentDiv);
-                }
-                
-                try {
-                    if (role === 'model' && !isStreamingPlaceholder && typeof marked !== 'undefined') {
-                        const safeHtml = this._sanitizeAndParseMarkdown(content || '');
-                        contentDiv.innerHTML = safeHtml;
-                        this.processInteractivePlaceholders(contentDiv);
-                        this.processInteractiveTitles(contentDiv);
-                        this.addCopyButtonsToCodeBlocks(contentDiv, false);
-                    } else if (role === 'user') {
-                        const pre = document.createElement('pre'); pre.textContent = content; contentDiv.appendChild(pre);
-                    } else if (role === 'error') {
-                         const p = document.createElement('p'); p.textContent = content; contentDiv.appendChild(p);
-                    } else if (isStreamingPlaceholder) {
-                        contentDiv.innerHTML = '';
-                    } else {
-                        const pre = document.createElement('pre'); pre.textContent = content; contentDiv.innerHTML = ''; contentDiv.appendChild(pre);
+                    contentDiv.appendChild(details);
+
+                    if (content && content.trim() !== '') {
+                        const pre = document.createElement('pre');
+                        pre.textContent = content;
+                        pre.style.marginTop = '8px';
+                        contentDiv.appendChild(pre);
                     }
-                } catch (e) {
-                     const pre = document.createElement('pre'); pre.textContent = content; contentDiv.innerHTML = ''; contentDiv.appendChild(pre);
+                } else {
+                    try {
+                        if (role === 'model' && !isStreamingPlaceholder && typeof marked !== 'undefined') {
+                            const safeHtml = this._sanitizeAndParseMarkdown(content || '');
+                            contentDiv.innerHTML = safeHtml;
+                            this.processInteractivePlaceholders(contentDiv);
+                            this.processInteractiveTitles(contentDiv);
+                            this.addCopyButtonsToCodeBlocks(contentDiv, false);
+                        } else if (role === 'user') {
+                            const pre = document.createElement('pre'); pre.textContent = content; contentDiv.appendChild(pre);
+                        } else if (role === 'error') {
+                             const p = document.createElement('p'); p.textContent = content; contentDiv.appendChild(p);
+                        } else if (isStreamingPlaceholder) {
+                            contentDiv.innerHTML = '';
+                        } else {
+                            const pre = document.createElement('pre'); pre.textContent = content; contentDiv.innerHTML = ''; contentDiv.appendChild(pre);
+                        }
+                    } catch (e) {
+                         const pre = document.createElement('pre'); pre.textContent = content; contentDiv.innerHTML = ''; contentDiv.appendChild(pre);
+                    }
                 }
-                
                 messageDiv.appendChild(contentDiv);
 
                 const citationDetailsDiv = document.createElement('div');
@@ -9929,9 +9935,6 @@
                 } else {
                     text = elements.userInput.value.trim();
                     attachmentsToSend = [...state.pendingAttachments];
-                    if (!text && attachmentsToSend.length > 0) {
-                        text = `📎 添付ファイル (${attachmentsToSend.length}件)`;
-                    }
                 }
 
                 if (!isBackgroundProcess && (state.isSending || (!text && attachmentsToSend.length === 0))) {
@@ -11879,11 +11882,74 @@
                 const contentDiv = messageElement.querySelector('.message-content');
                 
                 if (originalMessage.role === 'user') {
+                    contentDiv.innerHTML = '';
                     if (originalMessage.attachments && originalMessage.attachments.length > 0) {
-                        contentDiv.querySelector('pre').textContent = newRawContent;
-                    } else {
-                        contentDiv.innerHTML = `<pre>${newRawContent}</pre>`;
+                        const details = document.createElement('details');
+                        details.classList.add('attachment-details');
+                        const summary = document.createElement('summary');
+                        summary.textContent = `添付ファイル (${originalMessage.attachments.length}件)`;
+                        details.appendChild(summary);
+
+                        const list = document.createElement('ul');
+                        list.classList.add('attachment-list');
+
+                        originalMessage.attachments.forEach((att, attachmentIndex) => {
+                            const listItem = document.createElement('li');
+                            listItem.dataset.attachmentIndex = attachmentIndex;
+                            const itemContainer = document.createElement('div');
+                            itemContainer.classList.add('attachment-list-item-container');
+
+                            const nameSpan = document.createElement('span');
+                            nameSpan.classList.add('attachment-list-item-name');
+                            nameSpan.textContent = sanitizeText(att.name);
+                            nameSpan.title = `${sanitizeText(att.name)} (${sanitizeText(att.mimeType)})`;
+
+                            const actionsDiv = document.createElement('div');
+                            actionsDiv.classList.add('attachment-actions');
+
+                            if (att.mimeType.startsWith('image/')) {
+                                const previewBtn = document.createElement('button');
+                                previewBtn.textContent = '表示';
+                                previewBtn.classList.add('attachment-preview-btn');
+                                previewBtn.onclick = (e) => { e.preventDefault(); appLogic.previewAttachment(index, attachmentIndex); };
+                                actionsDiv.appendChild(previewBtn);
+                            }
+
+                            const editBtn = document.createElement('button');
+                            editBtn.textContent = '編集';
+                            editBtn.classList.add('attachment-edit-btn');
+                            editBtn.onclick = (e) => { e.preventDefault(); appLogic.editAttachment(index, attachmentIndex); };
+
+                            const removeBtn = document.createElement('button');
+                            removeBtn.textContent = '削除';
+                            removeBtn.classList.add('attachment-remove-btn');
+                            removeBtn.onclick = (e) => { e.preventDefault(); appLogic.removeAttachment(index, attachmentIndex, listItem); };
+                            
+                            actionsDiv.appendChild(editBtn);
+                            actionsDiv.appendChild(removeBtn);
+                            itemContainer.appendChild(nameSpan);
+                            itemContainer.appendChild(actionsDiv);
+                            listItem.appendChild(itemContainer);
+                            list.appendChild(listItem);
+                        });
+                        details.appendChild(list);
+                        
+                        const addMoreBtn = document.createElement('button');
+                        addMoreBtn.textContent = 'ファイルを追加';
+                        addMoreBtn.classList.add('add-more-attachments-btn');
+                        addMoreBtn.onclick = (e) => { e.preventDefault(); appLogic.addMoreAttachments(index, list); };
+                        details.appendChild(addMoreBtn);
+
+                        contentDiv.appendChild(details);
                     }
+
+                    if (newRawContent && newRawContent.trim() !== '') {
+                        const pre = document.createElement('pre');
+                        pre.textContent = newRawContent;
+                        pre.style.marginTop = (originalMessage.attachments && originalMessage.attachments.length > 0) ? '8px' : '0';
+                        contentDiv.appendChild(pre);
+                    }
+
                 } else if (originalMessage.role === 'model') {
                     if (contentDiv && typeof marked !== 'undefined') {
                         try {
@@ -13634,7 +13700,6 @@
                 if (generationConfig.topP != null) body.top_p = generationConfig.topP;
                 if (generationConfig.presencePenalty != null) body.presence_penalty = generationConfig.presencePenalty;
                 if (generationConfig.frequencyPenalty != null) body.frequency_penalty = generationConfig.frequencyPenalty;
-                if (generationConfig.topK != null) body.top_k = generationConfig.topK;
 
                 return body;
             },
