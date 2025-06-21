@@ -3793,7 +3793,7 @@
                                     <input type="number" id="llmaggregator-frequency-penalty" step="0.1" min="-2.0" max="2.0" placeholder="例:0.0 (-2.0～2.0)" aria-label="LLM Aggregator Frequency Penalty">
                                 </div>
                             </div>
-                            <div id="llmaggregator-thoughts-param">
+                             <div id="llmaggregator-thoughts-param">
                                <h3 style="margin-top:15px; margin-bottom:10px; font-size:14px; border:0; padding:0;">思考プロセス</h3>
                                <label class="checkbox-label">
                                    <input type="checkbox" id="llmaggregator-include-thoughts-toggle">
@@ -5073,7 +5073,7 @@
                 deepSeekTopP: null,
                 deepSeekPresencePenalty: null,
                 deepSeekFrequencyPenalty: null,
-                deepSeekIncludeDeepSeekThoughts: false,
+                deepSeekIncludeThoughts: false,
                 deepSeekExpandThoughtsByDefault: false,
                 deepSeekStreamingOutput: true,
                 deepSeekStreamingSpeed: DEFAULT_STREAMING_SPEED,
@@ -5875,7 +5875,7 @@
                 const messageData = state.currentMessages[index];
                 const messageApiProvider = messageData?.generatedByApiProvider || state.settings.apiProvider;
                 const includeThoughtsForProvider = (messageApiProvider === 'gemini' && state.settings.geminiIncludeThoughts) ||
-                                                 (messageApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) ||
+                                                 (messageApiProvider === 'deepseek' && state.settings.deepSeekIncludeThoughts) ||
                                                  (messageApiProvider === 'claude' && state.settings.claudeIncludeThoughts) ||
                                                  (messageApiProvider === 'xai' && state.settings.xaiIncludeThoughts) ||
                                                  (messageApiProvider === 'llmaggregator' && state.settings.llmAggregatorIncludeThoughts);
@@ -6572,19 +6572,15 @@
                 let accumulatedContentForDisplay;
 
                 const selectedApiProvider = state.settings.apiProvider;
-                const streamSpeed = selectedApiProvider === 'gemini' ? state.settings.geminiStreamingSpeed : 
-                                  selectedApiProvider === 'deepseek' ? state.settings.deepSeekStreamingSpeed :
-                                  selectedApiProvider === 'claude' ? state.settings.claudeStreamingSpeed :
-                                  selectedApiProvider === 'xai' ? state.settings.xaiStreamingSpeed :
-                                  selectedApiProvider === 'llmaggregator' ? state.settings.llmAggregatorStreamingSpeed :
-                                  state.settings.openaiStreamingSpeed;
+                const streamSpeedKey = `${selectedApiProvider}StreamingSpeed`;
+                const streamSpeed = state.settings[streamSpeedKey] ?? DEFAULT_STREAMING_SPEED;
 
                 if (isThoughtSummary) {
-                    if ((selectedApiProvider === 'gemini' && state.settings.geminiIncludeThoughts) ||
-                        (selectedApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) ||
-                        (selectedApiProvider === 'claude' && state.settings.claudeIncludeThoughts) ||
-                        (selectedApiProvider === 'xai' && state.settings.xaiIncludeThoughts) ||
-                        (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorIncludeThoughts)) {
+                    const includeThoughtsKey = `${selectedApiProvider}IncludeThoughts`;
+                    if(selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
+                        includeThoughtsKey = 'deepSeekIncludeThoughts';
+                    }
+                    if (state.settings[includeThoughtsKey]) {
                         targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
                         accumulatedContentForDisplay = state.partialThoughtStreamContent;
                     } else {
@@ -7177,6 +7173,7 @@
                 elements.llmAggregatorApiKeyInput.value = state.settings.llmAggregatorApiKey || '';
                 elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
                 elements.llmAggregatorAdditionalModelsTextarea.value = state.settings.llmAggregatorAdditionalModels || '';
+                
 
                 elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPrompt || '';
                 elements.geminiEnableSystemPromptDefaultCheckbox.checked = state.settings.geminiEnableSystemPromptDefault;
@@ -7206,7 +7203,7 @@
                 elements.deepSeekTopPInput.value = state.settings.deepSeekTopP === null ? '' : state.settings.deepSeekTopP;
                 elements.deepSeekPresencePenaltyInput.value = state.settings.deepSeekPresencePenalty === null ? '' : state.settings.deepSeekPresencePenalty;
                 elements.deepSeekFrequencyPenaltyInput.value = state.settings.deepSeekFrequencyPenalty === null ? '' : state.settings.deepSeekFrequencyPenalty;
-                elements.deepSeekIncludeThoughtsToggle.checked = state.settings.deepSeekIncludeDeepSeekThoughts;
+                elements.deepSeekIncludeThoughtsToggle.checked = state.settings.deepSeekIncludeThoughts;
                 elements.deepSeekExpandThoughtsByDefaultToggle.checked = state.settings.deepSeekExpandThoughtsByDefault;
                 elements.deepSeekStreamingOutputCheckbox.checked = state.settings.deepSeekStreamingOutput;
                 elements.deepSeekStreamingSpeedInput.value = state.settings.deepSeekStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
@@ -7266,7 +7263,7 @@
                 elements.xaiIncludeThoughtsToggle.checked = state.settings.xaiIncludeThoughts;
                 elements.xaiExpandThoughtsByDefaultToggle.checked = state.settings.xaiExpandThoughtsByDefault;
                 elements.xaiReasoningEffortSelect.value = state.settings.xaiReasoningEffort;
-
+                
                 elements.llmAggregatorSystemPromptDefaultTextarea.value = state.settings.llmAggregatorSystemPrompt || '';
                 elements.llmAggregatorEnableSystemPromptDefaultCheckbox.checked = state.settings.llmAggregatorEnableSystemPromptDefault;
                 elements.llmAggregatorTemperatureInput.value = state.settings.llmAggregatorTemperature === null ? '' : state.settings.llmAggregatorTemperature;
@@ -10115,6 +10112,7 @@
 
                     if (useStreamingForThisCall && !isBackgroundProcess) {
                         const tempPlaceholderIndex = state.currentMessages.length;
+                        const expandThoughtsKey = `${selectedApiProvider}ExpandThoughtsByDefault`;
                         modelMessageObjectForStream = {
                             role: 'model',
                             content: '',
@@ -10123,11 +10121,7 @@
                             xaiThoughtSummary: null,
                             timestamp: Date.now(),
                             generatedByApiProvider: selectedApiProvider,
-                            thoughtSummaryOpen: (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts && state.settings.geminiExpandThoughtsByDefault) ||
-                                                (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && state.settings.claudeExpandThoughtsByDefault) ||
-                                                (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && state.settings.xaiExpandThoughtsByDefault) ||
-                                                (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorIncludeThoughts && state.settings.llmAggregatorExpandThoughtsByDefault),
+                            thoughtSummaryOpen: state.settings[expandThoughtsKey] || false,
                         };
 
                         if (isRetry && firstResponseIndexForRetry !== -1) {
@@ -10164,12 +10158,8 @@
                             responseStreamIterator = apiUtils.handleOpenAICompatibleStreamingResponse(apiResponseObject, 'xai');
                         }
 
-                        const currentContextStreamSpeed = selectedApiProvider === 'gemini' ? contextStreamingSpeed : 
-                                                          selectedApiProvider === 'deepseek' ? state.settings.deepSeekStreamingSpeed :
-                                                          selectedApiProvider === 'claude' ? state.settings.claudeStreamingSpeed :
-                                                          selectedApiProvider === 'xai' ? state.settings.xaiStreamingSpeed :
-                                                          selectedApiProvider === 'llmaggregator' ? state.settings.llmAggregatorStreamingSpeed :
-                                                          state.settings.openaiStreamingSpeed;
+                        const streamSpeedKey = `${selectedApiProvider}StreamingSpeed`;
+                        const currentContextStreamSpeed = state.settings[streamSpeedKey] ?? DEFAULT_STREAMING_SPEED;
 
                         const messageIndexForDisplay = isBackgroundProcess ? -1 : (modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1);
 
@@ -10377,12 +10367,9 @@
                              } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts) {
                                  bgModelMessage.xaiThoughtSummary = modelThoughtSummaryContent || null;
                              }
-
-                              bgModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
-                                                                  (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                                  (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
-                                                                  (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
-                                                                  (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault);
+                            
+                            const expandThoughtsByDefaultKey = `${selectedApiProvider}ExpandThoughtsByDefault`;
+                             bgModelMessage.thoughtSummaryOpen = state.settings[expandThoughtsByDefaultKey] || false;
 
                              currentContextMessages.push(bgModelMessage);
                              const chatToSaveBg = {
@@ -10465,11 +10452,8 @@
                             } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && modelThoughtSummaryContent) {
                                  newModelMessage.xaiThoughtSummary = modelThoughtSummaryContent || null;
                             }
-                            newModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
-                                                                 (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                                 (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
-                                                                 (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
-                                                                 (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault);
+                            const expandThoughtsByDefaultKey = `${selectedApiProvider}ExpandThoughtsByDefault`;
+                            newModelMessage.thoughtSummaryOpen = state.settings[expandThoughtsByDefaultKey] || false;
 
                              const targetUserIndexForCascade = userMessageIndex;
                              if (targetUserIndexForCascade !== -1 && !isBackgroundProcess) {
@@ -11071,7 +11055,7 @@
                 newSettings.deepSeekTopP = elements.deepSeekTopPInput.value === '' ? null : parseFloat(elements.deepSeekTopPInput.value);
                 newSettings.deepSeekPresencePenalty = elements.deepSeekPresencePenaltyInput.value === '' ? null : parseFloat(elements.deepSeekPresencePenaltyInput.value);
                 newSettings.deepSeekFrequencyPenalty = elements.deepSeekFrequencyPenaltyInput.value === '' ? null : parseFloat(elements.deepSeekFrequencyPenaltyInput.value);
-                newSettings.deepSeekIncludeDeepSeekThoughts = elements.deepSeekIncludeThoughtsToggle.checked;
+                newSettings.deepSeekIncludeThoughts = elements.deepSeekIncludeThoughtsToggle.checked;
                 newSettings.deepSeekExpandThoughtsByDefault = elements.deepSeekExpandThoughtsByDefaultToggle.checked;
                 newSettings.deepSeekStreamingOutput = elements.deepSeekStreamingOutputCheckbox.checked;
                 newSettings.deepSeekStreamingSpeed = elements.deepSeekStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.deepSeekStreamingSpeedInput.value);
@@ -11419,7 +11403,7 @@
                                 else if(key === 'geminiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'geminiPseudoStreaming') defaultSettingsCopy[key] = false;
                                 else if(key === 'geminiEnableGrounding') defaultSettingsCopy[key] = false;
-                                else if(key === 'deepSeekIncludeDeepSeekThoughts' || key === 'llmAggregatorIncludeThoughts') defaultSettingsCopy[key] = false;
+                                else if(key === 'deepSeekIncludeThoughts' || key === 'llmAggregatorIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'deepSeekExpandThoughtsByDefault' || key === 'llmAggregatorExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
@@ -11428,6 +11412,8 @@
                                 else if(key === 'xaiIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiReasoningEffort') defaultSettingsCopy[key] = 'low';
+                                else if(key === 'llmAggregatorApiBackend' || key === 'llmAggregatorModelName') defaultSettingsCopy[key] = '';
+                                else if(key === 'llmAggregatorApiKey' || key === 'llmAggregatorAdditionalModels') defaultSettingsCopy[key] = '';
                             }
                         });
                         defaultSettingsCopy.apiKey = '';
@@ -12601,7 +12587,7 @@
                         thinkingBudget: providerForSettingsB === 'gemini' ? geminiThinkingBudgetB : 
                                         providerForSettingsB === 'claude' ? claudeThinkingBudgetB : undefined,
                         includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : 
-                                         providerForSettingsB === 'deepseek' || providerForSettingsB === 'llmaggregator' ? contextDeepSeekIncludeThoughts : 
+                                         (providerForSettingsB === 'deepseek' || providerForSettingsB === 'llmaggregator') ? contextDeepSeekIncludeThoughts : 
                                          providerForSettingsB === 'claude' ? claudeIncludeThoughtsB :
                                          providerForSettingsB === 'xai' ? xaiIncludeThoughtsB : undefined,
                         expandThoughtsByDefault: (providerForSettingsB === 'gemini' && state.settings.geminiExpandThoughtsByDefault) ||
@@ -13173,7 +13159,7 @@
             },
             async *handleDeepSeekStreamingResponse(response) {
                 if (!response.body) {
-                    throw new Error("DeepSeekレスポンスボディがありません。");
+                    throw new Error("レスポンスボディがありません。");
                 }
                 const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
                 let buffer = '';
@@ -13352,7 +13338,7 @@
                     msg.parts.forEach(part => {
                         if (part.text) {
                             contentParts.push({ type: 'text', text: part.text });
-                                                    } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
+                        } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
                              contentParts.push({
                                 type: 'image',
                                 source: {
