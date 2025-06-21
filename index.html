@@ -3469,6 +3469,7 @@
                     <div style="margin-top:15px;">
                         <label for="llmaggregator-api-backend">API バックエンド URL:</label>
                         <input type="text" id="llmaggregator-api-backend" placeholder="例: https://api.openrouter.ai/v1" aria-label="LLM Aggregator API バックエンド URL">
+                        <div id="llmaggregator-url-error" style="color: red; font-size: 11px; margin-top: -5px; height: 14px;"></div>
                         <label for="llmaggregator-api-key">APIキー:</label>
                         <input type="password" id="llmaggregator-api-key" placeholder="APIキーを入力" aria-label="LLM Aggregator APIキー">
 
@@ -3778,6 +3779,10 @@
                             <div>
                                 <label for="llmaggregator-top-p">Top P:</label>
                                 <input type="number" id="llmaggregator-top-p" step="0.01" min="0" max="1" placeholder="例:1.0(0.0 - 1.0)" aria-label="LLM Aggregator Top P">
+                            </div>
+                            <div>
+                                <label for="llmaggregator-top-k">Top K:</label>
+                                <input type="number" id="llmaggregator-top-k" step="1" min="1" placeholder="例:40" aria-label="LLM Aggregator Top K">
                             </div>
                         </div>
                         <details id="settings-group-llmaggregator-other-params">
@@ -4681,6 +4686,17 @@
         const DEFAULT_DICE_MAX_VALUE = 100;
         const DEFAULT_THOUGHT_SUMMARY_OPACITY = 0.65;
         const DEFAULT_THOUGHT_SUMMARY_FONT_SIZE = 13;
+        
+        const ALLOWED_LLMAGGREGATOR_DOMAINS = [
+            'openrouter.ai',
+            'vercel.com',
+            'endpoints.anyscale.com',
+            'together.ai',
+            'console.groq.com',
+            'fireworks.ai',
+            'huggingface.co',
+            'deepinfra.com'
+        ];
 
         const extensionToMimeTypeMap = {
             'pdf': 'application/pdf', 'js': 'text/javascript', 'py': 'text/x-python',
@@ -4746,6 +4762,7 @@
             xaiAdditionalModelsTextarea: document.getElementById('xai-additional-models'),
             llmAggregatorSettingsGroup: document.getElementById('llmaggregator-settings-group'),
             llmAggregatorApiBackendInput: document.getElementById('llmaggregator-api-backend'),
+            llmAggregatorUrlError: document.getElementById('llmaggregator-url-error'),
             llmAggregatorApiKeyInput: document.getElementById('llmaggregator-api-key'),
             llmAggregatorModelNameSelect: document.getElementById('llmaggregator-model-name'),
             llmAggregatorUserDefinedModelsGroup: document.getElementById('llmaggregator-user-defined-models-group'),
@@ -4859,6 +4876,7 @@
             llmAggregatorMaxTokensInput: document.getElementById('llmaggregator-max-tokens'),
             llmAggregatorTemperatureInput: document.getElementById('llmaggregator-temperature'),
             llmAggregatorTopPInput: document.getElementById('llmaggregator-top-p'),
+            llmAggregatorTopKInput: document.getElementById('llmaggregator-top-k'),
             llmAggregatorPresencePenaltyInput: document.getElementById('llmaggregator-presence-penalty'),
             llmAggregatorFrequencyPenaltyInput: document.getElementById('llmaggregator-frequency-penalty'),
             llmAggregatorIncludeThoughtsToggle: document.getElementById('llmaggregator-include-thoughts-toggle'),
@@ -5147,6 +5165,7 @@
                 llmAggregatorTemperature: null,
                 llmAggregatorMaxTokens: null,
                 llmAggregatorTopP: null,
+                llmAggregatorTopK: null,
                 llmAggregatorPresencePenalty: null,
                 llmAggregatorFrequencyPenalty: null,
                 llmAggregatorIncludeThoughts: false,
@@ -5277,6 +5296,19 @@
         const sanitizeText = (text, maxLength = 255) => {
             if (typeof text !== 'string') return '';
             return text.replace(/[<>'"&]/g, '').substring(0, maxLength);
+        }
+        
+        function isAllowedAggregatorDomain(urlStr) {
+            if (!urlStr) return true;
+            try {
+                const url = new URL(urlStr.trim());
+                const host = url.hostname.toLowerCase();
+                return ALLOWED_LLMAGGREGATOR_DOMAINS.some(allowed => {
+                    return host === allowed || host.endsWith(`.${allowed}`);
+                });
+            } catch {
+                return false;
+            }
         }
 
         function updateMessageMaxWidthVar() {
@@ -6043,8 +6075,6 @@
                         appLogic.addMoreAttachments(index, list);
                     };
                     details.appendChild(addMoreBtn);
-
-                    contentDiv.appendChild(details);
 
                     if (content && content.trim() !== '') {
                         const pre = document.createElement('pre');
@@ -7271,6 +7301,7 @@
                 elements.llmAggregatorTemperatureInput.value = state.settings.llmAggregatorTemperature === null ? '' : state.settings.llmAggregatorTemperature;
                 elements.llmAggregatorMaxTokensInput.value = state.settings.llmAggregatorMaxTokens === null ? '' : state.settings.llmAggregatorMaxTokens;
                 elements.llmAggregatorTopPInput.value = state.settings.llmAggregatorTopP === null ? '' : state.settings.llmAggregatorTopP;
+                elements.llmAggregatorTopKInput.value = state.settings.llmAggregatorTopK === null ? '' : state.settings.llmAggregatorTopK;
                 elements.llmAggregatorPresencePenaltyInput.value = state.settings.llmAggregatorPresencePenalty === null ? '' : state.settings.llmAggregatorPresencePenalty;
                 elements.llmAggregatorFrequencyPenaltyInput.value = state.settings.llmAggregatorFrequencyPenalty === null ? '' : state.settings.llmAggregatorFrequencyPenalty;
                 elements.llmAggregatorIncludeThoughtsToggle.checked = state.settings.llmAggregatorIncludeThoughts;
@@ -8818,6 +8849,24 @@
                     state.settings.apiProviderCycle.llmaggregator = elements.apiProviderCycleLlmAggregatorCheckbox.checked;
                     uiUtils.updateApiProviderSelectOptions();
                 });
+                
+                const llmUrlInput = elements.llmAggregatorApiBackendInput;
+                const llmUrlError = elements.llmAggregatorUrlError;
+                
+                const validateLlmUrl = () => {
+                    const url = llmUrlInput.value;
+                    const saveButtons = document.querySelectorAll('.js-save-settings-btn');
+                    if (url && !isAllowedAggregatorDomain(url)) {
+                        llmUrlError.textContent = 'このドメインは許可されていません。';
+                        saveButtons.forEach(btn => btn.disabled = true);
+                    } else {
+                        llmUrlError.textContent = '';
+                        saveButtons.forEach(btn => btn.disabled = false);
+                    }
+                };
+
+                llmUrlInput.addEventListener('input', validateLlmUrl);
+                llmUrlInput.addEventListener('blur', validateLlmUrl);
             },
             handlePopState(event) {
                 const targetScreen = event.state?.screen || 'chat';
@@ -9670,6 +9719,8 @@
                 let contextClaudeTopK, contextClaudeIncludeThoughts, contextClaudeThinkingBudget, contextClaudeExpandThoughtsByDefault;
                 
                 let contextXaiVisionEnable, contextXaiIncludeThoughts, contextXaiReasoningEffort;
+                
+                let contextLlmAggregatorTopK;
 
                 if (isBackgroundProcess) {
                     const providerForSettingsB = sourceSessionContext.apiProvider || state.settings.apiProvider;
@@ -9753,6 +9804,7 @@
                         contextTemperature = sourceSessionContext.temperature ?? state.settings.llmAggregatorTemperature;
                         contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.llmAggregatorMaxTokens;
                         contextTopP = sourceSessionContext.topP ?? state.settings.llmAggregatorTopP;
+                        contextLlmAggregatorTopK = sourceSessionContext.topK ?? state.settings.llmAggregatorTopK;
                         contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.llmAggregatorPresencePenalty;
                         contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.llmAggregatorFrequencyPenalty;
                         contextDeepSeekIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.llmAggregatorIncludeThoughts;
@@ -9845,6 +9897,7 @@
                         contextTemperature = state.settings.llmAggregatorTemperature;
                         contextMaxTokens = state.settings.llmAggregatorMaxTokens;
                         contextTopP = state.settings.llmAggregatorTopP;
+                        contextLlmAggregatorTopK = state.settings.llmAggregatorTopK;
                         contextPresencePenalty = state.settings.llmAggregatorPresencePenalty;
                         contextFrequencyPenalty = state.settings.llmAggregatorFrequencyPenalty;
                         contextDeepSeekIncludeThoughts = state.settings.llmAggregatorIncludeThoughts;
@@ -9897,6 +9950,16 @@
                         uiUtils.showScreen('settings');
                     }
                     return "APIキー未設定";
+                }
+                
+                if (selectedApiProvider === 'llmaggregator') {
+                    if (!isAllowedAggregatorDomain(state.settings.llmAggregatorApiBackend)) {
+                        if (!isBackgroundProcess) {
+                            await uiUtils.showCustomAlert('LLM AggregatorのバックエンドURLがホワイトリスト外のため、送信できません。設定を確認してください。');
+                            uiUtils.showScreen('settings');
+                        }
+                        return "不正なドメイン";
+                    }
                 }
 
                 if (!isBackgroundProcess) uiUtils.setSendingState(true);
@@ -10108,6 +10171,8 @@
                             commonGenerationConfig.thinkingConfig.budget_tokens = contextClaudeThinkingBudget;
                         }
                     }
+                } else if (selectedApiProvider === 'llmaggregator') {
+                    if (contextLlmAggregatorTopK !== null) commonGenerationConfig.topK = contextLlmAggregatorTopK;
                 }
 
                 let systemInstructionForProvider = null;
@@ -11181,6 +11246,7 @@
                 newSettings.llmAggregatorTemperature = elements.llmAggregatorTemperatureInput.value === '' ? null : parseFloat(elements.llmAggregatorTemperatureInput.value);
                 newSettings.llmAggregatorMaxTokens = elements.llmAggregatorMaxTokensInput.value === '' ? null : parseInt(elements.llmAggregatorMaxTokensInput.value);
                 newSettings.llmAggregatorTopP = elements.llmAggregatorTopPInput.value === '' ? null : parseFloat(elements.llmAggregatorTopPInput.value);
+                newSettings.llmAggregatorTopK = elements.llmAggregatorTopKInput.value === '' ? null : parseInt(elements.llmAggregatorTopKInput.value);
                 newSettings.llmAggregatorPresencePenalty = elements.llmAggregatorPresencePenaltyInput.value === '' ? null : parseFloat(elements.llmAggregatorPresencePenaltyInput.value);
                 newSettings.llmAggregatorFrequencyPenalty = elements.llmAggregatorFrequencyPenaltyInput.value === '' ? null : parseFloat(elements.llmAggregatorFrequencyPenaltyInput.value);
                 newSettings.llmAggregatorIncludeThoughts = elements.llmAggregatorIncludeThoughtsToggle.checked;
@@ -11307,6 +11373,8 @@
                     } else if (provider === 'claude') {
                         newSettings.claudeTopK = validateNumeric(newSettings.claudeTopK, null, 1, Infinity, true);
                         newSettings.claudeThinkingBudget = validateNumeric(newSettings.claudeThinkingBudget, null, 1024, Infinity, true);
+                    } else if (provider === 'llmaggregator') {
+                        newSettings.llmAggregatorTopK = validateNumeric(newSettings.llmAggregatorTopK, null, 1, Infinity, true);
                     }
                 });
 
@@ -11576,6 +11644,7 @@
                         defaultSettingsCopy.showApiProviderToggleHeader = false;
                         defaultSettingsCopy.showApiProviderToggleFooter = true;
                         defaultSettingsCopy.apiProviderCycle = { gemini: true, deepseek: true, claude: true, openai: true, xai: true, llmaggregator: true };
+                        defaultSettingsCopy.llmAggregatorTopK = null;
 
                         state.settings = defaultSettingsCopy;
 
@@ -12539,7 +12608,7 @@
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
                         deepSeekIncludeThoughtsB, presencePenaltyB, frequencyPenaltyB,
                         claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB,
-                        xaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB;
+                        xaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB, llmAggregatorTopKB;
 
                     if (providerForSettingsB === 'gemini') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
@@ -12583,6 +12652,7 @@
                         temperatureB = state.settings.llmAggregatorTemperature;
                         maxTokensB = state.settings.llmAggregatorMaxTokens;
                         topPB = state.settings.llmAggregatorTopP;
+                        llmAggregatorTopKB = state.settings.llmAggregatorTopK;
                         presencePenaltyB = state.settings.llmAggregatorPresencePenalty;
                         frequencyPenaltyB = state.settings.llmAggregatorFrequencyPenalty;
                         contextDeepSeekIncludeThoughts = state.settings.llmAggregatorIncludeThoughts;
@@ -12656,7 +12726,8 @@
                         dummyUser: dummyUserB, enableDummyUser: enableDummyUserB,
                         dummyModel: dummyModelB, enableDummyModel: enableDummyModelB, concatDummyModel: concatDummyModelB,
                         topK: providerForSettingsB === 'gemini' ? geminiTopKB :
-                              providerForSettingsB === 'claude' ? claudeTopKB : undefined,
+                              providerForSettingsB === 'claude' ? claudeTopKB :
+                              providerForSettingsB === 'llmaggregator' ? llmAggregatorTopKB : undefined,
                         thinkingBudget: providerForSettingsB === 'gemini' ? geminiThinkingBudgetB : 
                                         providerForSettingsB === 'claude' ? claudeThinkingBudgetB : undefined,
                         includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : 
@@ -13142,11 +13213,12 @@
                  }
             },
             async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
-                let apiKey, model, baseUrl;
+                let apiKey, model, baseUrl, topK;
                 if (provider === 'llmaggregator') {
                     apiKey = state.settings.llmAggregatorApiKey;
                     model = state.settings.llmAggregatorModelName;
                     baseUrl = state.settings.llmAggregatorApiBackend;
+                    topK = state.settings.llmAggregatorTopK;
                     if (!baseUrl) {
                         throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
                     }
@@ -13191,6 +13263,10 @@
                     ...(generationConfig.presencePenalty !== undefined && { presence_penalty: generationConfig.presencePenalty }),
                     ...(generationConfig.frequencyPenalty !== undefined && { frequency_penalty: generationConfig.frequencyPenalty }),
                 };
+                
+                if (provider === 'llmaggregator' && topK !== null) {
+                    dsRequestBody.top_k = topK;
+                }
 
                 try {
                     const response = await fetch(endpoint, {
@@ -13602,6 +13678,10 @@
                     useStreaming,
                     enableVision
                 );
+                
+                if (provider === 'llmaggregator' && generationConfig.topK !== null) {
+                    body.top_k = generationConfig.topK;
+                }
                 
                 const response = await fetch(baseUrl, { method: "POST", headers, body: JSON.stringify(body), signal });
                 if (!response.ok) {
