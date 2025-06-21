@@ -3468,10 +3468,9 @@
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">LLM Aggregator 設定</summary>
                     <div style="margin-top:15px;">
                         <label for="llmaggregator-api-backend">API バックエンド URL:</label>
-                        <input type="text" id="llmaggregator-api-backend" placeholder="例: https://api.openrouter.ai/v1/chat/completions" aria-label="LLM Aggregator API バックエンド URL">
+                        <input type="text" id="llmaggregator-api-backend" placeholder="例: https://api.openrouter.ai/v1" aria-label="LLM Aggregator API バックエンド URL">
                         <label for="llmaggregator-api-key">APIキー:</label>
                         <input type="password" id="llmaggregator-api-key" placeholder="APIキーを入力" aria-label="LLM Aggregator APIキー">
-
                         <label for="llmaggregator-model-name">モデル名:</label>
                         <select id="llmaggregator-model-name" aria-label="LLM Aggregator モデル名">
                             <optgroup label="デフォルト">
@@ -3793,17 +3792,6 @@
                                     <input type="number" id="llmaggregator-frequency-penalty" step="0.1" min="-2.0" max="2.0" placeholder="例:0.0 (-2.0～2.0)" aria-label="LLM Aggregator Frequency Penalty">
                                 </div>
                             </div>
-                            <div id="llmaggregator-thoughts-param">
-                               <h3 style="margin-top:15px; margin-bottom:10px; font-size:14px; border:0; padding:0;">思考プロセス</h3>
-                               <label class="checkbox-label">
-                                   <input type="checkbox" id="llmaggregator-include-thoughts-toggle">
-                                   Include Thoughts
-                               </label>
-                               <label class="checkbox-label">
-                                   <input type="checkbox" id="llmaggregator-expand-thoughts-by-default-toggle">
-                                   💭思考プロセスを開いた状態にする
-                               </label>
-                           </div>
                         </details>
                     </div>
                 </details>
@@ -9647,7 +9635,7 @@
                 let contextGeminiTopK, contextGeminiThinkingBudget, contextGeminiIncludeThoughts,
                     contextGeminiPseudoStreaming, contextGeminiEnableGrounding;
 
-                let contextDeepSeekIncludeThoughts;
+                let contextDeepSeekIncludeThoughts, contextLlmAggregatorIncludeThoughts;
 
                 let contextClaudeTopK, contextClaudeIncludeThoughts, contextClaudeThinkingBudget, contextClaudeExpandThoughtsByDefault;
                 
@@ -9680,7 +9668,8 @@
                         contextTopP = sourceSessionContext.topP ?? state.settings[`${prefix}TopP`];
                         contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings[`${prefix}PresencePenalty`];
                         contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings[`${prefix}FrequencyPenalty`];
-                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings[`${prefix}IncludeThoughts`];
+                        if (prefix === 'deepseek') contextDeepSeekIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.deepSeekIncludeThoughts;
+                        if (prefix === 'llmaggregator') contextLlmAggregatorIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.llmAggregatorIncludeThoughts;
                         contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings[`${prefix}StreamingOutput`];
                         contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings[`${prefix}StreamingSpeed`];
                         contextDummyUser = sourceSessionContext.dummyUser ?? state.settings[`${prefix}DummyUser`];
@@ -9759,7 +9748,8 @@
                         contextTopP = state.settings[`${prefix}TopP`];
                         contextPresencePenalty = state.settings[`${prefix}PresencePenalty`];
                         contextFrequencyPenalty = state.settings[`${prefix}FrequencyPenalty`];
-                        contextDeepSeekIncludeThoughts = state.settings[`${prefix}IncludeThoughts`];
+                        if (prefix === 'deepseek') contextDeepSeekIncludeThoughts = state.settings.deepSeekIncludeThoughts;
+                        if (prefix === 'llmaggregator') contextLlmAggregatorIncludeThoughts = state.settings.llmAggregatorIncludeThoughts;
                         contextStreamingOutput = state.settings[`${prefix}StreamingOutput`];
                         contextStreamingSpeed = state.settings[`${prefix}StreamingSpeed`];
                         contextDummyUser = state.settings[`${prefix}DummyUser`];
@@ -10127,7 +10117,7 @@
                                                 (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                 (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && state.settings.claudeExpandThoughtsByDefault) ||
                                                 (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && state.settings.xaiExpandThoughtsByDefault) ||
-                                                (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorIncludeThoughts && state.settings.llmAggregatorExpandThoughtsByDefault),
+                                                (selectedApiProvider === 'llmaggregator' && contextLlmAggregatorIncludeThoughts && state.settings.llmAggregatorExpandThoughtsByDefault),
                         };
 
                         if (isRetry && firstResponseIndexForRetry !== -1) {
@@ -10154,8 +10144,10 @@
                         let responseStreamIterator;
                         if (selectedApiProvider === 'gemini') {
                             responseStreamIterator = apiUtils.handleGeminiStreamingResponse(apiResponseObject);
-                        } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
+                        } else if (selectedApiProvider === 'deepseek') {
                             responseStreamIterator = apiUtils.handleDeepSeekStreamingResponse(apiResponseObject);
+                        } else if (selectedApiProvider === 'llmaggregator') {
+                            responseStreamIterator = apiUtils.handleLlmAggregatorStreamingResponse(apiResponseObject);
                         } else if (selectedApiProvider === 'claude') {
                             responseStreamIterator = apiUtils.handleClaudeStreamingResponse(apiResponseObject);
                         } else if (selectedApiProvider === 'openai') {
@@ -10227,7 +10219,7 @@
                                      if (streamData.groundingMetadata) currentGroundingMetadata = streamData.groundingMetadata;
                                      if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
                                 } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
-                                    if (streamData.fullReasoningContent && contextDeepSeekIncludeThoughts) {
+                                    if (streamData.fullReasoningContent && (contextDeepSeekIncludeThoughts || contextLlmAggregatorIncludeThoughts)) {
                                         modelThoughtSummaryContent = streamData.fullReasoningContent;
                                     }
                                     if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
@@ -10300,11 +10292,11 @@
                                         totalTokenCount: data.usage.total_tokens,
                                     };
                                 }
-                                if (contextDeepSeekIncludeThoughts && data.parsedReasoningContent) {
+                                if ((contextDeepSeekIncludeThoughts || contextLlmAggregatorIncludeThoughts) && data.parsedReasoningContent) {
                                     modelThoughtSummaryContent = data.parsedReasoningContent;
                                 }
                             } else {
-                                rawContentFromApi = `${provider.toUpperCase()}からの応答がありません。`;
+                                rawContentFromApi = `${selectedApiProvider.toUpperCase()}からの応答がありません。`;
                                 modelResponseMetadata = { finishReason: 'ERROR' };
                                 if (data.error) rawContentFromApi += ` (エラー: ${data.error.message})`;
                             }
@@ -10370,7 +10362,7 @@
                              if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
                                  bgModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
                                  bgModelMessage.groundingMetadata = currentGroundingMetadata;
-                             } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts) {
+                             } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && (contextDeepSeekIncludeThoughts || contextLlmAggregatorIncludeThoughts)) {
                                  bgModelMessage.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                              } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts) {
                                  bgModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
@@ -10437,7 +10429,7 @@
                                 if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
                                     msgToUpdate.thoughtSummary = modelThoughtSummaryContent || null;
                                     msgToUpdate.groundingMetadata = currentGroundingMetadata;
-                                } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
+                                } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && (contextDeepSeekIncludeThoughts || contextLlmAggregatorIncludeThoughts) && modelThoughtSummaryContent) {
                                     msgToUpdate.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                                 } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.thoughtSummary = modelThoughtSummaryContent || null;
@@ -10458,7 +10450,7 @@
                             if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
                                  newModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
                                  newModelMessage.groundingMetadata = currentGroundingMetadata;
-                            } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
+                            } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && (contextDeepSeekIncludeThoughts || contextLlmAggregatorIncludeThoughts) && modelThoughtSummaryContent) {
                                  newModelMessage.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                             } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && modelThoughtSummaryContent) {
                                  newModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
@@ -10518,7 +10510,7 @@
                          let finalPartialThoughtValue = null;
                          if (selectedApiProvider === 'gemini' && partialThoughtContentOnError && contextGeminiIncludeThoughts) {
                              finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
-                         } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && partialThoughtContentOnError && contextDeepSeekIncludeThoughts) {
+                         } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && partialThoughtContentOnError && (contextDeepSeekIncludeThoughts || contextLlmAggregatorIncludeThoughts)) {
                              finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
                          } else if (selectedApiProvider === 'claude' && partialThoughtContentOnError && contextClaudeIncludeThoughts) {
                              finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
@@ -12493,7 +12485,7 @@
                         temperatureB, maxTokensB, topPB,
                         streamingOutputB, streamingSpeedB, concatDummyModelB,
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
-                        deepSeekIncludeThoughtsB, presencePenaltyB, frequencyPenaltyB,
+                        deepSeekIncludeThoughtsB, llmAggregatorIncludeThoughtsB, presencePenaltyB, frequencyPenaltyB,
                         claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB,
                         xaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB;
 
@@ -12526,7 +12518,8 @@
                         topPB = state.settings[`${prefix}TopP`];
                         presencePenaltyB = state.settings[`${prefix}PresencePenalty`];
                         frequencyPenaltyB = state.settings[`${prefix}FrequencyPenalty`];
-                        contextDeepSeekIncludeThoughts = state.settings[`${prefix}IncludeThoughts`];
+                        if (prefix === 'deepseek') contextDeepSeekIncludeThoughts = state.settings.deepSeekIncludeThoughts;
+                        if (prefix === 'llmaggregator') contextLlmAggregatorIncludeThoughts = state.settings.llmAggregatorIncludeThoughts;
                         streamingOutputB = state.settings[`${prefix}StreamingOutput`];
                         streamingSpeedB = state.settings[`${prefix}StreamingSpeed`];
                         dummyUserB = state.settings[`${prefix}DummyUser`];
@@ -12601,9 +12594,10 @@
                         thinkingBudget: providerForSettingsB === 'gemini' ? geminiThinkingBudgetB : 
                                         providerForSettingsB === 'claude' ? claudeThinkingBudgetB : undefined,
                         includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : 
-                                         providerForSettingsB === 'deepseek' || providerForSettingsB === 'llmaggregator' ? contextDeepSeekIncludeThoughts : 
+                                         providerForSettingsB === 'deepseek' ? contextDeepSeekIncludeThoughts : 
                                          providerForSettingsB === 'claude' ? claudeIncludeThoughtsB :
-                                         providerForSettingsB === 'xai' ? xaiIncludeThoughtsB : undefined,
+                                         providerForSettingsB === 'xai' ? xaiIncludeThoughtsB : 
+                                         providerForSettingsB === 'llmaggregator' ? contextLlmAggregatorIncludeThoughts : undefined,
                         expandThoughtsByDefault: (providerForSettingsB === 'gemini' && state.settings.geminiExpandThoughtsByDefault) ||
                                                  (providerForSettingsB === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                  (providerForSettingsB === 'claude' ? claudeExpandThoughtsByDefaultB : undefined) ||
@@ -13082,27 +13076,17 @@
                      }
                  }
             },
-            async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
-                let apiKey, model, baseUrl;
-                if (provider === 'llmaggregator') {
-                    apiKey = state.settings.llmAggregatorApiKey;
-                    model = state.settings.llmAggregatorModelName;
-                    baseUrl = state.settings.llmAggregatorApiBackend;
-                    if (!baseUrl) {
-                        throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
-                    }
-                } else {
-                    apiKey = state.settings.deepSeekApiKey;
-                    model = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
-                    baseUrl = state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
-                }
-
+            async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
+                const apiKey = state.settings.deepSeekApiKey;
                 if (!apiKey) {
-                    throw new Error(`${provider} APIキーが設定されていません。`);
+                    throw new Error("DeepSeek APIキーが設定されていません。");
                 }
                 state.abortController = new AbortController();
                 const { signal } = state.abortController;
 
+                const model = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
+                
+                const baseUrl = state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
                 const endpoint = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
 
                 const dsMessages = [];
@@ -13145,11 +13129,11 @@
                     });
 
                     if (!response.ok) {
-                        let errorMsg = `${provider.toUpperCase()} APIエラー (${response.status}): ${response.statusText}`;
+                        let errorMsg = `DeepSeek APIエラー (${response.status}): ${response.statusText}`;
                         try {
                             const errorData = await response.json();
                             if (errorData.error && errorData.error.message) {
-                                errorMsg = `${provider.toUpperCase()} APIエラー (${response.status}): ${errorData.error.message} (Type: ${errorData.error.type || 'N/A'})`;
+                                errorMsg = `DeepSeek APIエラー (${response.status}): ${errorData.error.message} (Type: ${errorData.error.type || 'N/A'})`;
                             }
                         } catch (e) {  }
                         throw new Error(errorMsg);
@@ -13255,6 +13239,96 @@
                     }
                 }
             },
+            async *handleLlmAggregatorStreamingResponse(response) {
+                if (!response.body) {
+                    throw new Error("LLM Aggregatorレスポンスボディがありません。");
+                }
+                const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+                let buffer = '';
+                let finalUsage = null;
+                let finalFinishReason = null;
+                let isCancelled = false;
+                
+                const thoughtStartMarker = "[THOUGHT]";
+                const thoughtEndMarker = "[/THOUGHT]";
+                let contentBuffer = "";
+
+                try {
+                    while (true) {
+                        if (state.abortController?.signal.aborted && !isCancelled) {
+                            isCancelled = true;
+                            await reader.cancel("User aborted");
+                            throw new Error("リクエストがキャンセルされました。");
+                        }
+
+                        const { value, done } = await reader.read();
+                        if (done) break;
+
+                        buffer += value;
+                        let eolIndex;
+                        while ((eolIndex = buffer.indexOf('\n')) >= 0) {
+                            const line = buffer.substring(0, eolIndex).trim();
+                            buffer = buffer.substring(eolIndex + 1);
+
+                            if (line.startsWith('data: ')) {
+                                const jsonData = line.substring(6);
+                                if (jsonData.trim() === '[DONE]') {
+                                    finalFinishReason = finalFinishReason || 'stop';
+                                    break;
+                                }
+                                try {
+                                    const chunk = JSON.parse(jsonData);
+                                    if (chunk.choices && chunk.choices[0] && chunk.choices[0].delta && chunk.choices[0].delta.content) {
+                                        contentBuffer += chunk.choices[0].delta.content;
+
+                                        let thoughtMatch;
+                                        while ((thoughtMatch = contentBuffer.match(/\[THOUGHT\]([\s\S]*?)\[\/THOUGHT\]/)) !== null) {
+                                            const preThoughtText = contentBuffer.substring(0, thoughtMatch.index);
+                                            const thoughtText = thoughtMatch[1];
+                                            if (preThoughtText) {
+                                                yield { type: 'chunk', contentText: preThoughtText, thoughtText: null };
+                                            }
+                                            if (thoughtText) {
+                                                yield { type: 'chunk', contentText: null, thoughtText: thoughtText };
+                                            }
+                                            contentBuffer = contentBuffer.substring(thoughtMatch.index + thoughtMatch[0].length);
+                                        }
+                                    }
+                                    if (chunk.choices && chunk.choices[0] && chunk.choices[0].finish_reason) {
+                                        finalFinishReason = chunk.choices[0].finish_reason;
+                                    }
+                                    if (chunk.usage) {
+                                        finalUsage = chunk.usage;
+                                    }
+                                } catch (e) {
+                                }
+                            }
+                        }
+                        if (finalFinishReason && finalFinishReason !== 'null') break;
+                    }
+
+                    if (contentBuffer.length > 0) {
+                        yield { type: 'chunk', contentText: contentBuffer, thoughtText: null };
+                    }
+
+                    yield {
+                        type: 'metadata',
+                        finishReason: isCancelled ? 'ABORTED' : finalFinishReason || 'stop',
+                        safetyRatings: null,
+                        groundingMetadata: null,
+                        usageMetadata: finalUsage ? {
+                            candidatesTokenCount: finalUsage.completion_tokens,
+                            totalTokenCount: finalUsage.total_tokens,
+                        } : null,
+                    };
+                } catch (error) {
+                    yield { type: 'error', error: { message: error.message }, message: error.message };
+                } finally {
+                     if (!reader.closed && !isCancelled) {
+                        try { await reader.cancel("Stream processing ended."); } catch (e) {}
+                    }
+                }
+            },
             async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
                 const apiKey = state.settings.claudeApiKey;
                 if (!apiKey) {
@@ -13352,7 +13426,7 @@
                     msg.parts.forEach(part => {
                         if (part.text) {
                             contentParts.push({ type: 'text', text: part.text });
-                                                    } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
+                        } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.data && part.inlineData.mimeType.startsWith('image/')) {
                              contentParts.push({
                                 type: 'image',
                                 source: {
