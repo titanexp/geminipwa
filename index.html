@@ -9159,6 +9159,7 @@
             rollDiceAndInput() {
                 let min = parseInt(state.settings.diceMinValue, 10);
                 let max = parseInt(state.settings.diceMaxValue, 10);
+
                 if (isNaN(min)) min = DEFAULT_DICE_MIN_VALUE;
                 if (isNaN(max)) max = DEFAULT_DICE_MAX_VALUE;
 
@@ -9678,7 +9679,7 @@
                         contextTopP = sourceSessionContext.topP ?? state.settings.deepSeekTopP;
                         contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.deepSeekPresencePenalty;
                         contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.deepSeekFrequencyPenalty;
-                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.deepSeekIncludeDeepSeekThoughts;
+                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.deepSeekIncludeThoughts;
                         contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.deepSeekStreamingOutput;
                         contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.deepSeekStreamingSpeed;
                         contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.deepSeekDummyUser;
@@ -9692,7 +9693,6 @@
                         contextTopP = sourceSessionContext.topP ?? state.settings.llmAggregatorTopP;
                         contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.llmAggregatorPresencePenalty;
                         contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.llmAggregatorFrequencyPenalty;
-                        const contextLlmAggregatorIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.llmAggregatorIncludeThoughts;
                         contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.llmAggregatorStreamingOutput;
                         contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.llmAggregatorStreamingSpeed;
                         contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.llmAggregatorDummyUser;
@@ -9784,7 +9784,6 @@
                         contextTopP = state.settings.llmAggregatorTopP;
                         contextPresencePenalty = state.settings.llmAggregatorPresencePenalty;
                         contextFrequencyPenalty = state.settings.llmAggregatorFrequencyPenalty;
-                        const contextLlmAggregatorIncludeThoughts = state.settings.llmAggregatorIncludeThoughts;
                         contextStreamingOutput = state.settings.llmAggregatorStreamingOutput;
                         contextStreamingSpeed = state.settings.llmAggregatorStreamingSpeed;
                         contextDummyUser = state.settings.llmAggregatorDummyUser;
@@ -10123,7 +10122,7 @@
                         apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                     } else if (selectedApiProvider === 'openai' || selectedApiProvider === 'llmaggregator') {
                         const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
-                        const enableVisionForCall = selectedApiProvider === 'openai' && hasImage;
+                        const enableVisionForCall = selectedApiProvider === 'openai' && hasImage; 
                         apiResponseObject = await apiUtils.callOpenAICompatibleApi(selectedApiProvider, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, enableVisionForCall);
                     } else if (selectedApiProvider === 'xai') {
                         const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
@@ -10330,7 +10329,7 @@
                                     modelThoughtSummaryContent = data.parsedReasoningContent;
                                 }
                             } else {
-                                rawContentFromApi = `${provider.toUpperCase()}からの応答がありません。`;
+                                rawContentFromApi = `DeepSeekからの応答がありません。`;
                                 modelResponseMetadata = { finishReason: 'ERROR' };
                                 if (data.error) rawContentFromApi += ` (エラー: ${data.error.message})`;
                             }
@@ -12567,7 +12566,6 @@
                         topPB = state.settings.llmAggregatorTopP;
                         presencePenaltyB = state.settings.llmAggregatorPresencePenalty;
                         frequencyPenaltyB = state.settings.llmAggregatorFrequencyPenalty;
-                        const contextLlmAggregatorIncludeThoughts = state.settings.llmAggregatorIncludeThoughts;
                         streamingOutputB = state.settings.llmAggregatorStreamingOutput;
                         streamingSpeedB = state.settings.llmAggregatorStreamingSpeed;
                         dummyUserB = state.settings.llmAggregatorDummyUser;
@@ -12642,7 +12640,7 @@
                         thinkingBudget: providerForSettingsB === 'gemini' ? geminiThinkingBudgetB : 
                                         providerForSettingsB === 'claude' ? claudeThinkingBudgetB : undefined,
                         includeThoughts: providerForSettingsB === 'gemini' ? geminiIncludeThoughtsB : 
-                                         providerForSettingsB === 'deepseek' || providerForSettingsB === 'llmaggregator' ? contextDeepSeekIncludeThoughts : 
+                                         providerForSettingsB === 'deepseek' || providerForSettingsB === 'llmaggregator' ? deepSeekIncludeThoughtsB : 
                                          providerForSettingsB === 'claude' ? claudeIncludeThoughtsB :
                                          providerForSettingsB === 'xai' ? xaiIncludeThoughtsB : undefined,
                         expandThoughtsByDefault: (providerForSettingsB === 'gemini' && state.settings.geminiExpandThoughtsByDefault) ||
@@ -12863,6 +12861,7 @@
                             itemContainer.appendChild(nameSpan);
                             itemContainer.appendChild(actionsDiv);
                             listItem.appendChild(itemContainer);
+                            listElement.appendChild(listItem);
 
                         } catch (error) {
                             encodingError = true;
@@ -13622,6 +13621,7 @@
                             const line = buffer.slice(0, eolIndex).trim();
                             buffer = buffer.slice(eolIndex + 1);
 
+                            if (line.startsWith(':')) continue;
                             if (!line.startsWith('data:')) continue;
                             const data = line.slice(5).trim();
 
