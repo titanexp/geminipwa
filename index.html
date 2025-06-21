@@ -825,7 +825,7 @@
             margin-right: auto;
             flex-shrink: 1;
             min-width: 60px;
-            transition: font-size 0.2s ease;
+            transition: font-size: 0.2s ease;
         }
         .header-button {
             background: none;
@@ -6076,33 +6076,29 @@
                     };
                     details.appendChild(addMoreBtn);
 
-                    if (content && content.trim() !== '') {
-                        const pre = document.createElement('pre');
-                        pre.textContent = content;
-                        pre.style.marginTop = '8px';
-                        contentDiv.appendChild(pre);
-                    }
-                } else {
-                    try {
-                        if (role === 'model' && !isStreamingPlaceholder && typeof marked !== 'undefined') {
-                            const safeHtml = this._sanitizeAndParseMarkdown(content || '');
-                            contentDiv.innerHTML = safeHtml;
-                            this.processInteractivePlaceholders(contentDiv);
-                            this.processInteractiveTitles(contentDiv);
-                            this.addCopyButtonsToCodeBlocks(contentDiv, false);
-                        } else if (role === 'user') {
-                            const pre = document.createElement('pre'); pre.textContent = content; contentDiv.appendChild(pre);
-                        } else if (role === 'error') {
-                             const p = document.createElement('p'); p.textContent = content; contentDiv.appendChild(p);
-                        } else if (isStreamingPlaceholder) {
-                            contentDiv.innerHTML = '';
-                        } else {
-                            const pre = document.createElement('pre'); pre.textContent = content; contentDiv.innerHTML = ''; contentDiv.appendChild(pre);
-                        }
-                    } catch (e) {
-                         const pre = document.createElement('pre'); pre.textContent = content; contentDiv.innerHTML = ''; contentDiv.appendChild(pre);
-                    }
+                    messageDiv.insertBefore(details, contentDiv);
                 }
+                
+                try {
+                    if (role === 'model' && !isStreamingPlaceholder && typeof marked !== 'undefined') {
+                        const safeHtml = this._sanitizeAndParseMarkdown(content || '');
+                        contentDiv.innerHTML = safeHtml;
+                        this.processInteractivePlaceholders(contentDiv);
+                        this.processInteractiveTitles(contentDiv);
+                        this.addCopyButtonsToCodeBlocks(contentDiv, false);
+                    } else if (role === 'user') {
+                        const pre = document.createElement('pre'); pre.textContent = content; contentDiv.appendChild(pre);
+                    } else if (role === 'error') {
+                         const p = document.createElement('p'); p.textContent = content; contentDiv.appendChild(p);
+                    } else if (isStreamingPlaceholder) {
+                        contentDiv.innerHTML = '';
+                    } else {
+                        const pre = document.createElement('pre'); pre.textContent = content; contentDiv.innerHTML = ''; contentDiv.appendChild(pre);
+                    }
+                } catch (e) {
+                     const pre = document.createElement('pre'); pre.textContent = content; contentDiv.innerHTML = ''; contentDiv.appendChild(pre);
+                }
+                
                 messageDiv.appendChild(contentDiv);
 
                 const citationDetailsDiv = document.createElement('div');
@@ -9933,6 +9929,9 @@
                 } else {
                     text = elements.userInput.value.trim();
                     attachmentsToSend = [...state.pendingAttachments];
+                    if (!text && attachmentsToSend.length > 0) {
+                        text = `📎 添付ファイル (${attachmentsToSend.length}件)`;
+                    }
                 }
 
                 if (!isBackgroundProcess && (state.isSending || (!text && attachmentsToSend.length === 0))) {
@@ -11880,13 +11879,11 @@
                 const contentDiv = messageElement.querySelector('.message-content');
                 
                 if (originalMessage.role === 'user') {
-                    let preElement = contentDiv.querySelector('pre');
-                    if (!preElement) {
-                        preElement = document.createElement('pre');
-                        preElement.style.marginTop = '8px';
-                        contentDiv.appendChild(preElement);
+                    if (originalMessage.attachments && originalMessage.attachments.length > 0) {
+                        contentDiv.querySelector('pre').textContent = newRawContent;
+                    } else {
+                        contentDiv.innerHTML = `<pre>${newRawContent}</pre>`;
                     }
-                    preElement.textContent = newRawContent;
                 } else if (originalMessage.role === 'model') {
                     if (contentDiv && typeof marked !== 'undefined') {
                         try {
@@ -13637,6 +13634,7 @@
                 if (generationConfig.topP != null) body.top_p = generationConfig.topP;
                 if (generationConfig.presencePenalty != null) body.presence_penalty = generationConfig.presencePenalty;
                 if (generationConfig.frequencyPenalty != null) body.frequency_penalty = generationConfig.frequencyPenalty;
+                if (generationConfig.topK != null) body.top_k = generationConfig.topK;
 
                 return body;
             },
