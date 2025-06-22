@@ -1,7 +1,7 @@
 
 <!DOCTYPE html>
 <html lang="ja">
-<head>   
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GeminiPWA</title>
@@ -1863,6 +1863,8 @@
         .app-header .api-provider-toggle-btn.openai { background-color: #10A37F !important; color: #ffffff !important; }
         .app-header .api-provider-toggle-btn.xai { background-color: #000000 !important; color: #ffffff !important; }
         .app-header .api-provider-toggle-btn.llmaggregator { background-color: #e53935 !important; color: #ffffff !important; }
+        .app-header .api-provider-toggle-btn.dummy { background-color: #FFD700 !important; color: #ffffff !important; }
+        
         body.dark-mode .app-header .api-provider-toggle-btn.gemini:hover {
             background-color: rgba(255, 255, 255, 0.9) !important;
             color: #8A75D2 !important;
@@ -1886,12 +1888,18 @@
         body.dark-mode .app-header .api-provider-toggle-btn.llmaggregator:hover {
             background-color: #c62828 !important;
         }
+        body.dark-mode .app-header .api-provider-toggle-btn.dummy:hover {
+            background-color: rgba(255, 215, 0, 0.9) !important;
+            color: #ffffff !important;
+        }
+
         .chat-input-area .api-provider-toggle-btn.gemini { background-color: #ffffff !important; color: #8A75D2 !important; }
         .chat-input-area .api-provider-toggle-btn.deepseek { background-color: #4D6BFF !important; color: #ffffff !important; }
         .chat-input-area .api-provider-toggle-btn.claude { background-color: #D97757 !important; color: #EFEDE5 !important; }
         .chat-input-area .api-provider-toggle-btn.openai { background-color: #10A37F !important; color: #ffffff !important; }
         .chat-input-area .api-provider-toggle-btn.xai { background-color: #000000 !important; color: #ffffff !important; }
         .chat-input-area .api-provider-toggle-btn.llmaggregator { background-color: #e53935 !important; color: #ffffff !important; }
+        .chat-input-area .api-provider-toggle-btn.dummy { background-color: #FFD700 !important; color: #ffffff !important; }
         
         .attachment-badge {
             position: absolute;
@@ -3288,6 +3296,7 @@
                             <option value="openai">ChatGPT (OpenAI API)</option>
                             <option value="xai">Grok (xAI API)</option>
                             <option value="llmaggregator">LLM Aggregator</option>
+                            <option value="dummy">Dummy AI (デバッグ用)</option>
                         </select>
                     </div>
                     <details id="settings-group-common-system-prompt" style="margin-top:15px;">
@@ -3486,6 +3495,27 @@
                         <label for="llmaggregator-additional-models" style="margin-top:10px;">追加モデル (カンマ区切り):</label>
                         <textarea id="llmaggregator-additional-models" placeholder="例: mistralai/Mixtral-8x7B-Instruct-v0.1,another/model" aria-label="LLM Aggregator 追加モデル"></textarea>
                         </p>
+                    </div>
+                </details>
+
+                <details id="dummy-settings-group" class="settings-group hidden" open>
+                    <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">Dummy AI 設定 (デバッグ用)</summary>
+                    <div style="margin-top:15px;">
+                        <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 15px;">
+                            ※ これはデバッグ用のダミーAIです。実際のAPIには接続せず、常に空のメッセージを返します。
+                        </p>
+                        <label for="dummy-model-name">モデル名:</label>
+                        <select id="dummy-model-name" aria-label="Dummy モデル名">
+                            <optgroup label="ダミーモデル">
+                                <option value="dummy-ai-v1">dummy-ai-v1</option>
+                                <option value="dummy-ai-v2">dummy-ai-v2</option>
+                                <option value="dummy-ai-debug">dummy-ai-debug</option>
+                            </optgroup>
+                            <optgroup label="ユーザー指定" id="dummy-user-defined-models-group">
+                            </optgroup>
+                        </select>
+                        <label for="dummy-additional-models" style="margin-top:10px;">追加モデル (カンマ区切り):</label>
+                        <textarea id="dummy-additional-models" placeholder="例: my-dummy-model-1,my-dummy-model-2" aria-label="Dummy 追加モデル"></textarea>
                     </div>
                 </details>
 
@@ -3811,6 +3841,40 @@
                         </details>
                     </div>
                 </details>
+                
+                <details id="dummy-params-group" class="settings-group hidden" open>
+                    <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">パラメータ (Dummy AI)</summary>
+                    <div style="margin-top:15px;">
+                        <label for="dummy-system-prompt-default">固有システムプロンプト (Dummy AI):</label>
+                        <textarea id="dummy-system-prompt-default" placeholder="例: あなたはデバッグ用のダミーAIです。" aria-label="Dummy AI 固有システムプロンプト"></textarea>
+                        <label class="checkbox-label" style="margin-top: -5px; margin-bottom: 15px;">
+                            <input type="checkbox" id="dummy-enable-system-prompt-default">
+                            このシステムプロンプトを有効にする (共通システムプロンプトより優先度高)
+                        </label>
+                        <div class="param-grid">
+                            <div>
+                                <label for="dummy-response-delay">応答遅延 (ミリ秒):</label>
+                                <input type="number" id="dummy-response-delay" step="100" min="0" placeholder="例: 1000" aria-label="Dummy AI 応答遅延">
+                            </div>
+                            <div>
+                                <label for="dummy-streaming-speed">文字送り速度 (ミリ秒/文字):</label>
+                                <input type="number" id="dummy-streaming-speed" min="0" step="1" placeholder="例: 30" aria-label="Dummy AI 文字送り速度">
+                            </div>
+                        </div>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="dummy-streaming-output">
+                            ストリーミング出力を使用する
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="dummy-include-thoughts">
+                            思考プロセスを含める (デバッグ用)
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="dummy-expand-thoughts-by-default-toggle">
+                            💭思考プロセスを開いた状態にする
+                        </label>
+                    </div>
+                </details>
 
                 <details id="gemini-advanced-group" class="settings-group" open>
                    <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">アドバンスド (Gemini)</summary>
@@ -4049,6 +4113,16 @@
                        <input type="number" id="llmaggregator-streaming-speed" min="0" step="1" placeholder="例: 30 (0で無効)" aria-label="LLM Aggregator 文字送り速度">
                     </div>
                 </details>
+                
+                <details id="dummy-advanced-group" class="settings-group hidden" open>
+                   <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">アドバンスド (Dummy AI)</summary>
+                   <div style="margin-top:15px;">
+                       <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: 15px;">
+                           Dummy AIのアドバンスド設定はありません。
+                       </p>
+                   </div>
+                </details>
+
 
                 <div id="gemini-grounding-param" class="settings-group">
                     <h3>検索 (Gemini)</h3>
@@ -4287,6 +4361,10 @@
                                                     <input type="checkbox" id="api-provider-cycle-llmaggregator">
                                                     LLM Aggregator
                                                 </label>
+                                                <label class="checkbox-label" style="font-size: 12px;">
+                                                    <input type="checkbox" id="api-provider-cycle-dummy">
+                                                    Dummy AI (デバッグ用)
+                                                </label>
                                            </div>
                                        </div>
                                    </details>
@@ -4408,6 +4486,7 @@
                                             <label for="toggle-button-bottom-text-collapse">下部ボタン 折りたたみ時テキスト:</label>
                                             <input type="text" id="toggle-button-bottom-text-collapse" placeholder="例: 非表示">
                                             <label for="toggle-button-bottom-text-expand">下部ボタン 展開時テキスト:</label>
+```html
                                             <input type="text" id="toggle-button-bottom-text-expand" placeholder="例: 表示">
                                         </div>
                                    </details>
@@ -4582,6 +4661,7 @@
         const DEFAULT_OPENAI_MODEL = 'gpt-3.5-turbo';
         const DEFAULT_XAI_MODEL = 'grok-3-mini';
         const DEFAULT_LLMAGGREGATOR_MODEL = 'meta-llama/llama-4-maverick-17b-128e-instruct:free';
+        const DEFAULT_DUMMY_MODEL = 'dummy-ai-v1';
         const DEFAULT_STREAMING_SPEED = 12;
         const DEFAULT_TEMPERATURE = 0.5;
         const DEFAULT_MAX_TOKENS = 4000;
@@ -4771,6 +4851,9 @@
             llmAggregatorModelNameSelect: document.getElementById('llmaggregator-model-name'),
             llmAggregatorUserDefinedModelsGroup: document.getElementById('llmaggregator-user-defined-models-group'),
             llmAggregatorAdditionalModelsTextarea: document.getElementById('llmaggregator-additional-models'),
+            dummySettingsGroup: document.getElementById('dummy-settings-group'),
+            dummyModelNameSelect: document.getElementById('dummy-model-name'),
+            dummyAdditionalModelsTextarea: document.getElementById('dummy-additional-models'),
             
             geminiParamsGroup: document.getElementById('gemini-params-group'),
             deepseekParamsGroup: document.getElementById('deepseek-params-group'),
@@ -4778,6 +4861,7 @@
             openaiParamsGroup: document.getElementById('openai-params-group'),
             xaiParamsGroup: document.getElementById('xai-params-group'),
             llmAggregatorParamsGroup: document.getElementById('llmaggregator-params-group'),
+            dummyParamsGroup: document.getElementById('dummy-params-group'),
 
             geminiAdvancedGroup: document.getElementById('gemini-advanced-group'),
             deepseekAdvancedGroup: document.getElementById('deepseek-advanced-group'),
@@ -4785,6 +4869,7 @@
             openaiAdvancedGroup: document.getElementById('openai-advanced-group'),
             xaiAdvancedGroup: document.getElementById('xai-advanced-group'),
             llmAggregatorAdvancedGroup: document.getElementById('llmaggregator-advanced-group'),
+            dummyAdvancedGroup: document.getElementById('dummy-advanced-group'),
 
             geminiSystemPromptDefaultTextarea: document.getElementById('gemini-system-prompt-default'),
             geminiEnableSystemPromptDefaultCheckbox: document.getElementById('gemini-enable-system-prompt-default'),
@@ -4892,6 +4977,14 @@
             llmAggregatorDummyModelInput: document.getElementById('llmaggregator-dummy-model'),
             llmAggregatorEnableDummyModelCheckbox: document.getElementById('llmaggregator-enable-dummy-model'),
             llmAggregatorConcatDummyModelCheckbox: document.getElementById('llmaggregator-concat-dummy-model'),
+
+            dummySystemPromptDefaultTextarea: document.getElementById('dummy-system-prompt-default'),
+            dummyEnableSystemPromptDefaultCheckbox: document.getElementById('dummy-enable-system-prompt-default'),
+            dummyResponseDelayInput: document.getElementById('dummy-response-delay'),
+            dummyStreamingSpeedInput: document.getElementById('dummy-streaming-speed'),
+            dummyStreamingOutputCheckbox: document.getElementById('dummy-streaming-output'),
+            dummyIncludeThoughtsToggle: document.getElementById('dummy-include-thoughts'),
+            dummyExpandThoughtsByDefaultToggle: document.getElementById('dummy-expand-thoughts-by-default-toggle'),
 
             setThinkingBudgetBtns: document.querySelectorAll('.set-thinking-budget-btn'),
             setClaudeParamBtns: document.querySelectorAll('.set-claude-param-btn'),
@@ -5049,6 +5142,7 @@
             apiProviderCycleOpenAICheckbox: document.getElementById('api-provider-cycle-openai'),
             apiProviderCycleXaiCheckbox: document.getElementById('api-provider-cycle-xai'),
             apiProviderCycleLlmAggregatorCheckbox: document.getElementById('api-provider-cycle-llmaggregator'),
+            apiProviderCycleDummyCheckbox: document.getElementById('api-provider-cycle-dummy'),
             imagePreviewDialog: document.getElementById('imagePreviewDialog'),
         };
 
@@ -5181,6 +5275,15 @@
                 llmAggregatorDummyModel: '',
                 llmAggregatorEnableDummyModel: true,
                 llmAggregatorConcatDummyModel: false,
+                dummyModelName: DEFAULT_DUMMY_MODEL,
+                dummyAdditionalModels: '',
+                dummySystemPrompt: '',
+                dummyEnableSystemPromptDefault: true,
+                dummyResponseDelay: 1000,
+                dummyStreamingSpeed: DEFAULT_STREAMING_SPEED,
+                dummyStreamingOutput: true,
+                dummyIncludeThoughts: false,
+                dummyExpandThoughtsByDefault: false,
                 enterToSend: true,
                 autoScrollOnNewMessage: DEFAULT_AUTO_SCROLL_ON_NEW_MESSAGE,
                 autoScrollOnThought: false,
@@ -5267,6 +5370,7 @@
                     openai: true,
                     xai: true,
                     llmaggregator: true,
+                    dummy: true,
                 },
             },
             backgroundImageUrl: null,
@@ -5504,7 +5608,7 @@
                                         state.settings[key] = defaultValue;
                                     }
                                 } else if (key === 'apiProvider') {
-                                    if (['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'].includes(loadedValue)) {
+                                    if (['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator', 'dummy'].includes(loadedValue)) {
                                         state.settings.apiProvider = loadedValue;
                                     } else {
                                         state.settings.apiProvider = defaultValue;
@@ -5531,6 +5635,7 @@
                                     state.settings.apiProviderCycle.openai = loadedValue.openai === true;
                                     state.settings.apiProviderCycle.xai = loadedValue.xai === true;
                                     state.settings.apiProviderCycle.llmaggregator = loadedValue.llmaggregator === true;
+                                    state.settings.apiProviderCycle.dummy = loadedValue.dummy === true;
                                 } else if (typeof defaultValue === 'number' || defaultValue === null) {
                                      let num;
                                      if (key.toLowerCase().includes('temperature') || key.toLowerCase().includes('topp') || key.toLowerCase().includes('penalty') ||
@@ -5606,6 +5711,8 @@
                                 'llmaggregator-settings-group': true,
                                 'llmaggregator-params-group': true,
                                 'llmaggregator-advanced-group': true,
+                                'dummy-settings-group': true,
+                                'dummy-params-group': true,
                             };
                         }
                         resolve(state.settings);
@@ -5913,7 +6020,8 @@
                                                  (messageApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) ||
                                                  (messageApiProvider === 'claude' && state.settings.claudeIncludeThoughts) ||
                                                  (messageApiProvider === 'xai' && state.settings.xaiIncludeThoughts) ||
-                                                 (messageApiProvider === 'llmaggregator' && state.settings.llmAggregatorIncludeThoughts);
+                                                 (messageApiProvider === 'llmaggregator' && state.settings.llmAggregatorIncludeThoughts) ||
+                                                 (messageApiProvider === 'dummy' && state.settings.dummyIncludeThoughts);
 
                 let initialThoughtOpenState = false;
                 if (isStreamingPlaceholder) {
@@ -5925,7 +6033,8 @@
                                                (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
                                                (messageApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
-                                               (messageApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault);
+                                               (messageApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault) ||
+                                               (messageApiProvider === 'dummy' && state.settings.dummyExpandThoughtsByDefault);
                 }
 
                 if (role === 'model' && includeThoughtsForProvider && (messageData?.thoughtSummary || messageData?.deepSeekThoughtSummary || messageData?.xaiThoughtSummary || isStreamingPlaceholder)) {
@@ -6612,6 +6721,7 @@
                                   selectedApiProvider === 'claude' ? state.settings.claudeStreamingSpeed :
                                   selectedApiProvider === 'xai' ? state.settings.xaiStreamingSpeed :
                                   selectedApiProvider === 'llmaggregator' ? state.settings.llmAggregatorStreamingSpeed :
+                                  selectedApiProvider === 'dummy' ? state.settings.dummyStreamingSpeed :
                                   state.settings.openaiStreamingSpeed;
 
                 if (isThoughtSummary) {
@@ -6619,7 +6729,8 @@
                         (selectedApiProvider === 'deepseek' && state.settings.deepSeekIncludeDeepSeekThoughts) ||
                         (selectedApiProvider === 'claude' && state.settings.claudeIncludeThoughts) ||
                         (selectedApiProvider === 'xai' && state.settings.xaiIncludeThoughts) ||
-                        (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorIncludeThoughts)) {
+                        (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorIncludeThoughts) ||
+                        (selectedApiProvider === 'dummy' && state.settings.dummyIncludeThoughts)) {
                         targetContentDiv = messageDiv.querySelector(`#streaming-thought-summary-${index}`);
                         accumulatedContentForDisplay = state.partialThoughtStreamContent;
                     } else {
@@ -7212,6 +7323,8 @@
                 elements.llmAggregatorApiKeyInput.value = state.settings.llmAggregatorApiKey || '';
                 elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
                 elements.llmAggregatorAdditionalModelsTextarea.value = state.settings.llmAggregatorAdditionalModels || '';
+                elements.dummyModelNameSelect.value = state.settings.dummyModelName || DEFAULT_DUMMY_MODEL;
+                elements.dummyAdditionalModelsTextarea.value = state.settings.dummyAdditionalModels || '';
 
                 elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPrompt || '';
                 elements.geminiEnableSystemPromptDefaultCheckbox.checked = state.settings.geminiEnableSystemPromptDefault;
@@ -7319,6 +7432,15 @@
                 elements.llmAggregatorDummyModelInput.value = state.settings.llmAggregatorDummyModel || '';
                 elements.llmAggregatorEnableDummyModelCheckbox.checked = state.settings.llmAggregatorEnableDummyModel;
                 elements.llmAggregatorConcatDummyModelCheckbox.checked = state.settings.llmAggregatorConcatDummyModel;
+                
+                elements.dummySystemPromptDefaultTextarea.value = state.settings.dummySystemPrompt || '';
+                elements.dummyEnableSystemPromptDefaultCheckbox.checked = state.settings.dummyEnableSystemPromptDefault;
+                elements.dummyResponseDelayInput.value = state.settings.dummyResponseDelay ?? 1000;
+                elements.dummyStreamingSpeedInput.value = state.settings.dummyStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
+                elements.dummyStreamingOutputCheckbox.checked = state.settings.dummyStreamingOutput;
+                elements.dummyIncludeThoughtsToggle.checked = state.settings.dummyIncludeThoughts;
+                elements.dummyExpandThoughtsByDefaultToggle.checked = state.settings.dummyExpandThoughtsByDefault;
+
 
                  elements.enterToSendCheckbox.checked = state.settings.enterToSend;
                  elements.autoScrollOnNewMessageCheckbox.checked = state.settings.autoScrollOnNewMessage;
@@ -7361,6 +7483,7 @@
                  elements.apiProviderCycleOpenAICheckbox.checked = state.settings.apiProviderCycle.openai;
                  elements.apiProviderCycleXaiCheckbox.checked = state.settings.apiProviderCycle.xai;
                  elements.apiProviderCycleLlmAggregatorCheckbox.checked = state.settings.apiProviderCycle.llmaggregator;
+                 elements.apiProviderCycleDummyCheckbox.checked = state.settings.apiProviderCycle.dummy;
 
                 elements.showMemoButtonToggle.checked = state.settings.showMemoButton;
                 elements.memoHeightInput.value = state.settings.memoHeight || '';
@@ -7425,6 +7548,7 @@
                 this.updateOpenAIUserModelOptions();
                 this.updateXaiUserModelOptions();
                 this.updateLlmAggregatorUserModelOptions();
+                this.updateDummyUserModelOptions();
                 this.updateBackgroundSettingsUI();
                 this.updateIconSettingsUI();
                 this.applyTheme();
@@ -7455,6 +7579,7 @@
                 const showOpenAI = provider === 'openai';
                 const showXai = provider === 'xai';
                 const showLlmAggregator = provider === 'llmaggregator';
+                const showDummy = provider === 'dummy';
 
                 elements.geminiSettingsGroup.classList.toggle('hidden', !showGemini);
                 elements.geminiParamsGroup.classList.toggle('hidden', !showGemini);
@@ -7480,6 +7605,10 @@
                 elements.llmAggregatorSettingsGroup.classList.toggle('hidden', !showLlmAggregator);
                 elements.llmAggregatorParamsGroup.classList.toggle('hidden', !showLlmAggregator);
                 elements.llmAggregatorAdvancedGroup.classList.toggle('hidden', !showLlmAggregator);
+                
+                elements.dummySettingsGroup.classList.toggle('hidden', !showDummy);
+                elements.dummyParamsGroup.classList.toggle('hidden', !showDummy);
+                elements.dummyAdvancedGroup.classList.toggle('hidden', !showDummy);
             },
             updateChatScreenElementVisibility() {
                 const header = elements.chatScreen.querySelector('.app-header');
@@ -7570,6 +7699,7 @@
                     openai: { text: 'OP', title: 'OpenAI', className: 'openai' },
                     xai: { text: 'XA', title: 'xAI', className: 'xai' },
                     llmaggregator: { text: 'LA', title: 'LLM Aggregator', className: 'llmaggregator' },
+                    dummy: { text: 'DU', title: 'Dummy AI', className: 'dummy' },
                 };
                 const currentProviderInfo = providerMap[state.settings.apiProvider] || { text: '??', title: 'Unknown', className: '' };
                 
@@ -7577,7 +7707,7 @@
                     if (button) {
                         button.textContent = currentProviderInfo.text;
                         button.title = `API: ${currentProviderInfo.title}`;
-                        button.classList.remove('gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator');
+                        button.classList.remove('gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator', 'dummy');
                         if (currentProviderInfo.className) {
                             button.classList.add(currentProviderInfo.className);
                         }
@@ -7769,6 +7899,29 @@
                 } else if (select.options.length > 0) {
                     select.value = defaultModels[0];
                     state.settings.llmAggregatorModelName = select.value;
+                }
+            },
+            updateDummyUserModelOptions() {
+                const group = elements.dummyModelNameSelect.querySelector('#dummy-user-defined-models-group');
+                group.innerHTML = '';
+                const models = (state.settings.dummyAdditionalModels || '')
+                    .split(',')
+                    .map(m => m.trim())
+                    .filter(m => m !== '');
+
+                if (models.length > 0) {
+                    group.disabled = false;
+                    models.forEach(modelId => {
+                        const option = document.createElement('option');
+                        option.value = modelId;
+                        option.textContent = modelId;
+                        group.appendChild(option);
+                    });
+                    if (models.includes(state.settings.dummyModelName)) {
+                        elements.dummyModelNameSelect.value = state.settings.dummyModelName;
+                    }
+                } else {
+                    group.disabled = true;
                 }
             },
             applyFontFamily() {
@@ -8220,7 +8373,8 @@
                     { value: 'claude', text: 'Claude (Anthropic API)' },
                     { value: 'openai', text: 'ChatGPT (OpenAI API)' },
                     { value: 'xai', text: 'Grok (xAI API)' },
-                    { value: 'llmaggregator', text: 'LLM Aggregator' }
+                    { value: 'llmaggregator', text: 'LLM Aggregator' },
+                    { value: 'dummy', text: 'Dummy AI (デバッグ用)' }
                 ];
 
                 const currentValue = apiProviderSelect.value;
@@ -8872,6 +9026,10 @@
                 });
                  elements.apiProviderCycleLlmAggregatorCheckbox.addEventListener('change', () => {
                     state.settings.apiProviderCycle.llmaggregator = elements.apiProviderCycleLlmAggregatorCheckbox.checked;
+                    uiUtils.updateApiProviderSelectOptions();
+                });
+                 elements.apiProviderCycleDummyCheckbox.addEventListener('change', () => {
+                    state.settings.apiProviderCycle.dummy = elements.apiProviderCycleDummyCheckbox.checked;
                     uiUtils.updateApiProviderSelectOptions();
                 });
                 
@@ -9715,6 +9873,8 @@
                         individualPrompt = state.settings.xaiSystemPrompt.trim();
                     } else if (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorEnableSystemPromptDefault) {
                         individualPrompt = state.settings.llmAggregatorSystemPrompt.trim();
+                    } else if (selectedApiProvider === 'dummy' && state.settings.dummyEnableSystemPromptDefault) {
+                        individualPrompt = state.settings.dummySystemPrompt.trim();
                     }
                     
                     if (state.settings.enableCommonSystemPromptDefault) {
@@ -9746,6 +9906,9 @@
                 let contextXaiVisionEnable, contextXaiIncludeThoughts, contextXaiReasoningEffort;
                 
                 let contextLlmAggregatorTopK;
+                
+                let contextDummyResponseDelay;
+
 
                 if (isBackgroundProcess) {
                     const providerForSettingsB = sourceSessionContext.apiProvider || state.settings.apiProvider;
@@ -9933,6 +10096,10 @@
                         contextDummyModel = state.settings.llmAggregatorDummyModel;
                         contextEnableDummyModel = state.settings.llmAggregatorEnableDummyModel;
                         contextConcatDummyModel = state.settings.llmAggregatorConcatDummyModel;
+                    } else if (selectedApiProvider === 'dummy') {
+                        contextDummyResponseDelay = state.settings.dummyResponseDelay;
+                        contextStreamingOutput = state.settings.dummyStreamingOutput;
+                        contextStreamingSpeed = state.settings.dummyStreamingSpeed;
                     }
                 }
 
@@ -9971,10 +10138,13 @@
                     (selectedApiProvider === 'xai' && !state.settings.xaiApiKey) ||
                     (selectedApiProvider === 'llmaggregator' && !state.settings.llmAggregatorApiKey)) {
                     if (!isBackgroundProcess) {
-                        await uiUtils.showCustomAlert(`${selectedApiProvider} APIキーが設定されていません。設定画面を開きます。`);
-                        uiUtils.showScreen('settings');
+                        if(selectedApiProvider !== 'dummy') {
+                            await uiUtils.showCustomAlert(`${selectedApiProvider} APIキーが設定されていません。設定画面を開きます。`);
+                            uiUtils.showScreen('settings');
+                        }
+                    } else if (selectedApiProvider !== 'dummy') {
+                        return "APIキー未設定";
                     }
-                    return "APIキー未設定";
                 }
                 
                 if (selectedApiProvider === 'llmaggregator') {
@@ -10206,7 +10376,7 @@
                 if (systemPromptTextToUseForApi) {
                     if (selectedApiProvider === 'gemini') {
                         systemInstructionForProvider = { role: "system", parts: [{ text: systemPromptTextToUseForApi }] };
-                    } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'claude' || selectedApiProvider === 'openai' || selectedApiProvider === 'xai' || selectedApiProvider === 'llmaggregator') {
+                    } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'claude' || selectedApiProvider === 'openai' || selectedApiProvider === 'xai' || selectedApiProvider === 'llmaggregator' || selectedApiProvider === 'dummy') {
                         systemInstructionForProvider = { content: systemPromptTextToUseForApi, parts: [{ text: systemPromptTextToUseForApi }] };
                     }
                 }
@@ -10237,6 +10407,8 @@
                         const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
                         const enableVisionForThisCall = contextXaiVisionEnable || hasImage;
                         apiResponseObject = await apiUtils.callXaiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, enableVisionForThisCall);
+                    } else if (selectedApiProvider === 'dummy') {
+                        apiResponseObject = await apiUtils.callDummyApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                     } else {
                         throw new Error("不明なAPIプロバイダーが選択されています。");
                     }
@@ -10261,7 +10433,8 @@
                                                 (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                 (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && state.settings.claudeExpandThoughtsByDefault) ||
                                                 (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && state.settings.xaiExpandThoughtsByDefault) ||
-                                                (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorIncludeThoughts && state.settings.llmAggregatorExpandThoughtsByDefault),
+                                                (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorIncludeThoughts && state.settings.llmAggregatorExpandThoughtsByDefault) ||
+                                                (selectedApiProvider === 'dummy' && state.settings.dummyIncludeThoughts && state.settings.dummyExpandThoughtsByDefault),
                         };
 
                         if (isRetry && firstResponseIndexForRetry !== -1) {
@@ -10296,6 +10469,8 @@
                             responseStreamIterator = apiUtils.handleOpenAICompatibleStreamingResponse(apiResponseObject, 'openai');
                         } else if (selectedApiProvider === 'xai') {
                             responseStreamIterator = apiUtils.handleOpenAICompatibleStreamingResponse(apiResponseObject, 'xai');
+                        } else if (selectedApiProvider === 'dummy') {
+                            responseStreamIterator = apiUtils.handleDummyStreamingResponse(apiResponseObject);
                         }
 
                         const currentContextStreamSpeed = selectedApiProvider === 'gemini' ? contextStreamingSpeed : 
@@ -10303,6 +10478,7 @@
                                                           selectedApiProvider === 'claude' ? state.settings.claudeStreamingSpeed :
                                                           selectedApiProvider === 'xai' ? state.settings.xaiStreamingSpeed :
                                                           selectedApiProvider === 'llmaggregator' ? state.settings.llmAggregatorStreamingSpeed :
+                                                          selectedApiProvider === 'dummy' ? state.settings.dummyStreamingSpeed :
                                                           state.settings.openaiStreamingSpeed;
 
                         const messageIndexForDisplay = isBackgroundProcess ? -1 : (modelMessageObjectForStream ? state.currentMessages.indexOf(modelMessageObjectForStream) : -1);
@@ -10489,6 +10665,13 @@
                                 rawContentFromApi = "(応答が空です)";
                             }
                             modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
+                        } else if (selectedApiProvider === 'dummy') {
+                            modelResponseRawContent = data.content || '';
+                            modelResponseMetadata = { finishReason: data.finishReason || 'stop' };
+                            finalUsageMetadataFromStream = data.usage ? {
+                                candidatesTokenCount: data.usage.completion_tokens,
+                                totalTokenCount: data.usage.total_tokens
+                            } : null;
                         }
                     }
 
@@ -10510,13 +10693,16 @@
                                  bgModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
                              } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts) {
                                  bgModelMessage.xaiThoughtSummary = modelThoughtSummaryContent || null;
+                             } else if (selectedApiProvider === 'dummy' && state.settings.dummyIncludeThoughts) {
+                                bgModelMessage.thoughtSummary = "これはデバッグ用のダミー思考プロセスです。";
                              }
 
                               bgModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
                                                                   (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                                   (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
                                                                   (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
-                                                                  (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault);
+                                                                  (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault) ||
+                                                                  (selectedApiProvider === 'dummy' && state.settings.dummyExpandThoughtsByDefault);
 
                              currentContextMessages.push(bgModelMessage);
                              const chatToSaveBg = {
@@ -10577,6 +10763,8 @@
                                     msgToUpdate.thoughtSummary = modelThoughtSummaryContent || null;
                                 } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.xaiThoughtSummary = modelThoughtSummaryContent || null;
+                                } else if (selectedApiProvider === 'dummy' && state.settings.dummyIncludeThoughts) {
+                                    msgToUpdate.thoughtSummary = "これはデバッグ用のダミー思考プロセスです。";
                                 }
                                 uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
                                 await dbUtils.saveChat();
@@ -10598,12 +10786,15 @@
                                  newModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
                             } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && modelThoughtSummaryContent) {
                                  newModelMessage.xaiThoughtSummary = modelThoughtSummaryContent || null;
+                            } else if (selectedApiProvider === 'dummy' && state.settings.dummyIncludeThoughts) {
+                                newModelMessage.thoughtSummary = "これはデバッグ用のダミー思考プロセスです。";
                             }
                             newModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
                                                                  (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
                                                                  (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
                                                                  (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
-                                                                 (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault);
+                                                                 (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault) ||
+                                                                 (selectedApiProvider === 'dummy' && state.settings.dummyExpandThoughtsByDefault);
 
                              const targetUserIndexForCascade = userMessageIndex;
                              if (targetUserIndexForCascade !== -1 && !isBackgroundProcess) {
@@ -10658,6 +10849,8 @@
                              finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
                          } else if (selectedApiProvider === 'xai' && partialThoughtContentOnError && contextXaiIncludeThoughts) {
                              finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
+                         } else if (selectedApiProvider === 'dummy' && partialThoughtContentOnError && state.settings.dummyIncludeThoughts) {
+                            finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
                          }
 
                         const streamingMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
@@ -10680,7 +10873,10 @@
                                 msgToUpdate.thoughtSummary = finalPartialThoughtValue;
                             } else if (selectedApiProvider === 'xai') {
                                 msgToUpdate.xaiThoughtSummary = finalPartialThoughtValue;
+                            } else if (selectedApiProvider === 'dummy') {
+                                msgToUpdate.thoughtSummary = finalPartialThoughtValue;
                             }
+
 
                              try {
                                 uiUtils.finalizeStreamingMessage(streamingMessageIndex);
@@ -11176,6 +11372,8 @@
                  newSettings.llmAggregatorApiKey = elements.llmAggregatorApiKeyInput.value.trim();
                  newSettings.llmAggregatorModelName = elements.llmAggregatorModelNameSelect.value;
                  newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalModelsTextarea.value.trim();
+                 newSettings.dummyModelName = elements.dummyModelNameSelect.value;
+                 newSettings.dummyAdditionalModels = elements.dummyAdditionalModelsTextarea.value.trim();
 
                 newSettings.geminiSystemPrompt = elements.geminiSystemPromptDefaultTextarea.value.trim();
                 newSettings.geminiEnableSystemPromptDefault = elements.geminiEnableSystemPromptDefaultCheckbox.checked;
@@ -11284,6 +11482,15 @@
                 newSettings.llmAggregatorEnableDummyModel = elements.llmAggregatorEnableDummyModelCheckbox.checked;
                 newSettings.llmAggregatorConcatDummyModel = elements.llmAggregatorConcatDummyModelCheckbox.checked;
 
+                newSettings.dummySystemPrompt = elements.dummySystemPromptDefaultTextarea.value.trim();
+                newSettings.dummyEnableSystemPromptDefault = elements.dummyEnableSystemPromptDefaultCheckbox.checked;
+                newSettings.dummyResponseDelay = elements.dummyResponseDelayInput.value === '' ? 1000 : parseInt(elements.dummyResponseDelayInput.value, 10);
+                newSettings.dummyStreamingSpeed = elements.dummyStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.dummyStreamingSpeedInput.value, 10);
+                newSettings.dummyStreamingOutput = elements.dummyStreamingOutputCheckbox.checked;
+                newSettings.dummyIncludeThoughts = elements.dummyIncludeThoughtsToggle.checked;
+                newSettings.dummyExpandThoughtsByDefault = elements.dummyExpandThoughtsByDefaultToggle.checked;
+
+
                  newSettings.enterToSend = elements.enterToSendCheckbox.checked;
                  newSettings.autoScrollOnNewMessage = elements.autoScrollOnNewMessageCheckbox.checked;
                  newSettings.autoScrollOnThought = elements.autoScrollOnThoughtCheckbox.checked;
@@ -11365,6 +11572,7 @@
                      openai: elements.apiProviderCycleOpenAICheckbox.checked,
                      xai: elements.apiProviderCycleXaiCheckbox.checked,
                      llmaggregator: elements.apiProviderCycleLlmAggregatorCheckbox.checked,
+                     dummy: elements.apiProviderCycleDummyCheckbox.checked,
                  };
 
                 const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
@@ -11376,21 +11584,24 @@
                     return num;
                 };
 
-                const providers = ['gemini', 'deepSeek', 'claude', 'openai', 'xai', 'llmaggregator'];
+                const providers = ['gemini', 'deepSeek', 'claude', 'openai', 'xai', 'llmaggregator', 'dummy'];
                 providers.forEach(provider => {
                     const prefix = provider;
                     const streamingSpeedKey = `${prefix}StreamingSpeed`;
                     newSettings[streamingSpeedKey] = validateNumeric(newSettings[streamingSpeedKey], DEFAULT_STREAMING_SPEED, 0, Infinity, true);
-                    const tempKey = `${prefix}Temperature`;
-                    newSettings[tempKey] = validateNumeric(newSettings[tempKey], null, 0, 2);
-                    const maxTokensKey = `${prefix}MaxTokens`;
-                    newSettings[maxTokensKey] = validateNumeric(newSettings[maxTokensKey], null, 1, Infinity, true);
-                    const topPKey = `${prefix}TopP`;
-                    newSettings[topPKey] = validateNumeric(newSettings[topPKey], null, 0, 1);
-                    const presencePenaltyKey = `${prefix}PresencePenalty`;
-                    newSettings[presencePenaltyKey] = validateNumeric(newSettings[presencePenaltyKey], null, -2.0, 2.0);
-                    const frequencyPenaltyKey = `${prefix}FrequencyPenalty`;
-                    newSettings[frequencyPenaltyKey] = validateNumeric(newSettings[frequencyPenaltyKey], null, -2.0, 2.0);
+
+                    if (provider !== 'dummy') {
+                        const tempKey = `${prefix}Temperature`;
+                        newSettings[tempKey] = validateNumeric(newSettings[tempKey], null, 0, 2);
+                        const maxTokensKey = `${prefix}MaxTokens`;
+                        newSettings[maxTokensKey] = validateNumeric(newSettings[maxTokensKey], null, 1, Infinity, true);
+                        const topPKey = `${prefix}TopP`;
+                        newSettings[topPKey] = validateNumeric(newSettings[topPKey], null, 0, 1);
+                        const presencePenaltyKey = `${prefix}PresencePenalty`;
+                        newSettings[presencePenaltyKey] = validateNumeric(newSettings[presencePenaltyKey], null, -2.0, 2.0);
+                        const frequencyPenaltyKey = `${prefix}FrequencyPenalty`;
+                        newSettings[frequencyPenaltyKey] = validateNumeric(newSettings[frequencyPenaltyKey], null, -2.0, 2.0);
+                    }
 
                     if (provider === 'gemini') {
                         newSettings.geminiTopK = validateNumeric(newSettings.geminiTopK, null, 1, Infinity, true);
@@ -11400,6 +11611,8 @@
                         newSettings.claudeThinkingBudget = validateNumeric(newSettings.claudeThinkingBudget, null, 1024, Infinity, true);
                     } else if (provider === 'llmaggregator') {
                         newSettings.llmAggregatorTopK = validateNumeric(newSettings.llmAggregatorTopK, null, 1, Infinity, true);
+                    } else if (provider === 'dummy') {
+                        newSettings.dummyResponseDelay = validateNumeric(newSettings.dummyResponseDelay, 1000, 0, Infinity, true);
                     }
                 });
 
@@ -11543,7 +11756,7 @@
 
                         const defaultSettingsCopy = JSON.parse(JSON.stringify(state.settings));
                         Object.keys(defaultSettingsCopy).forEach(key => {
-                            if (key.startsWith('gemini') || key.startsWith('deepSeek') || key.startsWith('claude') || key.startsWith('openai') || key.startsWith('xai') || key.startsWith('llmaggregator')) {
+                            if (key.startsWith('gemini') || key.startsWith('deepSeek') || key.startsWith('claude') || key.startsWith('openai') || key.startsWith('xai') || key.startsWith('llmaggregator') || key.startsWith('dummy')) {
                                 if(key.toLowerCase().includes('systemprompt')) defaultSettingsCopy[key] = '';
                                 else if(key.toLowerCase().includes('enablesystempromptdefault')) defaultSettingsCopy[key] = true;
                                 else if(key.toLowerCase().includes('temperature') || key.toLowerCase().includes('maxtokens') || key.toLowerCase().includes('topk') || key.toLowerCase().includes('topp') || key.toLowerCase().includes('penalty') || key.toLowerCase().includes('budget')) defaultSettingsCopy[key] = null;
@@ -11556,8 +11769,8 @@
                                 else if(key === 'geminiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'geminiPseudoStreaming') defaultSettingsCopy[key] = false;
                                 else if(key === 'geminiEnableGrounding') defaultSettingsCopy[key] = false;
-                                else if(key === 'deepSeekIncludeDeepSeekThoughts' || key === 'llmAggregatorIncludeThoughts') defaultSettingsCopy[key] = false;
-                                else if(key === 'deepSeekExpandThoughtsByDefault' || key === 'llmAggregatorExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
+                                else if(key === 'deepSeekIncludeDeepSeekThoughts' || key === 'llmAggregatorIncludeThoughts' || key === 'dummyIncludeThoughts') defaultSettingsCopy[key] = false;
+                                else if(key === 'deepSeekExpandThoughtsByDefault' || key === 'llmAggregatorExpandThoughtsByDefault' || key === 'dummyExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'claudeThinkingBudget') defaultSettingsCopy[key] = null;
@@ -11565,6 +11778,7 @@
                                 else if(key === 'xaiIncludeThoughts') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiExpandThoughtsByDefault') defaultSettingsCopy[key] = false;
                                 else if(key === 'xaiReasoningEffort') defaultSettingsCopy[key] = 'low';
+                                else if(key === 'dummyResponseDelay') defaultSettingsCopy[key] = 1000;
                             }
                         });
                         defaultSettingsCopy.apiKey = '';
@@ -11589,6 +11803,8 @@
                         defaultSettingsCopy.llmAggregatorApiBackend = '';
                         defaultSettingsCopy.llmAggregatorModelName = DEFAULT_LLMAGGREGATOR_MODEL;
                         defaultSettingsCopy.llmAggregatorAdditionalModels = '';
+                        defaultSettingsCopy.dummyModelName = DEFAULT_DUMMY_MODEL;
+                        defaultSettingsCopy.dummyAdditionalModels = '';
                         defaultSettingsCopy.apiProvider = 'gemini';
                         defaultSettingsCopy.enterToSend = true;
                         defaultSettingsCopy.autoScrollOnNewMessage = DEFAULT_AUTO_SCROLL_ON_NEW_MESSAGE;
@@ -11668,7 +11884,7 @@
                         defaultSettingsCopy.settingsUIDetailsOpenStates = {};
                         defaultSettingsCopy.showApiProviderToggleHeader = false;
                         defaultSettingsCopy.showApiProviderToggleFooter = true;
-                        defaultSettingsCopy.apiProviderCycle = { gemini: true, deepseek: true, claude: true, openai: true, xai: true, llmaggregator: true };
+                        defaultSettingsCopy.apiProviderCycle = { gemini: true, deepseek: true, claude: true, openai: true, xai: true, llmaggregator: true, dummy: true };
                         defaultSettingsCopy.llmAggregatorTopK = null;
 
                         state.settings = defaultSettingsCopy;
@@ -12660,9 +12876,11 @@
                      (selectedApiProvider === 'xai' && !state.settings.xaiApiKey) ||
                      (selectedApiProvider === 'llmaggregator' && !state.settings.llmAggregatorApiKey)
                     ) {
-                    await uiUtils.showCustomAlert("選択中のAPIプロバイダーのAPIキーが設定されていません。");
-                    uiUtils.showScreen('settings');
-                    return;
+                    if (selectedApiProvider !== 'dummy') {
+                        await uiUtils.showCustomAlert("選択中のAPIプロバイダーのAPIキーが設定されていません。");
+                        uiUtils.showScreen('settings');
+                        return;
+                    }
                 }
 
                 uiUtils.setAiToAiProcessingState(true, "AI間会話処理中 (ステップ1/2)...");
@@ -12694,7 +12912,8 @@
                         geminiTopKB, geminiThinkingBudgetB, geminiIncludeThoughtsB, geminiPseudoStreamingB, geminiEnableGroundingB,
                         deepSeekIncludeThoughtsB, presencePenaltyB, frequencyPenaltyB,
                         claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB,
-                        xaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB, llmAggregatorTopKB;
+                        xaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB, llmAggregatorTopKB,
+                        dummyResponseDelayB;
 
                     if (providerForSettingsB === 'gemini') {
                         systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
@@ -12799,6 +13018,12 @@
                         xaiVisionEnableB = state.settings.xaiVisionEnable;
                         xaiIncludeThoughtsB = state.settings.xaiIncludeThoughts;
                         xaiReasoningEffortB = state.settings.xaiReasoningEffort;
+                    } else if (providerForSettingsB === 'dummy') {
+                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.dummySystemPrompt;
+                        enableSystemPromptDefaultB = state.settings.dummyEnableSystemPromptDefault;
+                        dummyResponseDelayB = state.settings.dummyResponseDelay;
+                        streamingOutputB = state.settings.dummyStreamingOutput;
+                        streamingSpeedB = state.settings.dummyStreamingSpeed;
                     }
 
                     const contextForB = {
@@ -12829,6 +13054,7 @@
                         pseudoStreaming: providerForSettingsB === 'gemini' ? geminiPseudoStreamingB : undefined,
                         enableGrounding: providerForSettingsB === 'gemini' ? geminiEnableGroundingB : undefined,
                         visionEnable: providerForSettingsB === 'xai' ? xaiVisionEnableB : undefined,
+                        dummyResponseDelay: providerForSettingsB === 'dummy' ? dummyResponseDelayB : undefined,
                         inputText: inputForB,
                         attachments: [],
                         apiProvider: providerForSettingsB
@@ -13922,6 +14148,78 @@
                 }
                 return response;
             },
+            async callDummyApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
+                state.abortController = new AbortController();
+                
+                const delay = state.settings.dummyResponseDelay || 1000;
+                
+                await new Promise(resolve => setTimeout(resolve, delay));
+                
+                if (state.abortController?.signal.aborted) {
+                    throw new Error("リクエストがキャンセルされました。");
+                }
+                
+                return new Response(new ReadableStream({
+                    start(controller) {
+                        if (useStreaming) {
+                            const stream = apiUtils.handleDummyStreamingResponse({}).getReader();
+                            function push() {
+                                stream.read().then(({done, value}) => {
+                                    if (done) {
+                                        controller.close();
+                                        return;
+                                    }
+                                    controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(value)}\n\n`));
+                                    push();
+                                });
+                            }
+                            push();
+                        } else {
+                            const response = {
+                                choices: [{
+                                    message: { content: "" },
+                                    finish_reason: "stop"
+                                }],
+                                usage: {
+                                    completion_tokens: 0,
+                                    prompt_tokens: 1,
+                                    total_tokens: 1
+                                }
+                            };
+                             if (state.settings.dummyIncludeThoughts) {
+                                 response.choices[0].message.reasoning_content = "これはデバッグ用のダミー思考プロセスです。";
+                             }
+                            controller.enqueue(JSON.stringify(response));
+                            controller.close();
+                        }
+                    }
+                }), { headers: { 'Content-Type': 'application/json' } });
+            },
+            async *handleDummyStreamingResponse(response) {
+                const streamingSpeed = state.settings.dummyStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
+                const includeThoughts = state.settings.dummyIncludeThoughts;
+                let isCancelled = false;
+                
+                try {
+                    if (includeThoughts) {
+                        const thoughtText = "これはデバッグ用のダミー思考プロセスです。";
+                        for (const char of thoughtText) {
+                            if (state.abortController?.signal.aborted) { isCancelled = true; break; }
+                            yield { type: 'chunk', contentText: null, thoughtText: char };
+                            if (streamingSpeed > 0) await sleep(streamingSpeed);
+                        }
+                    }
+                    if (isCancelled) throw new Error("リクエストがキャンセルされました。");
+
+                    yield {
+                        type: 'metadata',
+                        finishReason: 'stop',
+                        usageMetadata: { candidatesTokenCount: 0, totalTokenCount: 1 }
+                    };
+                } catch (error) {
+                    yield { type: 'error', error: { message: error.message }, message: error.message };
+                }
+            }
         };
 
         const errorRecovery = {
