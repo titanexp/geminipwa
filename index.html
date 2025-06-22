@@ -1863,6 +1863,8 @@
         .app-header .api-provider-toggle-btn.openai { background-color: #10A37F !important; color: #ffffff !important; }
         .app-header .api-provider-toggle-btn.xai { background-color: #000000 !important; color: #ffffff !important; }
         .app-header .api-provider-toggle-btn.llmaggregator { background-color: #e53935 !important; color: #ffffff !important; }
+        .app-header .api-provider-toggle-btn.dummy { background-color: var(--bg-button-gold) !important; color: var(--text-button-gold) !important; }
+        .app-header .api-provider-toggle-btn.dummy:hover { background-color: var(--bg-button-gold-hover) !important; }
         body.dark-mode .app-header .api-provider-toggle-btn.gemini:hover {
             background-color: rgba(255, 255, 255, 0.9) !important;
             color: #8A75D2 !important;
@@ -1892,6 +1894,7 @@
         .chat-input-area .api-provider-toggle-btn.openai { background-color: #10A37F !important; color: #ffffff !important; }
         .chat-input-area .api-provider-toggle-btn.xai { background-color: #000000 !important; color: #ffffff !important; }
         .chat-input-area .api-provider-toggle-btn.llmaggregator { background-color: #e53935 !important; color: #ffffff !important; }
+        .chat-input-area .api-provider-toggle-btn.dummy { background-color: var(--bg-button-gold) !important; color: var(--text-button-gold) !important; }
         
         .attachment-badge {
             position: absolute;
@@ -3288,6 +3291,7 @@
                             <option value="openai">ChatGPT (OpenAI API)</option>
                             <option value="xai">Grok (xAI API)</option>
                             <option value="llmaggregator">LLM Aggregator</option>
+                            <option value="dummy">Dummy AI</option>
                         </select>
                     </div>
                     <details id="settings-group-common-system-prompt" style="margin-top:15px;">
@@ -3486,6 +3490,14 @@
                         <label for="llmaggregator-additional-models" style="margin-top:10px;">追加モデル (カンマ区切り):</label>
                         <textarea id="llmaggregator-additional-models" placeholder="例: mistralai/Mixtral-8x7B-Instruct-v0.1,another/model" aria-label="LLM Aggregator 追加モデル"></textarea>
                         </p>
+                    </div>
+                </details>
+                
+                <details id="dummy-settings-group" class="settings-group hidden" open>
+                    <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">Dummy AI 設定</summary>
+                    <div style="margin-top:15px;">
+                        <p style="font-size: 12px; color: var(--text-secondary);">このプロバイダーはデバッグ用のダミーです。</p>
+                        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">APIキーは不要で、バックエンドへの接続も行いません。ユーザーがメッセージを送信すると、常に空の応答を返します。</p>
                     </div>
                 </details>
 
@@ -4287,6 +4299,10 @@
                                                     <input type="checkbox" id="api-provider-cycle-llmaggregator">
                                                     LLM Aggregator
                                                 </label>
+                                                <label class="checkbox-label" style="font-size: 12px;">
+                                                    <input type="checkbox" id="api-provider-cycle-dummy">
+                                                    Dummy AI
+                                                </label>
                                            </div>
                                        </div>
                                    </details>
@@ -4785,6 +4801,7 @@
             openaiAdvancedGroup: document.getElementById('openai-advanced-group'),
             xaiAdvancedGroup: document.getElementById('xai-advanced-group'),
             llmAggregatorAdvancedGroup: document.getElementById('llmaggregator-advanced-group'),
+            dummySettingsGroup: document.getElementById('dummy-settings-group'),
 
             geminiSystemPromptDefaultTextarea: document.getElementById('gemini-system-prompt-default'),
             geminiEnableSystemPromptDefaultCheckbox: document.getElementById('gemini-enable-system-prompt-default'),
@@ -5049,6 +5066,7 @@
             apiProviderCycleOpenAICheckbox: document.getElementById('api-provider-cycle-openai'),
             apiProviderCycleXaiCheckbox: document.getElementById('api-provider-cycle-xai'),
             apiProviderCycleLlmAggregatorCheckbox: document.getElementById('api-provider-cycle-llmaggregator'),
+            apiProviderCycleDummyCheckbox: document.getElementById('api-provider-cycle-dummy'),
             imagePreviewDialog: document.getElementById('imagePreviewDialog'),
         };
 
@@ -5267,6 +5285,7 @@
                     openai: true,
                     xai: true,
                     llmaggregator: true,
+                    dummy: true,
                 },
             },
             backgroundImageUrl: null,
@@ -7361,6 +7380,7 @@
                  elements.apiProviderCycleOpenAICheckbox.checked = state.settings.apiProviderCycle.openai;
                  elements.apiProviderCycleXaiCheckbox.checked = state.settings.apiProviderCycle.xai;
                  elements.apiProviderCycleLlmAggregatorCheckbox.checked = state.settings.apiProviderCycle.llmaggregator;
+                 elements.apiProviderCycleDummyCheckbox.checked = state.settings.apiProviderCycle.dummy;
 
                 elements.showMemoButtonToggle.checked = state.settings.showMemoButton;
                 elements.memoHeightInput.value = state.settings.memoHeight || '';
@@ -7455,6 +7475,7 @@
                 const showOpenAI = provider === 'openai';
                 const showXai = provider === 'xai';
                 const showLlmAggregator = provider === 'llmaggregator';
+                const showDummy = provider === 'dummy';
 
                 elements.geminiSettingsGroup.classList.toggle('hidden', !showGemini);
                 elements.geminiParamsGroup.classList.toggle('hidden', !showGemini);
@@ -7480,6 +7501,20 @@
                 elements.llmAggregatorSettingsGroup.classList.toggle('hidden', !showLlmAggregator);
                 elements.llmAggregatorParamsGroup.classList.toggle('hidden', !showLlmAggregator);
                 elements.llmAggregatorAdvancedGroup.classList.toggle('hidden', !showLlmAggregator);
+
+                elements.dummySettingsGroup.classList.toggle('hidden', !showDummy);
+
+                const paramGroups = [
+                    elements.geminiParamsGroup, elements.deepseekParamsGroup, elements.claudeParamsGroup,
+                    elements.openaiParamsGroup, elements.xaiParamsGroup, elements.llmAggregatorParamsGroup,
+                    elements.geminiAdvancedGroup, elements.deepseekAdvancedGroup, elements.claudeAdvancedGroup,
+                    elements.openaiAdvancedGroup, elements.xaiAdvancedGroup, elements.llmAggregatorAdvancedGroup,
+                    elements.geminiGroundingParam
+                ];
+
+                if (showDummy) {
+                    paramGroups.forEach(group => group.classList.add('hidden'));
+                }
             },
             updateChatScreenElementVisibility() {
                 const header = elements.chatScreen.querySelector('.app-header');
@@ -7570,6 +7605,7 @@
                     openai: { text: 'OP', title: 'OpenAI', className: 'openai' },
                     xai: { text: 'XA', title: 'xAI', className: 'xai' },
                     llmaggregator: { text: 'LA', title: 'LLM Aggregator', className: 'llmaggregator' },
+                    dummy: { text: 'DU', title: 'Dummy AI', className: 'dummy' },
                 };
                 const currentProviderInfo = providerMap[state.settings.apiProvider] || { text: '??', title: 'Unknown', className: '' };
                 
@@ -7577,7 +7613,7 @@
                     if (button) {
                         button.textContent = currentProviderInfo.text;
                         button.title = `API: ${currentProviderInfo.title}`;
-                        button.classList.remove('gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator');
+                        button.classList.remove('gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator', 'dummy');
                         if (currentProviderInfo.className) {
                             button.classList.add(currentProviderInfo.className);
                         }
@@ -8220,7 +8256,8 @@
                     { value: 'claude', text: 'Claude (Anthropic API)' },
                     { value: 'openai', text: 'ChatGPT (OpenAI API)' },
                     { value: 'xai', text: 'Grok (xAI API)' },
-                    { value: 'llmaggregator', text: 'LLM Aggregator' }
+                    { value: 'llmaggregator', text: 'LLM Aggregator' },
+                    { value: 'dummy', text: 'Dummy AI' }
                 ];
 
                 const currentValue = apiProviderSelect.value;
@@ -8872,6 +8909,10 @@
                 });
                  elements.apiProviderCycleLlmAggregatorCheckbox.addEventListener('change', () => {
                     state.settings.apiProviderCycle.llmaggregator = elements.apiProviderCycleLlmAggregatorCheckbox.checked;
+                    uiUtils.updateApiProviderSelectOptions();
+                });
+                 elements.apiProviderCycleDummyCheckbox.addEventListener('change', () => {
+                    state.settings.apiProviderCycle.dummy = elements.apiProviderCycleDummyCheckbox.checked;
                     uiUtils.updateApiProviderSelectOptions();
                 });
                 
@@ -9690,11 +9731,58 @@
             },
             async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
                 const isBackgroundProcess = !!sourceSessionContext;
+                const selectedApiProvider = isBackgroundProcess ? (sourceSessionContext.apiProvider || state.settings.apiProvider) : state.settings.apiProvider;
+
+                if (selectedApiProvider === 'dummy') {
+                    if (isBackgroundProcess) {
+                        return { content: '', metadata: { finishReason: 'stop' } };
+                    }
+
+                    const text = elements.userInput.value.trim();
+                    const attachmentsToSend = [...state.pendingAttachments];
+                    if (state.isSending || (!text && attachmentsToSend.length === 0)) {
+                        return;
+                    }
+
+                    uiUtils.setSendingState(true);
+
+                    if (isRetry) {
+                        if (retryUserMessageIndex + 1 < state.currentMessages.length) {
+                            state.currentMessages.splice(retryUserMessageIndex + 1);
+                        }
+                        uiUtils.renderChatMessages(true);
+                    } else {
+                        const userMessage = {
+                            role: 'user', content: text, timestamp: Date.now(),
+                            attachments: attachmentsToSend, generatedByApiProvider: null
+                        };
+                        state.currentMessages.push(userMessage);
+                        const userMessageIndex = state.currentMessages.length - 1;
+                        uiUtils.appendMessage(userMessage.role, userMessage.content, userMessageIndex, false, null, userMessage.attachments);
+                        elements.userInput.value = '';
+                        state.pendingAttachments = [];
+                        uiUtils.adjustTextareaHeight();
+                        uiUtils.updateAttachmentBadgeVisibility();
+                    }
+
+                    await dbUtils.saveChat();
+                    await sleep(300 + Math.random() * 400);
+
+                    const modelMessage = {
+                        role: 'model', content: '', timestamp: Date.now(), generatedByApiProvider: 'dummy'
+                    };
+                    state.currentMessages.push(modelMessage);
+                    const modelMessageIndex = state.currentMessages.length - 1;
+                    uiUtils.appendMessage(modelMessage.role, modelMessage.content, modelMessageIndex);
+
+                    await dbUtils.saveChat();
+                    uiUtils.setSendingState(false);
+                    if (state.settings.autoScrollOnNewMessage) uiUtils.scrollToBottom();
+                    return;
+                }
                 let currentContextSessionId = isBackgroundProcess ? sourceSessionContext.sessionId : state.currentChatId;
                 let currentContextMessages = isBackgroundProcess ? [...sourceSessionContext.messages] : [...state.currentMessages];
                 let currentContextSystemPrompt = '';
-
-                const selectedApiProvider = isBackgroundProcess ? (sourceSessionContext.apiProvider || state.settings.apiProvider) : state.settings.apiProvider;
 
                 if (isBackgroundProcess) {
                     currentContextSystemPrompt = sourceSessionContext.systemPrompt || '';
@@ -11365,6 +11453,7 @@
                      openai: elements.apiProviderCycleOpenAICheckbox.checked,
                      xai: elements.apiProviderCycleXaiCheckbox.checked,
                      llmaggregator: elements.apiProviderCycleLlmAggregatorCheckbox.checked,
+                     dummy: elements.apiProviderCycleDummyCheckbox.checked,
                  };
 
                 const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
@@ -11668,7 +11757,7 @@
                         defaultSettingsCopy.settingsUIDetailsOpenStates = {};
                         defaultSettingsCopy.showApiProviderToggleHeader = false;
                         defaultSettingsCopy.showApiProviderToggleFooter = true;
-                        defaultSettingsCopy.apiProviderCycle = { gemini: true, deepseek: true, claude: true, openai: true, xai: true, llmaggregator: true };
+                        defaultSettingsCopy.apiProviderCycle = { gemini: true, deepseek: true, claude: true, openai: true, xai: true, llmaggregator: true, dummy: true };
                         defaultSettingsCopy.llmAggregatorTopK = null;
 
                         state.settings = defaultSettingsCopy;
