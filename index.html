@@ -4510,7 +4510,11 @@
                              ※ ブラウザに保存されている設定や履歴を全て削除。<BR>
                              ！！間違えて押そうとしていないか注意！！
                          </p>
-
+                         <button id="force-recovery-btn" class="orange-button">🔄 強制復旧 (キャッシュクリア&リロード)</button>
+                         <p style="font-size: 11px; color: var(--text-secondary); margin-top:5px; margin-bottom: 10px;">
+                             ※ アプリが不安定な場合に使用。全キャッシュをクリアして強制的に再起動します。<br>
+                             ※ ユーザーデータ（チャット履歴・設定）は保持されます。
+                         </p>
                      </details>
                 </div>
             </main>
@@ -8257,40 +8261,6 @@
 
         const appLogic = {
             initializeApp() {
-                window.onerror = function(message, source, lineno, colno, error) {
-                    console.error("グローバルエラーハンドラーがエラーを捕捉しました:", {
-                        message, source, lineno, colno, error
-                    });
-
-                    try {
-                        const now = Date.now();
-                        const lastErrorTime = parseInt(sessionStorage.getItem('lastErrorTime') || '0', 10);
-                        const errorCount = parseInt(sessionStorage.getItem('errorCount') || '0', 10);
-                        
-                        if (now - lastErrorTime < 10000) {
-                            const newErrorCount = errorCount + 1;
-                            sessionStorage.setItem('errorCount', newErrorCount);
-
-                            if (newErrorCount >= 3) {
-                                console.warn(`エラーが頻発(${newErrorCount}回)したため、自動回復を試みます。`);
-                                sessionStorage.removeItem('errorCount');
-                                sessionStorage.removeItem('lastErrorTime');
-                                
-                                appLogic.updateApp(true);
-                            }
-                        } else {
-                            sessionStorage.setItem('errorCount', '1');
-                        }
-                        
-                        sessionStorage.setItem('lastErrorTime', now.toString());
-
-                    } catch (e) {
-                        console.error("エラーハンドラー内でエラーが発生しました:", e);
-                    }
-
-                    return false;
-                };
-
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -8462,6 +8432,25 @@
                 elements.updateAppBtn.addEventListener('click', () => this.updateApp());
                 elements.clearDataBtn.addEventListener('click', () => this.confirmClearAllData());
                 elements.clearHistoryBtn.addEventListener('click', () => this.confirmClearAllHistory());
+                document.getElementById('force-recovery-btn').addEventListener('click', async () => {
+                    const confirmed = await uiUtils.showCustomConfirm(
+                        "強制復旧を実行しますか？\n\n" +
+                        "この操作により：\n" +
+                        "• 全キャッシュがクリアされます\n" +
+                        "• アプリが自動的に再起動されます\n" +
+                        "• チャット履歴と設定は保持されます\n\n" +
+                        "アプリが不安定な場合にのみ実行してください。"
+                    );
+                    
+                    if (confirmed) {
+                        if (typeof errorRecovery !== 'undefined') {
+                            errorRecovery.manualRecovery();
+                        } else {
+                            await uiUtils.showCustomAlert("キャッシュをクリアして再起動します...");
+                            window.location.reload(true);
+                        }
+                    }
+                });
 
                 if (elements.themeSelect) {
                     elements.themeSelect.addEventListener('change', () => {
@@ -9446,21 +9435,6 @@
                     uiUtils.showScreen('chat');
                 }
             },
-            async duplicateChat(id) {
-                if (state.isSending) { const conf = await uiUtils.showCustomConfirm("送信中です。中断してチャットを複製しますか？"); if (!conf) return; this.abortRequest(); }
-                if (state.editingMessageIndex !== null) { const conf = await uiUtils.showCustomConfirm("編集中です。変更を破棄してチャットを複製しますか？"); if (!conf) return; const msgEl = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`); this.cancelEditMessage(state.editingMessageIndex, msgEl); }
-                if (state.isEditingSystemPrompt) { const conf = await uiUtils.showCustomConfirm("システムプロンプト編集中です。変更を破棄してチャットを複製しますか？"); if (!conf) return; this.cancelEditSystemPrompt(); }
-                if ((state.currentMessages.length > 0 || state.currentSystemPrompt) && state.currentChatId && state.currentChatId !== id) { try { await dbUtils.saveChat(); } catch (error) { const conf = await uiUtils.showCustomConfirm("現在のチャット保存に失敗しました。複製を続行しますか？"); if (!conf) return; } }
-                if (state.pendingAttachments.length > 0) {
-                    const confirmedAttach = await uiUtils.showCustomConfirm("添付準備中のファイルがあります。破棄してチャットを複製しますか？");
-                    if (!confirmedAttach) return;
-                    state.pendingAttachments = [];
-                }
-
-                try {
-                    const chat = await dbUtils.getChat(id);
-                    if (chat) {
-                        const originalTitle = chat.title || "無題のチャット";
             async duplicateChat(id) {
                 if (state.isSending) { const conf = await uiUtils.showCustomConfirm("送信中です。中断してチャットを複製しますか？"); if (!conf) return; this.abortRequest(); }
                 if (state.editingMessageIndex !== null) { const conf = await uiUtils.showCustomConfirm("編集中です。変更を破棄してチャットを複製しますか？"); if (!conf) return; const msgEl = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`); this.cancelEditMessage(state.editingMessageIndex, msgEl); }
@@ -11528,28 +11502,21 @@
                      await uiUtils.showCustomAlert(`設定の保存中にエラーが発生しました: ${error}`);
                  }
             },
-            async updateApp(skipConfirmation = false) {
+            async updateApp() {
                 if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
-                    if (!skipConfirmation) {
-                        await uiUtils.showCustomAlert("Service Workerが検出されませんでした。ページをリロードしてから再試行してください。");
-                    }
+                    await uiUtils.showCustomAlert("Service Workerが検出されませんでした。ページをリロードしてから再試行してください。");
                     return;
                 }
-                const confirmed = skipConfirmation ? true : await uiUtils.showCustomConfirm("アプリのキャッシュをクリアして最新版を再取得しますか？ (ページがリロードされます)");
+                const confirmed = await uiUtils.showCustomConfirm("アプリのキャッシュをクリアして最新版を再取得しますか？ (ページがリロードされます)");
                 if (confirmed) {
-                    console.log(`[UpdateApp] ${skipConfirmation ? '自動' : '手動'}でのキャッシュクリアを開始します。`);
                     navigator.serviceWorker.ready.then(reg => {
                         if (reg.active) {
                             reg.active.postMessage({ action: 'clearCache' });
                         } else {
-                            if (!skipConfirmation) {
-                                uiUtils.showCustomAlert("アクティブなService Workerが見つかりません。手動でリロードが必要かもしれません。");
-                            }
+                            uiUtils.showCustomAlert("アクティブなService Workerが見つかりません。手動でリロードが必要かもしれません。");
                         }
                     }).catch(async err => {
-                        if (!skipConfirmation) {
-                            await uiUtils.showCustomAlert("Service Workerの準備中にエラーが発生しました。");
-                        }
+                        await uiUtils.showCustomAlert("Service Workerの準備中にエラーが発生しました。");
                     });
                 }
             },
@@ -13956,6 +13923,174 @@
                 return response;
             },
         };
+
+        const errorRecovery = {
+            errorCount: 0,
+            errorTimeWindow: 60000,
+            maxErrors: 3,
+            lastErrorTime: 0,
+            isRecovering: false,
+            
+            init() {
+                window.addEventListener('error', (event) => {
+                    this.handleError('JavaScript Error', {
+                        message: event.message,
+                        filename: event.filename,
+                        lineno: event.lineno,
+                        colno: event.colno,
+                        error: event.error
+                    });
+                });
+
+                window.addEventListener('unhandledrejection', (event) => {
+                    this.handleError('Unhandled Promise Rejection', {
+                        reason: event.reason,
+                        promise: event.promise
+                    });
+                });
+
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.addEventListener('error', (event) => {
+                        this.handleError('Service Worker Error', event);
+                    });
+                }
+            },
+
+            handleError(type, errorInfo) {
+                if (this.isRecovering) return;
+
+                const now = Date.now();
+                
+                if (now - this.lastErrorTime > this.errorTimeWindow) {
+                    this.errorCount = 0;
+                }
+                
+                this.errorCount++;
+                this.lastErrorTime = now;
+                
+                const isCriticalError = this.isCriticalError(errorInfo);
+                
+                if (this.errorCount >= this.maxErrors || isCriticalError) {
+                    this.triggerForceReload(type, errorInfo, isCriticalError);
+                }
+            },
+
+            isCriticalError(errorInfo) {
+                const criticalPatterns = [
+                    /Cannot read prop/i,
+                    /Cannot access before initialization/i,
+                    /is not defined/i,
+                    /IndexedDB/i,
+                    /QuotaExceededError/i,
+                    /localStorage/i,
+                    /sessionStorage/i,
+                    /Service Worker/i,
+                    /Failed to fetch/i,
+                    /NetworkError/i
+                ];
+                
+                const errorMessage = JSON.stringify(errorInfo).toLowerCase();
+                return criticalPatterns.some(pattern => pattern.test(errorMessage));
+            },
+
+            async triggerForceReload(errorType, errorInfo, isCritical) {
+                if (this.isRecovering) return;
+                this.isRecovering = true;
+
+                const reason = isCritical ? '致命的なエラー' : `連続エラー(${this.errorCount}回)`;
+                
+                try {
+                    await this.showRecoveryNotification(reason, errorType);
+                    
+                    await this.clearCacheAndReload();
+                    
+                } catch (recoveryError) {
+                    window.location.reload(true);
+                }
+            },
+
+            async showRecoveryNotification(reason, errorType) {
+                if (typeof uiUtils !== 'undefined' && uiUtils.showCustomAlert) {
+                    try {
+                        await uiUtils.showCustomAlert(
+                            `アプリで${reason}が発生しました。\n` +
+                            `安定性を保つため、キャッシュをクリアして再起動します。\n\n` +
+                            `エラータイプ: ${errorType}\n` +
+                            `この操作は自動で実行されます。`
+                        );
+                    } catch (e) {
+                        alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
+                    }
+                } else {
+                    alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
+                }
+            },
+
+            async clearCacheAndReload() {
+                try {
+                    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                        await new Promise((resolve, reject) => {
+                            const timeoutId = setTimeout(() => reject(new Error('Service Worker timeout')), 5000);
+                            
+                            const messageHandler = (event) => {
+                                if (event.data && event.data.action === 'cacheCleared') {
+                                    clearTimeout(timeoutId);
+                                    navigator.serviceWorker.removeEventListener('message', messageHandler);
+                                    resolve();
+                                }
+                            };
+                            
+                            navigator.serviceWorker.addEventListener('message', messageHandler);
+                            navigator.serviceWorker.controller.postMessage({ action: 'clearCache' });
+                        });
+                    }
+                    
+                    if ('caches' in window) {
+                        const cacheNames = await caches.keys();
+                        await Promise.all(cacheNames.map(name => caches.delete(name)));
+                    }
+                    
+                    this.clearStorageSelectively();
+                    
+                    window.location.reload(true);
+                    
+                } catch (error) {
+                    window.location.href = window.location.href + '?recovery=' + Date.now();
+                }
+            },
+
+            clearStorageSelectively() {
+                try {
+                    const protectedKeys = [
+                        'GeminiPWA_DB',
+                    ];
+                    
+                    if (typeof Storage !== 'undefined' && sessionStorage) {
+                        sessionStorage.clear();
+                    }
+                    
+                    if (typeof Storage !== 'undefined' && localStorage) {
+                        const keysToRemove = [];
+                        for (let i = 0; i < localStorage.length; i++) {
+                            const key = localStorage.key(i);
+                            if (key && !protectedKeys.some(protected => key.includes(protected))) {
+                                keysToRemove.push(key);
+                            }
+                        }
+                        keysToRemove.forEach(key => localStorage.removeItem(key));
+                    }
+                } catch (error) {
+                }
+            },
+
+            manualRecovery() {
+                this.triggerForceReload('Manual Recovery', { reason: 'User triggered' }, true);
+            }
+        };
+
+        errorRecovery.init();
+
+        window.errorRecovery = errorRecovery;
 
         appLogic.initializeApp();
     </script>
