@@ -7949,7 +7949,7 @@
                 textarea.style.height = Math.min(scrollHeight, maxHeight) + 'px';
 
                 if (textarea === elements.userInput && !state.isSending) {
-                    elements.sendButton.disabled = textarea.value.trim() === '' && state.pendingAttachments.length === 0;
+                    elements.sendButton.disabled = (textarea.value.trim() === '' && state.pendingAttachments.length === 0) && state.settings.apiProvider !== 'dummy';
                 }
             },
             showCustomDialog(dialogElement, focusElement) {
@@ -8025,7 +8025,7 @@
                 const hasAttachments = state.pendingAttachments.length > 0;
                 elements.attachFileBtn.classList.toggle('has-attachments', hasAttachments);
                  if (!state.isSending) {
-                     elements.sendButton.disabled = elements.userInput.value.trim() === '' && state.pendingAttachments.length === 0;
+                     elements.sendButton.disabled = (elements.userInput.value.trim() === '' && state.pendingAttachments.length === 0) && state.settings.apiProvider !== 'dummy';
                  }
             },
             showFileUploadDialog() {
@@ -8421,7 +8421,8 @@
                 elements.userInput.addEventListener('keypress', (e) => {
                     if (state.settings.enterToSend && e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
-                        if (!(elements.userInput.value.trim() === '' && state.pendingAttachments.length === 0) && !state.isSending) {
+                        const canSend = state.settings.apiProvider === 'dummy' || !(elements.userInput.value.trim() === '' && state.pendingAttachments.length === 0);
+                        if (canSend && !state.isSending) {
                              this.handleSend();
                         }
                     }
@@ -9738,12 +9739,6 @@
                         return { content: '', metadata: { finishReason: 'stop' } };
                     }
 
-                    const text = elements.userInput.value.trim();
-                    const attachmentsToSend = [...state.pendingAttachments];
-                    if (state.isSending || (!text && attachmentsToSend.length === 0)) {
-                        return;
-                    }
-
                     uiUtils.setSendingState(true);
 
                     if (isRetry) {
@@ -9752,6 +9747,8 @@
                         }
                         uiUtils.renderChatMessages(true);
                     } else {
+                        const text = elements.userInput.value.trim();
+                        const attachmentsToSend = [...state.pendingAttachments];
                         const userMessage = {
                             role: 'user', content: text, timestamp: Date.now(),
                             attachments: attachmentsToSend, generatedByApiProvider: null
