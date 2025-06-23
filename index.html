@@ -9747,21 +9747,49 @@
                 const isBackgroundProcess = !!sourceSessionContext;
                 const selectedApiProvider = isBackgroundProcess ? (sourceSessionContext.apiProvider || state.settings.apiProvider) : state.settings.apiProvider;
 
+                let text = '';
+                let attachmentsToSend = [];
+                if (isBackgroundProcess) {
+                    text = sourceSessionContext.inputText || '';
+                    attachmentsToSend = sourceSessionContext.attachments ? [...sourceSessionContext.attachments] : [];
+                } else if (isRetry) {
+                    const retryUserMessage = state.currentMessages[retryUserMessageIndex];
+                    if (!retryUserMessage || retryUserMessage.role !== 'user') {
+                        uiUtils.setSendingState(false);
+                        return;
+                    }
+                    text = retryUserMessage.content || '';
+                    attachmentsToSend = retryUserMessage.attachments ? [...retryUserMessage.attachments] : [];
+                } else {
+                    text = elements.userInput.value.trim();
+                    attachmentsToSend = [...state.pendingAttachments];
+                }
+
+                if (!isBackgroundProcess) {
+                    const isInputEmpty = text.trim() === '';
+                    const hasAttachments = attachmentsToSend.length > 0;
+                    const isDummyProvider = selectedApiProvider === 'dummy';
+
+                    if (state.isSending) {
+                        return;
+                    }
+
+                    if (!isDummyProvider && isInputEmpty && !hasAttachments) {
+                        return;
+                    }
+                }
+                
                 if (selectedApiProvider === 'dummy') {
                     if (isBackgroundProcess) {
                         return { content: '', metadata: { finishReason: 'stop' } };
                     }
-
                     uiUtils.setSendingState(true);
-
                     if (isRetry) {
                         if (retryUserMessageIndex + 1 < state.currentMessages.length) {
                             state.currentMessages.splice(retryUserMessageIndex + 1);
                         }
                         uiUtils.renderChatMessages(true);
                     } else {
-                        const text = elements.userInput.value.trim();
-                        const attachmentsToSend = [...state.pendingAttachments];
                         const userMessage = {
                             role: 'user', content: text, timestamp: Date.now(),
                             attachments: attachmentsToSend, generatedByApiProvider: null
@@ -9774,22 +9802,20 @@
                         uiUtils.adjustTextareaHeight();
                         uiUtils.updateAttachmentBadgeVisibility();
                     }
-
                     await dbUtils.saveChat();
                     await sleep(300 + Math.random() * 400);
-
                     const modelMessage = {
                         role: 'model', content: '', timestamp: Date.now(), generatedByApiProvider: 'dummy'
                     };
                     state.currentMessages.push(modelMessage);
                     const modelMessageIndex = state.currentMessages.length - 1;
                     uiUtils.appendMessage(modelMessage.role, modelMessage.content, modelMessageIndex);
-
                     await dbUtils.saveChat();
                     uiUtils.setSendingState(false);
                     if (state.settings.autoScrollOnNewMessage) uiUtils.scrollToBottom();
                     return;
                 }
+
                 let currentContextSessionId = isBackgroundProcess ? sourceSessionContext.sessionId : state.currentChatId;
                 let currentContextMessages = isBackgroundProcess ? [...sourceSessionContext.messages] : [...state.currentMessages];
                 let currentContextSystemPrompt = '';
@@ -10031,44 +10057,6 @@
                         contextDummyModel = state.settings.llmAggregatorDummyModel;
                         contextEnableDummyModel = state.settings.llmAggregatorEnableDummyModel;
                         contextConcatDummyModel = state.settings.llmAggregatorConcatDummyModel;
-                    }
-                }
-
-                if (!isBackgroundProcess) {
-                    if (state.editingMessageIndex !== null) { await uiUtils.showCustomAlert("他のメッセージを編集中です。"); return; }
-                    if (state.isEditingSystemPrompt) { await uiUtils.showCustomAlert("システムプロンプト編集中です。"); return; }
-                }
-
-                let text = '';
-                let attachmentsToSend = [];
-
-                if (isBackgroundProcess) {
-                    text = sourceSessionContext.inputText || '';
-                    attachmentsToSend = sourceSessionContext.attachments ? [...sourceSessionContext.attachments] : [];
-                } else if (isRetry) {
-                    const retryUserMessage = currentContextMessages[retryUserMessageIndex];
-                    if (!retryUserMessage || retryUserMessage.role !== 'user') {
-                        if (!isBackgroundProcess) uiUtils.setSendingState(false);
-                        return;
-                    }
-                    text = retryUserMessage.content || '';
-                    attachmentsToSend = retryUserMessage.attachments ? [...retryUserMessage.attachments] : [];
-                } else {
-                    text = elements.userInput.value.trim();
-                    attachmentsToSend = [...state.pendingAttachments];
-                }
-
-                if (!isBackgroundProcess) {
-                    const isInputEmpty = text.trim() === '';
-                    const hasAttachments = attachmentsToSend.length > 0;
-                    const isDummyProvider = selectedApiProvider === 'dummy';
-
-                    if (state.isSending) {
-                        return;
-                    }
-
-                    if (!isDummyProvider && isInputEmpty && !hasAttachments) {
-                        return;
                     }
                 }
                 
@@ -10846,6 +10834,7 @@
                     uiUtils.updateChatScreenElementVisibility();
                     uiUtils.toggleApiSettingsVisibility(state.settings.apiProvider);
                     this.updateSystemPromptBasedOnProvider();
+                    uiUtils.adjustTextareaHeight();
                 } catch (error) {
                     await uiUtils.showCustomAlert(`APIプロバイダー設定の保存に失敗しました: ${error.message}`);
                     state.settings.apiProvider = providersInCycle[currentIndex >= 0 ? currentIndex : 0];
