@@ -7925,7 +7925,6 @@
                     elements.sendButton.textContent = '送';
                     elements.sendButton.classList.remove('sending');
                     elements.sendButton.title = "送信";
-                    elements.sendButton.disabled = elements.userInput.value.trim() === '' && state.pendingAttachments.length === 0;
                     elements.userInput.disabled = false;
                     elements.attachFileBtn.disabled = false;
                     elements.pasteToInputBtn.disabled = false;
@@ -7940,6 +7939,7 @@
                     elements.loadingIndicator.removeAttribute('aria-live');
                     elements.systemPromptDetails.style.pointerEvents = '';
                     elements.systemPromptDetails.style.opacity = '';
+                    this.adjustTextareaHeight();
                 }
             },
             adjustTextareaHeight(textarea = elements.userInput, maxHeight = TEXTAREA_MAX_HEIGHT) {
@@ -7949,7 +7949,15 @@
                 textarea.style.height = Math.min(scrollHeight, maxHeight) + 'px';
 
                 if (textarea === elements.userInput && !state.isSending) {
-                    elements.sendButton.disabled = (textarea.value.trim() === '' && state.pendingAttachments.length === 0) && state.settings.apiProvider !== 'dummy';
+                    const isInputEmpty = textarea.value.trim() === '';
+                    const hasAttachments = state.pendingAttachments.length > 0;
+                    const isDummyProvider = state.settings.apiProvider === 'dummy';
+
+                    if (isDummyProvider) {
+                        elements.sendButton.disabled = false;
+                    } else {
+                        elements.sendButton.disabled = isInputEmpty && !hasAttachments;
+                    }
                 }
             },
             showCustomDialog(dialogElement, focusElement) {
@@ -8024,9 +8032,14 @@
             updateAttachmentBadgeVisibility() {
                 const hasAttachments = state.pendingAttachments.length > 0;
                 elements.attachFileBtn.classList.toggle('has-attachments', hasAttachments);
-                 if (!state.isSending) {
-                     elements.sendButton.disabled = (elements.userInput.value.trim() === '' && state.pendingAttachments.length === 0) && state.settings.apiProvider !== 'dummy';
-                 }
+                if (!state.isSending) {
+                    const isDummyProvider = state.settings.apiProvider === 'dummy';
+                    if (isDummyProvider) {
+                        elements.sendButton.disabled = false;
+                    } else {
+                        elements.sendButton.disabled = elements.userInput.value.trim() === '' && !hasAttachments;
+                    }
+                }
             },
             showFileUploadDialog() {
                 if (state.pendingAttachments.length > 0) {
@@ -10045,8 +10058,18 @@
                     attachmentsToSend = [...state.pendingAttachments];
                 }
 
-                if (!isBackgroundProcess && (state.isSending || (!text && attachmentsToSend.length === 0))) {
-                    return;
+                if (!isBackgroundProcess) {
+                    const isInputEmpty = text.trim() === '';
+                    const hasAttachments = attachmentsToSend.length > 0;
+                    const isDummyProvider = selectedApiProvider === 'dummy';
+
+                    if (state.isSending) {
+                        return;
+                    }
+
+                    if (!isDummyProvider && isInputEmpty && !hasAttachments) {
+                        return;
+                    }
                 }
                 
                 if ((selectedApiProvider === 'gemini' && !state.settings.apiKey) ||
