@@ -3498,6 +3498,13 @@
                     <div style="margin-top:15px;">
                         <p style="font-size: 12px; color: var(--text-secondary);">このプロバイダーはデバッグ用のダミーです。</p>
                         <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">APIキーは不要で、バックエンドへの接続も行いません。ユーザーがメッセージを送信すると、常に空の応答を返します。</p>
+                        <label class="checkbox-label" style="margin-top: 15px;">
+                            <input type="checkbox" id="dummy-error-debug-mode">
+                            エラーログを応答する (デバッグモード)
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                            ※ チェック時、これまでに発生したJavaScriptエラーのログを応答します。
+                        </p>
                     </div>
                 </details>
 
@@ -5068,6 +5075,7 @@
             apiProviderCycleLlmAggregatorCheckbox: document.getElementById('api-provider-cycle-llmaggregator'),
             apiProviderCycleDummyCheckbox: document.getElementById('api-provider-cycle-dummy'),
             imagePreviewDialog: document.getElementById('imagePreviewDialog'),
+            dummyErrorDebugModeCheckbox: document.getElementById('dummy-error-debug-mode'),
         };
 
         const state = {
@@ -5287,6 +5295,7 @@
                     llmaggregator: true,
                     dummy: true,
                 },
+                dummyErrorDebugMode: false,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -7425,6 +7434,7 @@
                 elements.toggleButtonBottomTextCollapseInput.value = state.settings.toggleButtonBottomTextCollapse || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 elements.toggleButtonBottomTextExpandInput.value = state.settings.toggleButtonBottomTextExpand || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
                 elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity ?? DEFAULT_THOUGHT_SUMMARY_OPACITY;
+                elements.dummyErrorDebugModeCheckbox.checked = state.settings.dummyErrorDebugMode;
 
                 document.documentElement.style.setProperty('--message-body-font-size', `${state.settings.messageBodyFontSize || DEFAULT_MESSAGE_BODY_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--code-block-font-size', `${state.settings.codeBlockFontSize || DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
@@ -9780,9 +9790,15 @@
                 }
                 
                 if (selectedApiProvider === 'dummy') {
-                    if (isBackgroundProcess) {
-                        return { content: '', metadata: { finishReason: 'stop' } };
+                    let dummyResponseContent = '';
+                    if (state.settings.dummyErrorDebugMode) {
+                        dummyResponseContent = errorRecovery.getErrorLogAsString();
                     }
+
+                    if (isBackgroundProcess) {
+                        return { content: dummyResponseContent, metadata: { finishReason: 'stop' } };
+                    }
+
                     uiUtils.setSendingState(true);
                     if (isRetry) {
                         if (retryUserMessageIndex + 1 < state.currentMessages.length) {
@@ -9804,8 +9820,9 @@
                     }
                     await dbUtils.saveChat();
                     await sleep(300 + Math.random() * 400);
+                    
                     const modelMessage = {
-                        role: 'model', content: '', timestamp: Date.now(), generatedByApiProvider: 'dummy'
+                        role: 'model', content: dummyResponseContent, timestamp: Date.now(), generatedByApiProvider: 'dummy'
                     };
                     state.currentMessages.push(modelMessage);
                     const modelMessageIndex = state.currentMessages.length - 1;
@@ -11464,6 +11481,7 @@
                      llmaggregator: elements.apiProviderCycleLlmAggregatorCheckbox.checked,
                      dummy: elements.apiProviderCycleDummyCheckbox.checked,
                  };
+                 newSettings.dummyErrorDebugMode = elements.dummyErrorDebugModeCheckbox.checked;
 
                 const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
                     let num = isInteger ? parseInt(value, 10) : parseFloat(value);
@@ -11768,6 +11786,7 @@
                         defaultSettingsCopy.showApiProviderToggleFooter = true;
                         defaultSettingsCopy.apiProviderCycle = { gemini: true, deepseek: true, claude: true, openai: true, xai: true, llmaggregator: true, dummy: true };
                         defaultSettingsCopy.llmAggregatorTopK = null;
+                        defaultSettingsCopy.dummyErrorDebugMode = false;
 
                         state.settings = defaultSettingsCopy;
 
@@ -14028,6 +14047,51 @@
             maxErrors: 3,
             lastErrorTime: 0,
             isRecovering: false,
+            errorLog: [],
+            maxLogSize: 20,
+
+            logError(type, errorInfo) {
+                const now = new Date();
+                const logEntry = {
+                    timestamp: now.toISOString(),
+                    type: type,
+                    info: this.serializeErrorInfo(errorInfo)
+                };
+                this.errorLog.unshift(logEntry);
+                if (this.errorLog.length > this.maxLogSize) {
+                    this.errorLog.pop();
+                }
+            },
+
+            serializeErrorInfo(errorInfo) {
+                try {
+                    const cache = new Set();
+                    return JSON.stringify(errorInfo, (key, value) => {
+                        if (typeof value === 'object' && value !== null) {
+                            if (value instanceof Window) return '[Window Object]';
+                            if (cache.has(value)) {
+                                return '[Circular Reference]';
+                            }
+                            cache.add(value);
+                        }
+                        return value;
+                    }, 2);
+                } catch (e) {
+                    if (errorInfo instanceof Error) {
+                        return JSON.stringify({ message: errorInfo.message, stack: errorInfo.stack, name: errorInfo.name }, null, 2);
+                    }
+                    return `Failed to serialize error: ${e.message}`;
+                }
+            },
+
+            getErrorLogAsString() {
+                if (this.errorLog.length === 0) {
+                    return "これまでに記録されたエラーはありません。";
+                }
+                return this.errorLog.map(log => 
+                    `Timestamp: ${log.timestamp}\nType: ${log.type}\nInfo:\n${log.info}`
+                ).join('\n\n====================\n\n');
+            },
             
             init() {
                 window.addEventListener('error', (event) => {
@@ -14064,6 +14128,8 @@
                 
                 this.errorCount++;
                 this.lastErrorTime = now;
+                
+                this.logError(type, errorInfo);
                 
                 const isCriticalError = this.isCriticalError(errorInfo);
                 
