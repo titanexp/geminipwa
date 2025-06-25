@@ -3505,6 +3505,16 @@
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                             ※ チェック時、これまでに発生したJavaScriptエラーのログを応答します。
                         </p>
+                        <hr style="margin: 15px 0;">
+                        <label for="dummy-dummy-model">ダミー Model プロンプト (送信時のみ追加):</label>
+                        <textarea id="dummy-dummy-model" placeholder="API送信直前に model ロールとして履歴最末尾に追加されます" aria-label="Dummy AI ダミー Model プロンプト"></textarea>
+                        <label class="checkbox-label" style="margin-top: -5px;">
+                            <input type="checkbox" id="dummy-enable-dummy-model">
+                            このダミーModelプロンプトを有効にする
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                            ※Dummy AIでは、この応答は常にモデルの応答の先頭に連結されます。
+                        </p>
                     </div>
                 </details>
 
@@ -5076,6 +5086,8 @@
             apiProviderCycleDummyCheckbox: document.getElementById('api-provider-cycle-dummy'),
             imagePreviewDialog: document.getElementById('imagePreviewDialog'),
             dummyErrorDebugModeCheckbox: document.getElementById('dummy-error-debug-mode'),
+            dummyDummyModelInput: document.getElementById('dummy-dummy-model'),
+            dummyEnableDummyModelCheckbox: document.getElementById('dummy-enable-dummy-model'),
         };
 
         const state = {
@@ -5296,6 +5308,8 @@
                     dummy: true,
                 },
                 dummyErrorDebugMode: false,
+                dummyDummyModel: '',
+                dummyEnableDummyModel: true,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -7435,6 +7449,8 @@
                 elements.toggleButtonBottomTextExpandInput.value = state.settings.toggleButtonBottomTextExpand || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
                 elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity ?? DEFAULT_THOUGHT_SUMMARY_OPACITY;
                 elements.dummyErrorDebugModeCheckbox.checked = state.settings.dummyErrorDebugMode;
+                elements.dummyDummyModelInput.value = state.settings.dummyDummyModel || '';
+                elements.dummyEnableDummyModelCheckbox.checked = state.settings.dummyEnableDummyModel;
 
                 document.documentElement.style.setProperty('--message-body-font-size', `${state.settings.messageBodyFontSize || DEFAULT_MESSAGE_BODY_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--code-block-font-size', `${state.settings.codeBlockFontSize || DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
@@ -9442,54 +9458,6 @@
                         groupIds.forEach(gid => {
                             const siblings = state.currentMessages.filter(m => m.siblingGroupId === gid);
                             const selected = siblings.filter(m => m.isSelected);
-                            if (selected.length === 0 && siblings.length > 0) {
-                                siblings[siblings.length - 1].isSelected = true;
-                                needsSave = true;
-                            } else if (selected.length > 1) {
-                                selected.slice(0, -1).forEach(m => m.isSelected = false);
-                                needsSave = true;
-                            }
-                        });
-
-                        if (chat.systemPrompt !== undefined) {
-                             state.currentSystemPrompt = chat.systemPrompt;
-                        } else {
-                            state.currentSystemPrompt = '';
-                        }
-
-                        state.pendingAttachments = [];
-                        state.areAllMessagesHidden = false;
-                        uiUtils.updateToggleAllContentButton();
-                        uiUtils.updateSystemPromptUI();
-                        state.messageCollapsedStates.clear();
-                        state.thoughtSummaryOpenStates.clear();
-                        if (state.settings.persistMessageCollapseState && chat.collapsedStates) {
-                            Object.entries(chat.collapsedStates).forEach(([idx, isCollapsed]) => {
-                                state.messageCollapsedStates.set(parseInt(idx, 10), isCollapsed);
-                            });
-                        }
-                         (chat.messages || []).forEach((msg, idx) => {
-                            if (msg.thoughtSummaryOpen !== undefined) {
-                                state.thoughtSummaryOpenStates.set(idx, msg.thoughtSummaryOpen);
-                            }
-                        });
-
-                        uiUtils.renderChatMessages();
-                        uiUtils.updateChatTitle(chat.title);
-                        elements.userInput.value = '';
-                        uiUtils.adjustTextareaHeight();
-                        uiUtils.setSendingState(false);
-                        uiUtils.updateAttachmentBadgeVisibility();
-                        elements.memoEditor.value = '';
-                        if (needsSave) {
-                            await dbUtils.saveChat();
-                        }
-                        history.replaceState({ screen: 'chat' }, '', '#chat');
-                        state.currentScreen = 'chat';
-                        if (state.settings.autoScrollOnNewMessage && state.currentMessages.length > 0) {
-                            uiUtils.scrollToBottom();
-                        }
-                    } else {
                         await uiUtils.showCustomAlert("チャット履歴が見つかりませんでした。");
                         this.startNewChat();
                         uiUtils.showScreen('chat');
@@ -9793,10 +9761,18 @@
                     let dummyResponseContent = '';
                     if (state.settings.dummyErrorDebugMode) {
                         dummyResponseContent = errorRecovery.getErrorLogAsString();
+                        if (!dummyResponseContent.trim()) {
+                             dummyResponseContent = "これまでに記録されたエラーはありません。";
+                        }
+                    }
+
+                    let finalResponse = dummyResponseContent;
+                    if (state.settings.dummyEnableDummyModel && state.settings.dummyDummyModel) {
+                        finalResponse = state.settings.dummyDummyModel + finalResponse;
                     }
 
                     if (isBackgroundProcess) {
-                        return { content: dummyResponseContent, metadata: { finishReason: 'stop' } };
+                        return { content: finalResponse, metadata: { finishReason: 'stop' } };
                     }
 
                     uiUtils.setSendingState(true);
@@ -9822,7 +9798,7 @@
                     await sleep(300 + Math.random() * 400);
                     
                     const modelMessage = {
-                        role: 'model', content: dummyResponseContent, timestamp: Date.now(), generatedByApiProvider: 'dummy'
+                        role: 'model', content: finalResponse, timestamp: Date.now(), generatedByApiProvider: 'dummy'
                     };
                     state.currentMessages.push(modelMessage);
                     const modelMessageIndex = state.currentMessages.length - 1;
@@ -10171,7 +10147,7 @@
                             currentContextSessionId = null;
                             state.currentChatId = null;
                         }
-                    } else if (isBackgroundProcess && sourceSessionContext.sessionId) {
+                    } else if (isBackgroundProcess && sourceSessionContext?.sessionId) {
                          existingChatForDBSave = await dbUtils.getChat(sourceSessionContext.sessionId);
                          if (existingChatForDBSave) {
                             titleToSave = existingChatForDBSave.title;
@@ -10212,7 +10188,7 @@
 
                     if (isNewChatForDBSave) {
                         chatToSave.createdAt = Date.now();
-                    } else {
+                    } else if (existingChatForDBSave) {
                         chatToSave.id = currentContextSessionId || sourceSessionContext?.sessionId;
                         chatToSave.createdAt = existingChatForDBSave.createdAt;
                     }
@@ -11397,6 +11373,8 @@
                 newSettings.llmAggregatorDummyModel = elements.llmAggregatorDummyModelInput.value.trim();
                 newSettings.llmAggregatorEnableDummyModel = elements.llmAggregatorEnableDummyModelCheckbox.checked;
                 newSettings.llmAggregatorConcatDummyModel = elements.llmAggregatorConcatDummyModelCheckbox.checked;
+                newSettings.dummyDummyModel = elements.dummyDummyModelInput.value.trim();
+                newSettings.dummyEnableDummyModel = elements.dummyEnableDummyModelCheckbox.checked;
 
                  newSettings.enterToSend = elements.enterToSendCheckbox.checked;
                  newSettings.autoScrollOnNewMessage = elements.autoScrollOnNewMessageCheckbox.checked;
@@ -11787,6 +11765,8 @@
                         defaultSettingsCopy.apiProviderCycle = { gemini: true, deepseek: true, claude: true, openai: true, xai: true, llmaggregator: true, dummy: true };
                         defaultSettingsCopy.llmAggregatorTopK = null;
                         defaultSettingsCopy.dummyErrorDebugMode = false;
+                        defaultSettingsCopy.dummyDummyModel = '';
+                        defaultSettingsCopy.dummyEnableDummyModel = true;
 
                         state.settings = defaultSettingsCopy;
 
