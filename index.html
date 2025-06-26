@@ -6408,6 +6408,38 @@
                     }
                 }
             },
+            isImageMarkdownCode(preElement) {
+                const codeElement = preElement.querySelector('code');
+                const content = (codeElement ? codeElement.innerText : preElement.innerText).trim();
+                const imageMarkdownRegex = /^!\[([^\]]*)\]\(([^)]+?)(?:\s+"([^"]+)")?\)$/;
+                return imageMarkdownRegex.test(content);
+            },
+            processImageMarkdownBlock(preElement) {
+                const codeElement = preElement.querySelector('code');
+                const markdownText = (codeElement ? codeElement.innerText : preElement.innerText).trim();
+                const imageMarkdownRegex = /^!\[([^\]]*)\]\(([^)]+?)(?:\s+"([^"]+)")?\)$/;
+                const match = markdownText.match(imageMarkdownRegex);
+
+                if (match) {
+                    const altText = match[1];
+                    const imageUrl = match[2];
+                    const titleText = match[3];
+
+                    const imgElement = document.createElement('img');
+                    imgElement.src = imageUrl;
+                    imgElement.alt = altText;
+                    if (titleText) {
+                        imgElement.title = titleText;
+                    }
+
+                    imgElement.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        window.open(imgElement.src, '_blank', 'noopener,noreferrer');
+                    });
+
+                    preElement.parentNode.replaceChild(imgElement, preElement);
+                }
+            },
             addCopyButtonsToCodeBlocks(contentDiv, isStreamingContext = false) {
                 const codeBlocks = contentDiv.querySelectorAll('pre');
                 codeBlocks.forEach(preElement => {
@@ -6415,6 +6447,11 @@
                         const codeElement = preElement.querySelector('code');
                         const mermaidCode = codeElement ? codeElement.innerText : preElement.innerText;
                         this.processMermaidBlock(preElement, mermaidCode);
+                        return;
+                    }
+
+                    if (this.isImageMarkdownCode(preElement)) {
+                        this.processImageMarkdownBlock(preElement);
                         return;
                     }
 
@@ -9245,18 +9282,6 @@
                         elements.clipboardStackEditor.focus();
                         state.clipboardStackContent = elements.clipboardStackEditor.value;
                         const originalText = elements.pasteClipboardStackBtn.textContent;
-                        elements.pasteClipboardStackBtn.textContent = "貼付け完了";
-                        elements.pasteClipboardStackBtn.disabled = true;
-                        setTimeout(() => { elements.pasteClipboardStackBtn.textContent = originalText; elements.pasteClipboardStackBtn.disabled = false; }, 1500);
-                    } else {
-                        const originalText = elements.pasteClipboardStackBtn.textContent;
-                        elements.pasteClipboardStackBtn.textContent = "空です";
-                        elements.pasteClipboardStackBtn.disabled = true;
-                        setTimeout(() => { elements.pasteClipboardStackBtn.textContent = originalText; elements.pasteClipboardStackBtn.disabled = false; }, 1500);
-                    }
-                } catch (err) {
-                    if (err.name === 'NotAllowedError' || err.message.includes('Read permission denied')) {
-                         const originalText = elements.pasteClipboardStackBtn.textContent;
                          elements.pasteClipboardStackBtn.textContent = "許可エラー";
                          elements.pasteClipboardStackBtn.disabled = true;
                          setTimeout(() => { elements.pasteClipboardStackBtn.textContent = originalText; elements.pasteClipboardStackBtn.disabled = false; }, 2000);
