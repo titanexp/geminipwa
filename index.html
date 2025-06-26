@@ -6417,10 +6417,17 @@
                         this.processMermaidBlock(preElement, mermaidCode);
                         return;
                     }
-
+            
+                    if (this.isImageCodeBlock(preElement)) {
+                        const codeElement = preElement.querySelector('code');
+                        const imageMarkdown = codeElement ? codeElement.innerText : preElement.innerText;
+                        this.processImageCodeBlock(preElement, imageMarkdown);
+                        return;
+                    }
+            
                     const codeElement = preElement.querySelector('code');
                     const textToCopy = codeElement ? codeElement.innerText : preElement.innerText;
-
+            
                     if (textToCopy && textToCopy.trim() !== '') {
                         const copyButton = document.createElement('button');
                         copyButton.textContent = 'コピー';
@@ -6449,6 +6456,50 @@
                         preElement.appendChild(copyButton);
                     }
                 });
+            },
+            isImageCodeBlock(preElement) {
+                const codeElement = preElement.querySelector('code');
+                if (codeElement) {
+                    const langClass = Array.from(codeElement.classList).find(cls => cls.startsWith('language-'));
+                    if (langClass) {
+                        const lang = langClass.substring('language-'.length);
+                        return ['image', 'img', 'picture'].includes(lang.toLowerCase());
+                    }
+                }
+                return false;
+            },
+            processImageCodeBlock(preElement, imageMarkdown) {
+                const container = document.createElement('div');
+                container.classList.add('image-code-container');
+            
+                const lines = imageMarkdown.trim().split('\n');
+                const imageRegex = /!\[(.*?)\]\((.*?)\)/;
+                let imageFound = false;
+            
+                lines.forEach(line => {
+                    const match = line.trim().match(imageRegex);
+                    if (match) {
+                        imageFound = true;
+                        const altText = match[1];
+                        const src = match[2];
+            
+                        const img = document.createElement('img');
+                        img.src = src;
+                        img.alt = altText;
+            
+                        img.style.cursor = 'pointer';
+                        img.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            window.open(img.src, '_blank', 'noopener,noreferrer');
+                        });
+            
+                        container.appendChild(img);
+                    }
+                });
+            
+                if (imageFound) {
+                    preElement.parentNode.replaceChild(container, preElement);
+                }
             },
             isMermaidCode(preElement) {
                 const codeElement = preElement.querySelector('code');
