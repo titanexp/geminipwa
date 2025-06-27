@@ -6880,7 +6880,7 @@
                             li.onclick = (event) => {
                                 if (!event.target.closest('.history-item-actions button')) {
                                     appLogic.loadChat(chat.id);
-                                    this.showScreen('chat');
+                                    uiUtils.showScreen('chat');
                                 }
                             };
                             li.querySelector('.js-edit-title-btn').onclick = (e) => { e.stopPropagation(); appLogic.editHistoryTitle(chat.id, titleEl); };
@@ -8366,7 +8366,7 @@
         };
 
         const appLogic = {
-            initializeApp() {
+            async initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -8399,55 +8399,55 @@
                 registerServiceWorker();
 
                 try {
-                    dbUtils.openDB().then(() => {
-                        dbUtils.loadSettings().then(() => {
-                            uiUtils.applyTheme();
-                            uiUtils.applyFontFamily();
-                            uiUtils.applySidePanelSettingsToUI();
-    
-                            if (state.settings.backgroundImageBlob instanceof Blob) {
-                                uiUtils.revokeExistingObjectUrl();
-                                try {
-                                     state.backgroundImageUrl = URL.createObjectURL(state.settings.backgroundImageBlob);
-                                     document.documentElement.style.setProperty('--chat-background-image', `url(${state.backgroundImageUrl})`);
-                                } catch (e) {
-                                     document.documentElement.style.setProperty('--chat-background-image', 'none');
-                                }
-                            } else {
-                                document.documentElement.style.setProperty('--chat-background-image', 'none');
-                            }
-                            if (state.settings.userIconBlob instanceof Blob) {
-                                try { state.userIconUrl = URL.createObjectURL(state.settings.userIconBlob); } catch (e) { }
-                            }
-                            if (state.settings.aiIconBlob instanceof Blob) {
-                                try { state.aiIconUrl = URL.createObjectURL(state.settings.aiIconBlob); } catch (e) { }
-                            }
-    
-                            uiUtils.applySettingsToUI();
-    
-                            dbUtils.getAllChats(state.settings.historySortOrder).then(chats => {
-                                if (chats && chats.length > 0) {
-                                    this.loadChat(chats[0].id);
-                                } else {
-                                    this.startNewChat();
-                                }
-                                history.replaceState({ screen: 'chat' }, '', '#chat');
-                                state.currentScreen = 'chat';
-    
-                            }).finally(() => {
-                                updateMessageMaxWidthVar();
-                                this.setupEventListeners();
-                                this.updateZoomState();
-                                uiUtils.adjustTextareaHeight();
-                                uiUtils.setSendingState(false);
-                                if (state.settings.autoScrollOnNewMessage) {
-                                    uiUtils.scrollToBottom();
-                                }
-                            });
-                        });
-                    });
+                    await dbUtils.openDB();
+                    await dbUtils.loadSettings();
+                    
+                    uiUtils.applyTheme();
+                    uiUtils.applyFontFamily();
+                    uiUtils.applySidePanelSettingsToUI();
+
+                    if (state.settings.backgroundImageBlob instanceof Blob) {
+                        uiUtils.revokeExistingObjectUrl();
+                        try {
+                             state.backgroundImageUrl = URL.createObjectURL(state.settings.backgroundImageBlob);
+                             document.documentElement.style.setProperty('--chat-background-image', `url(${state.backgroundImageUrl})`);
+                        } catch (e) {
+                             document.documentElement.style.setProperty('--chat-background-image', 'none');
+                        }
+                    } else {
+                        document.documentElement.style.setProperty('--chat-background-image', 'none');
+                    }
+                    if (state.settings.userIconBlob instanceof Blob) {
+                        try { state.userIconUrl = URL.createObjectURL(state.settings.userIconBlob); } catch (e) { }
+                    }
+                    if (state.settings.aiIconBlob instanceof Blob) {
+                        try { state.aiIconUrl = URL.createObjectURL(state.settings.aiIconBlob); } catch (e) { }
+                    }
+
+                    uiUtils.applySettingsToUI();
+
+                    const chats = await dbUtils.getAllChats(state.settings.historySortOrder);
+                    if (chats && chats.length > 0) {
+                        await this.loadChat(chats[0].id);
+                    } else {
+                        this.startNewChat();
+                    }
+                    
+                    history.replaceState({ screen: 'chat' }, '', '#chat');
+                    state.currentScreen = 'chat';
+                    
+                    updateMessageMaxWidthVar();
+                    this.setupEventListeners();
+                    this.updateZoomState();
+                    uiUtils.adjustTextareaHeight();
+                    uiUtils.setSendingState(false);
+                    
+                    if (state.settings.autoScrollOnNewMessage) {
+                        uiUtils.scrollToBottom();
+                    }
+
                 } catch (error) {
-                    uiUtils.showCustomAlert(`アプリの初期化に失敗しました: ${error}`);
+                    await uiUtils.showCustomAlert(`アプリの初期化に失敗しました: ${error}`);
                     elements.appContainer.innerHTML = `<p style="padding: 20px; text-align: center; color: red;">アプリの起動に失敗しました。</p>`;
                 } 
             },
@@ -9478,7 +9478,7 @@
                     if (chat) {
                         state.currentChatId = chat.id;
                         state.currentMessages = chat.messages?.map(msg => ({
-                            ...msg,
+                        ...msg,
                             attachments: msg.attachments || [],
                             thoughtSummaryOpen: msg.thoughtSummaryOpen || false,
                         })) || [];
