@@ -3545,7 +3545,7 @@
                     <div style="margin-top:15px;">
                         <label for="openai-api-key">ChatGPT APIキー:</label>
                         <input type="password" id="openai-api-key" placeholder="sk-..." aria-label="ChatGPT APIキー">
-                        <details id="openai-multi-api-keys-section" class="hidden" style="margin-top: 10px;">
+                        <details id="openai-multi-api-keys-section" style="margin-top: 10px;">
                             <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor: pointer; font-weight: normal;">複数APIキー管理 (OpenAI)</summary>
                             <div style="padding-left: 15px; margin-top: 10px;">
                                 <div id="openai-api-keys-list" class="api-keys-list"></div>
@@ -3590,7 +3590,7 @@
                     <div style="margin-top:15px;">
                         <label for="xai-api-key">xAI APIキー:</label>
                         <input type="password" id="xai-api-key" placeholder="xai-..." aria-label="xAI APIキー">
-                        <details id="xai-multi-api-keys-section" class="hidden" style="margin-top: 10px;">
+                        <details id="xai-multi-api-keys-section" style="margin-top: 10px;">
                             <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor: pointer; font-weight: normal;">複数APIキー管理 (xAI)</summary>
                             <div style="padding-left: 15px; margin-top: 10px;">
                                 <div id="xai-api-keys-list" class="api-keys-list"></div>
@@ -3623,7 +3623,7 @@
                         <div id="llmaggregator-url-error" style="color: red; font-size: 11px; margin-top: -5px; height: 14px;"></div>
                         <label for="llmaggregator-api-key">APIキー:</label>
                         <input type="password" id="llmaggregator-api-key" placeholder="APIキーを入力" aria-label="LLM Aggregator APIキー">
-                        <details id="llmaggregator-multi-api-keys-section" class="hidden" style="margin-top: 10px;">
+                        <details id="llmaggregator-multi-api-keys-section" style="margin-top: 10px;">
                             <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor: pointer; font-weight: normal;">複数APIキー管理 (LLM Aggregator)</summary>
                             <div style="padding-left: 15px; margin-top: 10px;">
                                 <div id="llmaggregator-api-keys-list" class="api-keys-list"></div>
@@ -4417,13 +4417,6 @@
                                    </label>
                                    <p style="height:10px"></p>
                                    <label class="checkbox-label">
-                                       <input type="checkbox" id="show-multi-api-keys-toggle">
-                                       複数APIキー管理機能を表示する
-                                   </label>
-                                   <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                                       ※ 複数のAPIキーを使い分けたい場合に使用。
-                                   </p>
-                                   <label class="checkbox-label">
                                        <input type="checkbox" id="hide-system-prompt-toggle">
                                        システムプロンプト非表示
                                    </label>
@@ -5177,7 +5170,6 @@
             disableDeleteMessageConfirmationToggle: document.getElementById('disable-delete-message-confirmation-toggle'),
             disableAttachmentConfirmationToggle: document.getElementById('disable-attachment-confirmation-toggle'),
             addPrefixOnImportToggle: document.getElementById('add-prefix-on-import-toggle'),
-            showMultiApiKeysToggle: document.getElementById('show-multi-api-keys-toggle'),
             showTopCollapseButtonToggle: document.getElementById('show-top-collapse-button-toggle'),
             showBottomCollapseButtonToggle: document.getElementById('show-bottom-collapse-button-toggle'),
             persistMessageCollapseStateCheckbox: document.getElementById('persist-message-collapse-state'),
@@ -5446,8 +5438,6 @@
                 disableDeleteMessageConfirmation: false,
                 disableAttachmentConfirmation: false,
                 addPrefixOnImport: true,
-                showMultiApiKeys: false,
-                disableSaveSettingsConfirmation: false,
                 showTopCollapseButton: true,
                 showBottomCollapseButton: true,
                 persistMessageCollapseState: DEFAULT_PERSIST_MESSAGE_COLLAPSE_STATE,
@@ -5467,6 +5457,7 @@
                 apiProvider: 'gemini',
                 thoughtSummaryOpacity: DEFAULT_THOUGHT_SUMMARY_OPACITY,
                 settingsUIDetailsOpenStates: {},
+                disableSaveSettingsConfirmation: false,
                 showApiProviderToggleHeader: false,
                 showApiProviderToggleFooter: true,
                 apiProviderCycle: {
@@ -7629,7 +7620,6 @@
                 elements.disableDeleteMessageConfirmationToggle.checked = state.settings.disableDeleteMessageConfirmation;
                 elements.disableAttachmentConfirmationToggle.checked = state.settings.disableAttachmentConfirmation;
                 elements.addPrefixOnImportToggle.checked = state.settings.addPrefixOnImport;
-                elements.showMultiApiKeysToggle.checked = state.settings.showMultiApiKeys;
                 elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
                 elements.showBottomCollapseButtonToggle.checked = state.settings.showBottomCollapseButton;
@@ -7675,7 +7665,6 @@
                 this.updateSessionLinkingUI();
                 this.updateApiProviderSelectOptions();
                 this.applyMinimizeUI();
-                this.toggleMultiApiKeysVisibility(state.settings.showMultiApiKeys);
             },
             applyMinimizeUI() {
                 elements.appContainer.classList.toggle('minimized-ui', state.settings.minimizeHeaderFooter);
@@ -8540,28 +8529,7 @@
                         window.open(newImg.src, '_blank', 'noopener,noreferrer');
                     });
                 });
-            },
-            toggleMultiApiKeysVisibility(show) {
-                const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'];
-                
-                providers.forEach(provider => {
-                    const multiKeySectionId = `${provider}-multi-api-keys-section`;
-                    const multiKeySection = document.getElementById(multiKeySectionId);
-                    if (multiKeySection) {
-                        multiKeySection.classList.toggle('hidden', !show);
-                    }
-
-                    const singleKeyInputId = provider === 'gemini' ? 'gemini-api-key' : `${provider}-api-key`;
-                    const singleKeyInput = document.getElementById(singleKeyInputId);
-                    if (singleKeyInput) {
-                        const label = singleKeyInput.previousElementSibling;
-                        if (label && label.tagName === 'LABEL') {
-                            label.classList.toggle('hidden', show);
-                        }
-                        singleKeyInput.classList.toggle('hidden', show);
-                    }
-                });
-            },
+            }
         };
 
         const appLogic = {
@@ -9081,10 +9049,6 @@
                 elements.persistMessageCollapseStateCheckbox.addEventListener('change', () => {
                     state.settings.persistMessageCollapseState = elements.persistMessageCollapseStateCheckbox.checked;
                 });
-                elements.showMultiApiKeysToggle.addEventListener('change', (e) => {
-                    state.settings.showMultiApiKeys = e.target.checked;
-                    uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
-                });
 
                 elements.messageContainer.addEventListener('click', (event) => {
                     const clickedMessage = event.target.closest('.message');
@@ -9150,7 +9114,7 @@
                     }
                 });
 
-                document.querySelectorAll('#settings-screen details[id]').forEach(details => {
+                document.querySelectorAll('#settings-screen details').forEach(details => {
                     details.addEventListener('toggle', (event) => {
                         if (details.id) {
                             state.settings.settingsUIDetailsOpenStates[details.id] = details.open;
@@ -11531,67 +11495,27 @@
                  const currentProvider = elements.apiProviderSelect.value;
                  const newSettings = { ...state.settings };
                  newSettings.apiProvider = currentProvider;
-                 
-                newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
-
-                if (newSettings.showMultiApiKeys) {
-                    newSettings.apiKey = '';
-                    newSettings.deepSeekApiKey = '';
-                    newSettings.claudeApiKey = '';
-                    newSettings.openaiApiKey = '';
-                    newSettings.xaiApiKey = '';
-                    newSettings.llmAggregatorApiKey = '';
-                    
-                    newSettings.geminiApiKeys = state.settings.geminiApiKeys;
-                    newSettings.geminiActiveApiKeyIndex = state.settings.geminiActiveApiKeyIndex;
-                    newSettings.deepseekApiKeys = state.settings.deepseekApiKeys;
-                    newSettings.deepseekActiveApiKeyIndex = state.settings.deepseekActiveApiKeyIndex;
-                    newSettings.claudeApiKeys = state.settings.claudeApiKeys;
-                    newSettings.claudeActiveApiKeyIndex = state.settings.claudeActiveApiKeyIndex;
-                    newSettings.openaiApiKeys = state.settings.openaiApiKeys;
-                    newSettings.openaiActiveApiKeyIndex = state.settings.openaiActiveApiKeyIndex;
-                    newSettings.xaiApiKeys = state.settings.xaiApiKeys;
-                    newSettings.xaiActiveApiKeyIndex = state.settings.xaiActiveApiKeyIndex;
-                    newSettings.llmaggregatorApiKeys = state.settings.llmaggregatorApiKeys;
-                    newSettings.llmaggregatorActiveApiKeyIndex = state.settings.llmaggregatorActiveApiKeyIndex;
-
-                } else {
-                    newSettings.apiKey = elements.geminiApiKeyInput.value.trim();
-                    newSettings.deepSeekApiKey = elements.deepSeekApiKeyInput.value.trim();
-                    newSettings.claudeApiKey = elements.claudeApiKeyInput.value.trim();
-                    newSettings.openaiApiKey = elements.openaiApiKeyInput.value.trim();
-                    newSettings.xaiApiKey = elements.xaiApiKeyInput.value.trim();
-                    newSettings.llmAggregatorApiKey = elements.llmAggregatorApiKeyInput.value.trim();
-
-                    newSettings.geminiApiKeys = [];
-                    newSettings.geminiActiveApiKeyIndex = -1;
-                    newSettings.deepseekApiKeys = [];
-                    newSettings.deepseekActiveApiKeyIndex = -1;
-                    newSettings.claudeApiKeys = [];
-                    newSettings.claudeActiveApiKeyIndex = -1;
-                    newSettings.openaiApiKeys = [];
-                    newSettings.openaiActiveApiKeyIndex = -1;
-                    newSettings.xaiApiKeys = [];
-                    newSettings.xaiActiveApiKeyIndex = -1;
-                    newSettings.llmaggregatorApiKeys = [];
-                    newSettings.llmaggregatorActiveApiKeyIndex = -1;
-                }
-
+                 newSettings.apiKey = elements.geminiApiKeyInput.value.trim();
                  newSettings.modelName = elements.geminiModelNameSelect.value;
                  newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
                  newSettings.commonSystemPrompt = elements.commonSystemPromptDefaultTextarea.value.trim();
                  newSettings.enableCommonSystemPromptDefault = elements.enableCommonSystemPromptDefaultCheckbox.checked;
                  
+                 newSettings.deepSeekApiKey = elements.deepSeekApiKeyInput.value.trim();
                  newSettings.deepSeekModelName = elements.deepSeekModelNameSelect.value;
                  newSettings.deepSeekAdditionalModels = elements.deepSeekAdditionalModelsTextarea.value.trim();
                  newSettings.deepSeekApiEndpoint = elements.deepSeekApiEndpointInput.value.trim();
+                 newSettings.claudeApiKey = elements.claudeApiKeyInput.value.trim();
                  newSettings.claudeModelName = elements.claudeModelNameSelect.value;
                  newSettings.claudeAdditionalModels = elements.claudeAdditionalModelsTextarea.value.trim();
+                 newSettings.openaiApiKey = elements.openaiApiKeyInput.value.trim();
                  newSettings.openaiModelName = elements.openaiModelNameSelect.value;
                  newSettings.openaiAdditionalModels = elements.openaiAdditionalModelsTextarea.value.trim();
+                 newSettings.xaiApiKey = elements.xaiApiKeyInput.value.trim();
                  newSettings.xaiModelName = elements.xaiModelNameSelect.value;
                  newSettings.xaiAdditionalModels = elements.xaiAdditionalModelsTextarea.value.trim();
                  newSettings.llmAggregatorApiBackend = elements.llmAggregatorApiBackendInput.value.trim();
+                 newSettings.llmAggregatorApiKey = elements.llmAggregatorApiKeyInput.value.trim();
                  newSettings.llmAggregatorModelName = elements.llmAggregatorModelNameSelect.value;
                  newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalModelsTextarea.value.trim();
 
@@ -11788,6 +11712,18 @@
                  newSettings.dummyErrorDebugMode = elements.dummyErrorDebugModeCheckbox.checked;
                  newSettings.dummyDummyModel = elements.dummyDummyModelInput.value.trim();
                  newSettings.dummyEnableDummyModel = elements.dummyEnableDummyModelCheckbox.checked;
+                 newSettings.geminiApiKeys = state.settings.geminiApiKeys;
+                 newSettings.geminiActiveApiKeyIndex = state.settings.geminiActiveApiKeyIndex;
+                 newSettings.deepseekApiKeys = state.settings.deepseekApiKeys;
+                 newSettings.deepseekActiveApiKeyIndex = state.settings.deepseekActiveApiKeyIndex;
+                 newSettings.claudeApiKeys = state.settings.claudeApiKeys;
+                 newSettings.claudeActiveApiKeyIndex = state.settings.claudeActiveApiKeyIndex;
+                 newSettings.openaiApiKeys = state.settings.openaiApiKeys;
+                 newSettings.openaiActiveApiKeyIndex = state.settings.openaiActiveApiKeyIndex;
+                 newSettings.xaiApiKeys = state.settings.xaiApiKeys;
+                 newSettings.xaiActiveApiKeyIndex = state.settings.xaiActiveApiKeyIndex;
+                 newSettings.llmaggregatorApiKeys = state.settings.llmaggregatorApiKeys;
+                 newSettings.llmaggregatorActiveApiKeyIndex = state.settings.llmaggregatorActiveApiKeyIndex;
 
                 const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
                     let num = isInteger ? parseInt(value, 10) : parseFloat(value);
@@ -12069,7 +12005,6 @@
                         defaultSettingsCopy.disableDeleteMessageConfirmation = false;
                         defaultSettingsCopy.disableAttachmentConfirmation = false;
                         defaultSettingsCopy.addPrefixOnImport = true;
-                        defaultSettingsCopy.showMultiApiKeys = false;
                         defaultSettingsCopy.disableSaveSettingsConfirmation = false;
                         defaultSettingsCopy.showTopCollapseButton = true;
                         defaultSettingsCopy.showBottomCollapseButton = true;
@@ -12096,18 +12031,6 @@
                         defaultSettingsCopy.dummyErrorDebugMode = false;
                         defaultSettingsCopy.dummyDummyModel = '';
                         defaultSettingsCopy.dummyEnableDummyModel = false;
-                        defaultSettingsCopy.geminiApiKeys = [];
-                        defaultSettingsCopy.geminiActiveApiKeyIndex = -1;
-                        defaultSettingsCopy.deepseekApiKeys = [];
-                        defaultSettingsCopy.deepseekActiveApiKeyIndex = -1;
-                        defaultSettingsCopy.claudeApiKeys = [];
-                        defaultSettingsCopy.claudeActiveApiKeyIndex = -1;
-                        defaultSettingsCopy.openaiApiKeys = [];
-                        defaultSettingsCopy.openaiActiveApiKeyIndex = -1;
-                        defaultSettingsCopy.xaiApiKeys = [];
-                        defaultSettingsCopy.xaiActiveApiKeyIndex = -1;
-                        defaultSettingsCopy.llmaggregatorApiKeys = [];
-                        defaultSettingsCopy.llmaggregatorActiveApiKeyIndex = -1;
 
                         state.settings = defaultSettingsCopy;
 
@@ -13519,13 +13442,7 @@
 
         const apiUtils = {
             async callGeminiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding) {
-                let apiKey;
-                if (state.settings.showMultiApiKeys) {
-                    apiKey = multiApiKeyUtils.getActiveApiKey('gemini');
-                } else {
-                    apiKey = state.settings.apiKey;
-                }
-                
+                const apiKey = multiApiKeyUtils.getActiveApiKey('gemini') || state.settings.apiKey;
                 let baseUrl = GEMINI_API_BASE_URL;
                 
                 if (!apiKey) {
@@ -13746,11 +13663,7 @@
             async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
                 let apiKey, model, baseUrl, topK;
                 if (provider === 'llmaggregator') {
-                    if (state.settings.showMultiApiKeys) {
-                        apiKey = multiApiKeyUtils.getActiveApiKey('llmaggregator');
-                    } else {
-                        apiKey = state.settings.llmAggregatorApiKey;
-                    }
+                    apiKey = multiApiKeyUtils.getActiveApiKey('llmaggregator') || state.settings.llmAggregatorApiKey;
                     model = state.settings.llmAggregatorModelName;
                     baseUrl = state.settings.llmAggregatorApiBackend;
                     topK = state.settings.llmAggregatorTopK;
@@ -13758,11 +13671,7 @@
                         throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
                     }
                 } else {
-                    if (state.settings.showMultiApiKeys) {
-                        apiKey = multiApiKeyUtils.getActiveApiKey('deepseek');
-                    } else {
-                        apiKey = state.settings.deepSeekApiKey;
-                    }
+                    apiKey = multiApiKeyUtils.getActiveApiKey('deepseek') || state.settings.deepSeekApiKey;
                     model = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
                     baseUrl = state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
                 }
@@ -13930,7 +13839,7 @@
                 }
             },
             async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
-                const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('claude') : state.settings.claudeApiKey;
+                const apiKey = multiApiKeyUtils.getActiveApiKey('claude') || state.settings.claudeApiKey;
                 if (!apiKey) {
                     throw new Error("Claude APIキーが設定されていません。");
                 }
@@ -14182,11 +14091,11 @@
                 let apiKey, model, baseUrl;
                 
                 if (provider === 'openai') {
-                    apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('openai') : state.settings.openaiApiKey;
+                    apiKey = multiApiKeyUtils.getActiveApiKey('openai') || state.settings.openaiApiKey;
                     model = state.settings.openaiModelName || DEFAULT_OPENAI_MODEL;
                     baseUrl = OPENAI_API_BASE_URL;
                 } else if (provider === 'llmaggregator') {
-                    apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('llmaggregator') : state.settings.llmAggregatorApiKey;
+                    apiKey = multiApiKeyUtils.getActiveApiKey('llmaggregator') || state.settings.llmAggregatorApiKey;
                     model = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
                     baseUrl = state.settings.llmAggregatorApiBackend;
                     if (!baseUrl) {
@@ -14317,7 +14226,7 @@
                 }
             },
             async callXaiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
-                const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('xai') : state.settings.xaiApiKey;
+                const apiKey = multiApiKeyUtils.getActiveApiKey('xai') || state.settings.xaiApiKey;
                 if (!apiKey) {
                     throw new Error("xAI APIキーが設定されていません。");
                 }
@@ -14560,8 +14469,7 @@
             clearStorageSelectively() {
                 try {
                     const protectedKeys = [
-                        'GeminiPWA_DB',
-                    ];
+                                        ];
                     
                     if (typeof Storage !== 'undefined' && sessionStorage) {
                         sessionStorage.clear();
@@ -14781,7 +14689,7 @@
                 labelInput.value = key.label;
                 labelInput.placeholder = `キー ${index + 1}`;
                 labelInput.addEventListener('change', (e) => {
-                                    this.updateApiKeyLabel(provider, key.id, e.target.value);
+                    this.updateApiKeyLabel(provider, key.id, e.target.value);
                 });
 
                 const keyInput = document.createElement('input');
