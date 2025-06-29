@@ -8545,20 +8545,34 @@
                 const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'];
                 
                 providers.forEach(provider => {
-                    const multiKeySectionId = `${provider}-multi-api-keys-section`;
-                    const multiKeySection = document.getElementById(multiKeySectionId);
+                    const multiKeySection = document.getElementById(`${provider}-multi-api-keys-section`);
                     if (multiKeySection) {
                         multiKeySection.classList.toggle('hidden', !show);
                     }
 
                     const singleKeyInputId = provider === 'gemini' ? 'gemini-api-key' : `${provider}-api-key`;
                     const singleKeyInput = document.getElementById(singleKeyInputId);
+                    
+                    if (singleKeyInput && singleKeyInput.previousElementSibling?.tagName === 'LABEL') {
+                        singleKeyInput.previousElementSibling.classList.toggle('hidden', show);
+                    }
+                    
                     if (singleKeyInput) {
-                        const label = singleKeyInput.previousElementSibling;
-                        if (label && label.tagName === 'LABEL') {
-                            label.classList.toggle('hidden', show);
+                        if (show) {
+                            const activeKey = multiApiKeyUtils.getActiveApiKey(provider);
+                            singleKeyInput.value = activeKey || '';
+                        } else {
+                            let singleKeyValue = '';
+                            switch(provider) {
+                                case 'gemini': singleKeyValue = state.settings.apiKey; break;
+                                case 'deepseek': singleKeyValue = state.settings.deepSeekApiKey; break;
+                                case 'claude': singleKeyValue = state.settings.claudeApiKey; break;
+                                case 'openai': singleKeyValue = state.settings.openaiApiKey; break;
+                                case 'xai': singleKeyValue = state.settings.xaiApiKey; break;
+                                case 'llmaggregator': singleKeyValue = state.settings.llmAggregatorApiKey; break;
+                            }
+                            singleKeyInput.value = singleKeyValue || '';
                         }
-                        singleKeyInput.classList.toggle('hidden', show);
                     }
                 });
             },
@@ -9214,6 +9228,9 @@
                 elements.openaiApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('openai'));
                 elements.xaiApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('xai'));
                 elements.llmAggregatorApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('llmaggregator'));
+                elements.showMultiApiKeysToggle.addEventListener('change', (e) => {
+                    uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
+                });
             },
             handlePopState(event) {
                 const targetScreen = event.state?.screen || 'chat';
@@ -11528,33 +11545,24 @@
                  }
             },
             async saveSettings() {
-                 const currentProvider = elements.apiProviderSelect.value;
-                 const newSettings = { ...state.settings };
-                 newSettings.apiProvider = currentProvider;
-                 
+                const newSettings = { ...state.settings };
                 newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
-
+                
                 if (newSettings.showMultiApiKeys) {
-                    newSettings.apiKey = '';
-                    newSettings.deepSeekApiKey = '';
-                    newSettings.claudeApiKey = '';
-                    newSettings.openaiApiKey = '';
-                    newSettings.xaiApiKey = '';
-                    newSettings.llmAggregatorApiKey = '';
-                    
-                    newSettings.geminiApiKeys = state.settings.geminiApiKeys;
-                    newSettings.geminiActiveApiKeyIndex = state.settings.geminiActiveApiKeyIndex;
-                    newSettings.deepseekApiKeys = state.settings.deepseekApiKeys;
-                    newSettings.deepseekActiveApiKeyIndex = state.settings.deepseekActiveApiKeyIndex;
-                    newSettings.claudeApiKeys = state.settings.claudeApiKeys;
-                    newSettings.claudeActiveApiKeyIndex = state.settings.claudeActiveApiKeyIndex;
-                    newSettings.openaiApiKeys = state.settings.openaiApiKeys;
-                    newSettings.openaiActiveApiKeyIndex = state.settings.openaiActiveApiKeyIndex;
-                    newSettings.xaiApiKeys = state.settings.xaiApiKeys;
-                    newSettings.xaiActiveApiKeyIndex = state.settings.xaiActiveApiKeyIndex;
-                    newSettings.llmaggregatorApiKeys = state.settings.llmaggregatorApiKeys;
-                    newSettings.llmaggregatorActiveApiKeyIndex = state.settings.llmaggregatorActiveApiKeyIndex;
+                    const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'];
+                    providers.forEach(provider => {
+                        const keysKey = `${provider}ApiKeys`;
+                        const activeIndexKey = `${provider}ActiveApiKeyIndex`;
+                        const inputId = provider === 'gemini' ? 'gemini-api-key' : `${provider}-api-key`;
+                        const inputElement = document.getElementById(inputId);
 
+                        if (newSettings[keysKey] && newSettings[activeIndexKey] > -1) {
+                            const activeKey = newSettings[keysKey][newSettings[activeIndexKey]];
+                            if (activeKey && inputElement) {
+                                activeKey.value = inputElement.value.trim();
+                            }
+                        }
+                    });
                 } else {
                     newSettings.apiKey = elements.geminiApiKeyInput.value.trim();
                     newSettings.deepSeekApiKey = elements.deepSeekApiKeyInput.value.trim();
@@ -11562,21 +11570,9 @@
                     newSettings.openaiApiKey = elements.openaiApiKeyInput.value.trim();
                     newSettings.xaiApiKey = elements.xaiApiKeyInput.value.trim();
                     newSettings.llmAggregatorApiKey = elements.llmAggregatorApiKeyInput.value.trim();
-
-                    newSettings.geminiApiKeys = [];
-                    newSettings.geminiActiveApiKeyIndex = -1;
-                    newSettings.deepseekApiKeys = [];
-                    newSettings.deepseekActiveApiKeyIndex = -1;
-                    newSettings.claudeApiKeys = [];
-                    newSettings.claudeActiveApiKeyIndex = -1;
-                    newSettings.openaiApiKeys = [];
-                    newSettings.openaiActiveApiKeyIndex = -1;
-                    newSettings.xaiApiKeys = [];
-                    newSettings.xaiActiveApiKeyIndex = -1;
-                    newSettings.llmaggregatorApiKeys = [];
-                    newSettings.llmaggregatorActiveApiKeyIndex = -1;
                 }
 
+                 newSettings.apiProvider = elements.apiProviderSelect.value;
                  newSettings.modelName = elements.geminiModelNameSelect.value;
                  newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
                  newSettings.commonSystemPrompt = elements.commonSystemPromptDefaultTextarea.value.trim();
@@ -13562,7 +13558,7 @@
                      safetySettings : [
                          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
                          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-                         { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },                         { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+                                                  { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },                         { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
                      ]
                 };
 
@@ -14721,27 +14717,21 @@
                 switch (provider) {
                     case 'gemini':
                         elements.geminiApiKeyInput.value = activeKey;
-                        state.settings.apiKey = activeKey;
                         break;
                     case 'deepseek':
                         elements.deepSeekApiKeyInput.value = activeKey;
-                        state.settings.deepSeekApiKey = activeKey;
                         break;
                     case 'claude':
                         elements.claudeApiKeyInput.value = activeKey;
-                        state.settings.claudeApiKey = activeKey;
                         break;
                     case 'openai':
                         elements.openaiApiKeyInput.value = activeKey;
-                        state.settings.openaiApiKey = activeKey;
                         break;
                     case 'xai':
                         elements.xaiApiKeyInput.value = activeKey;
-                        state.settings.xaiApiKey = activeKey;
                         break;
                     case 'llmaggregator':
                         elements.llmAggregatorApiKeyInput.value = activeKey;
-                        state.settings.llmAggregatorApiKey = activeKey;
                         break;
                 }
             },
