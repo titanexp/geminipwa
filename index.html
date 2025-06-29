@@ -3427,7 +3427,7 @@
                     <div style="margin-top:15px;">
                         <label for="gemini-api-key">Gemini APIキー:</label>
                         <input type="password" id="gemini-api-key" placeholder="APIキーを入力" aria-label="Gemini APIキー">
-                        <details id="gemini-multi-api-keys-section" class="hidden" style="margin-top: 10px;">
+                        <details id="gemini-multi-api-keys-section" style="margin-top: 10px;">
                             <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor: pointer; font-weight: normal;">複数APIキー管理 (Gemini)</summary>
                             <div style="padding-left: 15px; margin-top: 10px;">
                                 <div id="gemini-api-keys-list" class="api-keys-list"></div>
@@ -3465,7 +3465,7 @@
                     <div style="margin-top:15px;">
                         <label for="deepseek-api-key">DeepSeek APIキー:</label>
                         <input type="password" id="deepseek-api-key" placeholder="DeepSeek APIキーを入力" aria-label="DeepSeek APIキー">
-                        <details id="deepseek-multi-api-keys-section" class="hidden" style="margin-top: 10px;">
+                        <details id="deepseek-multi-api-keys-section" style="margin-top: 10px;">
                             <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor: pointer; font-weight: normal;">複数APIキー管理 (DeepSeek)</summary>
                             <div style="padding-left: 15px; margin-top: 10px;">
                                 <div id="deepseek-api-keys-list" class="api-keys-list"></div>
@@ -3497,7 +3497,7 @@
                     <div style="margin-top:15px;">
                         <label for="claude-api-key">Claude APIキー:</label>
                         <input type="password" id="claude-api-key" placeholder="APIキーを入力" aria-label="Claude APIキー">
-                        <details id="claude-multi-api-keys-section" class="hidden" style="margin-top: 10px;">
+                        <details id="claude-multi-api-keys-section" style="margin-top: 10px;">
                             <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor: pointer; font-weight: normal;">複数APIキー管理 (Claude)</summary>
                             <div style="padding-left: 15px; margin-top: 10px;">
                                 <div id="claude-api-keys-list" class="api-keys-list"></div>
@@ -5447,6 +5447,7 @@
                 disableAttachmentConfirmation: false,
                 addPrefixOnImport: true,
                 showMultiApiKeys: false,
+                disableSaveSettingsConfirmation: false,
                 showTopCollapseButton: true,
                 showBottomCollapseButton: true,
                 persistMessageCollapseState: DEFAULT_PERSIST_MESSAGE_COLLAPSE_STATE,
@@ -5466,7 +5467,6 @@
                 apiProvider: 'gemini',
                 thoughtSummaryOpacity: DEFAULT_THOUGHT_SUMMARY_OPACITY,
                 settingsUIDetailsOpenStates: {},
-                disableSaveSettingsConfirmation: false,
                 showApiProviderToggleHeader: false,
                 showApiProviderToggleFooter: true,
                 apiProviderCycle: {
@@ -8542,18 +8542,23 @@
                 });
             },
             toggleMultiApiKeysVisibility(show) {
-                const sections = [
-                    'gemini-multi-api-keys-section',
-                    'deepseek-multi-api-keys-section',
-                    'claude-multi-api-keys-section',
-                    'openai-multi-api-keys-section',
-                    'xai-multi-api-keys-section',
-                    'llmaggregator-multi-api-keys-section'
-                ];
-                sections.forEach(id => {
-                    const section = document.getElementById(id);
-                    if (section) {
-                        section.classList.toggle('hidden', !show);
+                const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'];
+                
+                providers.forEach(provider => {
+                    const multiKeySectionId = `${provider}-multi-api-keys-section`;
+                    const multiKeySection = document.getElementById(multiKeySectionId);
+                    if (multiKeySection) {
+                        multiKeySection.classList.toggle('hidden', !show);
+                    }
+
+                    const singleKeyInputId = provider === 'gemini' ? 'gemini-api-key' : `${provider}-api-key`;
+                    const singleKeyInput = document.getElementById(singleKeyInputId);
+                    if (singleKeyInput) {
+                        const label = singleKeyInput.previousElementSibling;
+                        if (label && label.tagName === 'LABEL') {
+                            label.classList.toggle('hidden', show);
+                        }
+                        singleKeyInput.classList.toggle('hidden', show);
                     }
                 });
             },
@@ -11526,27 +11531,67 @@
                  const currentProvider = elements.apiProviderSelect.value;
                  const newSettings = { ...state.settings };
                  newSettings.apiProvider = currentProvider;
-                 newSettings.apiKey = elements.geminiApiKeyInput.value.trim();
+                 
+                newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
+
+                if (newSettings.showMultiApiKeys) {
+                    newSettings.apiKey = '';
+                    newSettings.deepSeekApiKey = '';
+                    newSettings.claudeApiKey = '';
+                    newSettings.openaiApiKey = '';
+                    newSettings.xaiApiKey = '';
+                    newSettings.llmAggregatorApiKey = '';
+                    
+                    newSettings.geminiApiKeys = state.settings.geminiApiKeys;
+                    newSettings.geminiActiveApiKeyIndex = state.settings.geminiActiveApiKeyIndex;
+                    newSettings.deepseekApiKeys = state.settings.deepseekApiKeys;
+                    newSettings.deepseekActiveApiKeyIndex = state.settings.deepseekActiveApiKeyIndex;
+                    newSettings.claudeApiKeys = state.settings.claudeApiKeys;
+                    newSettings.claudeActiveApiKeyIndex = state.settings.claudeActiveApiKeyIndex;
+                    newSettings.openaiApiKeys = state.settings.openaiApiKeys;
+                    newSettings.openaiActiveApiKeyIndex = state.settings.openaiActiveApiKeyIndex;
+                    newSettings.xaiApiKeys = state.settings.xaiApiKeys;
+                    newSettings.xaiActiveApiKeyIndex = state.settings.xaiActiveApiKeyIndex;
+                    newSettings.llmaggregatorApiKeys = state.settings.llmaggregatorApiKeys;
+                    newSettings.llmaggregatorActiveApiKeyIndex = state.settings.llmaggregatorActiveApiKeyIndex;
+
+                } else {
+                    newSettings.apiKey = elements.geminiApiKeyInput.value.trim();
+                    newSettings.deepSeekApiKey = elements.deepSeekApiKeyInput.value.trim();
+                    newSettings.claudeApiKey = elements.claudeApiKeyInput.value.trim();
+                    newSettings.openaiApiKey = elements.openaiApiKeyInput.value.trim();
+                    newSettings.xaiApiKey = elements.xaiApiKeyInput.value.trim();
+                    newSettings.llmAggregatorApiKey = elements.llmAggregatorApiKeyInput.value.trim();
+
+                    newSettings.geminiApiKeys = [];
+                    newSettings.geminiActiveApiKeyIndex = -1;
+                    newSettings.deepseekApiKeys = [];
+                    newSettings.deepseekActiveApiKeyIndex = -1;
+                    newSettings.claudeApiKeys = [];
+                    newSettings.claudeActiveApiKeyIndex = -1;
+                    newSettings.openaiApiKeys = [];
+                    newSettings.openaiActiveApiKeyIndex = -1;
+                    newSettings.xaiApiKeys = [];
+                    newSettings.xaiActiveApiKeyIndex = -1;
+                    newSettings.llmaggregatorApiKeys = [];
+                    newSettings.llmaggregatorActiveApiKeyIndex = -1;
+                }
+
                  newSettings.modelName = elements.geminiModelNameSelect.value;
                  newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
                  newSettings.commonSystemPrompt = elements.commonSystemPromptDefaultTextarea.value.trim();
                  newSettings.enableCommonSystemPromptDefault = elements.enableCommonSystemPromptDefaultCheckbox.checked;
                  
-                 newSettings.deepSeekApiKey = elements.deepSeekApiKeyInput.value.trim();
                  newSettings.deepSeekModelName = elements.deepSeekModelNameSelect.value;
                  newSettings.deepSeekAdditionalModels = elements.deepSeekAdditionalModelsTextarea.value.trim();
                  newSettings.deepSeekApiEndpoint = elements.deepSeekApiEndpointInput.value.trim();
-                 newSettings.claudeApiKey = elements.claudeApiKeyInput.value.trim();
                  newSettings.claudeModelName = elements.claudeModelNameSelect.value;
                  newSettings.claudeAdditionalModels = elements.claudeAdditionalModelsTextarea.value.trim();
-                 newSettings.openaiApiKey = elements.openaiApiKeyInput.value.trim();
                  newSettings.openaiModelName = elements.openaiModelNameSelect.value;
                  newSettings.openaiAdditionalModels = elements.openaiAdditionalModelsTextarea.value.trim();
-                 newSettings.xaiApiKey = elements.xaiApiKeyInput.value.trim();
                  newSettings.xaiModelName = elements.xaiModelNameSelect.value;
                  newSettings.xaiAdditionalModels = elements.xaiAdditionalModelsTextarea.value.trim();
                  newSettings.llmAggregatorApiBackend = elements.llmAggregatorApiBackendInput.value.trim();
-                 newSettings.llmAggregatorApiKey = elements.llmAggregatorApiKeyInput.value.trim();
                  newSettings.llmAggregatorModelName = elements.llmAggregatorModelNameSelect.value;
                  newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalModelsTextarea.value.trim();
 
@@ -11711,7 +11756,6 @@
                  newSettings.disableDeleteMessageConfirmation = elements.disableDeleteMessageConfirmationToggle.checked;
                  newSettings.disableAttachmentConfirmation = elements.disableAttachmentConfirmationToggle.checked;
                  newSettings.addPrefixOnImport = elements.addPrefixOnImportToggle.checked;
-                 newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
                  newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
                  newSettings.showTopCollapseButton = elements.showTopCollapseButtonToggle.checked;
                  newSettings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
@@ -11744,18 +11788,6 @@
                  newSettings.dummyErrorDebugMode = elements.dummyErrorDebugModeCheckbox.checked;
                  newSettings.dummyDummyModel = elements.dummyDummyModelInput.value.trim();
                  newSettings.dummyEnableDummyModel = elements.dummyEnableDummyModelCheckbox.checked;
-                 newSettings.geminiApiKeys = state.settings.geminiApiKeys;
-                 newSettings.geminiActiveApiKeyIndex = state.settings.geminiActiveApiKeyIndex;
-                 newSettings.deepseekApiKeys = state.settings.deepseekApiKeys;
-                 newSettings.deepseekActiveApiKeyIndex = state.settings.deepseekActiveApiKeyIndex;
-                 newSettings.claudeApiKeys = state.settings.claudeApiKeys;
-                 newSettings.claudeActiveApiKeyIndex = state.settings.claudeActiveApiKeyIndex;
-                 newSettings.openaiApiKeys = state.settings.openaiApiKeys;
-                 newSettings.openaiActiveApiKeyIndex = state.settings.openaiActiveApiKeyIndex;
-                 newSettings.xaiApiKeys = state.settings.xaiApiKeys;
-                 newSettings.xaiActiveApiKeyIndex = state.settings.xaiActiveApiKeyIndex;
-                 newSettings.llmaggregatorApiKeys = state.settings.llmaggregatorApiKeys;
-                 newSettings.llmaggregatorActiveApiKeyIndex = state.settings.llmaggregatorActiveApiKeyIndex;
 
                 const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
                     let num = isInteger ? parseInt(value, 10) : parseFloat(value);
@@ -12064,6 +12096,18 @@
                         defaultSettingsCopy.dummyErrorDebugMode = false;
                         defaultSettingsCopy.dummyDummyModel = '';
                         defaultSettingsCopy.dummyEnableDummyModel = false;
+                        defaultSettingsCopy.geminiApiKeys = [];
+                        defaultSettingsCopy.geminiActiveApiKeyIndex = -1;
+                        defaultSettingsCopy.deepseekApiKeys = [];
+                        defaultSettingsCopy.deepseekActiveApiKeyIndex = -1;
+                        defaultSettingsCopy.claudeApiKeys = [];
+                        defaultSettingsCopy.claudeActiveApiKeyIndex = -1;
+                        defaultSettingsCopy.openaiApiKeys = [];
+                        defaultSettingsCopy.openaiActiveApiKeyIndex = -1;
+                        defaultSettingsCopy.xaiApiKeys = [];
+                        defaultSettingsCopy.xaiActiveApiKeyIndex = -1;
+                        defaultSettingsCopy.llmaggregatorApiKeys = [];
+                        defaultSettingsCopy.llmaggregatorActiveApiKeyIndex = -1;
 
                         state.settings = defaultSettingsCopy;
 
@@ -13475,7 +13519,13 @@
 
         const apiUtils = {
             async callGeminiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding) {
-                const apiKey = multiApiKeyUtils.getActiveApiKey('gemini') || state.settings.apiKey;
+                let apiKey;
+                if (state.settings.showMultiApiKeys) {
+                    apiKey = multiApiKeyUtils.getActiveApiKey('gemini');
+                } else {
+                    apiKey = state.settings.apiKey;
+                }
+                
                 let baseUrl = GEMINI_API_BASE_URL;
                 
                 if (!apiKey) {
@@ -13696,7 +13746,11 @@
             async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
                 let apiKey, model, baseUrl, topK;
                 if (provider === 'llmaggregator') {
-                    apiKey = multiApiKeyUtils.getActiveApiKey('llmaggregator') || state.settings.llmAggregatorApiKey;
+                    if (state.settings.showMultiApiKeys) {
+                        apiKey = multiApiKeyUtils.getActiveApiKey('llmaggregator');
+                    } else {
+                        apiKey = state.settings.llmAggregatorApiKey;
+                    }
                     model = state.settings.llmAggregatorModelName;
                     baseUrl = state.settings.llmAggregatorApiBackend;
                     topK = state.settings.llmAggregatorTopK;
@@ -13704,7 +13758,11 @@
                         throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
                     }
                 } else {
-                    apiKey = multiApiKeyUtils.getActiveApiKey('deepseek') || state.settings.deepSeekApiKey;
+                    if (state.settings.showMultiApiKeys) {
+                        apiKey = multiApiKeyUtils.getActiveApiKey('deepseek');
+                    } else {
+                        apiKey = state.settings.deepSeekApiKey;
+                    }
                     model = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
                     baseUrl = state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
                 }
@@ -13872,7 +13930,7 @@
                 }
             },
             async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
-                const apiKey = multiApiKeyUtils.getActiveApiKey('claude') || state.settings.claudeApiKey;
+                const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('claude') : state.settings.claudeApiKey;
                 if (!apiKey) {
                     throw new Error("Claude APIキーが設定されていません。");
                 }
@@ -14124,11 +14182,11 @@
                 let apiKey, model, baseUrl;
                 
                 if (provider === 'openai') {
-                    apiKey = multiApiKeyUtils.getActiveApiKey('openai') || state.settings.openaiApiKey;
+                    apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('openai') : state.settings.openaiApiKey;
                     model = state.settings.openaiModelName || DEFAULT_OPENAI_MODEL;
                     baseUrl = OPENAI_API_BASE_URL;
                 } else if (provider === 'llmaggregator') {
-                    apiKey = multiApiKeyUtils.getActiveApiKey('llmaggregator') || state.settings.llmAggregatorApiKey;
+                    apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('llmaggregator') : state.settings.llmAggregatorApiKey;
                     model = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
                     baseUrl = state.settings.llmAggregatorApiBackend;
                     if (!baseUrl) {
@@ -14259,7 +14317,7 @@
                 }
             },
             async callXaiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
-                const apiKey = multiApiKeyUtils.getActiveApiKey('xai') || state.settings.xaiApiKey;
+                const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('xai') : state.settings.xaiApiKey;
                 if (!apiKey) {
                     throw new Error("xAI APIキーが設定されていません。");
                 }
@@ -14461,7 +14519,7 @@
                     } catch (e) {
                         alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
                     }
-                                    } else {
+                } else {
                     alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
                 }
             },
@@ -14723,7 +14781,7 @@
                 labelInput.value = key.label;
                 labelInput.placeholder = `キー ${index + 1}`;
                 labelInput.addEventListener('change', (e) => {
-                    this.updateApiKeyLabel(provider, key.id, e.target.value);
+                                    this.updateApiKeyLabel(provider, key.id, e.target.value);
                 });
 
                 const keyInput = document.createElement('input');
