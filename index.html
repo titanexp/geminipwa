@@ -4694,6 +4694,13 @@
                          <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                              ※ 設定保存時の確認ダイアログを表示しません。
                          </p>
+                         <label class="checkbox-label" style="margin-top: 10px; margin-bottom: 5px;">
+                             <input type="checkbox" id="auto-save-settings-toggle">
+                             設定を即時反映する（「保存」不要）
+                         </label>
+                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                             ※ 設定を変更すると自動的に保存されます。
+                         </p>
                          <button id="force-recovery-btn" class="orange-button">🔄 強制復旧 (キャッシュクリア&リロード)</button>
                          <p style="font-size: 11px; color: var(--text-secondary); margin-top:5px; margin-bottom: 10px;">
                              ※ アプリが不安定な場合に使用。全キャッシュをクリアして強制的に再起動します。「アプリを更新」の処理に加えて、ブラウザが保持しているこの「GeminiPWA」アプリに関連する他の種類のキャッシュも可能な限り削除します。<br>
@@ -5234,6 +5241,7 @@
             xaiThoughtsParam: document.getElementById('xai-thoughts-param'),
             llmAggregatorThoughtsParam: document.getElementById('llmaggregator-thoughts-param'),
             disableSaveSettingsConfirmationToggle: document.getElementById('disable-save-settings-confirmation-toggle'),
+            autoSaveSettingsToggle: document.getElementById('auto-save-settings-toggle'),
             headerApiProviderToggleBtn: document.getElementById('header-api-provider-toggle-btn'),
             footerApiProviderToggleBtn: document.getElementById('footer-api-provider-toggle-btn'),
             showApiProviderToggleHeaderCheckbox: document.getElementById('show-api-provider-toggle-header'),
@@ -5451,6 +5459,7 @@
                 addPrefixOnImport: true,
                 showMultiApiKeys: false,
                 disableSaveSettingsConfirmation: false,
+                autoSaveSettings: false,
                 showTopCollapseButton: true,
                 showBottomCollapseButton: true,
                 persistMessageCollapseState: DEFAULT_PERSIST_MESSAGE_COLLAPSE_STATE,
@@ -7634,6 +7643,7 @@
                 elements.addPrefixOnImportToggle.checked = state.settings.addPrefixOnImport;
                 elements.showMultiApiKeysToggle.checked = state.settings.showMultiApiKeys;
                 elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
+                elements.autoSaveSettingsToggle.checked = state.settings.autoSaveSettings;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
                 elements.showBottomCollapseButtonToggle.checked = state.settings.showBottomCollapseButton;
                 elements.persistMessageCollapseStateCheckbox.checked = state.settings.persistMessageCollapseState;
@@ -8749,7 +8759,7 @@
                 });
 
                 elements.saveSettingsBtns.forEach(button => {
-                    button.addEventListener('click', () => this.saveSettings());
+                    button.addEventListener('click', () => this.saveSettings(true));
                 });
                 elements.updateAppBtn.addEventListener('click', () => this.updateApp());
                 elements.clearDataBtn.addEventListener('click', () => this.confirmClearAllData());
@@ -9232,6 +9242,29 @@
                 elements.llmAggregatorApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('llmaggregator'));
                 elements.showMultiApiKeysToggle.addEventListener('change', (e) => {
                     uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
+                });
+                
+                let autoSaveTimer;
+                const handleSettingsChange = () => {
+                    if (state.settings.autoSaveSettings) {
+                        clearTimeout(autoSaveTimer);
+                        autoSaveTimer = setTimeout(() => {
+                            this.saveSettings(false);
+                        }, 500);
+                    }
+                };
+
+                const settingsScreenElement = document.getElementById('settings-screen');
+                settingsScreenElement.addEventListener('change', (event) => {
+                    if (event.target.closest('.settings-group, .danger-zone')) {
+                        handleSettingsChange();
+                    }
+                });
+
+                settingsScreenElement.addEventListener('input', (event) => {
+                    if (event.target.matches('input[type="text"], input[type="password"], input[type="number"], textarea')) {
+                         handleSettingsChange();
+                    }
                 });
             },
             handlePopState(event) {
@@ -11546,9 +11579,11 @@
                      await uiUtils.showCustomAlert(`${type === 'user' ? 'ユーザー' : 'AI'}アイコンの削除エラー: ${error}`);
                  }
             },
-            async saveSettings() {
+            async saveSettings(showNotice = true) {
                 const newSettings = { ...state.settings };
                 newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
+                newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
+                newSettings.autoSaveSettings = elements.autoSaveSettingsToggle.checked;
                 
                 if (newSettings.showMultiApiKeys) {
                     const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'];
@@ -11754,7 +11789,6 @@
                  newSettings.disableDeleteMessageConfirmation = elements.disableDeleteMessageConfirmationToggle.checked;
                  newSettings.disableAttachmentConfirmation = elements.disableAttachmentConfirmationToggle.checked;
                  newSettings.addPrefixOnImport = elements.addPrefixOnImportToggle.checked;
-                 newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
                  newSettings.showTopCollapseButton = elements.showTopCollapseButtonToggle.checked;
                  newSettings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
                  newSettings.persistMessageCollapseState = elements.persistMessageCollapseStateCheckbox.checked;
@@ -11887,6 +11921,9 @@
 
                      await Promise.all(promises);
 
+                     state.settings.disableSaveSettingsConfirmation = newSettings.disableSaveSettingsConfirmation;
+                     state.settings.autoSaveSettings = newSettings.autoSaveSettings;
+                     
                      const currentBgBlob = state.settings.backgroundImageBlob;
                      const currentUserIconBlob = state.settings.userIconBlob;
                      const currentAiIconBlob = state.settings.aiIconBlob;
@@ -11896,7 +11933,6 @@
                      state.settings.backgroundImageBlob = currentBgBlob;
                      state.settings.userIconBlob = currentUserIconBlob;
                      state.settings.aiIconBlob = currentAiIconBlob;
-                     state.settings.disableSaveSettingsConfirmation = newSettings.disableSaveSettingsConfirmation;
 
                      if (!state.isSending && !state.isAiToAiChatProcessing) {
                         uiUtils.applySettingsToUI();
@@ -11911,9 +11947,9 @@
                         uiUtils.applySettingsUIDetailsOpenStates();
                     }
 
-                    if (!state.settings.disableSaveSettingsConfirmation) {
-                        await uiUtils.showCustomAlert("設定を保存しました。");
-                    }
+                     if (showNotice && !state.settings.disableSaveSettingsConfirmation) {
+                         await uiUtils.showCustomAlert("設定を保存しました。");
+                     }
 
                      if (newSettings.historySortOrder !== oldSortOrder && state.currentScreen === 'history') {
                          uiUtils.renderHistoryList();
@@ -12069,6 +12105,7 @@
                         defaultSettingsCopy.addPrefixOnImport = true;
                         defaultSettingsCopy.showMultiApiKeys = false;
                         defaultSettingsCopy.disableSaveSettingsConfirmation = false;
+                        defaultSettingsCopy.autoSaveSettings = false;
                         defaultSettingsCopy.showTopCollapseButton = true;
                         defaultSettingsCopy.showBottomCollapseButton = true;
                         defaultSettingsCopy.persistMessageCollapseState = DEFAULT_PERSIST_MESSAGE_COLLAPSE_STATE;
@@ -14553,7 +14590,7 @@
                 } catch (error) {
                     window.location.href = window.location.href + '?recovery=' + Date.now();
                 }
-            },
+                            },
 
             clearStorageSelectively() {
                 try {
@@ -14877,4 +14914,3 @@
     </script>
 </body>
 </html>
-
