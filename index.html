@@ -2187,6 +2187,7 @@
         .settings-action-button {
             background-color: var(--bg-button-action);
             padding: 8px 15px;
+            padding: 8px 15px;
             border-radius: 5px;
             border: none;
             font-size: 14px;
@@ -3328,19 +3329,6 @@
             </div>
 
             <main class="main-content">
-                <div id="system-prompt-area" class="system-prompt-area">
-                    <details id="system-prompt-details">
-                        <summary>システムプロンプト</summary>
-                        <div class="system-prompt-content">
-                            <textarea id="system-prompt-editor" aria-label="システムプロンプト編集"></textarea>
-                            <div class="system-prompt-actions">
-                                <button id="clear-system-prompt-btn" class="clear-system-prompt-btn">全削除</button>
-                                <button id="cancel-system-prompt-btn" class="cancel-system-prompt-btn">キャンセル</button>
-                                <button id="save-system-prompt-btn" class="save-system-prompt-btn">保存</button>
-                            </div>
-                        </div>
-                    </details>
-                </div>
                 <div id="message-container" class="message-container">
                 </div>
                 <div id="loading-indicator" class="loading-indicator hidden" aria-live="polite">応答中</div>
@@ -4700,10 +4688,10 @@
                          </p>
                          <label class="checkbox-label" style="margin-top: 10px; margin-bottom: 5px;">
                              <input type="checkbox" id="auto-save-settings-toggle">
-                             設定を即時反映する（「保存」不要）
+                             設定を即時反映する
                          </label>
                          <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-                             ※ 設定を変更すると自動的に保存されます。
+                             ※ 「設定を保存」ボタンを押さずとも、設定の変更が直ちに適用されます。
                          </p>
                          <button id="force-recovery-btn" class="orange-button">🔄 強制復旧 (キャッシュクリア&リロード)</button>
                          <p style="font-size: 11px; color: var(--text-secondary); margin-top:5px; margin-bottom: 10px;">
@@ -4934,12 +4922,6 @@
             noHistoryMessage: document.getElementById('no-history-message'),
             historyItemTemplate: document.querySelector('.js-history-item-template'),
             themeColorMeta: document.getElementById('theme-color-meta'),
-            systemPromptArea: document.getElementById('system-prompt-area'),
-            systemPromptDetails: document.getElementById('system-prompt-details'),
-            systemPromptEditor: document.getElementById('system-prompt-editor'),
-            saveSystemPromptBtn: document.getElementById('save-system-prompt-btn'),
-            cancelSystemPromptBtn: document.getElementById('cancel-system-prompt-btn'),
-            clearSystemPromptBtn: document.getElementById('clear-system-prompt-btn'),
             apiProviderSelect: document.getElementById('api-provider-select'),
             commonSystemPromptDefaultTextarea: document.getElementById('common-system-prompt-default'),
             enableCommonSystemPromptDefaultCheckbox: document.getElementById('enable-common-system-prompt-default'),
@@ -5279,7 +5261,6 @@
             db: null,
             currentChatId: null,
             currentMessages: [],
-            currentSystemPrompt: '',
             settings: {
                 apiKey: '',
                 modelName: DEFAULT_MODEL,
@@ -5518,7 +5499,6 @@
             partialStreamContent: '',
             partialThoughtStreamContent: '',
             editingMessageIndex: null,
-            isEditingSystemPrompt: false,
             touchStartX: 0,
             touchStartY: 0,
             touchEndX: 0,
@@ -5856,7 +5836,7 @@
             },
             async saveChat(optionalTitle = null) {
                 await this.openDB();
-                if ((!state.currentMessages || state.currentMessages.length === 0) && !state.currentSystemPrompt) {
+                if ((!state.currentMessages || state.currentMessages.length === 0)) {
                     return Promise.resolve(state.currentChatId);
                 }
                 return new Promise((resolve, reject) => {
@@ -5891,7 +5871,7 @@
                         }
                         const chatIdForOperation = existingChatData ? existingChatData.id : state.currentChatId;
                         const chatData = {
-                            messages: messagesToSave, systemPrompt: state.currentSystemPrompt,
+                            messages: messagesToSave,
                             updatedAt: now, createdAt: existingChatData ? existingChatData.createdAt : now,
                             title: title,
                         };
@@ -7687,7 +7667,6 @@
                 this.updateIconSettingsUI();
                 this.applyTheme();
                 this.applyFontFamily();
-                this.toggleSystemPromptVisibility();
                 this.applySidePanelSettingsToUI();
                 this.updateSessionLinkingUI();
                 this.updateApiProviderSelectOptions();
@@ -8055,18 +8034,6 @@
                 document.documentElement.style.setProperty('--code-block-font-size', `${state.settings.codeBlockFontSize || DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--thought-summary-font-size', `${state.settings.thoughtSummaryFontSize || DEFAULT_THOUGHT_SUMMARY_FONT_SIZE}px`);
             },
-            updateSystemPromptUI() {
-                elements.systemPromptEditor.value = state.currentSystemPrompt;
-                if (!state.isEditingSystemPrompt) {
-                    elements.systemPromptDetails.removeAttribute('open');
-                }
-                this.adjustTextareaHeight(elements.systemPromptEditor, 200);
-                this.toggleSystemPromptVisibility();
-            },
-            toggleSystemPromptVisibility() {
-                const shouldHide = state.settings.hideSystemPromptInChat;
-                elements.systemPromptArea.classList.toggle('hidden', shouldHide);
-            },
             showScreen(screenName, fromPopState = false) {
                 if (state.editingMessageIndex !== null) {
                      const messageElement = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`);
@@ -8075,9 +8042,6 @@
                      } else {
                         state.editingMessageIndex = null;
                      }
-                }
-                if (state.isEditingSystemPrompt) {
-                    appLogic.cancelEditSystemPrompt();
                 }
                 if (state.isMemoVisible && screenName !== 'chat') {
                      elements.memoArea.classList.add('hidden');
@@ -8116,7 +8080,6 @@
                     elements.historyScreen.style.transform = 'translateX(-100%)';
                     elements.settingsScreen.style.transform = 'translateX(100%)';
                     requestAnimationFrame(() => {
-                        this.updateSystemPromptUI();
                         this.adjustTextareaHeight();
                         this.updateChatScreenElementVisibility();
                     });
@@ -8159,8 +8122,6 @@
                     if (elements.aiToAiChatBtn) elements.aiToAiChatBtn.disabled = true;
                     elements.loadingIndicator.classList.remove('hidden');
                     elements.loadingIndicator.setAttribute('aria-live', 'polite');
-                    elements.systemPromptDetails.style.pointerEvents = 'none';
-                    elements.systemPromptDetails.style.opacity = '0.7';
                 } else {
                     elements.sendButton.textContent = '送';
                     elements.sendButton.classList.remove('sending');
@@ -8177,8 +8138,6 @@
                     }
                     elements.loadingIndicator.classList.add('hidden');
                     elements.loadingIndicator.removeAttribute('aria-live');
-                    elements.systemPromptDetails.style.pointerEvents = '';
-                    elements.systemPromptDetails.style.opacity = '';
                     this.adjustTextareaHeight();
                 }
             },
@@ -8473,8 +8432,6 @@
                     elements.pasteToInputBtn.disabled = true;
                     elements.rollDiceBtn.disabled = true;
                     if (elements.aiToAiChatBtn) elements.aiToAiChatBtn.disabled = true;
-                    elements.systemPromptDetails.style.pointerEvents = 'none';
-                    elements.systemPromptDetails.style.opacity = '0.7';
                 } else {
                     elements.loadingIndicator.textContent = '応答中';
                     elements.loadingIndicator.classList.add('hidden');
@@ -8491,8 +8448,6 @@
                                           state.currentChatId && state.linkedSessionIds.includes(state.currentChatId);
                         elements.aiToAiChatBtn.disabled = !showAiToAiBtn;
                     }
-                    elements.systemPromptDetails.style.pointerEvents = '';
-                    elements.systemPromptDetails.style.opacity = '';
                 }
             },
             updateSessionLinkingUI() {
@@ -8535,7 +8490,6 @@
                     state.settings.apiProvider = newProvider;
                     apiProviderSelect.value = newProvider;
                     this.toggleApiSettingsVisibility(newProvider);
-                    appLogic.updateSystemPromptBasedOnProvider();
                 }
 
                 if (enabledOptions.length === 0) {
@@ -8728,27 +8682,6 @@
                 });
                  elements.userInput.addEventListener('input', () => uiUtils.updateAttachmentBadgeVisibility());
 
-                elements.systemPromptDetails.addEventListener('toggle', (event) => {
-                    if (event.target.open) {
-                        this.startEditSystemPrompt();
-                    } else if (state.isEditingSystemPrompt) {
-                        this.cancelEditSystemPrompt();
-                    }
-                });
-                elements.saveSystemPromptBtn.addEventListener('click', () => this.saveCurrentSystemPrompt());
-                elements.cancelSystemPromptBtn.addEventListener('click', () => this.cancelEditSystemPrompt());
-                elements.clearSystemPromptBtn.addEventListener('click', async () => {
-                    if (!elements.systemPromptEditor.value) return;
-                    const confirmed = await uiUtils.showCustomConfirm("システムプロンプトの内容を全て削除しますか？");
-                    if (confirmed) {
-                        elements.systemPromptEditor.value = '';
-                        uiUtils.adjustTextareaHeight(elements.systemPromptEditor, 200);
-                    }
-                });
-                elements.systemPromptEditor.addEventListener('input', () => {
-                    uiUtils.adjustTextareaHeight(elements.systemPromptEditor, 200);
-                });
-
                 elements.importHistoryBtn.addEventListener('click', () => elements.importHistoryInput.click());
                 elements.importHistoryInput.addEventListener('change', (event) => {
                     const file = event.target.files[0];
@@ -8800,7 +8733,6 @@
                         const selectedProvider = event.target.value;
                         state.settings.apiProvider = selectedProvider;
                         uiUtils.toggleApiSettingsVisibility(selectedProvider);
-                        this.updateSystemPromptBasedOnProvider();
                     });
                 }
                 if (elements.enableSessionLinkingCheckbox) {
@@ -8956,11 +8888,9 @@
 
                 elements.hideSystemPromptToggle.addEventListener('change', () => {
                     state.settings.hideSystemPromptInChat = elements.hideSystemPromptToggle.checked;
-                    uiUtils.toggleSystemPromptVisibility();
                 });
                 elements.enableCommonSystemPromptDefaultCheckbox.addEventListener('change', () => {
                     state.settings.enableCommonSystemPromptDefault = elements.enableCommonSystemPromptDefaultCheckbox.checked;
-                    uiUtils.toggleSystemPromptVisibility();
                 });
                 elements.showChatTitleToggle.addEventListener('change', () => {
                     state.settings.showChatTitle = elements.showChatTitleToggle.checked;
@@ -9357,10 +9287,6 @@
                      uiUtils.showCustomAlert("メッセージ編集中はメモを開閉できません。");
                      return;
                  }
-                 if (state.isEditingSystemPrompt) {
-                     uiUtils.showCustomAlert("システムプロンプト編集中はメモを開閉できません。");
-                     return;
-                 }
 
                 state.isMemoVisible = !state.isMemoVisible;
                 elements.memoArea.classList.toggle('hidden', !state.isMemoVisible);
@@ -9454,10 +9380,6 @@
             toggleClipboardStack() {
                  if (state.editingMessageIndex !== null) {
                      uiUtils.showCustomAlert("メッセージ編集中はクリップボードスタックを開閉できません。");
-                     return;
-                 }
-                 if (state.isEditingSystemPrompt) {
-                     uiUtils.showCustomAlert("システムプロンプト編集中はクリップボードスタックを開閉できません。");
                      return;
                  }
 
@@ -9660,11 +9582,6 @@
                     const msgEl = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`);
                     this.cancelEditMessage(state.editingMessageIndex, msgEl);
                 }
-                if (state.isEditingSystemPrompt) {
-                    const confirmed = await uiUtils.showCustomConfirm("システムプロンプト編集中です。変更を破棄して新規チャットを開始しますか？");
-                    if (!confirmed) return;
-                    this.cancelEditSystemPrompt();
-                }
                 if (state.pendingAttachments.length > 0) {
                     const confirmedAttach = await uiUtils.showCustomConfirm("添付準備中のファイルがあります。破棄して新規チャットを開始しますか？");
                     if (!confirmedAttach) return;
@@ -9672,7 +9589,7 @@
                     uiUtils.updateAttachmentBadgeVisibility();
                 }
 
-                if ((state.currentMessages.length > 0 || state.currentSystemPrompt) && state.currentChatId) {
+                if ((state.currentMessages.length > 0) && state.currentChatId) {
                     try {
                         await dbUtils.saveChat();
                     } catch (error) {
@@ -9686,10 +9603,8 @@
             startNewChat() {
                 state.currentChatId = null;
                 state.currentMessages = [];
-                state.currentSystemPrompt = '';
-
+                
                 if (state.settings.commonSystemPrompt && state.settings.commonSystemPrompt.trim() !== '') {
-                    state.currentSystemPrompt = state.settings.commonSystemPrompt;
                 }
                 
                 state.pendingAttachments = [];
@@ -9703,7 +9618,6 @@
                 uiUtils.updateToggleAllContentButton();
                 state.messageCollapsedStates.clear();
                 state.thoughtSummaryOpenStates.clear();
-                uiUtils.updateSystemPromptUI();
                 uiUtils.renderChatMessages();
                 uiUtils.updateChatTitle();
                 elements.userInput.value = '';
@@ -9728,11 +9642,6 @@
                     if (!confirmedEdit) return;
                     const msgEl = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`);
                     this.cancelEditMessage(state.editingMessageIndex, msgEl);
-                }
-                if (state.isEditingSystemPrompt) {
-                    const confirmed = await uiUtils.showCustomConfirm("システムプロンプト編集中です。変更を破棄して別のチャットを読み込みますか？");
-                    if (!confirmed) return;
-                    this.cancelEditSystemPrompt();
                 }
                 if (state.pendingAttachments.length > 0) {
                     const confirmedAttach = await uiUtils.showCustomConfirm("添付準備中のファイルがあります。破棄して別のチャットを読み込みますか？");
@@ -9765,16 +9674,9 @@
                             }
                         });
 
-                        if (chat.systemPrompt !== undefined) {
-                             state.currentSystemPrompt = chat.systemPrompt;
-                        } else {
-                            state.currentSystemPrompt = '';
-                        }
-
                         state.pendingAttachments = [];
                         state.areAllMessagesHidden = false;
                         uiUtils.updateToggleAllContentButton();
-                        uiUtils.updateSystemPromptUI();
                         state.messageCollapsedStates.clear();
                         state.thoughtSummaryOpenStates.clear();
                         if (state.settings.persistMessageCollapseState && chat.collapsedStates) {
@@ -9817,8 +9719,7 @@
             async duplicateChat(id) {
                 if (state.isSending) { const conf = await uiUtils.showCustomConfirm("送信中です。中断してチャットを複製しますか？"); if (!conf) return; this.abortRequest(); }
                 if (state.editingMessageIndex !== null) { const conf = await uiUtils.showCustomConfirm("編集中です。変更を破棄してチャットを複製しますか？"); if (!conf) return; const msgEl = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`); this.cancelEditMessage(state.editingMessageIndex, msgEl); }
-                if (state.isEditingSystemPrompt) { const conf = await uiUtils.showCustomConfirm("システムプロンプト編集中です。変更を破棄してチャットを複製しますか？"); if (!conf) return; this.cancelEditSystemPrompt(); }
-                if ((state.currentMessages.length > 0 || state.currentSystemPrompt) && state.currentChatId && state.currentChatId !== id) { try { await dbUtils.saveChat(); } catch (error) { const conf = await uiUtils.showCustomConfirm("現在のチャット保存に失敗しました。複製を続行しますか？"); if (!conf) return; } }
+                if ((state.currentMessages.length > 0) && state.currentChatId && state.currentChatId !== id) { try { await dbUtils.saveChat(); } catch (error) { const conf = await uiUtils.showCustomConfirm("現在のチャット保存に失敗しました。複製を続行しますか？"); if (!conf) return; } }
                 if (state.pendingAttachments.length > 0) {
                     const confirmedAttach = await uiUtils.showCustomConfirm("添付準備中のファイルがあります。破棄してチャットを複製しますか？");
                     if (!confirmedAttach) return;
@@ -9862,7 +9763,6 @@
 
                         const newChatData = {
                             messages: duplicatedMessages,
-                            systemPrompt: chat.systemPrompt || '',
                             updatedAt: Date.now(),
                             createdAt: Date.now(),
                             title: newTitle
@@ -9897,15 +9797,12 @@
 
                  try {
                      const chat = await dbUtils.getChat(chatId);
-                     if (!chat || ((!chat.messages || chat.messages.length === 0) && !chat.systemPrompt)) {
+                     if (!chat || ((!chat.messages || chat.messages.length === 0))) {
                          await uiUtils.showCustomAlert("チャットデータが空です。");
                          return;
                      }
 
                      let exportText = '';
-                     if (chat.systemPrompt) {
-                         exportText += `<|#|system|#|>\n${chat.systemPrompt}\n<|#|/system|#|>\n\n`;
-                     }
                      if (chat.messages) {
                          chat.messages.forEach(msg => {
                              if (msg.role === 'user' || msg.role === 'model') {
@@ -9939,7 +9836,7 @@
                  }
             },
             async confirmDeleteCurrentSession() {
-                if (!state.currentChatId && state.currentMessages.length === 0 && !state.currentSystemPrompt) {
+                if (!state.currentChatId && state.currentMessages.length === 0) {
                     await uiUtils.showCustomAlert("削除するチャットがありません（新規チャット状態です）。");
                     return;
                 }
@@ -9949,10 +9846,6 @@
                 }
                 if (state.editingMessageIndex !== null) {
                     await uiUtils.showCustomAlert("メッセージ編集中です。完了後に再度お試しください。");
-                    return;
-                }
-                if (state.isEditingSystemPrompt) {
-                    await uiUtils.showCustomAlert("システムプロンプト編集中です。完了後に再度お試しください。");
                     return;
                 }
                 const chatTitle = elements.chatTitle.textContent.startsWith("新規チャット") ? "このチャット" : `チャット「${elements.chatTitle.textContent.replace(/^: /, '')}」`;
@@ -9975,15 +9868,12 @@
                 }
             },
             async copyCurrentSessionText() {
-                if (state.currentMessages.length === 0 && !state.currentSystemPrompt) {
+                if (state.currentMessages.length === 0) {
                     await uiUtils.showCustomAlert("コピーする内容がありません。");
                     return;
                 }
 
                 let sessionText = "";
-                if (state.currentSystemPrompt) {
-                    sessionText += `システムプロンプト:\n${state.currentSystemPrompt}\n\n--------------------\n\n`;
-                }
                 state.currentMessages.forEach(msg => {
                     if (msg.role === 'user') {
                         sessionText += `あなた:\n`;
@@ -10161,7 +10051,6 @@
                 if (isBackgroundProcess) {
                     currentContextSystemPrompt = sourceSessionContext.systemPrompt || '';
                 } else {
-                    const chatSystemPrompt = state.currentSystemPrompt.trim();
                     let individualPrompt = '';
                     let commonPrompt = '';
 
@@ -10188,7 +10077,7 @@
                     } else if (commonPrompt) {
                         currentContextSystemPrompt = commonPrompt;
                     } else {
-                        currentContextSystemPrompt = chatSystemPrompt;
+                        currentContextSystemPrompt = '';
                     }
                 }
                 
@@ -10526,7 +10415,6 @@
                             ...(msg.usageMetadata && { usageMetadata: msg.usageMetadata }),
                             ...(msg.thoughtSummaryOpen !== undefined && { thoughtSummaryOpen: msg.thoughtSummaryOpen }),
                         })),
-                        systemPrompt: state.currentSystemPrompt,
                         updatedAt: Date.now(),
                         title: titleToSave
                     };
@@ -10971,7 +10859,6 @@
                                     ...(msg.usageMetadata && { usageMetadata: msg.usageMetadata }),
                                     ...(msg.thoughtSummaryOpen !== undefined && { thoughtSummaryOpen: msg.thoughtSummaryOpen }),
                                 })),
-                                systemPrompt: currentContextSystemPrompt,
                                 updatedAt: Date.now(),
                                 id: sourceSessionContext.sessionId
                              };
@@ -11171,7 +11058,6 @@
                     elements.apiProviderSelect.value = state.settings.apiProvider;
                     uiUtils.updateChatScreenElementVisibility();
                     uiUtils.toggleApiSettingsVisibility(state.settings.apiProvider);
-                    this.updateSystemPromptBasedOnProvider();
                     uiUtils.adjustTextareaHeight();
                 } catch (error) {
                     await uiUtils.showCustomAlert(`APIプロバイダー設定の保存に失敗しました: ${error.message}`);
@@ -11179,9 +11065,6 @@
                     elements.apiProviderSelect.value = state.settings.apiProvider;
                     uiUtils.updateChatScreenElementVisibility();
                 }
-            },
-            updateSystemPromptBasedOnProvider() {
-                 uiUtils.updateSystemPromptUI();
             },
             abortRequest() {
                 if (state.abortController) {
@@ -11201,8 +11084,8 @@
                         return;
                     }
                     try {
-                        const { messages: importedMessages, systemPrompt: importedSystemPrompt } = this.parseImportedHistory(textContent);
-                        if (importedMessages.length === 0 && !importedSystemPrompt) {
+                        const { messages: importedMessages } = this.parseImportedHistory(textContent);
+                        if (importedMessages.length === 0) {
                             await uiUtils.showCustomAlert("ファイルから有効なメッセージまたはシステムプロンプトを読み込めませんでした。形式を確認してください。");
                             return;
                         }
@@ -11242,7 +11125,7 @@
                         const newTitle = titlePrefix + (fileNameWithoutExt || `Imported_${Date.now()}`);
 
                         const newChatData = {
-                            messages: importedMessages, systemPrompt: importedSystemPrompt || '',
+                            messages: importedMessages,
                             updatedAt: Date.now(), createdAt: Date.now(),
                             title: newTitle.substring(0, 100)
                         };
@@ -11265,7 +11148,6 @@
             },
             parseImportedHistory(text) {
                 const messages = [];
-                let systemPrompt = '';
                 const blockRegex = /<\|#\|(system|user|model)\|#\|([^>]*)>([\s\S]*?)<\|#\|\/\1\|#\|>/g;
                 let match;
 
@@ -11274,9 +11156,7 @@
                     const attributesString = match[2].trim();
                     const content = match[3].trim();
 
-                    if (role === 'system' && content) {
-                        systemPrompt = content;
-                    } else if ((role === 'user' || role === 'model') && (content || attributesString.includes('attachments'))) {
+                    if ((role === 'user' || role === 'model') && (content || attributesString.includes('attachments'))) {
                         const messageData = {
                             role: role, content: content, timestamp: Date.now(), attachments: []
                         };
@@ -11309,7 +11189,7 @@
                         messages.push(messageData);
                     }
                 }
-                return { messages, systemPrompt };
+                return { messages };
             },
             async exportAllSessions() {
                 const confirmed = await uiUtils.showCustomConfirm("全てのセッションを1つのJSONファイルとしてエクスポートしますか？");
@@ -11324,7 +11204,6 @@
 
                     const exportableChats = chats.map(chat => ({
                         title: chat.title,
-                        systemPrompt: chat.systemPrompt,
                         messages: chat.messages.map(msg => {
                             const messageExport = {
                                 role: msg.role,
@@ -11408,7 +11287,6 @@
                             const titlePrefix = state.settings.addPrefixOnImport ? `${IMPORT_PREFIX}(全) ` : '';
                             const newChat = {
                                 title: `${titlePrefix}${chatData.title}`.substring(0,100),
-                                systemPrompt: chatData.systemPrompt || '',
                                 messages: (chatData.messages || []).map(msg => ({
                                     role: msg.role,
                                     content: msg.content || '',
@@ -11591,7 +11469,6 @@
                 newSettings.autoSaveSettings = elements.autoSaveSettingsToggle.checked;
 
                 if (newSettings.showMultiApiKeys) {
-                    // This block is now intentionally empty
                 } else {
                     newSettings.apiKey = elements.geminiApiKeyInput.value.trim();
                     newSettings.deepSeekApiKey = elements.deepSeekApiKeyInput.value.trim();
@@ -11979,7 +11856,6 @@
 
                         state.currentChatId = null;
                         state.currentMessages = [];
-                        state.currentSystemPrompt = '';
                         state.pendingAttachments = [];
                         state.isMemoVisible = false;
                         elements.memoArea.classList.add('hidden');
@@ -12188,30 +12064,6 @@
                     }
                 }
             },
-            startEditSystemPrompt() {
-                if (state.isSending) return;
-                state.isEditingSystemPrompt = true;
-                elements.systemPromptEditor.value = state.currentSystemPrompt;
-                uiUtils.adjustTextareaHeight(elements.systemPromptEditor, 200);
-                elements.systemPromptEditor.focus();
-            },
-            async saveCurrentSystemPrompt() {
-                const newPrompt = elements.systemPromptEditor.value.trim();
-                state.currentSystemPrompt = newPrompt;
-                try {
-                    await dbUtils.saveChat();
-                } catch (error) {
-                    await uiUtils.showCustomAlert("システムプロンプトのチャットへの保存に失敗しました。");
-                }
-                state.isEditingSystemPrompt = false;
-                elements.systemPromptDetails.removeAttribute('open');
-            },
-            cancelEditSystemPrompt() {
-                state.isEditingSystemPrompt = false;
-                elements.systemPromptEditor.value = state.currentSystemPrompt;
-                elements.systemPromptDetails.removeAttribute('open');
-                uiUtils.adjustTextareaHeight(elements.systemPromptEditor, 200);
-            },
             async startEditMessage(index, messageElement) {
                  if (state.isSending) {
                      await uiUtils.showCustomAlert("送信中は編集できません。");
@@ -12219,10 +12071,6 @@
                  }
                  if (state.editingMessageIndex !== null && state.editingMessageIndex !== index) {
                      await uiUtils.showCustomAlert("他のメッセージを編集中です。");
-                     return;
-                 }
-                 if (state.isEditingSystemPrompt) {
-                     await uiUtils.showCustomAlert("システムプロンプトを編集中です。");
                      return;
                  }
                  if (state.editingMessageIndex === index) {
@@ -12550,10 +12398,6 @@
                     await uiUtils.showCustomAlert("送信中は削除できません。");
                     return;
                 }
-                if (state.isEditingSystemPrompt) {
-                    await uiUtils.showCustomAlert("システムプロンプト編集中は削除できません。");
-                    return;
-                }
                 if (index < 0 || index >= state.currentMessages.length) {
                      return;
                 }
@@ -12633,7 +12477,7 @@
                         if (requiresTitleUpdate) {
                             uiUtils.updateChatTitle(newTitleForSave);
                         }
-                        if (state.currentMessages.length === 0 && !state.currentSystemPrompt && state.currentChatId) {
+                        if (state.currentMessages.length === 0 && state.currentChatId) {
                             this.startNewChat();
                         }
                     } catch (error) {
@@ -12656,10 +12500,6 @@
                 }
                 if (state.isSending) {
                     await uiUtils.showCustomAlert("送信中です。");
-                    return;
-                }
-                if (state.isEditingSystemPrompt) {
-                    await uiUtils.showCustomAlert("システムプロンプト編集中はリトライできません。");
                     return;
                 }
 
@@ -12798,7 +12638,6 @@
                 }
                 if (state.editingMessageIndex !== null) { await uiUtils.showCustomAlert("編集中は削除できません。"); return; }
                 if (state.isSending) { await uiUtils.showCustomAlert("送信中は削除できません。"); return; }
-                if (state.isEditingSystemPrompt) { await uiUtils.showCustomAlert("システムプロンプト編集中は削除できません。"); return; }
 
                 const siblings = this.getCascadedSiblings(indexToDelete, true);
                 const currentIndexInGroup = siblings.findIndex(m => m === msgToDelete) + 1;
@@ -13070,10 +12909,6 @@
                      uiUtils.showCustomAlert("メッセージ編集中は操作できません。");
                      return;
                  }
-                 if (state.isEditingSystemPrompt) {
-                     uiUtils.showCustomAlert("システムプロンプト編集中は操作できません。");
-                     return;
-                 }
 
                 state.areAllMessagesHidden = !state.areAllMessagesHidden;
                 uiUtils.updateToggleAllContentButton();
@@ -13163,7 +12998,7 @@
                         xaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB, llmAggregatorTopKB;
 
                     if (providerForSettingsB === 'gemini') {
-                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.geminiSystemPrompt;
+                        systemPromptB = state.settings.geminiSystemPrompt;
                         enableSystemPromptDefaultB = state.settings.geminiEnableSystemPromptDefault;
                         temperatureB = state.settings.geminiTemperature;
                         maxTokensB = state.settings.geminiMaxTokens;
@@ -13183,7 +13018,7 @@
                         geminiPseudoStreamingB = state.settings.geminiPseudoStreaming;
                         geminiEnableGroundingB = state.settings.geminiEnableGrounding;
                     } else if (providerForSettingsB === 'deepseek') {
-                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.deepSeekSystemPrompt;
+                        systemPromptB = state.settings.deepSeekSystemPrompt;
                         enableSystemPromptDefaultB = state.settings.deepSeekEnableSystemPromptDefault;
                         temperatureB = state.settings.deepSeekTemperature;
                         maxTokensB = state.settings.deepSeekMaxTokens;
@@ -13199,7 +13034,7 @@
                         enableDummyModelB = state.settings.deepSeekEnableDummyModel;
                         concatDummyModelB = state.settings.deepSeekConcatDummyModel;
                     } else if (providerForSettingsB === 'llmaggregator') {
-                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.llmAggregatorSystemPrompt;
+                        systemPromptB = state.settings.llmAggregatorSystemPrompt;
                         enableSystemPromptDefaultB = state.settings.llmAggregatorEnableSystemPromptDefault;
                         temperatureB = state.settings.llmAggregatorTemperature;
                         maxTokensB = state.settings.llmAggregatorMaxTokens;
@@ -13216,7 +13051,7 @@
                         enableDummyModelB = state.settings.llmAggregatorEnableDummyModel;
                         concatDummyModelB = state.settings.llmAggregatorConcatDummyModel;
                     } else if (providerForSettingsB === 'claude') {
-                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.claudeSystemPrompt;
+                        systemPromptB = state.settings.claudeSystemPrompt;
                         enableSystemPromptDefaultB = state.settings.claudeEnableSystemPromptDefault;
                         temperatureB = state.settings.claudeTemperature;
                         maxTokensB = state.settings.claudeMaxTokens;
@@ -13233,7 +13068,7 @@
                         claudeThinkingBudgetB = state.settings.claudeThinkingBudget;
                         claudeExpandThoughtsByDefaultB = state.settings.claudeExpandThoughtsByDefault;
                     } else if (providerForSettingsB === 'openai') {
-                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.openaiSystemPrompt;
+                        systemPromptB = state.settings.openaiSystemPrompt;
                         enableSystemPromptDefaultB = state.settings.openaiEnableSystemPromptDefault;
                         temperatureB = state.settings.openaiTemperature;
                         maxTokensB = state.settings.openaiMaxTokens;
@@ -13248,7 +13083,7 @@
                         enableDummyModelB = state.settings.openaiEnableDummyModel;
                         concatDummyModelB = state.settings.openaiConcatDummyModel;
                     } else if (providerForSettingsB === 'xai') {
-                        systemPromptB = sessionB_Data.systemPrompt !== undefined ? sessionB_Data.systemPrompt : state.settings.xaiSystemPrompt;
+                        systemPromptB = state.settings.xaiSystemPrompt;
                         enableSystemPromptDefaultB = state.settings.xaiEnableSystemPromptDefault;
                         temperatureB = state.settings.xaiTemperature;
                         maxTokensB = state.settings.xaiMaxTokens;
@@ -14743,7 +14578,7 @@
                 if (!state.settings.showMultiApiKeys) {
                     return;
                 }
-                const activeKey = this.getActiveApiKey(provider);
+                                const activeKey = this.getActiveApiKey(provider);
                 switch (provider) {
                     case 'gemini':
                         elements.geminiApiKeyInput.value = activeKey;
