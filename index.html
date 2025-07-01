@@ -9117,6 +9117,29 @@
                     uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
                 });
 
+                const settingsScreenElement = document.getElementById('settings-screen');
+                let autoSaveTimer;
+                const handleSettingsChange = () => {
+                    if (state.settings.autoSaveSettings) {
+                        clearTimeout(autoSaveTimer);
+                        autoSaveTimer = setTimeout(() => {
+                            this.saveSettings(false);
+                        }, 500);
+                    }
+                };
+
+                settingsScreenElement.addEventListener('change', (event) => {
+                    if (event.target.closest('.settings-group, .danger-zone')) {
+                        handleSettingsChange();
+                    }
+                });
+
+                settingsScreenElement.addEventListener('input', (event) => {
+                    if (event.target.matches('input[type="text"], input[type="password"], input[type="number"], textarea')) {
+                         handleSettingsChange();
+                    }
+                });
+
                 elements.messageContainer.addEventListener('click', (event) => {
                     const clickedMessage = event.target.closest('.message');
                     if (event.target.closest('.message-actions button, .message-cascade-controls button, .message-toggle-button, .interactive-title-content, .code-copy-button, a[href="#"], .thought-summary-details summary, .attachment-actions button, .add-more-attachments-btn')) {
@@ -9247,33 +9270,6 @@
                 elements.llmAggregatorApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('llmaggregator'));
                 elements.showMultiApiKeysToggle.addEventListener('change', (e) => {
                     uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
-                });
-                
-                let autoSaveTimer;
-                const handleSettingsChange = () => {
-                    if (state.settings.autoSaveSettings) {
-                        clearTimeout(autoSaveTimer);
-                        autoSaveTimer = setTimeout(() => {
-                            this.saveSettings(false);
-                        }, 500);
-                    }
-                };
-
-                const settingsScreenElement = document.getElementById('settings-screen');
-                settingsScreenElement.addEventListener('change', (event) => {
-                    if (event.target.id === 'auto-save-settings-toggle') {
-                        elements.settingsScreen.classList.toggle('auto-save-mode', event.target.checked);
-                    }
-
-                    if (event.target.closest('.settings-group, .danger-zone')) {
-                        handleSettingsChange();
-                    }
-                });
-
-                settingsScreenElement.addEventListener('input', (event) => {
-                    if (event.target.matches('input[type="text"], input[type="password"], input[type="number"], textarea')) {
-                         handleSettingsChange();
-                    }
                 });
             },
             handlePopState(event) {
@@ -13622,7 +13618,7 @@
                 try {
                     const response = await fetch(endpoint, {
                         method: 'POST',
-                                                headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(requestBody),
                         signal
                     });
@@ -14786,7 +14782,7 @@
             renderApiKeyList(provider) {
                 const keys = this.getApiKeysArray(provider);
                 const container = this.getListContainer(provider);
-                const addButton = this.getAddButton(provider);
+                                const addButton = this.getAddButton(provider);
 
                 container.innerHTML = '';
 
