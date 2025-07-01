@@ -3281,6 +3281,10 @@
             background-color: var(--bg-button-disabled);
             cursor: not-allowed;
         }
+        #settings-screen.auto-save-mode .app-header #settings-save-notice,
+        #settings-screen.auto-save-mode .app-header .js-save-settings-btn {
+            display: none !important;
+        }
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
@@ -7689,6 +7693,7 @@
                 this.updateApiProviderSelectOptions();
                 this.applyMinimizeUI();
                 this.toggleMultiApiKeysVisibility(state.settings.showMultiApiKeys);
+                elements.settingsScreen.classList.toggle('auto-save-mode', state.settings.autoSaveSettings);
             },
             applyMinimizeUI() {
                 elements.appContainer.classList.toggle('minimized-ui', state.settings.minimizeHeaderFooter);
@@ -9256,6 +9261,10 @@
 
                 const settingsScreenElement = document.getElementById('settings-screen');
                 settingsScreenElement.addEventListener('change', (event) => {
+                    if (event.target.id === 'auto-save-settings-toggle') {
+                        elements.settingsScreen.classList.toggle('auto-save-mode', event.target.checked);
+                    }
+
                     if (event.target.closest('.settings-group, .danger-zone')) {
                         handleSettingsChange();
                     }
@@ -12610,7 +12619,7 @@
                     const oldThoughtOpenStates = new Map(state.thoughtSummaryOpenStates);
                     state.thoughtSummaryOpenStates.clear();
                      state.currentMessages.forEach((msg, newIdx) => {
-                        const oldIdxEquivalent = newIdx >= Math.min(...indicesToDelete) ? newIdx + 1 : newIdx;
+                        const oldIdxEquivalent = newIdx >= indexToDelete ? newIdx + 1 : newIdx;
                         if (oldThoughtOpenStates.has(oldIdxEquivalent)) {
                             state.thoughtSummaryOpenStates.set(newIdx, oldThoughtOpenStates.get(oldIdxEquivalent));
                         } else {
@@ -13284,7 +13293,7 @@
                         presencePenalty: presencePenaltyB, frequencyPenalty: frequencyPenaltyB,
                         streamingOutput: streamingOutputB, streamingSpeed: streamingSpeedB,
                         dummyUser: dummyUserB, enableDummyUser: enableDummyUserB,
-                        dummyModel: dummyModelB, enableDummyModel: enableDummyModelB, concatDummyModel: concatDummyModelB,
+                        dummyModel: dummyModelB, enableDummyModelB: enableDummyModelB, concatDummyModel: concatDummyModelB,
                         topK: providerForSettingsB === 'gemini' ? geminiTopKB :
                               providerForSettingsB === 'claude' ? claudeTopKB :
                               providerForSettingsB === 'llmaggregator' ? llmAggregatorTopKB : undefined,
@@ -13613,7 +13622,7 @@
                 try {
                     const response = await fetch(endpoint, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                                                headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(requestBody),
                         signal
                     });
