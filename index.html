@@ -8475,7 +8475,7 @@
         };
 
         const appLogic = {
-            initializeApp() {
+            async initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -12353,34 +12353,45 @@
                 confirmedDelete = await uiUtils.showCustomConfirm(confirmMessage);
             }
 
-            const originalFirstUserMsgIndex = state.currentMessages.findIndex(m => m.role === 'user');
-
             if (confirmedDelete) {
-                const newCollapsedStates = new Map();
-                const newThoughtOpenStates = new Map();
-                let newIdxCounter = 0;
+                const originalFirstUserMsgIndex = state.currentMessages.findIndex(m => m.role === 'user');
 
-                state.currentMessages.forEach((msg, oldIdx) => {
-                    if (!indicesToDelete.includes(oldIdx)) {
-                        if (state.messageCollapsedStates.has(oldIdx)) {
-                            newCollapsedStates.set(newIdxCounter, state.messageCollapsedStates.get(oldIdx));
-                        }
-                        if (state.thoughtSummaryOpenStates.has(oldIdx)) {
-                            newThoughtOpenStates.set(newIdxCounter, state.thoughtSummaryOpenStates.get(oldIdx));
-                        }
-                        newIdxCounter++;
-                    }
-                });
-                
                 indicesToDelete.sort((a, b) => b - a).forEach(idx => {
                     state.currentMessages.splice(idx, 1);
+                    state.messageCollapsedStates.delete(idx);
+                    state.thoughtSummaryOpenStates.delete(idx);
                 });
 
-                state.messageCollapsedStates = newCollapsedStates;
-                state.thoughtSummaryOpenStates = newThoughtOpenStates;
+                const oldCollapsedStates = new Map(state.messageCollapsedStates);
+                state.messageCollapsedStates.clear();
+                 state.currentMessages.forEach((msg, newIdx) => {
+                    const oldIdxEquivalent = newIdx >= Math.min(...indicesToDelete) ? newIdx + indicesToDelete.filter(i => i <= newIdx).length : newIdx;
+                    if (oldCollapsedStates.has(oldIdxEquivalent)) {
+                        state.messageCollapsedStates.set(newIdx, oldCollapsedStates.get(oldIdxEquivalent));
+                    } else {
+                        state.messageCollapsedStates.set(newIdx, false);
+                    }
+                });
+                const oldThoughtOpenStates = new Map(state.thoughtSummaryOpenStates);
+                state.thoughtSummaryOpenStates.clear();
+                 state.currentMessages.forEach((msg, newIdx) => {
+                    const minDeletedIndex = Math.min(...indicesToDelete);
+                    const oldIdxEquivalent = newIdx >= minDeletedIndex ? newIdx + indicesToDelete.filter(i => i <= newIdx).length : newIdx;
+                    if (oldThoughtOpenStates.has(oldIdxEquivalent)) {
+                        state.thoughtSummaryOpenStates.set(newIdx, oldThoughtOpenStates.get(oldIdxEquivalent));
+                    } else {
+                        const messageApiProvider = msg?.generatedByApiProvider || state.settings.apiProvider;
+                        state.thoughtSummaryOpenStates.set(newIdx, (messageApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
+                                                                   (messageApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
+                                                                   (messageApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
+                                                                   (messageApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
+                                                                   (messageApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault));
+                    }
+                });
 
                 uiUtils.renderChatMessages(true);
 
+                const newFirstUserMsgIndex = state.currentMessages.findIndex(m => m.role === 'user');
                 let requiresTitleUpdate = indicesToDelete.includes(originalFirstUserMsgIndex);
 
                 try {
@@ -12388,7 +12399,6 @@
                     const currentChatData = state.currentChatId ? await dbUtils.getChat(state.currentChatId) : null;
 
                     if (requiresTitleUpdate) {
-                        const newFirstUserMsgIndex = state.currentMessages.findIndex(m => m.role === 'user');
                         const newFirstUserMessage = newFirstUserMsgIndex !== -1 ? state.currentMessages[newFirstUserMsgIndex] : null;
                         newTitleForSave = newFirstUserMessage ? newFirstUserMessage.content.substring(0, 50) : "無題のチャット";
                     } else if (currentChatData) {
@@ -13889,13 +13899,13 @@
                             }
                         }
                     }
-                    if (finalFinishReason && finalFinishReason !== 'null') break;
+                                        if (finalFinishReason && finalFinishReason !== 'null') break;
                 }
                 yield {
                     type: 'metadata',
                     finishReason: isCancelled ? 'ABORTED' : finalFinishReason || 'stop',
                     safetyRatings: null,
-                    usageMetadata: finalUsage ? {
+                                            usageMetadata: finalUsage ? {
                         candidatesTokenCount: finalUsage.output_tokens,
                         totalTokenCount: finalUsage.input_tokens + finalUsage.output_tokens
                     } : null
