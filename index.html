@@ -854,6 +854,7 @@
         .app-header #toggle-memo-btn,
         .app-header .scroll-jump-button,
         .app-header #toggle-all-content-btn,
+        .app-header #summarize-history-btn,
         .app-header .api-provider-toggle-btn {
             background-color: transparent !important;
             color: var(--text-light);
@@ -865,6 +866,7 @@
         .app-header #toggle-memo-btn:hover,
         .app-header .scroll-jump-button:hover,
         .app-header #toggle-all-content-btn:hover,
+        .app-header #summarize-history-btn:hover,
         .app-header .api-provider-toggle-btn:hover {
             background-color: rgba(255, 255, 255, 0.1) !important;
             border-color: rgba(255, 255, 255, 0.3) !important;
@@ -873,6 +875,7 @@
         body.pastel-yellow-mode .app-header #toggle-memo-btn,
         body.pastel-yellow-mode .app-header .scroll-jump-button,
         body.pastel-yellow-mode .app-header #toggle-all-content-btn,
+        body.pastel-yellow-mode .app-header #summarize-history-btn,
         body.pastel-yellow-mode .app-header .api-provider-toggle-btn {
             color: #424242;
         }
@@ -880,6 +883,7 @@
         body.pastel-yellow-mode .app-header #toggle-memo-btn:hover,
         body.pastel-yellow-mode .app-header .scroll-jump-button:hover,
         body.pastel-yellow-mode .app-header #toggle-all-content-btn:hover,
+        body.pastel-yellow-mode .app-header #summarize-history-btn:hover,
         body.pastel-yellow-mode .app-header .api-provider-toggle-btn:hover {
             background-color: rgba(0, 0, 0, 0.05) !important;
             border-color: rgba(0, 0, 0, 0.1) !important;
@@ -888,6 +892,7 @@
         body.dark-mode .app-header #toggle-memo-btn:hover,
         body.dark-mode .app-header .scroll-jump-button:hover,
         body.dark-mode .app-header #toggle-all-content-btn:hover,
+        body.dark-mode .app-header #summarize-history-btn:hover,
         body.dark-mode .app-header .api-provider-toggle-btn:hover {
             background-color: rgba(255, 255, 255, 0.08) !important;
             border-color: rgba(255, 255, 255, 0.2) !important;
@@ -1307,6 +1312,52 @@
         }
 
         #clipboard-stack-editor {
+            flex-grow: 1;
+            width: 100%;
+            border: none;
+            resize: none;
+            background-color: transparent;
+            color: var(--text-memo);
+            font-family: inherit;
+            font-size: 14px;
+            outline: none;
+            padding: 0;
+            margin: 0;
+            min-height: 50px;
+            display: block;
+        }
+
+        #summarized-history-area {
+            position: relative;
+            width: 100%;
+            min-height: 80px;
+            max-height: var(--memo-height);
+            background-color: var(--bg-memo);
+            border-bottom: 1px solid var(--border-secondary);
+            padding: 10px 15px;
+            z-index: 4;
+            box-shadow: 0 1px 3px var(--shadow-primary);
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            transition: max-height 0.3s ease-out, padding-top 0.3s ease-out, padding-bottom 0.3s ease-out, opacity 0.3s ease-out, border-width 0.3s ease-out;
+            resize: vertical;
+            margin-bottom: 0;
+        }
+
+        #summarized-history-area.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            max-height: 0 !important;
+            min-height: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            border-width: 0 !important;
+            overflow: hidden;
+        }
+
+        #summarized-history-editor {
             flex-grow: 1;
             width: 100%;
             border: none;
@@ -3218,6 +3269,7 @@
                 <button id="scroll-to-top-btn" class="header-button scroll-jump-button" aria-label="最上部へスクロール" title="最上部へ">🔼</button>
                 <button id="scroll-to-bottom-btn" class="header-button scroll-jump-button" aria-label="最下部へスクロール" title="最下部へ">🔽</button>
                 <button id="toggle-all-content-btn" class="header-button" aria-label="全メッセージ表示切替" title="全メッセージの表示/非表示を切り替え">🖼️</button>
+                <button id="summarize-history-btn" class="header-button hidden" aria-label="要約セッション履歴を開閉" title="要約セッション履歴">⚗️</button>
                 <button id="toggle-clipboard-stack-btn" class="header-button" aria-label="クリップボードスタックを開閉">🗒️</button>
                 <button id="toggle-memo-btn" class="header-button" aria-label="メモを開閉">📝</button>
                 <button id="goto-settings-btn" class="header-button" aria-label="設定へ">⚙</button>
@@ -3239,6 +3291,10 @@
                     <button id="paste-clipboard-stack-btn" class="paste-clipboard-stack-btn" title="スタックに貼り付け">貼付け</button>
                 </div>
                 <textarea id="clipboard-stack-editor" aria-label="クリップボードスタック入力エリア" placeholder="ここにコピーされたメッセージが蓄積されます...（保存されません）"></textarea>
+            </div>
+
+            <div id="summarized-history-area" class="hidden">
+                <textarea id="summarized-history-editor" aria-label="要約セッション履歴エリア" placeholder="ここには、Twin-engine機能によって要約された履歴が表示されます...（保存されません）" readonly></textarea>
             </div>
 
             <main class="main-content">
@@ -4563,6 +4619,13 @@
                 <details class="settings-group" id="settings-group-twin-engine">
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">Twin-engine</summary>
                     <div style="margin-top:10px;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="show-summarize-history-button-toggle">
+                            ヘッダーに「要約セッション履歴」ボタンを表示する（⚗️ボタン）
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                            ※ 有効にすると、ヘッダーに要約履歴パネルを開くボタンが表示されます。
+                        </p>
                         <label for="twin-engine-provider-select">使用するAPIプロバイダー (Twin-engine):</label>
                         <select id="twin-engine-provider-select" aria-label="Twin-engine APIプロバイダー選択">
                             <option value="gemini">Gemini (Google)</option>
@@ -5243,6 +5306,10 @@
             twinEngineLlmaggregatorSettings: document.getElementById('twin-engine-llmaggregator-settings'),
             twinEngineLlmaggregatorApiKeyInput: document.getElementById('twin-engine-llmaggregator-api-key'),
             twinEngineLlmaggregatorModelNameSelect: document.getElementById('twin-engine-llmaggregator-model-name'),
+            summarizeHistoryBtn: document.getElementById('summarize-history-btn'),
+            showSummarizeHistoryButtonToggle: document.getElementById('show-summarize-history-button-toggle'),
+            summarizedHistoryArea: document.getElementById('summarized-history-area'),
+            summarizedHistoryEditor: document.getElementById('summarized-history-editor'),
         };
 
         const state = {
@@ -5464,6 +5531,7 @@
                 twinEngineLlmaggregatorApiKey: '',
                 twinEngineLlmaggregatorModelName: DEFAULT_LLMAGGREGATOR_MODEL,
                 thoughtSummaryOpacity: DEFAULT_THOUGHT_SUMMARY_OPACITY,
+                showSummarizeHistoryButton: false,
                 settingsUIDetailsOpenStates: {},
                 showApiProviderToggleHeader: false,
                 showApiProviderToggleFooter: true,
@@ -5517,6 +5585,7 @@
             thoughtSummaryOpenStates: new Map(),
             linkedSessionIds: [],
             isAiToAiChatProcessing: false,
+            isSummarizedHistoryVisible: false,
         };
 
         const sanitizeText = (text, maxLength = 255) => {
@@ -7421,6 +7490,7 @@
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
                 elements.apiProviderSelect.value = state.settings.apiProvider;
                 elements.twinEngineProviderSelect.value = state.settings.twinEngineProvider || 'gemini';
+                elements.showSummarizeHistoryButtonToggle.checked = state.settings.showSummarizeHistoryButton;
                 elements.twinEngineGeminiApiKeyInput.value = state.settings.twinEngineGeminiApiKey || '';
                 elements.twinEngineDeepseekApiKeyInput.value = state.settings.twinEngineDeepseekApiKey || '';
                 elements.twinEngineClaudeApiKeyInput.value = state.settings.twinEngineClaudeApiKey || '';
@@ -7800,6 +7870,7 @@
                         { id: '#show-scroll-to-top-button-toggle', element: elements.scrollToTopBtn },
                         { id: '#show-scroll-to-bottom-button-toggle', element: elements.scrollToBottomBtn },
                         { id: '#show-toggle-all-content-button-toggle', element: elements.toggleAllContentBtn },
+                        { id: '#show-summarize-history-button-toggle', element: elements.summarizeHistoryBtn },
                         { id: '#show-memo-button-toggle', element: elements.toggleMemoBtn },
                         { id: '#show-clipboard-stack-button-toggle', element: elements.toggleClipboardStackBtn },
                     ];
@@ -7848,7 +7919,7 @@
                     let isOverflowing = settingsBtnRect.right > headerRect.right - 5;
             
                     const buttonPriority = [
-                        '#toggle-clipboard-stack-btn', '#toggle-memo-btn', '#scroll-to-top-btn',
+                        '#toggle-clipboard-stack-btn', '#toggle-memo-btn', '#summarize-history-btn', '#scroll-to-top-btn',
                         '#scroll-to-bottom-btn', '#toggle-all-content-btn', '#header-api-provider-toggle-btn',
                         '#copy-session-btn', '#delete-session-btn', '#new-chat-btn'
                     ];
@@ -8100,6 +8171,10 @@
                 if (state.isClipboardStackVisible && screenName !== 'chat') {
                      elements.clipboardStackArea.classList.add('hidden');
                      state.isClipboardStackVisible = false;
+                }
+                if (state.isSummarizedHistoryVisible && screenName !== 'chat') {
+                    elements.summarizedHistoryArea.classList.add('hidden');
+                    state.isSummarizedHistoryVisible = false;
                 }
 
                 if (screenName === state.currentScreen) {
@@ -8600,7 +8675,7 @@
         };
 
         const appLogic = {
-            async initializeApp() {
+            initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -9264,6 +9339,11 @@
             elements.twinEngineProviderSelect.addEventListener('change', (event) => {
                 uiUtils.updateTwinEngineApiSettingsVisibility(event.target.value);
             });
+            elements.summarizeHistoryBtn.addEventListener('click', () => this.toggleSummarizedHistoryArea());
+            elements.showSummarizeHistoryButtonToggle.addEventListener('change', () => {
+                state.settings.showSummarizeHistoryButton = elements.showSummarizeHistoryButtonToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+            });
         },
         handlePopState(event) {
             const targetScreen = event.state?.screen || 'chat';
@@ -9350,6 +9430,8 @@
                  uiUtils.showCustomAlert("メッセージ編集中はメモを開閉できません。");
                  return;
              }
+            if (state.isClipboardStackVisible) this.toggleClipboardStack();
+            if (state.isSummarizedHistoryVisible) this.toggleSummarizedHistoryArea();
 
             state.isMemoVisible = !state.isMemoVisible;
             elements.memoArea.classList.toggle('hidden', !state.isMemoVisible);
@@ -9445,6 +9527,8 @@
                  uiUtils.showCustomAlert("メッセージ編集中はクリップボードスタックを開閉できません。");
                  return;
              }
+            if (state.isMemoVisible) this.toggleMemo();
+            if (state.isSummarizedHistoryVisible) this.toggleSummarizedHistoryArea();
 
             state.isClipboardStackVisible = !state.isClipboardStackVisible;
             elements.clipboardStackArea.classList.toggle('hidden', !state.isClipboardStackVisible);
@@ -9536,6 +9620,27 @@
             if (confirmed) {
                 elements.clipboardStackEditor.value = '';
                 state.clipboardStackContent = '';
+            }
+        },
+        toggleSummarizedHistoryArea() {
+            if (state.editingMessageIndex !== null) {
+                uiUtils.showCustomAlert("メッセージ編集中は要約履歴を開閉できません。");
+                return;
+            }
+            if (state.isMemoVisible) {
+                state.isMemoVisible = false;
+                elements.memoArea.classList.add('hidden');
+            }
+            if (state.isClipboardStackVisible) {
+                state.isClipboardStackVisible = false;
+                elements.clipboardStackArea.classList.add('hidden');
+            }
+
+            state.isSummarizedHistoryVisible = !state.isSummarizedHistoryVisible;
+            elements.summarizedHistoryArea.classList.toggle('hidden', !state.isSummarizedHistoryVisible);
+
+            if (state.isSummarizedHistoryVisible) {
+                elements.summarizedHistoryEditor.focus();
             }
         },
         scrollToTop() {
@@ -9677,6 +9782,9 @@
             state.isClipboardStackVisible = false;
             elements.clipboardStackArea.classList.add('hidden');
             state.clipboardStackContent = '';
+            state.isSummarizedHistoryVisible = false;
+            elements.summarizedHistoryArea.classList.add('hidden');
+            elements.summarizedHistoryEditor.value = '';
             state.areAllMessagesHidden = false;
             uiUtils.updateToggleAllContentButton();
             state.messageCollapsedStates.clear();
@@ -11543,6 +11651,7 @@
 
              newSettings.apiProvider = elements.apiProviderSelect.value;
              newSettings.twinEngineProvider = elements.twinEngineProviderSelect.value;
+             newSettings.showSummarizeHistoryButton = elements.showSummarizeHistoryButtonToggle.checked;
              newSettings.twinEngineGeminiApiKey = elements.twinEngineGeminiApiKeyInput.value.trim();
              newSettings.twinEngineGeminiModelName = elements.twinEngineGeminiModelNameSelect.value;
              newSettings.twinEngineDeepseekApiKey = elements.twinEngineDeepseekApiKeyInput.value.trim();
@@ -12067,6 +12176,7 @@
                     defaultSettingsCopy.toggleButtonBottomTextCollapse = DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                     defaultSettingsCopy.toggleButtonBottomTextExpand = DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
                     defaultSettingsCopy.thoughtSummaryOpacity = DEFAULT_THOUGHT_SUMMARY_OPACITY;
+                    defaultSettingsCopy.showSummarizeHistoryButton = false;
                     defaultSettingsCopy.settingsUIDetailsOpenStates = {};
                     defaultSettingsCopy.showApiProviderToggleHeader = false;
                     defaultSettingsCopy.showApiProviderToggleFooter = true;
@@ -13846,7 +13956,7 @@
                             } catch (e) {}
                         }
                     }
-                     if (finalFinishReason && finalFinishReason !== 'null') break;
+                                        if (finalFinishReason && finalFinishReason !== 'null') break;
                 }
 
                 yield {
@@ -14239,7 +14349,7 @@
                 }
                 yield {
                     type: "metadata",
-                    finishReason: isCancelled ? "ABORTED" : finishReason || 'stop',
+                                        finishReason: isCancelled ? "ABORTED" : finishReason || 'stop',
                     usageMetadata: usage ? {
                         candidatesTokenCount: usage.completion_tokens,
                         totalTokenCount: usage.prompt_tokens + usage.completion_tokens
