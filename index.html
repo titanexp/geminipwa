@@ -125,6 +125,9 @@
             --bg-button-purple: #800080;
             --bg-button-purple-hover: #6A006A;
             --text-button-purple: #ffffff;
+            --bg-button-twin-engine: var(--bg-button-purple);
+            --bg-button-twin-engine-hover: var(--bg-button-purple-hover);
+            --text-button-twin-engine: var(--text-button-purple);
 
             --message-toggle-button-top-width: 6px;
             --message-toggle-button-top-height: 40px;
@@ -1960,6 +1963,13 @@
         body.pastel-rainbow-mode .chat-input-area button#send-button.sending:hover {
             background-color: #ffe766;
         }
+        .chat-input-area button#send-button.twin-engine-mode {
+            background-color: var(--bg-button-twin-engine);
+            color: var(--text-button-twin-engine);
+        }
+        .chat-input-area button#send-button.twin-engine-mode:hover:not(:disabled) {
+            background-color: var(--bg-button-twin-engine-hover);
+        }
 
         #loading-indicator {
             position: fixed;
@@ -3275,16 +3285,6 @@
         #settings-screen.auto-save-mode .app-header .js-save-settings-btn {
             display: none !important;
         }
-        .twin-engine-summary-actions-container .generate-twin-engine-summary-btn {
-            background-color: var(--bg-button-retry);
-            margin-right: auto;
-        }
-        .twin-engine-summary-actions-container .generate-twin-engine-summary-btn:hover:not(:disabled) {
-            background-color: var(--bg-button-retry-hover);
-        }
-        .twin-engine-summary-actions-container .generate-twin-engine-summary-btn:disabled {
-            background-color: var(--bg-button-disabled);
-        }
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
@@ -3330,7 +3330,6 @@
 
             <div id="twin-engine-summary-area" class="hidden">
                 <div class="twin-engine-summary-actions-container">
-                    <button id="generate-twin-engine-summary-btn" title="現在のチャット履歴から要約を生成">要約生成</button>
                     <button id="copy-twin-engine-summary-btn" class="copy-twin-engine-summary-btn" title="内容をコピー">コピー</button>
                     <button id="clear-twin-engine-summary-btn" class="clear-twin-engine-summary-btn" title="内容を全て削除">全削除</button>
                 </div>
@@ -3789,7 +3788,7 @@
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">パラメータ (DeepSeek)</summary>
                     <div style="margin-top:15px;">
                         <label for="deepseek-system-prompt-default">固有システムプロンプト (DeepSeek):</label>
-                        <textarea id="deepseek-system-prompt-default" placeholder="例: あなたは親切なDeepSeekアシスタントです。" aria-label="DeepSeek 固有システムプロンプト"></textarea>
+<textarea id="deepseek-system-prompt-default" placeholder="例: あなたは親切なDeepSeekアシスタントです。" aria-label="DeepSeek 固有システムプロンプト"></textarea>
                         <label class="checkbox-label" style="margin-top: -5px; margin-bottom: 15px;">
                             <input type="checkbox" id="deepseek-enable-system-prompt-default">
                             このシステムプロンプトを有効にする (共通システムプロンプトより優先度高)
@@ -4659,6 +4658,13 @@
                 <details class="settings-group" id="settings-group-twin-engine">
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">Twin-engine</summary>
                     <div style="margin-top:10px;">
+                        <label class="checkbox-label" style="margin-bottom: 15px; background-color: rgba(var(--bg-button-delete-rgb, 229, 57, 53), 0.1); padding: 8px; border-radius: 4px; border: 1px solid rgba(var(--bg-button-delete-rgb, 229, 57, 53), 0.2);">
+                            <input type="checkbox" id="enable-twin-engine-mode">
+                            <strong style="color: var(--text-error);">Twin-engineモードを有効にする (送信ボタンの挙動が変わります)</strong>
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -10px; margin-bottom: 15px;">
+                            ※ 有効時、送信ボタンはチャット履歴全体の要約を生成し、「要約セッション履歴」パネルに結果を出力します。通常のチャットは行えません。
+                        </p>
                         <label class="checkbox-label" style="margin-bottom: 5px;">
                             <input type="checkbox" id="show-twin-engine-summary-button-toggle">
                             ヘッダーに「要約セッション履歴」ボタンを表示する（⚗️ボタン）
@@ -5260,7 +5266,6 @@
             twinEngineSummaryBtn: document.getElementById('twin-engine-summary-btn'),
             twinEngineSummaryArea: document.getElementById('twin-engine-summary-area'),
             twinEngineSummaryEditor: document.getElementById('twin-engine-summary-editor'),
-            generateTwinEngineSummaryBtn: document.getElementById('generate-twin-engine-summary-btn'),
             copyTwinEngineSummaryBtn: document.getElementById('copy-twin-engine-summary-btn'),
             clearTwinEngineSummaryBtn: document.getElementById('clear-twin-engine-summary-btn'),
             showUserIconToggle: document.getElementById('show-user-icon-toggle'),
@@ -5353,6 +5358,7 @@
             twinEngineLlmaggregatorSettings: document.getElementById('twin-engine-llmaggregator-settings'),
             twinEngineLlmaggregatorApiKeyInput: document.getElementById('twin-engine-llmaggregator-api-key'),
             twinEngineLlmaggregatorModelNameSelect: document.getElementById('twin-engine-llmaggregator-model-name'),
+            enableTwinEngineModeCheckbox: document.getElementById('enable-twin-engine-mode'),
         };
 
         const state = {
@@ -5516,6 +5522,7 @@
                 showClipboardStackButton: false,
                 clipboardStackHeight: DEFAULT_CLIPBOARD_STACK_HEIGHT,
                 showTwinEngineSummaryButton: false,
+                enableTwinEngineMode: false,
                 showUserIcon: false,
                 userIconBlob: null,
                 showUserName: false,
@@ -6590,7 +6597,7 @@
                      (messageData.groundingMetadata.webSearchQueries && messageData.groundingMetadata.webSearchQueries.length > 0)))
                 {
                     const details = document.createElement('details');
-details.classList.add('citation-details');
+                    details.classList.add('citation-details');
                     const summary = document.createElement('summary');
                     summary.textContent = '引用元/検索クエリ';
                     details.appendChild(summary);
@@ -7534,6 +7541,7 @@ details.classList.add('citation-details');
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
                 elements.apiProviderSelect.value = state.settings.apiProvider;
                 elements.twinEngineProviderSelect.value = state.settings.twinEngineProvider || 'gemini';
+                elements.enableTwinEngineModeCheckbox.checked = state.settings.enableTwinEngineMode;
                 elements.twinEngineGeminiApiKeyInput.value = state.settings.twinEngineGeminiApiKey || '';
                 elements.twinEngineDeepseekApiKeyInput.value = state.settings.twinEngineDeepseekApiKey || '';
                 elements.twinEngineClaudeApiKeyInput.value = state.settings.twinEngineClaudeApiKey || '';
@@ -7807,6 +7815,20 @@ details.classList.add('citation-details');
                 this.toggleMultiApiKeysVisibility(state.settings.showMultiApiKeys);
                 elements.settingsScreen.classList.toggle('auto-save-mode', state.settings.autoSaveSettings);
                 this.updateMemoStackHeightSettingsVisibility();
+                this.updateSendButtonForTwinEngineMode();
+            },
+            updateSendButtonForTwinEngineMode() {
+                const isTwinEngineMode = state.settings.enableTwinEngineMode;
+                if (elements.sendButton) {
+                    elements.sendButton.classList.toggle('twin-engine-mode', isTwinEngineMode);
+                    if (isTwinEngineMode) {
+                        elements.sendButton.textContent = '要約';
+                        elements.sendButton.title = '現在のチャット履歴を要約する';
+                    } else {
+                        elements.sendButton.textContent = '送';
+                        elements.sendButton.title = '送信';
+                    }
+                }
             },
             applyMinimizeUI() {
                 elements.appContainer.classList.toggle('minimized-ui', state.settings.minimizeHeaderFooter);
@@ -8292,9 +8314,9 @@ details.classList.add('citation-details');
                     elements.loadingIndicator.classList.remove('hidden');
                     elements.loadingIndicator.setAttribute('aria-live', 'polite');
                 } else {
-                    elements.sendButton.textContent = '送';
+                    this.updateSendButtonForTwinEngineMode();
                     elements.sendButton.classList.remove('sending');
-                    elements.sendButton.title = "送信";
+                    elements.sendButton.disabled = false;
                     elements.userInput.disabled = false;
                     elements.attachFileBtn.disabled = false;
                     elements.pasteToInputBtn.disabled = false;
@@ -8790,6 +8812,7 @@ details.classList.add('citation-details');
                     state.currentScreen = 'chat';
                     
                     updateMessageMaxWidthVar();
+                    uiUtils.updateSendButtonForTwinEngineMode();
                     this.setupEventListeners();
                     this.updateZoomState();
                     uiUtils.adjustTextareaHeight();
@@ -8822,7 +8845,6 @@ details.classList.add('citation-details');
                 elements.twinEngineSummaryBtn.addEventListener('click', () => this.toggleTwinEngineSummary());
                 elements.copyTwinEngineSummaryBtn.addEventListener('click', () => this.copyTwinEngineSummaryText());
                 elements.clearTwinEngineSummaryBtn.addEventListener('click', () => this.confirmClearTwinEngineSummary());
-                elements.generateTwinEngineSummaryBtn.addEventListener('click', () => this.initiateTwinEngineSummary());
 
                 elements.scrollToTopBtn.addEventListener('click', () => this.scrollToTop());
                 elements.scrollToBottomBtn.addEventListener('click', () => this.scrollToBottom());
@@ -8942,6 +8964,10 @@ details.classList.add('citation-details');
                             }
                         }
                     });
+                });
+                elements.enableTwinEngineModeCheckbox.addEventListener('change', () => {
+                    state.settings.enableTwinEngineMode = elements.enableTwinEngineModeCheckbox.checked;
+                    uiUtils.updateSendButtonForTwinEngineMode();
                 });
 
                 elements.uploadBackgroundBtn.addEventListener('click', () => elements.backgroundImageInput.click());
@@ -9278,7 +9304,7 @@ details.classList.add('citation-details');
                         }
                     }
                 }, true);
-                document.body.addEventListener('click', (event) => {
+            document.body.addEventListener('click', (event) => {
                     if (!elements.messageContainer.contains(event.target) &&
                     !elements.memoArea.contains(event.target) &&
                     !elements.clipboardStackArea.contains(event.target) &&
@@ -10210,6 +10236,10 @@ details.classList.add('citation-details');
             }
         },
         async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
+            if (state.settings.enableTwinEngineMode && !isRetry && !sourceSessionContext) {
+                this.handleTwinEngineSend();
+                return;
+            }
             const isBackgroundProcess = !!sourceSessionContext;
             const selectedApiProvider = isBackgroundProcess ? (sourceSessionContext.apiProvider || state.settings.apiProvider) : state.settings.apiProvider;
 
@@ -11287,6 +11317,69 @@ details.classList.add('citation-details');
             }
             if (isBackgroundProcess) return null;
         },
+        async handleTwinEngineSend() {
+            if (state.isSending) return;
+            if (state.currentMessages.length === 0) {
+                await uiUtils.showCustomAlert("要約するチャット履歴がありません。");
+                return;
+            }
+
+            uiUtils.setAiToAiProcessingState(true, "要約中...");
+
+            try {
+                const historyText = state.currentMessages
+                    .filter(msg => msg.role === 'user' || msg.role === 'model')
+                    .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+                    .join('\n\n');
+
+                const prompt = `以下の会話を簡潔に要約してください。\n\n---\n\n${historyText}`;
+
+                const provider = state.settings.twinEngineProvider;
+                const apiKey = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ApiKey`];
+                const modelName = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ModelName`];
+
+                if (!apiKey) {
+                    throw new Error(`Twin-engine用の${provider} APIキーが設定されていません。`);
+                }
+
+                const context = {
+                    messages: [],
+                    systemPrompt: "You are a helpful assistant that summarizes conversations.",
+                    inputText: prompt,
+                    attachments: [],
+                    apiProvider: provider,
+                    modelName: modelName,
+                    temperature: state.settings[`${provider}Temperature`],
+                    maxTokens: state.settings[`${provider}MaxTokens`],
+                    topK: state.settings[`${provider}TopK`],
+                    topP: state.settings[`${provider}TopP`],
+                };
+
+                const response = await this.handleSend(false, -1, context);
+
+                if (response && response.content) {
+                    const summaryText = response.content;
+                    
+                    state.twinEngineSummaryContent = summaryText;
+                    elements.twinEngineSummaryEditor.value = summaryText;
+
+                    if (!state.isTwinEngineSummaryVisible) {
+                        this.toggleTwinEngineSummary();
+                    }
+                    elements.twinEngineSummaryEditor.scrollTop = 0;
+
+                    await uiUtils.showCustomAlert("要約が完了しました。");
+
+                } else {
+                    throw new Error("APIから有効な要約を取得できませんでした。");
+                }
+
+            } catch (error) {
+                await uiUtils.showCustomAlert(`Twin-engine要約エラー: ${error.message}`);
+            } finally {
+                uiUtils.setAiToAiProcessingState(false);
+            }
+        },
         async toggleApiProvider() {
             if(state.isSending || state.isAiToAiChatProcessing) {
                 await uiUtils.showCustomAlert('現在処理中のため、APIプロバイダーを変更できません。');
@@ -11732,6 +11825,7 @@ details.classList.add('citation-details');
 
              newSettings.apiProvider = elements.apiProviderSelect.value;
              newSettings.twinEngineProvider = elements.twinEngineProviderSelect.value;
+             newSettings.enableTwinEngineMode = elements.enableTwinEngineModeCheckbox.checked;
              newSettings.twinEngineGeminiApiKey = elements.twinEngineGeminiApiKeyInput.value.trim();
              newSettings.twinEngineGeminiModelName = elements.twinEngineGeminiModelNameSelect.value;
              newSettings.twinEngineDeepseekApiKey = elements.twinEngineDeepseekApiKeyInput.value.trim();
@@ -12213,6 +12307,7 @@ details.classList.add('citation-details');
                     defaultSettingsCopy.showClipboardStackButton = false;
                     defaultSettingsCopy.clipboardStackHeight = DEFAULT_CLIPBOARD_STACK_HEIGHT;
                     defaultSettingsCopy.showTwinEngineSummaryButton = false;
+                    defaultSettingsCopy.enableTwinEngineMode = false;
                     defaultSettingsCopy.showUserIcon = false;
                     defaultSettingsCopy.userIconBlob = null;
                     defaultSettingsCopy.showUserName = false;
@@ -13425,7 +13520,7 @@ details.classList.add('citation-details');
                 uiUtils.setAiToAiProcessingState(false);
             }
         },
-        async removeAttachment(messageIndex, attachmentIndex, listItemElement) {
+        removeAttachment: async function(messageIndex, attachmentIndex, listItemElement) {
             const message = state.currentMessages[messageIndex];
             if (!message || !message.attachments || !message.attachments[attachmentIndex]) return;
 
@@ -13644,80 +13739,10 @@ details.classList.add('citation-details');
             
             dialog.showModal();
         },
-        isProcessing() {
-            return state.isSending || state.isAiToAiChatProcessing;
-        },
-        async initiateTwinEngineSummary() {
-            if (this.isProcessing()) {
-                await uiUtils.showCustomAlert("現在、別の処理が実行中です。完了してから再度お試しください。");
-                return;
-            }
-            if (state.currentMessages.length === 0) {
-                await uiUtils.showCustomAlert("要約するチャット履歴がありません。");
-                return;
-            }
-
-            const confirmed = await uiUtils.showCustomConfirm("現在のチャット履歴から要約を生成しますか？\n(「設定 > Twin-engine」で指定されたAPIを使用します)");
-            if (!confirmed) return;
-
-            uiUtils.setAiToAiProcessingState(true, "要約を生成中...");
-            elements.generateTwinEngineSummaryBtn.disabled = true;
-
-            try {
-                const twinEngineProvider = state.settings.twinEngineProvider || 'gemini';
-                
-                const apiKey = state.settings[`twinEngine${this.capitalize(twinEngineProvider)}ApiKey`];
-                if (!apiKey) {
-                    throw new Error(`Twin-engine用の ${twinEngineProvider} APIキーが設定されていません。`);
-                }
-                
-                const summaryPrompt = "あなたは優秀な編集者です。以下の会話履歴全体を、重要なポイントや文脈を維持したまま、第三者にも分かりやすいように簡潔な日本語で要約してください。";
-
-                const context = {
-                    messages: [...state.currentMessages],
-                    systemPrompt: summaryPrompt,
-                    inputText: '',
-                    attachments: [],
-                    apiProvider: twinEngineProvider,
-                    modelName: state.settings[`twinEngine${this.capitalize(twinEngineProvider)}ModelName`],
-                    temperature: 0.2,
-                    maxTokens: 1500,
-                };
-                
-                const result = await this.handleSend(false, -1, context);
-
-                if (result && result.content) {
-                    const summaryText = result.content;
-                    
-                    const separator = state.twinEngineSummaryContent.trim() ? "\n\n--- (新しい要約 " + new Date().toLocaleString() + ") ---\n\n" : "";
-                    state.twinEngineSummaryContent += separator + summaryText;
-                    elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
-                    
-                    if (!state.isTwinEngineSummaryVisible) {
-                        this.toggleTwinEngineSummary();
-                    }
-                    elements.twinEngineSummaryEditor.scrollTop = elements.twinEngineSummaryEditor.scrollHeight;
-
-                    await uiUtils.showCustomAlert("要約が生成され、履歴パネルに表示されました。");
-                } else {
-                    throw new Error("APIから有効な要約を取得できませんでした。応答が空か、エラーが発生した可能性があります。");
-                }
-
-            } catch (error) {
-                await uiUtils.showCustomAlert(`要約生成中にエラーが発生しました: ${error.message}`);
-            } finally {
-                uiUtils.setAiToAiProcessingState(false);
-                elements.generateTwinEngineSummaryBtn.disabled = false;
-            }
-        },
-        capitalize(s) {
-            if (typeof s !== 'string' || s.length === 0) return '';
-            return s.charAt(0).toUpperCase() + s.slice(1);
-        },
     };
 
     const apiUtils = {
-        async callGeminiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding, modelOverride = null, configOverrides = {}) {
+        async callGeminiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding) {
             let apiKey;
             if (state.settings.showMultiApiKeys) {
                 apiKey = multiApiKeyUtils.getActiveApiKey('gemini');
@@ -13733,7 +13758,7 @@ details.classList.add('citation-details');
             state.abortController = new AbortController();
             const { signal } = state.abortController;
 
-            const model = modelOverride || state.settings.modelName || DEFAULT_MODEL;
+            const model = state.settings.modelName || DEFAULT_MODEL;
             
             let endpointMethod = useStreaming
                 ? (usePseudo ? 'generateContent?alt=sse&' : 'streamGenerateContent?alt=sse&')
@@ -13741,7 +13766,7 @@ details.classList.add('citation-details');
 
             const endpoint = `${baseUrl}${model}:${endpointMethod}key=${apiKey}`;
 
-            const finalGenerationConfig = { ...generationConfig, ...configOverrides };
+            const finalGenerationConfig = { ...generationConfig };
 
             if (state.settings.geminiThinkingBudget !== null || state.settings.geminiIncludeThoughts) {
                 finalGenerationConfig.thinkingConfig = finalGenerationConfig.thinkingConfig || {};
@@ -13942,7 +13967,7 @@ details.classList.add('citation-details');
                  }
              }
         },
-        async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek', modelOverride = null, configOverrides = {}) {
+        async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
             let apiKey, model, baseUrl, topK;
             if (provider === 'llmaggregator') {
                 if (state.settings.showMultiApiKeys) {
@@ -13950,7 +13975,7 @@ details.classList.add('citation-details');
                 } else {
                     apiKey = state.settings.llmAggregatorApiKey;
                 }
-                model = modelOverride || state.settings.llmAggregatorModelName;
+                model = state.settings.llmAggregatorModelName;
                 baseUrl = state.settings.llmAggregatorApiBackend;
                 topK = state.settings.llmAggregatorTopK;
                 if (!baseUrl) {
@@ -13962,7 +13987,7 @@ details.classList.add('citation-details');
                 } else {
                     apiKey = state.settings.deepSeekApiKey;
                 }
-                model = modelOverride || state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
+                model = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
                 baseUrl = state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
             }
 
@@ -13991,16 +14016,15 @@ details.classList.add('citation-details');
                 }
             });
 
-            const finalGenerationConfig = { ...generationConfig, ...configOverrides };
             const dsRequestBody = {
                 model: model,
                 messages: dsMessages,
                 stream: useStreaming,
-                ...(finalGenerationConfig.temperature !== undefined && { temperature: finalGenerationConfig.temperature }),
-                ...(finalGenerationConfig.maxOutputTokens !== undefined && { max_tokens: finalGenerationConfig.maxOutputTokens }),
-                ...(finalGenerationConfig.topP !== undefined && { top_p: finalGenerationConfig.topP }),
-                ...(finalGenerationConfig.presencePenalty !== undefined && { presence_penalty: finalGenerationConfig.presencePenalty }),
-                ...(finalGenerationConfig.frequencyPenalty !== undefined && { frequency_penalty: finalGenerationConfig.frequencyPenalty }),
+                ...(generationConfig.temperature !== undefined && { temperature: generationConfig.temperature }),
+                ...(generationConfig.maxOutputTokens !== undefined && { max_tokens: generationConfig.maxOutputTokens }),
+                ...(generationConfig.topP !== undefined && { top_p: generationConfig.topP }),
+                ...(generationConfig.presencePenalty !== undefined && { presence_penalty: generationConfig.presencePenalty }),
+                ...(generationConfig.frequencyPenalty !== undefined && { frequency_penalty: generationConfig.frequencyPenalty }),
             };
             
             if (provider === 'llmaggregator' && topK !== null) {
@@ -14129,7 +14153,7 @@ details.classList.add('citation-details');
                 }
             }
         },
-        async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming, modelOverride = null, configOverrides = {}) {
+        async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
             const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('claude') : state.settings.claudeApiKey;
             if (!apiKey) {
                 throw new Error("Claude APIキーが設定されていません。");
@@ -14137,35 +14161,34 @@ details.classList.add('citation-details');
             state.abortController = new AbortController();
             const { signal } = state.abortController;
 
-            const model = modelOverride || state.settings.claudeModelName || DEFAULT_CLAUDE_MODEL;
+            const model = state.settings.claudeModelName || DEFAULT_CLAUDE_MODEL;
             const baseUrl = CLAUDE_API_BASE_URL;
             
             const anthropicRequest = this.convertToClaudeRequest(messagesForApi, systemInstruction);
-            const finalGenerationConfig = { ...generationConfig, ...configOverrides };
 
             const requestBody = {
                 model: model,
                 messages: anthropicRequest.messages,
                 stream: useStreaming,
-                max_tokens: finalGenerationConfig.maxOutputTokens || state.settings.claudeMaxTokens || DEFAULT_CLAUDE_MAX_TOKENS
+                max_tokens: generationConfig.maxOutputTokens || state.settings.claudeMaxTokens || DEFAULT_CLAUDE_MAX_TOKENS
             };
             if(anthropicRequest.system) requestBody.system = anthropicRequest.system;
-            if (finalGenerationConfig.temperature !== undefined && finalGenerationConfig.temperature !== null) {
-                requestBody.temperature = finalGenerationConfig.temperature;
+            if (generationConfig.temperature !== undefined && generationConfig.temperature !== null) {
+                requestBody.temperature = generationConfig.temperature;
             } else if (state.settings.claudeTemperature !== null) {
                 requestBody.temperature = state.settings.claudeTemperature;
             } else {
                 requestBody.temperature = DEFAULT_CLAUDE_TEMPERATURE;
             }
 
-            if (finalGenerationConfig.topK !== undefined && finalGenerationConfig.topK !== null) {
-                requestBody.top_k = finalGenerationConfig.topK;
+            if (generationConfig.topK !== undefined && generationConfig.topK !== null) {
+                requestBody.top_k = generationConfig.topK;
             } else if (state.settings.claudeTopK !== null) {
                 requestBody.top_k = state.settings.claudeTopK;
             }
 
-            if (finalGenerationConfig.topP !== undefined && finalGenerationConfig.topP !== null) {
-                requestBody.top_p = finalGenerationConfig.topP;
+            if (generationConfig.topP !== undefined && generationConfig.topP !== null) {
+                requestBody.top_p = generationConfig.topP;
             } else if (state.settings.claudeTopP !== null) {
                 requestBody.top_p = state.settings.claudeTopP;
             } else {
@@ -14379,16 +14402,16 @@ details.classList.add('citation-details');
 
             return body;
         },
-        async callOpenAICompatibleApi(provider, messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision, modelOverride = null, configOverrides = {}) {
+        async callOpenAICompatibleApi(provider, messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
             let apiKey, model, baseUrl;
             
             if (provider === 'openai') {
                 apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('openai') : state.settings.openaiApiKey;
-                model = modelOverride || state.settings.openaiModelName || DEFAULT_OPENAI_MODEL;
+                model = state.settings.openaiModelName || DEFAULT_OPENAI_MODEL;
                 baseUrl = OPENAI_API_BASE_URL;
             } else if (provider === 'llmaggregator') {
                 apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('llmaggregator') : state.settings.llmAggregatorApiKey;
-                model = modelOverride || state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
+                model = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
                 baseUrl = state.settings.llmAggregatorApiBackend;
                 if (!baseUrl) {
                     throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
@@ -14409,18 +14432,17 @@ details.classList.add('citation-details');
                 "Authorization": `Bearer ${apiKey}`
             };
 
-            const finalGenerationConfig = { ...generationConfig, ...configOverrides };
             const body = this._createOpenAICompatibleRequestBody(
                 model,
                 messagesForApi,
                 systemInstruction,
-                finalGenerationConfig,
+                generationConfig,
                 useStreaming,
                 enableVision
             );
             
-            if (provider === 'llmaggregator' && finalGenerationConfig.topK !== null) {
-                body.top_k = finalGenerationConfig.topK;
+            if (provider === 'llmaggregator' && generationConfig.topK !== null) {
+                body.top_k = generationConfig.topK;
             }
             
             const response = await fetch(baseUrl, { method: "POST", headers, body: JSON.stringify(body), signal });
@@ -14457,7 +14479,7 @@ details.classList.add('citation-details');
 
                     buffer += value;
                     let eolIndex;
-                                        while ((eolIndex = buffer.indexOf('\n')) >= 0) {
+                    while ((eolIndex = buffer.indexOf('\n')) >= 0) {
                         const line = buffer.slice(0, eolIndex).trim();
                         buffer = buffer.slice(eolIndex + 1);
 
@@ -14518,7 +14540,7 @@ details.classList.add('citation-details');
                 }
             }
         },
-        async callXaiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision, modelOverride = null, configOverrides = {}) {
+        async callXaiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
             const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('xai') : state.settings.xaiApiKey;
             if (!apiKey) {
                 throw new Error("xAI APIキーが設定されていません。");
@@ -14531,12 +14553,11 @@ details.classList.add('citation-details');
                 "Authorization": `Bearer ${apiKey}`
             };
             
-            const finalGenerationConfig = { ...generationConfig, ...configOverrides };
             const body = this._createOpenAICompatibleRequestBody(
-                modelOverride || state.settings.xaiModelName || DEFAULT_XAI_MODEL,
+                state.settings.xaiModelName || DEFAULT_XAI_MODEL,
                 messagesForApi,
                 systemInstruction,
-                finalGenerationConfig,
+                generationConfig,
                 useStreaming,
                 enableVision
             );
