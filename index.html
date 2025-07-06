@@ -3275,6 +3275,26 @@
         #settings-screen.auto-save-mode .app-header .js-save-settings-btn {
             display: none !important;
         }
+        .app-header #twin-engine-summary-btn.processing-summary {
+            animation: pulse-summary-btn 1.5s infinite;
+        }
+        @keyframes pulse-summary-btn {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+                box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+            }
+            50% {
+                transform: scale(1.1);
+                opacity: 0.8;
+                box-shadow: 0 0 5px 3px rgba(255, 255, 255, 0);
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+                box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+            }
+        }
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
@@ -4657,10 +4677,10 @@
                         </p>
                         <label class="checkbox-label" style="margin-bottom: 5px;">
                             <input type="checkbox" id="enable-twin-engine">
-                            メッセージ送信ボタンでTwin-engineを起動する (会話履歴の要約)
+                            メッセージ送受信後に自動で会話履歴の要約を生成する
                         </label>
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-                            ※ 有効にすると、送信ボタンは入力内容を送信する代わりに、現在の会話履歴全体をTwin-engine用AIに送信し、要約を生成させます。
+                            ※ 有効にすると、AIからの応答が完了した後に、その時点までの会話履歴全体をTwin-engine用AIに送信し、自動で要約を生成させます。
                         </p>
                         <label for="twin-engine-summary-prompt">Twin-engine 要約用プロンプト:</label>
                         <textarea id="twin-engine-summary-prompt" placeholder="例: 以下の会話履歴を、重要なポイントを箇条書きで簡潔に要約してください。" aria-label="Twin-engine 要約用プロンプト"></textarea>
@@ -10213,10 +10233,6 @@
             }
         },
         async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
-            if (state.settings.enableTwinEngine && !isRetry && !sourceSessionContext) {
-                this.handleTwinEngineSend();
-                return;
-            }
             const isBackgroundProcess = !!sourceSessionContext;
             const selectedApiProvider = isBackgroundProcess ? (sourceSessionContext.apiProvider || state.settings.apiProvider) : state.settings.apiProvider;
 
@@ -11213,6 +11229,12 @@
                         if(tempPlaceholderIndex !== -1) state.currentMessages.splice(tempPlaceholderIndex, 1);
                     }
                 }
+
+                if (!isBackgroundProcess && state.settings.enableTwinEngine) {
+                    this.triggerAutomaticSummary().catch(summaryError => {
+                    });
+                }
+
             } catch (error) {
                 const isAbort = error.message === "リクエストがキャンセルされました。" || modelResponseMetadata.finishReason === 'ABORTED';
                 const displayErrorMessage = isAbort ? error.message : (error.message || "不明なエラーが発生しました");
@@ -11292,22 +11314,16 @@
             }
             if (isBackgroundProcess) return null;
         },
-        async handleTwinEngineSend() {
-            if (state.isSending || state.isAiToAiChatProcessing) {
-                await uiUtils.showCustomAlert("現在、他の処理を実行中です。");
+        async triggerAutomaticSummary() {
+            if (state.isAiToAiChatProcessing || state.isSending) {
                 return;
             }
             if (state.currentMessages.length === 0) {
-                await uiUtils.showCustomAlert("要約する会話履歴がありません。");
                 return;
             }
 
-            const confirmed = await uiUtils.showCustomConfirm(
-                `Twin-engine機能が有効です。\n現在の会話履歴全体を「${state.settings.twinEngineProvider}」に送信して要約しますか？\n(入力欄のテキストは送信されません)`
-            );
-            if (!confirmed) return;
-
-            uiUtils.setAiToAiProcessingState(true, "会話履歴の要約を生成中...");
+            const summaryBtn = elements.twinEngineSummaryBtn;
+            if (summaryBtn) summaryBtn.classList.add('processing-summary');
 
             try {
                 const provider = state.settings.twinEngineProvider;
@@ -11315,35 +11331,35 @@
 
                 switch(provider) {
                     case 'gemini':
-                        apiKey = state.settings.twinEngineGeminiApiKey;
+                        apiKey = state.settings.twinEngineGeminiApiKey || state.settings.apiKey;
                         modelName = state.settings.twinEngineGeminiModelName;
                         break;
                     case 'deepseek':
-                        apiKey = state.settings.twinEngineDeepseekApiKey;
+                        apiKey = state.settings.twinEngineDeepseekApiKey || state.settings.deepSeekApiKey;
                         modelName = state.settings.twinEngineDeepseekModelName;
                         break;
                     case 'claude':
-                        apiKey = state.settings.twinEngineClaudeApiKey;
+                        apiKey = state.settings.twinEngineClaudeApiKey || state.settings.claudeApiKey;
                         modelName = state.settings.twinEngineClaudeModelName;
                         break;
                     case 'openai':
-                        apiKey = state.settings.twinEngineOpenaiApiKey;
+                        apiKey = state.settings.twinEngineOpenaiApiKey || state.settings.openaiApiKey;
                         modelName = state.settings.twinEngineOpenaiModelName;
                         break;
                     case 'xai':
-                        apiKey = state.settings.twinEngineXaiApiKey;
+                        apiKey = state.settings.twinEngineXaiApiKey || state.settings.xaiApiKey;
                         modelName = state.settings.twinEngineXaiModelName;
                         break;
                     case 'llmaggregator':
-                        apiKey = state.settings.twinEngineLlmaggregatorApiKey;
+                        apiKey = state.settings.twinEngineLlmaggregatorApiKey || state.settings.llmAggregatorApiKey;
                         modelName = state.settings.twinEngineLlmaggregatorModelName;
                         break;
                     default:
                         throw new Error("Twin-engineに設定されたAPIプロバイダーが無効です。");
                 }
-
+                
                 if (!apiKey) {
-                    throw new Error(`${provider.charAt(0).toUpperCase() + provider.slice(1)}のTwin-engine用APIキーが設定されていません。`);
+                    return;
                 }
                 
                 const contextForSummary = {
@@ -11361,27 +11377,22 @@
                     const summary = response.content;
                     
                     const timestamp = new Date().toLocaleString('ja-JP');
-                    const summaryHeader = `--- [${timestamp}] by ${provider} (${modelName}) ---\n`;
+                    const summaryHeader = `--- [${timestamp}] by ${provider} (${modelName || 'default'}) ---\n`;
                     const newSummaryContent = summaryHeader + summary.trim() + "\n\n";
 
                     state.twinEngineSummaryContent = newSummaryContent + state.twinEngineSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
 
-                    if (!state.isTwinEngineSummaryVisible) {
-                        this.toggleTwinEngineSummary();
+                    if (state.isTwinEngineSummaryVisible) {
+                        elements.twinEngineSummaryEditor.scrollTop = 0;
                     }
-                    elements.twinEngineSummaryEditor.scrollTop = 0;
-
-                    await uiUtils.showCustomAlert("会話履歴の要約を生成し、要約パネルに追記しました。");
 
                 } else {
-                    throw new Error("APIから有効な要約を取得できませんでした。");
                 }
 
             } catch (error) {
-                await uiUtils.showCustomAlert(`Twin-engineでの要約生成中にエラーが発生しました: ${error.message}`);
             } finally {
-                uiUtils.setAiToAiProcessingState(false);
+                if (summaryBtn) summaryBtn.classList.remove('processing-summary');
             }
         },
         async toggleApiProvider() {
@@ -14264,849 +14275,848 @@
                         });
                     }
                 });
-
-                if (contentParts.length > 0) {
-                    claudeMessages.push({
-                        role: claudeRole,
-                        content: contentParts
-                    });
-                }
-            }
-            return {
-                messages: claudeMessages,
-                system: systemContent || undefined
-            };
-        },
-        async *handleClaudeStreamingResponse(response) {
-            if (!response.body) {
-                throw new Error("Claudeレスポンスボディがありません。");
-            }
-            const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-            let buffer = '';
-            let finalUsage = null;
-            let finalFinishReason = null;
-            let isCancelled = false;
-
-            try {
-                while (true) {
-                    if (state.abortController?.signal.aborted && !isCancelled) {
-                        isCancelled = true;
-                        await reader.cancel("User aborted");
-                        throw new Error("リクエストがキャンセルされました。");
+                                    if (contentParts.length > 0) {
+                        claudeMessages.push({
+                            role: claudeRole,
+                            content: contentParts
+                        });
                     }
-
-                    const { value, done } = await reader.read();
-                    if (done) break;
-
-                    buffer += value;
-                    let eolIndex;
-                    while ((eolIndex = buffer.indexOf('\n')) >= 0) {
-                        const line = buffer.substring(0, eolIndex).trim();
-                        buffer = buffer.substring(eolIndex + 1);
-
-                        if (line.startsWith('data: ')) {
-                            const jsonData = line.substring(6);
-                            if (jsonData.trim() === '[DONE]') {
+                }
+                return {
+                    messages: claudeMessages,
+                    system: systemContent || undefined
+                };
+            },
+            async *handleClaudeStreamingResponse(response) {
+                if (!response.body) {
+                    throw new Error("Claudeレスポンスボディがありません。");
+                }
+                const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+                let buffer = '';
+                let finalUsage = null;
+                let finalFinishReason = null;
+                let isCancelled = false;
+    
+                try {
+                    while (true) {
+                        if (state.abortController?.signal.aborted && !isCancelled) {
+                            isCancelled = true;
+                            await reader.cancel("User aborted");
+                            throw new Error("リクエストがキャンセルされました。");
+                        }
+    
+                        const { value, done } = await reader.read();
+                        if (done) break;
+    
+                        buffer += value;
+                        let eolIndex;
+                        while ((eolIndex = buffer.indexOf('\n')) >= 0) {
+                            const line = buffer.substring(0, eolIndex).trim();
+                            buffer = buffer.substring(eolIndex + 1);
+    
+                            if (line.startsWith('data: ')) {
+                                const jsonData = line.substring(6);
+                                if (jsonData.trim() === '[DONE]') {
+                                    break;
+                                }
+                                try {
+                                    const chunk = JSON.parse(jsonData);
+                                    if (chunk.type === 'content_block_delta' && chunk.delta && chunk.delta.type === 'text_delta') {
+                                        yield { type: 'chunk', contentText: chunk.delta.text || '', thoughtText: null };
+                                    } else if (chunk.type === 'content_block_start' && chunk.content_block && chunk.content_block.type === 'thinking') {
+                                    } else if (chunk.type === 'content_block_delta' && chunk.delta && chunk.delta.type === 'thinking_delta') {
+                                        yield { type: 'chunk', contentText: null, thoughtText: chunk.delta.thinking || '' };
+                                    } else if (chunk.type === 'message_stop') {
+                                        finalFinishReason = chunk.message?.stop_reason || 'stop';
+                                        if (chunk["amazon-bedrock-invocationMetrics"]) {
+                                            finalUsage = {
+                                                input_tokens: chunk["amazon-bedrock-invocationMetrics"].inputTokenCount,
+                                                output_tokens: chunk["amazon-bedrock-invocationMetrics"].outputTokenCount
+                                            };
+                                        } else if (chunk.usage) {
+                                            finalUsage = chunk.usage;
+                                        }
+                                    } else if (chunk.type === 'message_delta' && chunk.usage) {
+                                        finalUsage = chunk.usage;
+                                    }
+                                } catch (e) {
+                                }
+                            }
+                        }
+                                            if (finalFinishReason && finalFinishReason !== 'null') break;
+                    }
+                    yield {
+                        type: 'metadata',
+                        finishReason: isCancelled ? 'ABORTED' : finalFinishReason || 'stop',
+                        safetyRatings: null,
+                                                usageMetadata: finalUsage ? {
+                            candidatesTokenCount: finalUsage.output_tokens,
+                            totalTokenCount: finalUsage.input_tokens + finalUsage.output_tokens
+                        } : null
+                    };
+                } catch (error) {
+                     yield { type: 'error', error: { message: error.message }, message: error.message };
+                } finally {
+                    if (!reader.closed && !isCancelled) {
+                        try { await reader.cancel("Stream processing ended."); } catch (e) { }
+                    }
+                }
+            },
+            _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, generationConfig, useStreaming, enableVision) {
+                const oaMessages = [];
+                if (systemInstruction && systemInstruction.parts?.[0]?.text) {
+                    oaMessages.push({ role: "system", content: systemInstruction.parts[0].text });
+                }
+    
+                messagesForApi.forEach(m => {
+                    const role = m.role === "model" ? "assistant" : m.role;
+                    const contentParts = [];
+                    let hasTextPart = false;
+    
+                    m.parts.forEach(p => {
+                        if (p.text) {
+                            if (hasTextPart) {
+                                contentParts[contentParts.length - 1].text += `\n${p.text}`;
+                            } else {
+                                contentParts.push({ type: "text", text: p.text });
+                                hasTextPart = true;
+                            }
+                        }
+                        if (p.textData) {
+                             if (hasTextPart) {
+                                contentParts[contentParts.length - 1].text += `\n\n--- ファイル内容 ---\n${p.textData}`;
+                            } else {
+                                contentParts.push({ type: "text", text: p.textData });
+                                hasTextPart = true;
+                            }
+                        }
+                        if (enableVision && p.inlineData && p.inlineData.mimeType && p.inlineData.data && p.inlineData.mimeType.startsWith('image/')) {
+                            contentParts.push({
+                                type: "image_url",
+                                image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` }
+                            });
+                        }
+                    });
+    
+                    if (contentParts.length > 0) {
+                        oaMessages.push({ role: role, content: contentParts });
+                    }
+                });
+    
+                const body = {
+                    model: model,
+                    messages: oaMessages,
+                    stream: useStreaming,
+                };
+                if (generationConfig.temperature != null) body.temperature = generationConfig.temperature;
+                if (generationConfig.maxOutputTokens != null) body.max_tokens = generationConfig.maxOutputTokens;
+                if (generationConfig.topP != null) body.top_p = generationConfig.topP;
+                if (generationConfig.presencePenalty != null) body.presence_penalty = generationConfig.presencePenalty;
+                if (generationConfig.frequencyPenalty != null) body.frequency_penalty = generationConfig.frequencyPenalty;
+    
+                return body;
+            },
+            async callOpenAICompatibleApi(provider, messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
+                let apiKey, model, baseUrl;
+                
+                if (provider === 'openai') {
+                    apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('openai') : state.settings.openaiApiKey;
+                    model = state.settings.openaiModelName || DEFAULT_OPENAI_MODEL;
+                    baseUrl = OPENAI_API_BASE_URL;
+                } else if (provider === 'llmaggregator') {
+                    apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('llmaggregator') : state.settings.llmAggregatorApiKey;
+                    model = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
+                    baseUrl = state.settings.llmAggregatorApiBackend;
+                    if (!baseUrl) {
+                        throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
+                    }
+                } else {
+                    throw new Error(`Unsupported provider for callOpenAICompatibleApi: ${provider}`);
+                }
+                
+                if (!apiKey) {
+                    throw new Error(`${provider} のAPIキーが設定されていません。`);
+                }
+    
+                state.abortController = new AbortController();
+                const { signal } = state.abortController;
+    
+                const headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`
+                };
+    
+                const body = this._createOpenAICompatibleRequestBody(
+                    model,
+                    messagesForApi,
+                    systemInstruction,
+                    generationConfig,
+                    useStreaming,
+                    enableVision
+                );
+                
+                if (provider === 'llmaggregator' && generationConfig.topK !== null) {
+                    body.top_k = generationConfig.topK;
+                }
+                
+                const response = await fetch(baseUrl, { method: "POST", headers, body: JSON.stringify(body), signal });
+                if (!response.ok) {
+                    let msg = `${provider} API error ${response.status}`;
+                    try {
+                        const je = await response.json();
+                        msg = je.error?.message || msg;
+                    } catch {}
+                    throw new Error(msg);
+                }
+                return response;
+            },
+            async *handleOpenAICompatibleStreamingResponse(response, providerName) {
+                if (!response.body) {
+                    throw new Error(`${providerName}レスポンスボディがありません。`);
+                }
+                const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+                let buffer = '';
+                let usage = null;
+                let finishReason = null;
+                let isCancelled = false;
+    
+                try {
+                    while (true) {
+                        if (state.abortController?.signal.aborted) {
+                            isCancelled = true;
+                            await reader.cancel();
+                            throw new Error("リクエストがキャンセルされました。");
+                        }
+    
+                        const { value, done } = await reader.read();
+                        if (done) break;
+    
+                        buffer += value;
+                        let eolIndex;
+                        while ((eolIndex = buffer.indexOf('\n')) >= 0) {
+                            const line = buffer.slice(0, eolIndex).trim();
+                            buffer = buffer.slice(eolIndex + 1);
+    
+                            if (!line.startsWith('data:')) continue;
+                            const data = line.slice(5).trim();
+    
+                            if (data === '[DONE]') {
+                                finishReason = 'stop';
                                 break;
                             }
                             try {
-                                const chunk = JSON.parse(jsonData);
-                                if (chunk.type === 'content_block_delta' && chunk.delta && chunk.delta.type === 'text_delta') {
-                                    yield { type: 'chunk', contentText: chunk.delta.text || '', thoughtText: null };
-                                } else if (chunk.type === 'content_block_start' && chunk.content_block && chunk.content_block.type === 'thinking') {
-                                } else if (chunk.type === 'content_block_delta' && chunk.delta && chunk.delta.type === 'thinking_delta') {
-                                    yield { type: 'chunk', contentText: null, thoughtText: chunk.delta.thinking || '' };
-                                } else if (chunk.type === 'message_stop') {
-                                    finalFinishReason = chunk.message?.stop_reason || 'stop';
-                                    if (chunk["amazon-bedrock-invocationMetrics"]) {
-                                        finalUsage = {
-                                            input_tokens: chunk["amazon-bedrock-invocationMetrics"].inputTokenCount,
-                                            output_tokens: chunk["amazon-bedrock-invocationMetrics"].outputTokenCount
-                                        };
-                                    } else if (chunk.usage) {
-                                        finalUsage = chunk.usage;
+                                const chunk = JSON.parse(data);
+                                if (chunk.choices?.[0]) {
+                                    const delta = chunk.choices[0].delta;
+                                    let contentText = null;
+                                    let thoughtText = null;
+    
+                                    if (delta?.content) {
+                                        contentText = delta.content;
                                     }
-                                } else if (chunk.type === 'message_delta' && chunk.usage) {
-                                    finalUsage = chunk.usage;
+                                    if (delta?.reasoning_content) {
+                                        thoughtText = delta.reasoning_content;
+                                    }
+    
+                                    if (contentText !== null || thoughtText !== null) {
+                                        yield { type: "chunk", contentText: contentText, thoughtText: thoughtText };
+                                    }
+                                    
+                                    if (chunk.choices[0].finish_reason) {
+                                        finishReason = chunk.choices[0].finish_reason;
+                                    }
                                 }
-                            } catch (e) {
-                            }
+                                if (chunk.usage) {
+                                    usage = chunk.usage;
+                                    if (usage.completion_tokens_details?.reasoning_tokens) {
+                                        usage.completion_tokens += usage.completion_tokens_details.reasoning_tokens;
+                                    }
+                                }
+                            } catch (e) {}
                         }
+                        if (finishReason) break;
                     }
-                                        if (finalFinishReason && finalFinishReason !== 'null') break;
+                    yield {
+                        type: "metadata",
+                        finishReason: isCancelled ? "ABORTED" : finishReason || 'stop',
+                        usageMetadata: usage ? {
+                            candidatesTokenCount: usage.completion_tokens,
+                            totalTokenCount: usage.prompt_tokens + usage.completion_tokens
+                        } : null,
+                        safetyRatings: null,
+                        groundingMetadata: null
+                    };
+                } catch (error) {
+                     yield { type: 'error', error: { message: error.message }, message: error.message };
+                } finally {
+                    if (!reader.closed && !isCancelled) {
+                        try { await reader.cancel(); } catch (e) {}
+                    }
                 }
-                yield {
-                    type: 'metadata',
-                    finishReason: isCancelled ? 'ABORTED' : finalFinishReason || 'stop',
-                    safetyRatings: null,
-                                            usageMetadata: finalUsage ? {
-                        candidatesTokenCount: finalUsage.output_tokens,
-                        totalTokenCount: finalUsage.input_tokens + finalUsage.output_tokens
-                    } : null
+            },
+            async callXaiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
+                const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('xai') : state.settings.xaiApiKey;
+                if (!apiKey) {
+                    throw new Error("xAI APIキーが設定されていません。");
+                }
+                state.abortController = new AbortController();
+                const { signal } = state.abortController;
+    
+                const headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${apiKey}`
                 };
-            } catch (error) {
-                 yield { type: 'error', error: { message: error.message }, message: error.message };
-            } finally {
-                if (!reader.closed && !isCancelled) {
-                    try { await reader.cancel("Stream processing ended."); } catch (e) { }
+                
+                const body = this._createOpenAICompatibleRequestBody(
+                    state.settings.xaiModelName || DEFAULT_XAI_MODEL,
+                    messagesForApi,
+                    systemInstruction,
+                    generationConfig,
+                    useStreaming,
+                    enableVision
+                );
+    
+                const reasoningModels = ['grok-3-mini', 'grok-3-mini-fast'];
+                if (state.settings.xaiIncludeThoughts && reasoningModels.includes(body.model)) {
+                    body.reasoning_effort = state.settings.xaiReasoningEffort;
                 }
-            }
-        },
-        _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, generationConfig, useStreaming, enableVision) {
-            const oaMessages = [];
-            if (systemInstruction && systemInstruction.parts?.[0]?.text) {
-                oaMessages.push({ role: "system", content: systemInstruction.parts[0].text });
-            }
-
-            messagesForApi.forEach(m => {
-                const role = m.role === "model" ? "assistant" : m.role;
-                const contentParts = [];
-                let hasTextPart = false;
-
-                m.parts.forEach(p => {
-                    if (p.text) {
-                        if (hasTextPart) {
-                            contentParts[contentParts.length - 1].text += `\n${p.text}`;
-                        } else {
-                            contentParts.push({ type: "text", text: p.text });
-                            hasTextPart = true;
-                        }
-                    }
-                    if (p.textData) {
-                         if (hasTextPart) {
-                            contentParts[contentParts.length - 1].text += `\n\n--- ファイル内容 ---\n${p.textData}`;
-                        } else {
-                            contentParts.push({ type: "text", text: p.textData });
-                            hasTextPart = true;
-                        }
-                    }
-                    if (enableVision && p.inlineData && p.inlineData.mimeType && p.inlineData.data && p.inlineData.mimeType.startsWith('image/')) {
-                        contentParts.push({
-                            type: "image_url",
-                            image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` }
-                        });
-                    }
+                
+                const baseUrl = XAI_API_BASE_URL;
+                const response = await fetch(baseUrl, { 
+                    method: "POST", 
+                    headers, 
+                    body: JSON.stringify(body), 
+                    signal 
                 });
-
-                if (contentParts.length > 0) {
-                    oaMessages.push({ role: role, content: contentParts });
+                
+                if (!response.ok) {
+                                let msg = `xAI API error ${response.status}`;
+                    try {
+                        const je = await response.json();
+                        msg = je.error?.message || msg;
+                    } catch {}
+                    throw new Error(msg);
                 }
-            });
-
-            const body = {
-                model: model,
-                messages: oaMessages,
-                stream: useStreaming,
-            };
-            if (generationConfig.temperature != null) body.temperature = generationConfig.temperature;
-            if (generationConfig.maxOutputTokens != null) body.max_tokens = generationConfig.maxOutputTokens;
-            if (generationConfig.topP != null) body.top_p = generationConfig.topP;
-            if (generationConfig.presencePenalty != null) body.presence_penalty = generationConfig.presencePenalty;
-            if (generationConfig.frequencyPenalty != null) body.frequency_penalty = generationConfig.frequencyPenalty;
-
-            return body;
-        },
-        async callOpenAICompatibleApi(provider, messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
-            let apiKey, model, baseUrl;
-            
-            if (provider === 'openai') {
-                apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('openai') : state.settings.openaiApiKey;
-                model = state.settings.openaiModelName || DEFAULT_OPENAI_MODEL;
-                baseUrl = OPENAI_API_BASE_URL;
-            } else if (provider === 'llmaggregator') {
-                apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('llmaggregator') : state.settings.llmAggregatorApiKey;
-                model = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
-                baseUrl = state.settings.llmAggregatorApiBackend;
-                if (!baseUrl) {
-                    throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
-                }
-            } else {
-                throw new Error(`Unsupported provider for callOpenAICompatibleApi: ${provider}`);
-            }
-            
-            if (!apiKey) {
-                throw new Error(`${provider} のAPIキーが設定されていません。`);
-            }
-
-            state.abortController = new AbortController();
-            const { signal } = state.abortController;
-
-            const headers = {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${apiKey}`
-            };
-
-            const body = this._createOpenAICompatibleRequestBody(
-                model,
-                messagesForApi,
-                systemInstruction,
-                generationConfig,
-                useStreaming,
-                enableVision
-            );
-            
-            if (provider === 'llmaggregator' && generationConfig.topK !== null) {
-                body.top_k = generationConfig.topK;
-            }
-            
-            const response = await fetch(baseUrl, { method: "POST", headers, body: JSON.stringify(body), signal });
-            if (!response.ok) {
-                let msg = `${provider} API error ${response.status}`;
-                try {
-                    const je = await response.json();
-                    msg = je.error?.message || msg;
-                } catch {}
-                throw new Error(msg);
-            }
-            return response;
-        },
-        async *handleOpenAICompatibleStreamingResponse(response, providerName) {
-            if (!response.body) {
-                throw new Error(`${providerName}レスポンスボディがありません。`);
-            }
-            const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-            let buffer = '';
-            let usage = null;
-            let finishReason = null;
-            let isCancelled = false;
-
-            try {
-                while (true) {
-                    if (state.abortController?.signal.aborted) {
-                        isCancelled = true;
-                        await reader.cancel();
-                        throw new Error("リクエストがキャンセルされました。");
+    
+                if (!useStreaming) {
+                    const data = await response.json();
+                    let reasoningContent = null;
+                    const choice = data.choices?.[0];
+                    if (choice && choice.message && choice.message.reasoning_content) {
+                        reasoningContent = choice.message.reasoning_content;
                     }
-
-                    const { value, done } = await reader.read();
-                    if (done) break;
-
-                    buffer += value;
-                    let eolIndex;
-                    while ((eolIndex = buffer.indexOf('\n')) >= 0) {
-                        const line = buffer.slice(0, eolIndex).trim();
-                        buffer = buffer.slice(eolIndex + 1);
-
-                        if (!line.startsWith('data:')) continue;
-                        const data = line.slice(5).trim();
-
-                        if (data === '[DONE]') {
-                            finishReason = 'stop';
-                            break;
-                        }
-                        try {
-                            const chunk = JSON.parse(data);
-                            if (chunk.choices?.[0]) {
-                                const delta = chunk.choices[0].delta;
-                                let contentText = null;
-                                let thoughtText = null;
-
-                                if (delta?.content) {
-                                    contentText = delta.content;
-                                }
-                                if (delta?.reasoning_content) {
-                                    thoughtText = delta.reasoning_content;
-                                }
-
-                                if (contentText !== null || thoughtText !== null) {
-                                    yield { type: "chunk", contentText: contentText, thoughtText: thoughtText };
-                                }
-                                
-                                if (chunk.choices[0].finish_reason) {
-                                    finishReason = chunk.choices[0].finish_reason;
-                                }
-                            }
-                            if (chunk.usage) {
-                                usage = chunk.usage;
-                                if (usage.completion_tokens_details?.reasoning_tokens) {
-                                    usage.completion_tokens += usage.completion_tokens_details.reasoning_tokens;
-                                }
-                            }
-                        } catch (e) {}
+                    if (data.usage?.completion_tokens_details?.reasoning_tokens) {
+                        data.usage.completion_tokens += data.usage.completion_tokens_details.reasoning_tokens;
                     }
-                    if (finishReason) break;
+                    response.json = async () => ({ ...data, xaiThoughtSummary: reasoningContent });
                 }
-                yield {
-                    type: "metadata",
-                    finishReason: isCancelled ? "ABORTED" : finishReason || 'stop',
-                    usageMetadata: usage ? {
-                        candidatesTokenCount: usage.completion_tokens,
-                        totalTokenCount: usage.prompt_tokens + usage.completion_tokens
-                    } : null,
-                    safetyRatings: null,
-                    groundingMetadata: null
+                return response;
+            },
+        };
+
+        const errorRecovery = {
+            errorCount: 0,
+            errorTimeWindow: 60000,
+            maxErrors: 3,
+            lastErrorTime: 0,
+            isRecovering: false,
+            errorLog: [],
+            maxLogSize: 20,
+    
+            logError(type, errorInfo) {
+                const now = new Date();
+                const logEntry = {
+                    timestamp: now.toISOString(),
+                    type: type,
+                    info: this.serializeErrorInfo(errorInfo)
                 };
-            } catch (error) {
-                 yield { type: 'error', error: { message: error.message }, message: error.message };
-            } finally {
-                if (!reader.closed && !isCancelled) {
-                    try { await reader.cancel(); } catch (e) {}
+                this.errorLog.unshift(logEntry);
+                if (this.errorLog.length > this.maxLogSize) {
+                    this.errorLog.pop();
                 }
-            }
-        },
-        async callXaiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
-            const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('xai') : state.settings.xaiApiKey;
-            if (!apiKey) {
-                throw new Error("xAI APIキーが設定されていません。");
-            }
-            state.abortController = new AbortController();
-            const { signal } = state.abortController;
-
-            const headers = {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${apiKey}`
-            };
-            
-            const body = this._createOpenAICompatibleRequestBody(
-                state.settings.xaiModelName || DEFAULT_XAI_MODEL,
-                messagesForApi,
-                systemInstruction,
-                generationConfig,
-                useStreaming,
-                enableVision
-            );
-
-            const reasoningModels = ['grok-3-mini', 'grok-3-mini-fast'];
-            if (state.settings.xaiIncludeThoughts && reasoningModels.includes(body.model)) {
-                body.reasoning_effort = state.settings.xaiReasoningEffort;
-            }
-            
-            const baseUrl = XAI_API_BASE_URL;
-            const response = await fetch(baseUrl, { 
-                method: "POST", 
-                headers, 
-                body: JSON.stringify(body), 
-                signal 
-            });
-            
-            if (!response.ok) {
-                            let msg = `xAI API error ${response.status}`;
+            },
+    
+            serializeErrorInfo(errorInfo) {
                 try {
-                    const je = await response.json();
-                    msg = je.error?.message || msg;
-                } catch {}
-                throw new Error(msg);
-            }
-
-            if (!useStreaming) {
-                const data = await response.json();
-                let reasoningContent = null;
-                const choice = data.choices?.[0];
-                if (choice && choice.message && choice.message.reasoning_content) {
-                    reasoningContent = choice.message.reasoning_content;
-                }
-                if (data.usage?.completion_tokens_details?.reasoning_tokens) {
-                    data.usage.completion_tokens += data.usage.completion_tokens_details.reasoning_tokens;
-                }
-                response.json = async () => ({ ...data, xaiThoughtSummary: reasoningContent });
-            }
-            return response;
-        },
-    };
-
-    const errorRecovery = {
-        errorCount: 0,
-        errorTimeWindow: 60000,
-        maxErrors: 3,
-        lastErrorTime: 0,
-        isRecovering: false,
-        errorLog: [],
-        maxLogSize: 20,
-
-        logError(type, errorInfo) {
-            const now = new Date();
-            const logEntry = {
-                timestamp: now.toISOString(),
-                type: type,
-                info: this.serializeErrorInfo(errorInfo)
-            };
-            this.errorLog.unshift(logEntry);
-            if (this.errorLog.length > this.maxLogSize) {
-                this.errorLog.pop();
-            }
-        },
-
-        serializeErrorInfo(errorInfo) {
-            try {
-                const cache = new Set();
-                return JSON.stringify(errorInfo, (key, value) => {
-                    if (typeof value === 'object' && value !== null) {
-                        if (value instanceof Window) return '[Window Object]';
-                        if (cache.has(value)) {
-                            return '[Circular Reference]';
+                    const cache = new Set();
+                    return JSON.stringify(errorInfo, (key, value) => {
+                        if (typeof value === 'object' && value !== null) {
+                            if (value instanceof Window) return '[Window Object]';
+                            if (cache.has(value)) {
+                                return '[Circular Reference]';
+                            }
+                            cache.add(value);
                         }
-                        cache.add(value);
-                    }
-                    return value;
-                }, 2);
-            } catch (e) {
-                if (errorInfo instanceof Error) {
-                    return JSON.stringify({ message: errorInfo.message, stack: errorInfo.stack, name: errorInfo.name }, null, 2);
-                }
-                return `Failed to serialize error: ${e.message}`;
-            }
-        },
-
-        getErrorLogAsString() {
-            if (this.errorLog.length === 0) {
-                return "これまでに記録されたエラーはありません。";
-            }
-            return this.errorLog.map(log => 
-                `Timestamp: ${log.timestamp}\nType: ${log.type}\nInfo:\n${log.info}`
-            ).join('\n\n====================\n\n');
-        },
-        
-        init() {
-            window.addEventListener('error', (event) => {
-                this.handleError('JavaScript Error', {
-                    message: event.message,
-                    filename: event.filename,
-                    lineno: event.lineno,
-                    colno: event.colno,
-                    error: event.error
-                });
-            });
-
-            window.addEventListener('unhandledrejection', (event) => {
-                this.handleError('Unhandled Promise Rejection', {
-                    reason: event.reason,
-                    promise: event.promise
-                });
-            });
-
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.addEventListener('error', (event) => {
-                    this.handleError('Service Worker Error', event);
-                });
-            }
-        },
-
-        handleError(type, errorInfo) {
-            if (this.isRecovering) return;
-
-            const now = Date.now();
-                            if (now - this.lastErrorTime > this.errorTimeWindow) {
-                this.errorCount = 0;
-            }
-            
-            this.errorCount++;
-            this.lastErrorTime = now;
-            
-            this.logError(type, errorInfo);
-            
-            const isCriticalError = this.isCriticalError(errorInfo);
-            
-            if (this.errorCount >= this.maxErrors || isCriticalError) {
-                this.triggerForceReload(type, errorInfo, isCriticalError);
-            }
-        },
-
-        isCriticalError(errorInfo) {
-            const criticalPatterns = [
-                /Cannot read prop/i,
-                /Cannot access before initialization/i,
-                /is not defined/i,
-                /IndexedDB/i,
-                /QuotaExceededError/i,
-                /localStorage/i,
-                /sessionStorage/i,
-                /Service Worker/i,
-                /Failed to fetch/i,
-                /NetworkError/i
-            ];
-                        const errorMessage = JSON.stringify(errorInfo).toLowerCase();
-            return criticalPatterns.some(pattern => pattern.test(errorMessage));
-        },
-
-        async triggerForceReload(errorType, errorInfo, isCritical) {
-            if (this.isRecovering) return;
-            this.isRecovering = true;
-
-            const reason = isCritical ? '致命的なエラー' : `連続エラー(${this.errorCount}回)`;
-            
-            try {
-                await this.showRecoveryNotification(reason, errorType);
-                
-                await this.clearCacheAndReload();
-                
-            } catch (recoveryError) {
-                window.location.reload(true);
-            }
-        },
-
-        async showRecoveryNotification(reason, errorType) {
-            if (typeof uiUtils !== 'undefined' && uiUtils.showCustomAlert) {
-                try {
-                    await uiUtils.showCustomAlert(
-                        `アプリで${reason}が発生しました。\n` +
-                        `安定性を保つため、キャッシュをクリアして再起動します。\n\n` +
-                        `エラータイプ: ${errorType}\n` +
-                        `この操作は自動で実行されます。`
-                    );
+                        return value;
+                    }, 2);
                 } catch (e) {
-                    alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
+                    if (errorInfo instanceof Error) {
+                        return JSON.stringify({ message: errorInfo.message, stack: errorInfo.stack, name: errorInfo.name }, null, 2);
+                    }
+                    return `Failed to serialize error: ${e.message}`;
                 }
-            } else {
-                alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
-            }
-        },
-
-        async clearCacheAndReload() {
-            try {
-                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                    await new Promise((resolve, reject) => {
-                        const timeoutId = setTimeout(() => reject(new Error('Service Worker timeout')), 5000);
-                        
-                        const messageHandler = (event) => {
-                            if (event.data && event.data.action === 'cacheCleared') {
-                                clearTimeout(timeoutId);
-                                navigator.serviceWorker.removeEventListener('message', messageHandler);
-                                resolve();
-                            }
-                        };
-                        
-                        navigator.serviceWorker.addEventListener('message', messageHandler);
-                        navigator.serviceWorker.controller.postMessage({ action: 'clearCache' });
+            },
+    
+            getErrorLogAsString() {
+                if (this.errorLog.length === 0) {
+                    return "これまでに記録されたエラーはありません。";
+                }
+                return this.errorLog.map(log => 
+                    `Timestamp: ${log.timestamp}\nType: ${log.type}\nInfo:\n${log.info}`
+                ).join('\n\n====================\n\n');
+            },
+            
+            init() {
+                window.addEventListener('error', (event) => {
+                    this.handleError('JavaScript Error', {
+                        message: event.message,
+                        filename: event.filename,
+                        lineno: event.lineno,
+                        colno: event.colno,
+                        error: event.error
+                    });
+                });
+    
+                window.addEventListener('unhandledrejection', (event) => {
+                    this.handleError('Unhandled Promise Rejection', {
+                        reason: event.reason,
+                        promise: event.promise
+                    });
+                });
+    
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.addEventListener('error', (event) => {
+                        this.handleError('Service Worker Error', event);
                     });
                 }
-                
-                if ('caches' in window) {
-                    const cacheNames = await caches.keys();
-                    await Promise.all(cacheNames.map(name => caches.delete(name)));
+            },
+    
+            handleError(type, errorInfo) {
+                if (this.isRecovering) return;
+    
+                const now = Date.now();
+                                if (now - this.lastErrorTime > this.errorTimeWindow) {
+                    this.errorCount = 0;
                 }
                 
-                this.clearStorageSelectively();
+                this.errorCount++;
+                this.lastErrorTime = now;
                 
-                window.location.reload(true);
+                this.logError(type, errorInfo);
                 
-            } catch (error) {
-                window.location.href = window.location.href + '?recovery=' + Date.now();
-            }
-                        },
-
-        clearStorageSelectively() {
-            try {
-                const protectedKeys = [
-                    'GeminiPWA_DB',
+                const isCriticalError = this.isCriticalError(errorInfo);
+                
+                if (this.errorCount >= this.maxErrors || isCriticalError) {
+                    this.triggerForceReload(type, errorInfo, isCriticalError);
+                }
+            },
+    
+            isCriticalError(errorInfo) {
+                const criticalPatterns = [
+                    /Cannot read prop/i,
+                    /Cannot access before initialization/i,
+                    /is not defined/i,
+                    /IndexedDB/i,
+                    /QuotaExceededError/i,
+                    /localStorage/i,
+                    /sessionStorage/i,
+                    /Service Worker/i,
+                    /Failed to fetch/i,
+                    /NetworkError/i
                 ];
+                            const errorMessage = JSON.stringify(errorInfo).toLowerCase();
+                return criticalPatterns.some(pattern => pattern.test(errorMessage));
+            },
+    
+            async triggerForceReload(errorType, errorInfo, isCritical) {
+                if (this.isRecovering) return;
+                this.isRecovering = true;
+    
+                const reason = isCritical ? '致命的なエラー' : `連続エラー(${this.errorCount}回)`;
                 
-                if (typeof Storage !== 'undefined' && sessionStorage) {
-                    sessionStorage.clear();
+                try {
+                    await this.showRecoveryNotification(reason, errorType);
+                    
+                    await this.clearCacheAndReload();
+                    
+                } catch (recoveryError) {
+                    window.location.reload(true);
                 }
-                
-                if (typeof Storage !== 'undefined' && localStorage) {
-                    const keysToRemove = [];
-                    for (let i = 0; i < localStorage.length; i++) {
-                        const key = localStorage.key(i);
-                        if (key && !protectedKeys.some(protected => key.includes(protected))) {
-                            keysToRemove.push(key);
-                        }
+            },
+    
+            async showRecoveryNotification(reason, errorType) {
+                if (typeof uiUtils !== 'undefined' && uiUtils.showCustomAlert) {
+                    try {
+                        await uiUtils.showCustomAlert(
+                            `アプリで${reason}が発生しました。\n` +
+                            `安定性を保つため、キャッシュをクリアして再起動します。\n\n` +
+                            `エラータイプ: ${errorType}\n` +
+                            `この操作は自動で実行されます。`
+                        );
+                    } catch (e) {
+                        alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
                     }
-                    keysToRemove.forEach(key => localStorage.removeItem(key));
+                } else {
+                    alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
                 }
-            } catch (error) {
-            }
-        },
-
-        manualRecovery() {
-            this.triggerForceReload('Manual Recovery', { reason: 'User triggered' }, true);
-        }
-    };
-            const multiApiKeyUtils = {
-        MAX_API_KEYS: 10,
-
-        initializeMultiApiKeys() {
-            elements.addGeminiApiKeyBtn.addEventListener('click', () => this.addApiKey('gemini'));
-            elements.addDeepseekApiKeyBtn.addEventListener('click', () => this.addApiKey('deepseek'));
-            elements.addClaudeApiKeyBtn.addEventListener('click', () => this.addApiKey('claude'));
-            elements.addOpenaiApiKeyBtn.addEventListener('click', () => this.addApiKey('openai'));
-            elements.addXaiApiKeyBtn.addEventListener('click', () => this.addApiKey('xai'));
-            elements.addLlmaggregatorApiKeyBtn.addEventListener('click', () => this.addApiKey('llmaggregator'));
-
-            this.renderAllApiKeyLists();
-        },
-
-        addApiKey(provider) {
-            const keys = this.getApiKeysArray(provider);
-            if (keys.length >= this.MAX_API_KEYS) {
-                uiUtils.showCustomAlert(`最大${this.MAX_API_KEYS}個までのAPIキーを設定できます。`);
-                return;
-            }
-
-            const newKey = {
-                id: Date.now().toString(),
-                label: `キー ${keys.length + 1}`,
-                value: '',
-                isActive: keys.length === 0
-            };
-
-            keys.push(newKey);
-            
-            if (newKey.isActive) {
-                this.setActiveApiKeyIndex(provider, keys.length - 1);
-            }
-
-            this.renderApiKeyList(provider);
-            this.updateMainApiKeyInput(provider);
-        },
-
-        async deleteApiKey(provider, keyId) {
-            const keys = this.getApiKeysArray(provider);
-            const keyIndex = keys.findIndex(key => key.id === keyId);
-            if (keyIndex === -1) return;
-
-            const keyToDelete = keys[keyIndex];
-            const confirmed = await uiUtils.showCustomConfirm(
-                `APIキー「${keyToDelete.label}」を削除しますか？`
-            );
-            
-            if (!confirmed) return;
-
-            const wasActive = keyToDelete.isActive;
-            keys.splice(keyIndex, 1);
-
-            if (wasActive && keys.length > 0) {
-                const newActiveIndex = Math.min(keyIndex, keys.length - 1);
-                keys[newActiveIndex].isActive = true;
-                this.setActiveApiKeyIndex(provider, newActiveIndex);
-            } else if (keys.length === 0) {
-                this.setActiveApiKeyIndex(provider, -1);
-            }
-
-            this.renderApiKeyList(provider);
-            this.updateMainApiKeyInput(provider);
-        },
-
-        selectApiKey(provider, keyId) {
-            const keys = this.getApiKeysArray(provider);
-            const selectedIndex = keys.findIndex(key => key.id === keyId);
-            if (selectedIndex === -1) return;
-
-            keys.forEach((key, index) => {
-                key.isActive = index === selectedIndex;
-            });
-
-            this.setActiveApiKeyIndex(provider, selectedIndex);
-            this.renderApiKeyList(provider);
-            this.updateMainApiKeyInput(provider);
-        },
-
-        updateApiKeyValue(provider, keyId, newValue) {
-            const keys = this.getApiKeysArray(provider);
-            const key = keys.find(k => k.id === keyId);
-                        if (key) {
-                key.value = newValue.trim();
-                if (key.isActive) {
-                    this.updateMainApiKeyInput(provider);
+            },
+    
+            async clearCacheAndReload() {
+                try {
+                    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                        await new Promise((resolve, reject) => {
+                            const timeoutId = setTimeout(() => reject(new Error('Service Worker timeout')), 5000);
+                            
+                            const messageHandler = (event) => {
+                                if (event.data && event.data.action === 'cacheCleared') {
+                                    clearTimeout(timeoutId);
+                                    navigator.serviceWorker.removeEventListener('message', messageHandler);
+                                    resolve();
+                                }
+                            };
+                            
+                            navigator.serviceWorker.addEventListener('message', messageHandler);
+                            navigator.serviceWorker.controller.postMessage({ action: 'clearCache' });
+                        });
+                    }
+                    
+                    if ('caches' in window) {
+                        const cacheNames = await caches.keys();
+                        await Promise.all(cacheNames.map(name => caches.delete(name)));
+                    }
+                    
+                    this.clearStorageSelectively();
+                    
+                    window.location.reload(true);
+                    
+                } catch (error) {
+                    window.location.href = window.location.href + '?recovery=' + Date.now();
                 }
+                            },
+    
+            clearStorageSelectively() {
+                try {
+                    const protectedKeys = [
+                        'GeminiPWA_DB',
+                    ];
+                    
+                    if (typeof Storage !== 'undefined' && sessionStorage) {
+                        sessionStorage.clear();
+                    }
+                    
+                    if (typeof Storage !== 'undefined' && localStorage) {
+                        const keysToRemove = [];
+                        for (let i = 0; i < localStorage.length; i++) {
+                            const key = localStorage.key(i);
+                            if (key && !protectedKeys.some(protected => key.includes(protected))) {
+                                keysToRemove.push(key);
+                            }
+                        }
+                        keysToRemove.forEach(key => localStorage.removeItem(key));
+                    }
+                } catch (error) {
+                }
+            },
+    
+            manualRecovery() {
+                this.triggerForceReload('Manual Recovery', { reason: 'User triggered' }, true);
             }
-        },
-
-        updateApiKeyLabel(provider, keyId, newLabel) {
-            const keys = this.getApiKeysArray(provider);
-            const key = keys.find(k => k.id === keyId);
-            if (key) {
-                key.label = newLabel.trim() || `キー ${keys.indexOf(key) + 1}`;
-            }
-        },
-
-        getApiKeysArray(provider) {
-            switch (provider) {
-                case 'gemini': return state.settings.geminiApiKeys;
-                case 'deepseek': return state.settings.deepseekApiKeys;
-                case 'claude': return state.settings.claudeApiKeys;
-                case 'openai': return state.settings.openaiApiKeys;
-                case 'xai': return state.settings.xaiApiKeys;
-                case 'llmaggregator': return state.settings.llmaggregatorApiKeys;
-                default: return [];
-            }
-        },
-
-        setActiveApiKeyIndex(provider, index) {
-            switch (provider) {
-                case 'gemini': state.settings.geminiActiveApiKeyIndex = index; break;
-                case 'deepseek': state.settings.deepseekActiveApiKeyIndex = index; break;
-                case 'claude': state.settings.claudeActiveApiKeyIndex = index; break;
-                case 'openai': state.settings.openaiActiveApiKeyIndex = index; break;
-                case 'xai': state.settings.xaiActiveApiKeyIndex = index; break;
-                case 'llmaggregator': state.settings.llmaggregatorActiveApiKeyIndex = index; break;
-            }
-        },
-
-        getActiveApiKey(provider) {
-            const keys = this.getApiKeysArray(provider);
-            const activeKey = keys.find(key => key.isActive);
-            return activeKey ? activeKey.value : '';
-        },
-
-        updateMainApiKeyInput(provider) {
-            if (!state.settings.showMultiApiKeys) {
-                return;
-            }
-            const activeKey = this.getActiveApiKey(provider);
-            switch (provider) {
-                case 'gemini':
-                    elements.geminiApiKeyInput.value = activeKey;
-                    break;
-                case 'deepseek':
-                    elements.deepSeekApiKeyInput.value = activeKey;
-                    break;
-                case 'claude':
-                    elements.claudeApiKeyInput.value = activeKey;
-                    break;
-                                    case 'openai':
-                    elements.openaiApiKeyInput.value = activeKey;
-                    break;
-                case 'xai':
-                    elements.xaiApiKeyInput.value = activeKey;
-                    break;
-                case 'llmaggregator':
-                    elements.llmAggregatorApiKeyInput.value = activeKey;
-                    break;
-            }
-        },
-
-        renderApiKeyList(provider) {
-            const keys = this.getApiKeysArray(provider);
-            const container = this.getListContainer(provider);
-                            const addButton = this.getAddButton(provider);
-
-            container.innerHTML = '';
-
-            if (keys.length === 0) {
-                const emptyMsg = document.createElement('p');
-                emptyMsg.textContent = 'APIキーが設定されていません。';
-                emptyMsg.style.color = 'var(--text-secondary)';
-                emptyMsg.style.fontSize = '13px';
-                emptyMsg.style.textAlign = 'center';
-                emptyMsg.style.margin = '10px 0';
-                container.appendChild(emptyMsg);
-            } else {
-                keys.forEach((key, index) => {
-                    const item = this.createApiKeyItem(provider, key, index);
-                    container.appendChild(item);
-                });
-            }
-
-            addButton.disabled = keys.length >= this.MAX_API_KEYS;
-            addButton.textContent = keys.length >= this.MAX_API_KEYS 
-                ? `最大${this.MAX_API_KEYS}個まで` 
-                : '新しいAPIキーを追加';
-        },
-
-        createApiKeyItem(provider, key, index) {
-            const item = document.createElement('div');
-            item.className = `api-key-item ${key.isActive ? 'active' : ''}`;
-
-            const labelInput = document.createElement('input');
-            labelInput.type = 'text';
-            labelInput.className = 'api-key-item-label';
-            labelInput.value = key.label;
-            labelInput.placeholder = `キー ${index + 1}`;
-            labelInput.addEventListener('change', (e) => {
-                                this.updateApiKeyLabel(provider, key.id, e.target.value);
-            });
-
-            const keyInput = document.createElement('input');
-            keyInput.type = 'password';
-            keyInput.className = 'api-key-item-input';
-            keyInput.value = key.value;
-            keyInput.placeholder = 'APIキーを入力...';
-            keyInput.addEventListener('input', (e) => {
-                this.updateApiKeyValue(provider, key.id, e.target.value);
-            });
-
-            const actions = document.createElement('div');
-            actions.className = 'api-key-item-actions';
-
-            const selectBtn = document.createElement('button');
-            selectBtn.className = `api-key-select-btn ${key.isActive ? 'active' : ''}`;
-            selectBtn.textContent = key.isActive ? '使用中' : '未選択';
-            selectBtn.disabled = key.isActive;
-            selectBtn.addEventListener('click', () => {
-                this.selectApiKey(provider, key.id);
-            });
-
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'api-key-delete-btn';
-            deleteBtn.textContent = '削';
-            deleteBtn.addEventListener('click', () => {
-                this.deleteApiKey(provider, key.id);
-            });
-
-            actions.appendChild(selectBtn);
-            actions.appendChild(deleteBtn);
-
-            item.appendChild(labelInput);
-            item.appendChild(keyInput);
-            item.appendChild(actions);
-
-            return item;
-        },
-
-        getListContainer(provider) {
-            switch (provider) {
-                case 'gemini': return elements.geminiApiKeysList;
-                case 'deepseek': return elements.deepseekApiKeysList;
-                case 'claude': return elements.claudeApiKeysList;
-                case 'openai': return elements.openaiApiKeysList;
-                case 'xai': return elements.xaiApiKeysList;
-                case 'llmaggregator': return elements.llmaggregatorApiKeysList;
-                default: return null;
-            }
-        },
-
-        getAddButton(provider) {
-            switch (provider) {
-                case 'gemini': return elements.addGeminiApiKeyBtn;
-                case 'deepseek': return elements.addDeepseekApiKeyBtn;
-                case 'claude': return elements.addClaudeApiKeyBtn;
-                case 'openai': return elements.addOpenaiApiKeyBtn;
-                case 'xai': return elements.addXaiApiKeyBtn;
-                case 'llmaggregator': return elements.addLlmaggregatorApiKeyBtn;
-                default: return null;
-            }
-        },
-
-        renderAllApiKeyLists() {
-            this.renderApiKeyList('gemini');
-            this.renderApiKeyList('deepseek');
-            this.renderApiKeyList('claude');
-            this.renderApiKeyList('openai');
-            this.renderApiKeyList('xai');
-                        this.renderApiKeyList('llmaggregator');
-        },
-
-        syncMainApiKeyInput(provider) {
-            if (!state.settings.showMultiApiKeys) {
-                return;
-            }
-            let mainValue = '';
-            switch (provider) {
-                case 'gemini': mainValue = elements.geminiApiKeyInput.value.trim(); break;
-                case 'deepseek': mainValue = elements.deepSeekApiKeyInput.value.trim(); break;
-                case 'claude': mainValue = elements.claudeApiKeyInput.value.trim(); break;
-                case 'openai': mainValue = elements.openaiApiKeyInput.value.trim(); break;
-                case 'xai': mainValue = elements.xaiApiKeyInput.value.trim(); break;
-                case 'llmaggregator': mainValue = elements.llmAggregatorApiKeyInput.value.trim(); break;
-            }
-
-            const keys = this.getApiKeysArray(provider);
-            const activeKey = keys.find(key => key.isActive);
-            
-            if (activeKey && activeKey.value !== mainValue) {
-                activeKey.value = mainValue;
+        };
+                const multiApiKeyUtils = {
+            MAX_API_KEYS: 10,
+    
+            initializeMultiApiKeys() {
+                elements.addGeminiApiKeyBtn.addEventListener('click', () => this.addApiKey('gemini'));
+                elements.addDeepseekApiKeyBtn.addEventListener('click', () => this.addApiKey('deepseek'));
+                elements.addClaudeApiKeyBtn.addEventListener('click', () => this.addApiKey('claude'));
+                elements.addOpenaiApiKeyBtn.addEventListener('click', () => this.addApiKey('openai'));
+                elements.addXaiApiKeyBtn.addEventListener('click', () => this.addApiKey('xai'));
+                elements.addLlmaggregatorApiKeyBtn.addEventListener('click', () => this.addApiKey('llmaggregator'));
+    
+                this.renderAllApiKeyLists();
+            },
+    
+            addApiKey(provider) {
+                const keys = this.getApiKeysArray(provider);
+                if (keys.length >= this.MAX_API_KEYS) {
+                    uiUtils.showCustomAlert(`最大${this.MAX_API_KEYS}個までのAPIキーを設定できます。`);
+                    return;
+                }
+    
+                const newKey = {
+                    id: Date.now().toString(),
+                    label: `キー ${keys.length + 1}`,
+                    value: '',
+                    isActive: keys.length === 0
+                };
+    
+                keys.push(newKey);
+                
+                if (newKey.isActive) {
+                    this.setActiveApiKeyIndex(provider, keys.length - 1);
+                }
+    
                 this.renderApiKeyList(provider);
+                this.updateMainApiKeyInput(provider);
+            },
+    
+            async deleteApiKey(provider, keyId) {
+                const keys = this.getApiKeysArray(provider);
+                const keyIndex = keys.findIndex(key => key.id === keyId);
+                if (keyIndex === -1) return;
+    
+                const keyToDelete = keys[keyIndex];
+                const confirmed = await uiUtils.showCustomConfirm(
+                    `APIキー「${keyToDelete.label}」を削除しますか？`
+                );
+                
+                if (!confirmed) return;
+    
+                const wasActive = keyToDelete.isActive;
+                keys.splice(keyIndex, 1);
+    
+                if (wasActive && keys.length > 0) {
+                    const newActiveIndex = Math.min(keyIndex, keys.length - 1);
+                    keys[newActiveIndex].isActive = true;
+                    this.setActiveApiKeyIndex(provider, newActiveIndex);
+                } else if (keys.length === 0) {
+                    this.setActiveApiKeyIndex(provider, -1);
+                }
+    
+                this.renderApiKeyList(provider);
+                this.updateMainApiKeyInput(provider);
+            },
+    
+            selectApiKey(provider, keyId) {
+                const keys = this.getApiKeysArray(provider);
+                const selectedIndex = keys.findIndex(key => key.id === keyId);
+                if (selectedIndex === -1) return;
+    
+                keys.forEach((key, index) => {
+                    key.isActive = index === selectedIndex;
+                });
+    
+                this.setActiveApiKeyIndex(provider, selectedIndex);
+                this.renderApiKeyList(provider);
+                this.updateMainApiKeyInput(provider);
+            },
+    
+            updateApiKeyValue(provider, keyId, newValue) {
+                const keys = this.getApiKeysArray(provider);
+                const key = keys.find(k => k.id === keyId);
+                            if (key) {
+                    key.value = newValue.trim();
+                    if (key.isActive) {
+                        this.updateMainApiKeyInput(provider);
+                    }
+                }
+            },
+    
+            updateApiKeyLabel(provider, keyId, newLabel) {
+                const keys = this.getApiKeysArray(provider);
+                const key = keys.find(k => k.id === keyId);
+                if (key) {
+                    key.label = newLabel.trim() || `キー ${keys.indexOf(key) + 1}`;
+                }
+            },
+    
+            getApiKeysArray(provider) {
+                switch (provider) {
+                    case 'gemini': return state.settings.geminiApiKeys;
+                    case 'deepseek': return state.settings.deepseekApiKeys;
+                    case 'claude': return state.settings.claudeApiKeys;
+                    case 'openai': return state.settings.openaiApiKeys;
+                    case 'xai': return state.settings.xaiApiKeys;
+                    case 'llmaggregator': return state.settings.llmaggregatorApiKeys;
+                    default: return [];
+                }
+            },
+    
+            setActiveApiKeyIndex(provider, index) {
+                switch (provider) {
+                    case 'gemini': state.settings.geminiActiveApiKeyIndex = index; break;
+                    case 'deepseek': state.settings.deepseekActiveApiKeyIndex = index; break;
+                    case 'claude': state.settings.claudeActiveApiKeyIndex = index; break;
+                    case 'openai': state.settings.openaiActiveApiKeyIndex = index; break;
+                    case 'xai': state.settings.xaiActiveApiKeyIndex = index; break;
+                    case 'llmaggregator': state.settings.llmaggregatorActiveApiKeyIndex = index; break;
+                }
+            },
+    
+            getActiveApiKey(provider) {
+                const keys = this.getApiKeysArray(provider);
+                const activeKey = keys.find(key => key.isActive);
+                return activeKey ? activeKey.value : '';
+            },
+    
+            updateMainApiKeyInput(provider) {
+                if (!state.settings.showMultiApiKeys) {
+                    return;
+                }
+                const activeKey = this.getActiveApiKey(provider);
+                switch (provider) {
+                    case 'gemini':
+                        elements.geminiApiKeyInput.value = activeKey;
+                        break;
+                    case 'deepseek':
+                        elements.deepSeekApiKeyInput.value = activeKey;
+                        break;
+                    case 'claude':
+                        elements.claudeApiKeyInput.value = activeKey;
+                        break;
+                                        case 'openai':
+                        elements.openaiApiKeyInput.value = activeKey;
+                        break;
+                    case 'xai':
+                        elements.xaiApiKeyInput.value = activeKey;
+                        break;
+                    case 'llmaggregator':
+                        elements.llmAggregatorApiKeyInput.value = activeKey;
+                        break;
+                }
+            },
+    
+            renderApiKeyList(provider) {
+                const keys = this.getApiKeysArray(provider);
+                const container = this.getListContainer(provider);
+                                const addButton = this.getAddButton(provider);
+    
+                container.innerHTML = '';
+    
+                if (keys.length === 0) {
+                    const emptyMsg = document.createElement('p');
+                    emptyMsg.textContent = 'APIキーが設定されていません。';
+                    emptyMsg.style.color = 'var(--text-secondary)';
+                    emptyMsg.style.fontSize = '13px';
+                    emptyMsg.style.textAlign = 'center';
+                    emptyMsg.style.margin = '10px 0';
+                    container.appendChild(emptyMsg);
+                } else {
+                    keys.forEach((key, index) => {
+                        const item = this.createApiKeyItem(provider, key, index);
+                        container.appendChild(item);
+                    });
+                }
+    
+                addButton.disabled = keys.length >= this.MAX_API_KEYS;
+                addButton.textContent = keys.length >= this.MAX_API_KEYS 
+                    ? `最大${this.MAX_API_KEYS}個まで` 
+                    : '新しいAPIキーを追加';
+            },
+    
+            createApiKeyItem(provider, key, index) {
+                const item = document.createElement('div');
+                item.className = `api-key-item ${key.isActive ? 'active' : ''}`;
+    
+                const labelInput = document.createElement('input');
+                labelInput.type = 'text';
+                labelInput.className = 'api-key-item-label';
+                labelInput.value = key.label;
+                labelInput.placeholder = `キー ${index + 1}`;
+                labelInput.addEventListener('change', (e) => {
+                                    this.updateApiKeyLabel(provider, key.id, e.target.value);
+                });
+    
+                const keyInput = document.createElement('input');
+                keyInput.type = 'password';
+                keyInput.className = 'api-key-item-input';
+                keyInput.value = key.value;
+                keyInput.placeholder = 'APIキーを入力...';
+                keyInput.addEventListener('input', (e) => {
+                    this.updateApiKeyValue(provider, key.id, e.target.value);
+                });
+    
+                const actions = document.createElement('div');
+                actions.className = 'api-key-item-actions';
+    
+                const selectBtn = document.createElement('button');
+                selectBtn.className = `api-key-select-btn ${key.isActive ? 'active' : ''}`;
+                selectBtn.textContent = key.isActive ? '使用中' : '未選択';
+                selectBtn.disabled = key.isActive;
+                selectBtn.addEventListener('click', () => {
+                    this.selectApiKey(provider, key.id);
+                });
+    
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'api-key-delete-btn';
+                deleteBtn.textContent = '削';
+                deleteBtn.addEventListener('click', () => {
+                    this.deleteApiKey(provider, key.id);
+                });
+    
+                actions.appendChild(selectBtn);
+                actions.appendChild(deleteBtn);
+    
+                item.appendChild(labelInput);
+                item.appendChild(keyInput);
+                item.appendChild(actions);
+    
+                return item;
+            },
+    
+            getListContainer(provider) {
+                switch (provider) {
+                    case 'gemini': return elements.geminiApiKeysList;
+                    case 'deepseek': return elements.deepseekApiKeysList;
+                    case 'claude': return elements.claudeApiKeysList;
+                    case 'openai': return elements.openaiApiKeysList;
+                    case 'xai': return elements.xaiApiKeysList;
+                    case 'llmaggregator': return elements.llmaggregatorApiKeysList;
+                    default: return null;
+                }
+            },
+    
+            getAddButton(provider) {
+                switch (provider) {
+                    case 'gemini': return elements.addGeminiApiKeyBtn;
+                    case 'deepseek': return elements.addDeepseekApiKeyBtn;
+                    case 'claude': return elements.addClaudeApiKeyBtn;
+                    case 'openai': return elements.addOpenaiApiKeyBtn;
+                    case 'xai': return elements.addXaiApiKeyBtn;
+                    case 'llmaggregator': return elements.addLlmaggregatorApiKeyBtn;
+                    default: return null;
+                }
+            },
+    
+            renderAllApiKeyLists() {
+                this.renderApiKeyList('gemini');
+                this.renderApiKeyList('deepseek');
+                this.renderApiKeyList('claude');
+                this.renderApiKeyList('openai');
+                this.renderApiKeyList('xai');
+                            this.renderApiKeyList('llmaggregator');
+            },
+    
+            syncMainApiKeyInput(provider) {
+                if (!state.settings.showMultiApiKeys) {
+                    return;
+                }
+                let mainValue = '';
+                switch (provider) {
+                    case 'gemini': mainValue = elements.geminiApiKeyInput.value.trim(); break;
+                    case 'deepseek': mainValue = elements.deepSeekApiKeyInput.value.trim(); break;
+                    case 'claude': mainValue = elements.claudeApiKeyInput.value.trim(); break;
+                    case 'openai': mainValue = elements.openaiApiKeyInput.value.trim(); break;
+                    case 'xai': mainValue = elements.xaiApiKeyInput.value.trim(); break;
+                    case 'llmaggregator': mainValue = elements.llmAggregatorApiKeyInput.value.trim(); break;
+                }
+    
+                const keys = this.getApiKeysArray(provider);
+                const activeKey = keys.find(key => key.isActive);
+                
+                if (activeKey && activeKey.value !== mainValue) {
+                    activeKey.value = mainValue;
+                    this.renderApiKeyList(provider);
+                }
             }
-        }
-    };
+        };
 
-    errorRecovery.init();
-
-    window.errorRecovery = errorRecovery;
-
-    appLogic.initializeApp();
-</script>
-</body>
-</html>
+        errorRecovery.init();
+    
+        window.errorRecovery = errorRecovery;
+    
+        appLogic.initializeApp();
+    </script>
+    </body>
+    </html>
 
