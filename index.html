@@ -3320,6 +3320,7 @@
 
             <div id="twin-engine-summary-area" class="hidden">
                 <div class="twin-engine-summary-actions-container">
+                    <button id="execute-twin-engine-summary-btn" class="orange-button" title="現在のチャット履歴を要約する">要約実行</button>
                     <button id="copy-twin-engine-summary-btn" class="copy-twin-engine-summary-btn" title="内容をコピー">コピー</button>
                     <button id="clear-twin-engine-summary-btn" class="clear-twin-engine-summary-btn" title="内容を全て削除">全削除</button>
                 </div>
@@ -5133,7 +5134,7 @@
             llmAggregatorExpandThoughtsByDefaultToggle: document.getElementById('llmaggregator-expand-thoughts-by-default-toggle'),
             llmAggregatorStreamingOutputCheckbox: document.getElementById('llmaggregator-streaming-output'),
             llmAggregatorStreamingSpeedInput: document.getElementById('llmaggregator-streaming-speed'),
-            llmAggregatorDummyUserInput: document.getElementById('llmaggregator-dummy-user'),
+            llmAggregatorDummyUser: document.getElementById('llmaggregator-dummy-user'),
             llmAggregatorEnableDummyUserCheckbox: document.getElementById('llmaggregator-enable-dummy-user'),
             llmAggregatorDummyModelInput: document.getElementById('llmaggregator-dummy-model'),
             llmAggregatorEnableDummyModelCheckbox: document.getElementById('llmaggregator-enable-dummy-model'),
@@ -5251,6 +5252,7 @@
             twinEngineSummaryEditor: document.getElementById('twin-engine-summary-editor'),
             copyTwinEngineSummaryBtn: document.getElementById('copy-twin-engine-summary-btn'),
             clearTwinEngineSummaryBtn: document.getElementById('clear-twin-engine-summary-btn'),
+            executeTwinEngineSummaryBtn: document.getElementById('execute-twin-engine-summary-btn'),
             showUserIconToggle: document.getElementById('show-user-icon-toggle'),
             userIconInput: document.getElementById('user-icon-input'),
             uploadUserIconBtn: document.getElementById('upload-user-icon-btn'),
@@ -8707,7 +8709,7 @@
         };
 
         const appLogic = {
-            async initializeApp() {
+            initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -8808,6 +8810,7 @@
                 elements.pasteClipboardStackBtn.addEventListener('click', () => this.pasteIntoClipboardStack());
 
                 elements.twinEngineSummaryBtn.addEventListener('click', () => this.toggleTwinEngineSummary());
+                elements.executeTwinEngineSummaryBtn.addEventListener('click', () => this.executeTwinEngineSummary());
                 elements.copyTwinEngineSummaryBtn.addEventListener('click', () => this.copyTwinEngineSummaryText());
                 elements.clearTwinEngineSummaryBtn.addEventListener('click', () => this.confirmClearTwinEngineSummary());
 
@@ -13630,6 +13633,182 @@
             okBtn.onclick = () => dialog.close();
             
             dialog.showModal();
+        },
+        async executeTwinEngineSummary() {
+            if (state.isSending || state.isAiToAiChatProcessing) {
+                await uiUtils.showCustomAlert("他の処理が実行中です。");
+                return;
+            }
+            if (state.currentMessages.length === 0) {
+                await uiUtils.showCustomAlert("要約するチャット履歴がありません。");
+                return;
+            }
+
+            const button = elements.executeTwinEngineSummaryBtn;
+            const originalButtonText = button.textContent;
+            const originalLoadingText = elements.loadingIndicator.textContent;
+
+            try {
+                button.disabled = true;
+                button.textContent = '要約中...';
+                elements.loadingIndicator.textContent = 'チャット履歴を要約中...';
+                elements.loadingIndicator.classList.remove('hidden');
+
+                const provider = state.settings.twinEngineProvider;
+                const apiKey = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ApiKey`];
+                const modelName = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ModelName`];
+                const apiEndpoint = (provider === 'deepseek' || provider === 'llmaggregator') ? state.settings[`${provider}ApiEndpoint`] || DEEPSEEK_API_DEFAULT_BASE_URL : null;
+
+
+                if (!provider || !apiKey || !modelName) {
+                    throw new Error(`Twin-engine用のAPIプロバイダー(${provider})設定が不完全です。設定画面を確認してください。`);
+                }
+
+                const systemPrompt = "あなたは優秀なアシスタントです。以下の会話履歴全体を、重要なポイントを網羅しつつ、簡潔に日本語で要約してください。";
+                
+                const messagesForApi = state.currentMessages
+                    .filter(msg => msg.role === 'user' || msg.role === 'model')
+                    .map(msg => ({
+                        role: msg.role,
+                        parts: [{ text: msg.content || '' }]
+                    }));
+                
+                const systemInstruction = { parts: [{ text: systemPrompt }] };
+
+                const generationConfig = {
+                    temperature: 0.5,
+                    maxOutputTokens: 2048
+                };
+
+                const apiCallConfig = { apiKey, modelName, apiEndpoint, messages: messagesForApi, systemInstruction, generationConfig };
+                const response = await this.callTwinEngineApi(provider, apiCallConfig);
+                const data = await response.json();
+
+                let responseText = '';
+                if (provider === 'gemini') {
+                    responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                } else if (provider === 'claude') {
+                     responseText = data.content?.[0]?.text || '';
+                } else {
+                     responseText = data.choices?.[0]?.message?.content || '';
+                }
+
+                if (!responseText.trim()) {
+                    throw new Error("APIから空の要約が返されました。");
+                }
+                
+                const now = new Date();
+                const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                const separator = `\n\n--- [${provider}/${modelName}] 要約 (${timestamp}) ---\n\n`;
+                
+                const currentSummary = elements.twinEngineSummaryEditor.value;
+                const newSummary = (currentSummary ? currentSummary + separator : '') + responseText.trim();
+                
+                elements.twinEngineSummaryEditor.value = newSummary;
+                state.twinEngineSummaryContent = newSummary;
+                
+                await uiUtils.showCustomAlert("要約が完了しました。");
+
+            } catch (error) {
+                await uiUtils.showCustomAlert(`要約の実行中にエラーが発生しました:\n${error.message}`);
+            } finally {
+                button.disabled = false;
+                button.textContent = originalButtonText;
+                elements.loadingIndicator.classList.add('hidden');
+                elements.loadingIndicator.textContent = originalLoadingText;
+                state.abortController = null;
+            }
+        },
+        async callTwinEngineApi(provider, config) {
+            const { apiKey, modelName, apiEndpoint, messages, systemInstruction, generationConfig } = config;
+            state.abortController = new AbortController();
+            
+            let url, body, headers;
+
+            switch(provider) {
+                case 'gemini':
+                    url = `${GEMINI_API_BASE_URL}${modelName}:generateContent?key=${apiKey}`;
+                    headers = { 'Content-Type': 'application/json' };
+                    body = {
+                        contents: messages,
+                        generationConfig,
+                        systemInstruction,
+                        safetySettings: [
+                            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+                            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+                        ]
+                    };
+                    break;
+                
+                case 'claude':
+                    url = CLAUDE_API_BASE_URL;
+                    headers = {
+                        'Content-Type': 'application/json',
+                        'x-api-key': apiKey,
+                        'anthropic-version': '2023-06-01',
+                        'anthropic-dangerous-direct-browser-access': 'true'
+                    };
+                    const claudeRequest = this.convertToClaudeRequest(messages, systemInstruction);
+                    body = {
+                        model: modelName,
+                        messages: claudeRequest.messages,
+                        system: claudeRequest.system,
+                        max_tokens: generationConfig.maxOutputTokens,
+                        temperature: generationConfig.temperature
+                    };
+                    break;
+
+                case 'deepseek':
+                case 'openai':
+                case 'xai':
+                case 'llmaggregator':
+                     const oaMessages = [];
+                     if (systemInstruction && systemInstruction.parts?.[0]?.text) {
+                         oaMessages.push({ role: "system", content: systemInstruction.parts[0].text });
+                     }
+                     messages.forEach(m => {
+                         oaMessages.push({ role: m.role === 'model' ? 'assistant' : m.role, content: m.parts[0].text });
+                     });
+                     body = {
+                         model: modelName,
+                         messages: oaMessages,
+                         temperature: generationConfig.temperature,
+                         max_tokens: generationConfig.maxOutputTokens
+                     };
+                     headers = {
+                         'Content-Type': 'application/json',
+                         'Authorization': `Bearer ${apiKey}`
+                     };
+                     if (provider === 'deepseek') url = `${apiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL}/chat/completions`;
+                     if (provider === 'openai') url = OPENAI_API_BASE_URL;
+                     if (provider === 'xai') url = XAI_API_BASE_URL;
+                     if (provider === 'llmaggregator') url = state.settings.llmAggregatorApiBackend;
+                     break;
+                
+                default:
+                    throw new Error(`Unsupported provider for Twin-engine: ${provider}`);
+            }
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(body),
+                signal: state.abortController.signal
+            });
+
+            if (!response.ok) {
+                let errorMsg = `${provider.toUpperCase()} APIエラー (${response.status}): ${response.statusText}`;
+                try {
+                    const errorData = await response.json();
+                    if (errorData.error && errorData.error.message) {
+                        errorMsg = `APIエラー: ${errorData.error.message}`;
+                    }
+                } catch (e) {}
+                throw new Error(errorMsg);
+            }
+            return response;
         },
     };
 
