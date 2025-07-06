@@ -4655,6 +4655,27 @@
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                             ※ Twin-engineで生成された要約履歴を表示・編集するためのパネルを開閉します。
                         </p>
+                        <label class="checkbox-label" style="margin-bottom: 5px;">
+                            <input type="checkbox" id="enable-twin-engine">
+                            Twin-engine機能を有効にする
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                            ※ 有効にすると、会話が長くなった際に自動で履歴を要約し、トークン消費を抑制します。
+                        </p>
+                        <label for="twin-engine-trigger-threshold">要約を開始するメッセージ数:</label>
+                        <input type="number" id="twin-engine-trigger-threshold" min="2" step="2" placeholder="例: 10">
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                            ※ 会話の往復数がこの値に達すると、次の送信時に要約が実行されます。
+                        </p>
+                        <label for="twin-engine-keep-last-messages">要約せずに残す直近のメッセージ数:</label>
+                        <input type="number" id="twin-engine-keep-last-messages" min="2" step="2" placeholder="例: 4">
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                            ※ 最新の会話の文脈を維持するため、ここで指定した数のメッセージは要約せず、そのまま残します。（2往復分を推奨）
+                        </p>
+                        <label for="twin-engine-summary-prompt">要約AIへのプロンプト:</label>
+                        <textarea id="twin-engine-summary-prompt" placeholder="以下の会話履歴を、後続のAIへの指示として使えるように、文脈を維持したまま簡潔に要約してください。"></textarea>
+
+                        <hr style="margin: 20px 0;">
                         <label for="twin-engine-provider-select">使用するAPIプロバイダー (Twin-engine):</label>
                         <select id="twin-engine-provider-select" aria-label="Twin-engine APIプロバイダー選択">
                             <option value="gemini">Gemini (Google)</option>
@@ -4701,9 +4722,6 @@
                             <label for="twin-engine-llmaggregator-model-name">モデル名 (Twin-engine):</label>
                             <select id="twin-engine-llmaggregator-model-name" aria-label="LLM Aggregator モデル名 (Twin-engine)"></select>
                         </div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: 15px;">
-                            ※ 「セッションの過去の会話 → ある程度セッションが進んだ時点で別の AI で要約 → システムプロンプトとその要約だけを現在の AI に渡して続きの対話を開始する」というワークフローを、行う機能（予定）
-                        </p>
                     </div>
                 </details>
                  <details class="settings-group" id="settings-group-session-linking">
@@ -5341,6 +5359,10 @@
             twinEngineLlmaggregatorSettings: document.getElementById('twin-engine-llmaggregator-settings'),
             twinEngineLlmaggregatorApiKeyInput: document.getElementById('twin-engine-llmaggregator-api-key'),
             twinEngineLlmaggregatorModelNameSelect: document.getElementById('twin-engine-llmaggregator-model-name'),
+            enableTwinEngineCheckbox: document.getElementById('enable-twin-engine'),
+            twinEngineTriggerThresholdInput: document.getElementById('twin-engine-trigger-threshold'),
+            twinEngineKeepLastMessagesInput: document.getElementById('twin-engine-keep-last-messages'),
+            twinEngineSummaryPromptTextarea: document.getElementById('twin-engine-summary-prompt'),
         };
 
         const state = {
@@ -5590,6 +5612,10 @@
                 xaiActiveApiKeyIndex: -1,
                 llmaggregatorApiKeys: [],
                 llmaggregatorActiveApiKeyIndex: -1,
+                enableTwinEngine: false,
+                twinEngineTriggerThreshold: 10,
+                twinEngineKeepLastMessages: 4,
+                twinEngineSummaryPrompt: '',
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -7716,6 +7742,10 @@
                  elements.apiProviderCycleDummyCheckbox.checked = state.settings.apiProviderCycle.dummy;
                  elements.dummyDummyModelInput.value = state.settings.dummyDummyModel || '';
                  elements.dummyEnableDummyModelCheckbox.checked = state.settings.dummyEnableDummyModel;
+                elements.enableTwinEngineCheckbox.checked = state.settings.enableTwinEngine;
+                elements.twinEngineTriggerThresholdInput.value = state.settings.twinEngineTriggerThreshold ?? '';
+                elements.twinEngineKeepLastMessagesInput.value = state.settings.twinEngineKeepLastMessages ?? '';
+                elements.twinEngineSummaryPromptTextarea.value = state.settings.twinEngineSummaryPrompt || '';
 
                 elements.showMemoButtonToggle.checked = state.settings.showMemoButton;
                 elements.showTwinEngineSummaryButtonToggle.checked = state.settings.showTwinEngineSummaryButton;
@@ -8707,7 +8737,7 @@
         };
 
         const appLogic = {
-            async initializeApp() {
+            initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -10558,6 +10588,41 @@
             let firstResponseIndexForRetry = -1;
             let siblingGroupIdToUse = null;
 
+            const isTwinEngineEnabled = state.settings.enableTwinEngine;
+            const triggerThreshold = parseInt(state.settings.twinEngineTriggerThreshold, 10) || 10;
+            let messagesToProcess;
+
+            if (isTwinEngineEnabled && !isBackgroundProcess && !isRetry && state.currentMessages.length >= triggerThreshold) {
+                try {
+                    const keepLastCount = parseInt(state.settings.twinEngineKeepLastMessages, 10) || 4;
+                    const messagesToSummarize = state.currentMessages.slice(0, state.currentMessages.length - keepLastCount);
+
+                    if (messagesToSummarize.length > 0) {
+                        const summary = await this.getSummaryFromTwinEngine(messagesToSummarize);
+                        state.twinEngineSummaryContent = summary;
+                        if (elements.twinEngineSummaryEditor) {
+                            elements.twinEngineSummaryEditor.value = summary;
+                        }
+
+                        const messagesToKeep = state.currentMessages.slice(state.currentMessages.length - keepLastCount);
+                        messagesToProcess = [
+                            { role: 'user', parts: [{ text: `これまでの会話の要約:\n${summary}` }] },
+                            { role: 'model', parts: [{ text: "承知しました。要約を記憶しました。" }] },
+                            ...messagesToKeep.map(msg => ({ role: msg.role, parts: [{ text: msg.content }] }))
+                        ];
+                    } else {
+                        messagesToProcess = [...state.currentMessages];
+                    }
+                } catch (error) {
+                    uiUtils.displayError(`Twin-engineでの要約に失敗しました: ${error.message}`);
+                    messagesToProcess = [...state.currentMessages];
+                }
+            } else if (isRetry) {
+                messagesToProcess = currentContextMessages.slice(0, userMessageIndex + 1);
+            } else {
+                messagesToProcess = [...currentContextMessages];
+            }
+
             if (!isBackgroundProcess && !isRetry) {
                 const userMessage = {
                     role: 'user', content: text, timestamp: Date.now(),
@@ -10572,15 +10637,15 @@
                 state.pendingAttachments = [];
                 uiUtils.adjustTextareaHeight();
                 uiUtils.updateAttachmentBadgeVisibility();
-                currentContextMessages = [...state.currentMessages];
+                messagesToProcess.push({ role: 'user', parts: [{ text: text, attachments: attachmentsToSend }] });
             } else if (isBackgroundProcess && !isRetry) {
                 const userMessage = {
                     role: 'user', content: text, timestamp: Date.now(),
                     attachments: attachmentsToSend,
                     generatedByApiProvider: null
                 };
-                currentContextMessages.push(userMessage);
-                userMessageIndex = currentContextMessages.length - 1;
+                messagesToProcess.push({ role: 'user', parts: [{ text: text, attachments: attachmentsToSend }] });
+                userMessageIndex = messagesToProcess.length - 1;
             } else if (isRetry) {
                 let siblingStartIndex = userMessageIndex + 1;
                 while (siblingStartIndex < currentContextMessages.length && currentContextMessages[siblingStartIndex].role !== 'model') {
@@ -10600,10 +10665,6 @@
                      }
                 }
             }
-
-            const messagesToProcess = isRetry
-                ? currentContextMessages.slice(0, userMessageIndex + 1)
-                : [...currentContextMessages];
 
             try {
                 let titleToSave = null;
@@ -11274,6 +11335,40 @@
             }
             if (isBackgroundProcess) return null;
         },
+        async getSummaryFromTwinEngine(messagesToSummarize) {
+            uiUtils.setAiToAiProcessingState(true, "Twin-engine: 履歴を要約中...");
+
+            try {
+                const provider = state.settings.twinEngineProvider;
+                const summaryPromptTemplate = state.settings.twinEngineSummaryPrompt 
+                    || "以下の会話履歴を、後続のAIへの指示として使えるように、文脈を維持したまま簡潔に要約してください。:\n\n";
+
+                const historyText = messagesToSummarize
+                    .map(msg => `${msg.role === 'user' ? 'ユーザー' : 'AI'}: ${msg.content}`)
+                    .join('\n');
+                
+                const promptForSummary = summaryPromptTemplate + historyText;
+
+                const summaryContext = {
+                    sessionId: null,
+                    messages: [],
+                    inputText: promptForSummary,
+                    apiProvider: provider,
+                    temperature: 0.2, 
+                    maxTokens: 1024,
+                };
+
+                const summaryResponse = await this.handleSend(false, -1, summaryContext);
+
+                if (summaryResponse && summaryResponse.content) {
+                    return summaryResponse.content;
+                } else {
+                    throw new Error("要約AIから有効な応答が得られませんでした。");
+                }
+            } finally {
+                uiUtils.setAiToAiProcessingState(false);
+            }
+        },
         async toggleApiProvider() {
             if(state.isSending || state.isAiToAiChatProcessing) {
                 await uiUtils.showCustomAlert('現在処理中のため、APIプロバイダーを変更できません。');
@@ -11942,6 +12037,10 @@
              newSettings.dummyErrorDebugMode = elements.dummyErrorDebugModeCheckbox.checked;
              newSettings.dummyDummyModel = elements.dummyDummyModelInput.value.trim();
              newSettings.dummyEnableDummyModel = elements.dummyEnableDummyModelCheckbox.checked;
+             newSettings.enableTwinEngine = elements.enableTwinEngineCheckbox.checked;
+             newSettings.twinEngineTriggerThreshold = parseInt(elements.twinEngineTriggerThresholdInput.value, 10) || 10;
+             newSettings.twinEngineKeepLastMessages = parseInt(elements.twinEngineKeepLastMessagesInput.value, 10) || 4;
+             newSettings.twinEngineSummaryPrompt = elements.twinEngineSummaryPromptTextarea.value.trim();
 
             const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
                 let num = isInteger ? parseInt(value, 10) : parseFloat(value);
@@ -12265,6 +12364,10 @@
                     defaultSettingsCopy.xaiActiveApiKeyIndex = -1;
                     defaultSettingsCopy.llmaggregatorApiKeys = [];
                     defaultSettingsCopy.llmaggregatorActiveApiKeyIndex = -1;
+                    defaultSettingsCopy.enableTwinEngine = false;
+                    defaultSettingsCopy.twinEngineTriggerThreshold = 10;
+                    defaultSettingsCopy.twinEngineKeepLastMessages = 4;
+                    defaultSettingsCopy.twinEngineSummaryPrompt = '';
 
                     state.settings = defaultSettingsCopy;
 
@@ -14205,29 +14308,20 @@
                                 } else if (chunk.type === 'content_block_delta' && chunk.delta && chunk.delta.type === 'thinking_delta') {
                                     yield { type: 'chunk', contentText: null, thoughtText: chunk.delta.thinking || '' };
                                 } else if (chunk.type === 'message_stop') {
-                                    finalFinishReason = chunk.message?.stop_reason || 'stop';
-                                    if (chunk["amazon-bedrock-invocationMetrics"]) {
-                                        finalUsage = {
-                                            input_tokens: chunk["amazon-bedrock-invocationMetrics"].inputTokenCount,
-                                            output_tokens: chunk["amazon-bedrock-invocationMetrics"].outputTokenCount
-                                        };
-                                    } else if (chunk.usage) {
-                                        finalUsage = chunk.usage;
-                                    }
-                                } else if (chunk.type === 'message_delta' && chunk.usage) {
+                                                                } else if (chunk.type === 'message_delta' && chunk.usage) {
                                     finalUsage = chunk.usage;
                                 }
                             } catch (e) {
                             }
                         }
                     }
-                                        if (finalFinishReason && finalFinishReason !== 'null') break;
+                    if (finalFinishReason && finalFinishReason !== 'null') break;
                 }
                 yield {
                     type: 'metadata',
                     finishReason: isCancelled ? 'ABORTED' : finalFinishReason || 'stop',
                     safetyRatings: null,
-                                            usageMetadata: finalUsage ? {
+                    usageMetadata: finalUsage ? {
                         candidatesTokenCount: finalUsage.output_tokens,
                         totalTokenCount: finalUsage.input_tokens + finalUsage.output_tokens
                     } : null
