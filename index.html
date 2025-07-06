@@ -3275,6 +3275,14 @@
         #settings-screen.auto-save-mode .app-header .js-save-settings-btn {
             display: none !important;
         }
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 100, 0.7); }
+            70% { transform: scale(1.15); box-shadow: 0 0 10px 15px rgba(255, 255, 100, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 100, 0); }
+        }
+        #twin-engine-summary-btn {
+            transition: transform 0.2s ease-in-out;
+        }
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
@@ -3320,7 +3328,6 @@
 
             <div id="twin-engine-summary-area" class="hidden">
                 <div class="twin-engine-summary-actions-container">
-                    <button id="execute-twin-engine-summary-btn" class="orange-button" title="現在のチャット履歴を要約する">要約実行</button>
                     <button id="copy-twin-engine-summary-btn" class="copy-twin-engine-summary-btn" title="内容をコピー">コピー</button>
                     <button id="clear-twin-engine-summary-btn" class="clear-twin-engine-summary-btn" title="内容を全て削除">全削除</button>
                 </div>
@@ -4702,9 +4709,15 @@
                             <label for="twin-engine-llmaggregator-model-name">モデル名 (Twin-engine):</label>
                             <select id="twin-engine-llmaggregator-model-name" aria-label="LLM Aggregator モデル名 (Twin-engine)"></select>
                         </div>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: 15px;">
-                            ※ 「セッションの過去の会話 → ある程度セッションが進んだ時点で別の AI で要約 → システムプロンプトとその要約だけを現在の AI に渡して続きの対話を開始する」というワークフローを、行う機能（予定）
+                        <label class="checkbox-label" style="margin-top: 20px;">
+                            <input type="checkbox" id="enable-twin-engine-auto-summary">
+                            メッセージ送信時にチャット履歴の自動要約を実行する
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                            ※ 有効にすると、メッセージを送信するたびに、設定されたTwin-engine APIでバックグラウンドで要約が生成され、要約パネルに表示されます。
                         </p>
+                        <label for="twin-engine-summary-prompt" style="margin-top: 15px;">要約指示プロンプト:</label>
+                        <textarea id="twin-engine-summary-prompt" placeholder="例: 以下の会話履歴を第三者の視点から客観的に、重要なポイントを箇条書きで3〜5項目にまとめてください。"></textarea>
                     </div>
                 </details>
                  <details class="settings-group" id="settings-group-session-linking">
@@ -5134,7 +5147,7 @@
             llmAggregatorExpandThoughtsByDefaultToggle: document.getElementById('llmaggregator-expand-thoughts-by-default-toggle'),
             llmAggregatorStreamingOutputCheckbox: document.getElementById('llmaggregator-streaming-output'),
             llmAggregatorStreamingSpeedInput: document.getElementById('llmaggregator-streaming-speed'),
-            llmAggregatorDummyUser: document.getElementById('llmaggregator-dummy-user'),
+            llmAggregatorDummyUserInput: document.getElementById('llmaggregator-dummy-user'),
             llmAggregatorEnableDummyUserCheckbox: document.getElementById('llmaggregator-enable-dummy-user'),
             llmAggregatorDummyModelInput: document.getElementById('llmaggregator-dummy-model'),
             llmAggregatorEnableDummyModelCheckbox: document.getElementById('llmaggregator-enable-dummy-model'),
@@ -5252,7 +5265,6 @@
             twinEngineSummaryEditor: document.getElementById('twin-engine-summary-editor'),
             copyTwinEngineSummaryBtn: document.getElementById('copy-twin-engine-summary-btn'),
             clearTwinEngineSummaryBtn: document.getElementById('clear-twin-engine-summary-btn'),
-            executeTwinEngineSummaryBtn: document.getElementById('execute-twin-engine-summary-btn'),
             showUserIconToggle: document.getElementById('show-user-icon-toggle'),
             userIconInput: document.getElementById('user-icon-input'),
             uploadUserIconBtn: document.getElementById('upload-user-icon-btn'),
@@ -5592,6 +5604,8 @@
                 xaiActiveApiKeyIndex: -1,
                 llmaggregatorApiKeys: [],
                 llmaggregatorActiveApiKeyIndex: -1,
+                enableTwinEngineAutoSummary: false,
+                twinEngineSummaryPrompt: '以下の会話履歴を第三者の視点から客観的に、重要なポイントを箇条書きで3〜5項目にまとめてください。',
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -7532,6 +7546,8 @@
                 elements.twinEngineLlmaggregatorApiKeyInput.value = state.settings.twinEngineLlmaggregatorApiKey || '';
                 this.updateTwinEngineApiSettingsVisibility(state.settings.twinEngineProvider);
                 this.updateAllTwinEngineUserModelOptions();
+                document.getElementById('enable-twin-engine-auto-summary').checked = state.settings.enableTwinEngineAutoSummary;
+                document.getElementById('twin-engine-summary-prompt').value = state.settings.twinEngineSummaryPrompt || '以下の会話履歴を第三者の視点から客観的に、重要なポイントを箇条書きで3〜5項目にまとめてください。';
                 elements.commonSystemPromptDefaultTextarea.value = state.settings.commonSystemPrompt || '';
                 elements.enableCommonSystemPromptDefaultCheckbox.checked = state.settings.enableCommonSystemPromptDefault;
 
@@ -8810,7 +8826,6 @@
                 elements.pasteClipboardStackBtn.addEventListener('click', () => this.pasteIntoClipboardStack());
 
                 elements.twinEngineSummaryBtn.addEventListener('click', () => this.toggleTwinEngineSummary());
-                elements.executeTwinEngineSummaryBtn.addEventListener('click', () => this.executeTwinEngineSummary());
                 elements.copyTwinEngineSummaryBtn.addEventListener('click', () => this.copyTwinEngineSummaryText());
                 elements.clearTwinEngineSummaryBtn.addEventListener('click', () => this.confirmClearTwinEngineSummary());
 
@@ -10202,6 +10217,22 @@
         async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
             const isBackgroundProcess = !!sourceSessionContext;
             const selectedApiProvider = isBackgroundProcess ? (sourceSessionContext.apiProvider || state.settings.apiProvider) : state.settings.apiProvider;
+
+            if (state.settings.enableTwinEngineAutoSummary && !isRetry && !isBackgroundProcess) {
+                const messagesForSummary = JSON.parse(JSON.stringify(state.currentMessages));
+                const userMessageContent = elements.userInput.value.trim();
+                const attachmentsToSendForSummary = [...state.pendingAttachments];
+                if (userMessageContent || attachmentsToSendForSummary.length > 0) {
+                     messagesForSummary.push({
+                        role: 'user', content: userMessageContent, timestamp: Date.now(),
+                        attachments: attachmentsToSendForSummary
+                    });
+                }
+        
+                this.triggerTwinEngineSummary(messagesForSummary).catch(err => {
+                    console.error("Twin-engine summary generation failed:", err);
+                });
+            }
 
             let text = '';
             let attachmentsToSend = [];
@@ -11734,6 +11765,8 @@
              newSettings.twinEngineXaiModelName = elements.twinEngineXaiModelNameSelect.value;
              newSettings.twinEngineLlmaggregatorApiKey = elements.twinEngineLlmaggregatorApiKeyInput.value.trim();
              newSettings.twinEngineLlmaggregatorModelName = elements.twinEngineLlmaggregatorModelNameSelect.value;
+             newSettings.enableTwinEngineAutoSummary = document.getElementById('enable-twin-engine-auto-summary').checked;
+             newSettings.twinEngineSummaryPrompt = document.getElementById('twin-engine-summary-prompt').value.trim();
              newSettings.modelName = elements.geminiModelNameSelect.value;
              newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
              newSettings.commonSystemPrompt = elements.commonSystemPromptDefaultTextarea.value.trim();
@@ -12203,6 +12236,8 @@
                     defaultSettingsCopy.showClipboardStackButton = false;
                     defaultSettingsCopy.clipboardStackHeight = DEFAULT_CLIPBOARD_STACK_HEIGHT;
                     defaultSettingsCopy.showTwinEngineSummaryButton = false;
+                    defaultSettingsCopy.enableTwinEngineAutoSummary = false;
+                    defaultSettingsCopy.twinEngineSummaryPrompt = '以下の会話履歴を第三者の視点から客観的に、重要なポイントを箇条書きで3〜5項目にまとめてください。';
                     defaultSettingsCopy.showUserIcon = false;
                     defaultSettingsCopy.userIconBlob = null;
                     defaultSettingsCopy.showUserName = false;
@@ -13634,181 +13669,83 @@
             
             dialog.showModal();
         },
-        async executeTwinEngineSummary() {
-            if (state.isSending || state.isAiToAiChatProcessing) {
-                await uiUtils.showCustomAlert("他の処理が実行中です。");
-                return;
-            }
-            if (state.currentMessages.length === 0) {
-                await uiUtils.showCustomAlert("要約するチャット履歴がありません。");
+        async triggerTwinEngineSummary(messages) {
+            if (!state.settings.enableTwinEngineAutoSummary || messages.length === 0) {
                 return;
             }
 
-            const button = elements.executeTwinEngineSummaryBtn;
-            const originalButtonText = button.textContent;
-            const originalLoadingText = elements.loadingIndicator.textContent;
+            const provider = state.settings.twinEngineProvider;
+            const apiKey = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ApiKey`];
+            const model = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ModelName`];
+
+            if (!provider || !apiKey || !model) {
+                console.warn("Twin-engine自動要約が有効ですが、プロバイダー、APIキー、またはモデルが設定されていません。");
+                return;
+            }
+
+            const historyText = messages.map(msg => {
+                const role = msg.role === 'model' ? 'AI' : 'ユーザー';
+                let content = msg.content || '';
+                if (msg.attachments && msg.attachments.length > 0) {
+                    content += ` [添付ファイル: ${msg.attachments.map(a => a.name).join(', ')}]`;
+                }
+                return `${role}: ${content}`;
+            }).join('\n\n');
+
+            const summaryPrompt = state.settings.twinEngineSummaryPrompt || '以下の会話履歴を要約してください。';
+            const fullPrompt = `${summaryPrompt}\n\n--- 会話履歴 ---\n${historyText}`;
+
+            const messagesForApi = [{
+                role: 'user',
+                parts: [{ text: fullPrompt }]
+            }];
+            
+            const generationConfig = { temperature: 0.3, maxOutputTokens: 1024 };
+            const systemInstruction = null;
 
             try {
-                button.disabled = true;
-                button.textContent = '要約中...';
-                elements.loadingIndicator.textContent = 'チャット履歴を要約中...';
-                elements.loadingIndicator.classList.remove('hidden');
-
-                const provider = state.settings.twinEngineProvider;
-                const apiKey = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ApiKey`];
-                const modelName = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ModelName`];
-                const apiEndpoint = (provider === 'deepseek' || provider === 'llmaggregator') ? state.settings[`${provider}ApiEndpoint`] || DEEPSEEK_API_DEFAULT_BASE_URL : null;
-
-
-                if (!provider || !apiKey || !modelName) {
-                    throw new Error(`Twin-engine用のAPIプロバイダー(${provider})設定が不完全です。設定画面を確認してください。`);
+                const callApiFunction = apiUtils[`call${provider.charAt(0).toUpperCase() + provider.slice(1)}Api`];
+                if (typeof callApiFunction !== 'function') {
+                    throw new Error(`Unsupported Twin-engine provider: ${provider}`);
                 }
-
-                const systemPrompt = "あなたは優秀なアシスタントです。以下の会話履歴全体を、重要なポイントを網羅しつつ、簡潔に日本語で要約してください。";
                 
-                const messagesForApi = state.currentMessages
-                    .filter(msg => msg.role === 'user' || msg.role === 'model')
-                    .map(msg => ({
-                        role: msg.role,
-                        parts: [{ text: msg.content || '' }]
-                    }));
-                
-                const systemInstruction = { parts: [{ text: systemPrompt }] };
-
-                const generationConfig = {
-                    temperature: 0.5,
-                    maxOutputTokens: 2048
-                };
-
-                const apiCallConfig = { apiKey, modelName, apiEndpoint, messages: messagesForApi, systemInstruction, generationConfig };
-                const response = await this.callTwinEngineApi(provider, apiCallConfig);
-                const data = await response.json();
-
-                let responseText = '';
-                if (provider === 'gemini') {
-                    responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                } else if (provider === 'claude') {
-                     responseText = data.content?.[0]?.text || '';
+                let response;
+                if (provider === 'openai' || provider === 'xai' || provider === 'llmaggregator' || provider === 'deepseek') {
+                     response = await callApiFunction(messagesForApi, generationConfig, systemInstruction, false, provider);
                 } else {
-                     responseText = data.choices?.[0]?.message?.content || '';
+                     response = await callApiFunction(messagesForApi, generationConfig, systemInstruction, false, false, false);
+                }
+                
+                const data = await response.json();
+                let responseContent = '';
+                
+                if (provider === 'gemini') {
+                    responseContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                } else if (provider === 'claude') {
+                    responseContent = data.content?.[0]?.text || '';
+                } else {
+                    responseContent = data.choices?.[0]?.message?.content || '';
                 }
 
-                if (!responseText.trim()) {
-                    throw new Error("APIから空の要約が返されました。");
+                if (!responseContent) {
+                    throw new Error('APIから空の要約が返されました。');
                 }
                 
-                const now = new Date();
-                const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-                const separator = `\n\n--- [${provider}/${modelName}] 要約 (${timestamp}) ---\n\n`;
-                
-                const currentSummary = elements.twinEngineSummaryEditor.value;
-                const newSummary = (currentSummary ? currentSummary + separator : '') + responseText.trim();
-                
-                elements.twinEngineSummaryEditor.value = newSummary;
-                state.twinEngineSummaryContent = newSummary;
-                
-                await uiUtils.showCustomAlert("要約が完了しました。");
+                state.twinEngineSummaryContent = responseContent;
+                if (elements.twinEngineSummaryEditor) {
+                    elements.twinEngineSummaryEditor.value = responseContent;
+                }
+
+                const summaryBtn = elements.twinEngineSummaryBtn;
+                if(summaryBtn && !summaryBtn.classList.contains('hidden')) {
+                    summaryBtn.style.animation = 'pulse 1s 1';
+                    setTimeout(() => { summaryBtn.style.animation = '' }, 1000);
+                }
 
             } catch (error) {
-                await uiUtils.showCustomAlert(`要約の実行中にエラーが発生しました:\n${error.message}`);
-            } finally {
-                button.disabled = false;
-                button.textContent = originalButtonText;
-                elements.loadingIndicator.classList.add('hidden');
-                elements.loadingIndicator.textContent = originalLoadingText;
-                state.abortController = null;
+                console.error(`Twin-engine要約API呼び出し失敗 (${provider}):`, error);
+                throw error;
             }
-        },
-        async callTwinEngineApi(provider, config) {
-            const { apiKey, modelName, apiEndpoint, messages, systemInstruction, generationConfig } = config;
-            state.abortController = new AbortController();
-            
-            let url, body, headers;
-
-            switch(provider) {
-                case 'gemini':
-                    url = `${GEMINI_API_BASE_URL}${modelName}:generateContent?key=${apiKey}`;
-                    headers = { 'Content-Type': 'application/json' };
-                    body = {
-                        contents: messages,
-                        generationConfig,
-                        systemInstruction,
-                        safetySettings: [
-                            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-                            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-                            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-                            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
-                        ]
-                    };
-                    break;
-                
-                case 'claude':
-                    url = CLAUDE_API_BASE_URL;
-                    headers = {
-                        'Content-Type': 'application/json',
-                        'x-api-key': apiKey,
-                        'anthropic-version': '2023-06-01',
-                        'anthropic-dangerous-direct-browser-access': 'true'
-                    };
-                    const claudeRequest = this.convertToClaudeRequest(messages, systemInstruction);
-                    body = {
-                        model: modelName,
-                        messages: claudeRequest.messages,
-                        system: claudeRequest.system,
-                        max_tokens: generationConfig.maxOutputTokens,
-                        temperature: generationConfig.temperature
-                    };
-                    break;
-
-                case 'deepseek':
-                case 'openai':
-                case 'xai':
-                case 'llmaggregator':
-                     const oaMessages = [];
-                     if (systemInstruction && systemInstruction.parts?.[0]?.text) {
-                         oaMessages.push({ role: "system", content: systemInstruction.parts[0].text });
-                     }
-                     messages.forEach(m => {
-                         oaMessages.push({ role: m.role === 'model' ? 'assistant' : m.role, content: m.parts[0].text });
-                     });
-                     body = {
-                         model: modelName,
-                         messages: oaMessages,
-                         temperature: generationConfig.temperature,
-                         max_tokens: generationConfig.maxOutputTokens
-                     };
-                     headers = {
-                         'Content-Type': 'application/json',
-                         'Authorization': `Bearer ${apiKey}`
-                     };
-                     if (provider === 'deepseek') url = `${apiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL}/chat/completions`;
-                     if (provider === 'openai') url = OPENAI_API_BASE_URL;
-                     if (provider === 'xai') url = XAI_API_BASE_URL;
-                     if (provider === 'llmaggregator') url = state.settings.llmAggregatorApiBackend;
-                     break;
-                
-                default:
-                    throw new Error(`Unsupported provider for Twin-engine: ${provider}`);
-            }
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(body),
-                signal: state.abortController.signal
-            });
-
-            if (!response.ok) {
-                let errorMsg = `${provider.toUpperCase()} APIエラー (${response.status}): ${response.statusText}`;
-                try {
-                    const errorData = await response.json();
-                    if (errorData.error && errorData.error.message) {
-                        errorMsg = `APIエラー: ${errorData.error.message}`;
-                    }
-                } catch (e) {}
-                throw new Error(errorMsg);
-            }
-            return response;
         },
     };
 
