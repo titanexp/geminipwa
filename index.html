@@ -125,9 +125,6 @@
             --bg-button-purple: #800080;
             --bg-button-purple-hover: #6A006A;
             --text-button-purple: #ffffff;
-            --bg-button-twin-engine: var(--bg-button-purple);
-            --bg-button-twin-engine-hover: var(--bg-button-purple-hover);
-            --text-button-twin-engine: var(--text-button-purple);
 
             --message-toggle-button-top-width: 6px;
             --message-toggle-button-top-height: 40px;
@@ -1963,13 +1960,6 @@
         body.pastel-rainbow-mode .chat-input-area button#send-button.sending:hover {
             background-color: #ffe766;
         }
-        .chat-input-area button#send-button.twin-engine-mode {
-            background-color: var(--bg-button-twin-engine);
-            color: var(--text-button-twin-engine);
-        }
-        .chat-input-area button#send-button.twin-engine-mode:hover:not(:disabled) {
-            background-color: var(--bg-button-twin-engine-hover);
-        }
 
         #loading-indicator {
             position: fixed;
@@ -3788,7 +3778,7 @@
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">パラメータ (DeepSeek)</summary>
                     <div style="margin-top:15px;">
                         <label for="deepseek-system-prompt-default">固有システムプロンプト (DeepSeek):</label>
-<textarea id="deepseek-system-prompt-default" placeholder="例: あなたは親切なDeepSeekアシスタントです。" aria-label="DeepSeek 固有システムプロンプト"></textarea>
+                        <textarea id="deepseek-system-prompt-default" placeholder="例: あなたは親切なDeepSeekアシスタントです。" aria-label="DeepSeek 固有システムプロンプト"></textarea>
                         <label class="checkbox-label" style="margin-top: -5px; margin-bottom: 15px;">
                             <input type="checkbox" id="deepseek-enable-system-prompt-default">
                             このシステムプロンプトを有効にする (共通システムプロンプトより優先度高)
@@ -4658,13 +4648,6 @@
                 <details class="settings-group" id="settings-group-twin-engine">
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">Twin-engine</summary>
                     <div style="margin-top:10px;">
-                        <label class="checkbox-label" style="margin-bottom: 15px; background-color: rgba(var(--bg-button-delete-rgb, 229, 57, 53), 0.1); padding: 8px; border-radius: 4px; border: 1px solid rgba(var(--bg-button-delete-rgb, 229, 57, 53), 0.2);">
-                            <input type="checkbox" id="enable-twin-engine-mode">
-                            <strong style="color: var(--text-error);">Twin-engineモードを有効にする (送信ボタンの挙動が変わります)</strong>
-                        </label>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -10px; margin-bottom: 15px;">
-                            ※ 有効時、送信ボタンはチャット履歴全体の要約を生成し、「要約セッション履歴」パネルに結果を出力します。通常のチャットは行えません。
-                        </p>
                         <label class="checkbox-label" style="margin-bottom: 5px;">
                             <input type="checkbox" id="show-twin-engine-summary-button-toggle">
                             ヘッダーに「要約セッション履歴」ボタンを表示する（⚗️ボタン）
@@ -5358,7 +5341,6 @@
             twinEngineLlmaggregatorSettings: document.getElementById('twin-engine-llmaggregator-settings'),
             twinEngineLlmaggregatorApiKeyInput: document.getElementById('twin-engine-llmaggregator-api-key'),
             twinEngineLlmaggregatorModelNameSelect: document.getElementById('twin-engine-llmaggregator-model-name'),
-            enableTwinEngineModeCheckbox: document.getElementById('enable-twin-engine-mode'),
         };
 
         const state = {
@@ -5522,7 +5504,6 @@
                 showClipboardStackButton: false,
                 clipboardStackHeight: DEFAULT_CLIPBOARD_STACK_HEIGHT,
                 showTwinEngineSummaryButton: false,
-                enableTwinEngineMode: false,
                 showUserIcon: false,
                 userIconBlob: null,
                 showUserName: false,
@@ -7541,7 +7522,6 @@
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
                 elements.apiProviderSelect.value = state.settings.apiProvider;
                 elements.twinEngineProviderSelect.value = state.settings.twinEngineProvider || 'gemini';
-                elements.enableTwinEngineModeCheckbox.checked = state.settings.enableTwinEngineMode;
                 elements.twinEngineGeminiApiKeyInput.value = state.settings.twinEngineGeminiApiKey || '';
                 elements.twinEngineDeepseekApiKeyInput.value = state.settings.twinEngineDeepseekApiKey || '';
                 elements.twinEngineClaudeApiKeyInput.value = state.settings.twinEngineClaudeApiKey || '';
@@ -7815,20 +7795,6 @@
                 this.toggleMultiApiKeysVisibility(state.settings.showMultiApiKeys);
                 elements.settingsScreen.classList.toggle('auto-save-mode', state.settings.autoSaveSettings);
                 this.updateMemoStackHeightSettingsVisibility();
-                this.updateSendButtonForTwinEngineMode();
-            },
-            updateSendButtonForTwinEngineMode() {
-                const isTwinEngineMode = state.settings.enableTwinEngineMode;
-                if (elements.sendButton) {
-                    elements.sendButton.classList.toggle('twin-engine-mode', isTwinEngineMode);
-                    if (isTwinEngineMode) {
-                        elements.sendButton.textContent = '要約';
-                        elements.sendButton.title = '現在のチャット履歴を要約する';
-                    } else {
-                        elements.sendButton.textContent = '送';
-                        elements.sendButton.title = '送信';
-                    }
-                }
             },
             applyMinimizeUI() {
                 elements.appContainer.classList.toggle('minimized-ui', state.settings.minimizeHeaderFooter);
@@ -8314,9 +8280,9 @@
                     elements.loadingIndicator.classList.remove('hidden');
                     elements.loadingIndicator.setAttribute('aria-live', 'polite');
                 } else {
-                    this.updateSendButtonForTwinEngineMode();
+                    elements.sendButton.textContent = '送';
                     elements.sendButton.classList.remove('sending');
-                    elements.sendButton.disabled = false;
+                    elements.sendButton.title = "送信";
                     elements.userInput.disabled = false;
                     elements.attachFileBtn.disabled = false;
                     elements.pasteToInputBtn.disabled = false;
@@ -8741,7 +8707,7 @@
         };
 
         const appLogic = {
-            initializeApp() {
+            async initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -8812,7 +8778,6 @@
                     state.currentScreen = 'chat';
                     
                     updateMessageMaxWidthVar();
-                    uiUtils.updateSendButtonForTwinEngineMode();
                     this.setupEventListeners();
                     this.updateZoomState();
                     uiUtils.adjustTextareaHeight();
@@ -8964,10 +8929,6 @@
                             }
                         }
                     });
-                });
-                elements.enableTwinEngineModeCheckbox.addEventListener('change', () => {
-                    state.settings.enableTwinEngineMode = elements.enableTwinEngineModeCheckbox.checked;
-                    uiUtils.updateSendButtonForTwinEngineMode();
                 });
 
                 elements.uploadBackgroundBtn.addEventListener('click', () => elements.backgroundImageInput.click());
@@ -9304,7 +9265,7 @@
                         }
                     }
                 }, true);
-            document.body.addEventListener('click', (event) => {
+                document.body.addEventListener('click', (event) => {
                     if (!elements.messageContainer.contains(event.target) &&
                     !elements.memoArea.contains(event.target) &&
                     !elements.clipboardStackArea.contains(event.target) &&
@@ -10236,10 +10197,6 @@
             }
         },
         async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
-            if (state.settings.enableTwinEngineMode && !isRetry && !sourceSessionContext) {
-                this.handleTwinEngineSend();
-                return;
-            }
             const isBackgroundProcess = !!sourceSessionContext;
             const selectedApiProvider = isBackgroundProcess ? (sourceSessionContext.apiProvider || state.settings.apiProvider) : state.settings.apiProvider;
 
@@ -11317,69 +11274,6 @@
             }
             if (isBackgroundProcess) return null;
         },
-        async handleTwinEngineSend() {
-            if (state.isSending) return;
-            if (state.currentMessages.length === 0) {
-                await uiUtils.showCustomAlert("要約するチャット履歴がありません。");
-                return;
-            }
-
-            uiUtils.setAiToAiProcessingState(true, "要約中...");
-
-            try {
-                const historyText = state.currentMessages
-                    .filter(msg => msg.role === 'user' || msg.role === 'model')
-                    .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
-                    .join('\n\n');
-
-                const prompt = `以下の会話を簡潔に要約してください。\n\n---\n\n${historyText}`;
-
-                const provider = state.settings.twinEngineProvider;
-                const apiKey = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ApiKey`];
-                const modelName = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ModelName`];
-
-                if (!apiKey) {
-                    throw new Error(`Twin-engine用の${provider} APIキーが設定されていません。`);
-                }
-
-                const context = {
-                    messages: [],
-                    systemPrompt: "You are a helpful assistant that summarizes conversations.",
-                    inputText: prompt,
-                    attachments: [],
-                    apiProvider: provider,
-                    modelName: modelName,
-                    temperature: state.settings[`${provider}Temperature`],
-                    maxTokens: state.settings[`${provider}MaxTokens`],
-                    topK: state.settings[`${provider}TopK`],
-                    topP: state.settings[`${provider}TopP`],
-                };
-
-                const response = await this.handleSend(false, -1, context);
-
-                if (response && response.content) {
-                    const summaryText = response.content;
-                    
-                    state.twinEngineSummaryContent = summaryText;
-                    elements.twinEngineSummaryEditor.value = summaryText;
-
-                    if (!state.isTwinEngineSummaryVisible) {
-                        this.toggleTwinEngineSummary();
-                    }
-                    elements.twinEngineSummaryEditor.scrollTop = 0;
-
-                    await uiUtils.showCustomAlert("要約が完了しました。");
-
-                } else {
-                    throw new Error("APIから有効な要約を取得できませんでした。");
-                }
-
-            } catch (error) {
-                await uiUtils.showCustomAlert(`Twin-engine要約エラー: ${error.message}`);
-            } finally {
-                uiUtils.setAiToAiProcessingState(false);
-            }
-        },
         async toggleApiProvider() {
             if(state.isSending || state.isAiToAiChatProcessing) {
                 await uiUtils.showCustomAlert('現在処理中のため、APIプロバイダーを変更できません。');
@@ -11825,7 +11719,6 @@
 
              newSettings.apiProvider = elements.apiProviderSelect.value;
              newSettings.twinEngineProvider = elements.twinEngineProviderSelect.value;
-             newSettings.enableTwinEngineMode = elements.enableTwinEngineModeCheckbox.checked;
              newSettings.twinEngineGeminiApiKey = elements.twinEngineGeminiApiKeyInput.value.trim();
              newSettings.twinEngineGeminiModelName = elements.twinEngineGeminiModelNameSelect.value;
              newSettings.twinEngineDeepseekApiKey = elements.twinEngineDeepseekApiKeyInput.value.trim();
@@ -12307,7 +12200,6 @@
                     defaultSettingsCopy.showClipboardStackButton = false;
                     defaultSettingsCopy.clipboardStackHeight = DEFAULT_CLIPBOARD_STACK_HEIGHT;
                     defaultSettingsCopy.showTwinEngineSummaryButton = false;
-                    defaultSettingsCopy.enableTwinEngineMode = false;
                     defaultSettingsCopy.showUserIcon = false;
                     defaultSettingsCopy.userIconBlob = null;
                     defaultSettingsCopy.showUserName = false;
