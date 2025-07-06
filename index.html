@@ -3275,14 +3275,6 @@
         #settings-screen.auto-save-mode .app-header .js-save-settings-btn {
             display: none !important;
         }
-        @keyframes pulse {
-            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 100, 0.7); }
-            70% { transform: scale(1.15); box-shadow: 0 0 10px 15px rgba(255, 255, 100, 0); }
-            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 255, 100, 0); }
-        }
-        #twin-engine-summary-btn {
-            transition: transform 0.2s ease-in-out;
-        }
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
@@ -4663,6 +4655,18 @@
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                             ※ Twin-engineで生成された要約履歴を表示・編集するためのパネルを開閉します。
                         </p>
+                        <label class="checkbox-label" style="margin-bottom: 5px;">
+                            <input type="checkbox" id="enable-twin-engine">
+                            メッセージ送信ボタンでTwin-engineを起動する (会話履歴の要約)
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                            ※ 有効にすると、送信ボタンは入力内容を送信する代わりに、現在の会話履歴全体をTwin-engine用AIに送信し、要約を生成させます。
+                        </p>
+                        <label for="twin-engine-summary-prompt">Twin-engine 要約用プロンプト:</label>
+                        <textarea id="twin-engine-summary-prompt" placeholder="例: 以下の会話履歴を、重要なポイントを箇条書きで簡潔に要約してください。" aria-label="Twin-engine 要約用プロンプト"></textarea>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                            ※ ここに入力した内容が、会話履歴とともにTwin-engine用AIへの指示として送信されます。
+                        </p>
                         <label for="twin-engine-provider-select">使用するAPIプロバイダー (Twin-engine):</label>
                         <select id="twin-engine-provider-select" aria-label="Twin-engine APIプロバイダー選択">
                             <option value="gemini">Gemini (Google)</option>
@@ -4709,15 +4713,9 @@
                             <label for="twin-engine-llmaggregator-model-name">モデル名 (Twin-engine):</label>
                             <select id="twin-engine-llmaggregator-model-name" aria-label="LLM Aggregator モデル名 (Twin-engine)"></select>
                         </div>
-                        <label class="checkbox-label" style="margin-top: 20px;">
-                            <input type="checkbox" id="enable-twin-engine-auto-summary">
-                            メッセージ送信時にチャット履歴の自動要約を実行する
-                        </label>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                            ※ 有効にすると、メッセージを送信するたびに、設定されたTwin-engine APIでバックグラウンドで要約が生成され、要約パネルに表示されます。
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: 15px;">
+                            ※ 「セッションの過去の会話 → ある程度セッションが進んだ時点で別の AI で要約 → システムプロンプトとその要約だけを現在の AI に渡して続きの対話を開始する」というワークフローを、行う機能（予定）
                         </p>
-                        <label for="twin-engine-summary-prompt" style="margin-top: 15px;">要約指示プロンプト:</label>
-                        <textarea id="twin-engine-summary-prompt" placeholder="例: 以下の会話履歴を第三者の視点から客観的に、重要なポイントを箇条書きで3〜5項目にまとめてください。"></textarea>
                     </div>
                 </details>
                  <details class="settings-group" id="settings-group-session-linking">
@@ -5604,8 +5602,8 @@
                 xaiActiveApiKeyIndex: -1,
                 llmaggregatorApiKeys: [],
                 llmaggregatorActiveApiKeyIndex: -1,
-                enableTwinEngineAutoSummary: false,
-                twinEngineSummaryPrompt: '以下の会話履歴を第三者の視点から客観的に、重要なポイントを箇条書きで3〜5項目にまとめてください。',
+                enableTwinEngine: false,
+                twinEngineSummaryPrompt: '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。',
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -7546,10 +7544,10 @@
                 elements.twinEngineLlmaggregatorApiKeyInput.value = state.settings.twinEngineLlmaggregatorApiKey || '';
                 this.updateTwinEngineApiSettingsVisibility(state.settings.twinEngineProvider);
                 this.updateAllTwinEngineUserModelOptions();
-                document.getElementById('enable-twin-engine-auto-summary').checked = state.settings.enableTwinEngineAutoSummary;
-                document.getElementById('twin-engine-summary-prompt').value = state.settings.twinEngineSummaryPrompt || '以下の会話履歴を第三者の視点から客観的に、重要なポイントを箇条書きで3〜5項目にまとめてください。';
                 elements.commonSystemPromptDefaultTextarea.value = state.settings.commonSystemPrompt || '';
                 elements.enableCommonSystemPromptDefaultCheckbox.checked = state.settings.enableCommonSystemPromptDefault;
+                document.getElementById('enable-twin-engine').checked = state.settings.enableTwinEngine;
+                document.getElementById('twin-engine-summary-prompt').value = state.settings.twinEngineSummaryPrompt || '';
 
                 elements.geminiApiKeyInput.value = state.settings.apiKey || '';
                 elements.geminiModelNameSelect.value = state.settings.modelName || DEFAULT_MODEL;
@@ -8725,7 +8723,7 @@
         };
 
         const appLogic = {
-            initializeApp() {
+            async initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -10215,24 +10213,12 @@
             }
         },
         async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
+            if (state.settings.enableTwinEngine && !isRetry && !sourceSessionContext) {
+                this.handleTwinEngineSend();
+                return;
+            }
             const isBackgroundProcess = !!sourceSessionContext;
             const selectedApiProvider = isBackgroundProcess ? (sourceSessionContext.apiProvider || state.settings.apiProvider) : state.settings.apiProvider;
-
-            if (state.settings.enableTwinEngineAutoSummary && !isRetry && !isBackgroundProcess) {
-                const messagesForSummary = JSON.parse(JSON.stringify(state.currentMessages));
-                const userMessageContent = elements.userInput.value.trim();
-                const attachmentsToSendForSummary = [...state.pendingAttachments];
-                if (userMessageContent || attachmentsToSendForSummary.length > 0) {
-                     messagesForSummary.push({
-                        role: 'user', content: userMessageContent, timestamp: Date.now(),
-                        attachments: attachmentsToSendForSummary
-                    });
-                }
-        
-                this.triggerTwinEngineSummary(messagesForSummary).catch(err => {
-                    console.error("Twin-engine summary generation failed:", err);
-                });
-            }
 
             let text = '';
             let attachmentsToSend = [];
@@ -10410,8 +10396,6 @@
                     contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.llmAggregatorMaxTokens;
                     contextTopP = sourceSessionContext.topP ?? state.settings.llmAggregatorTopP;
                     contextLlmAggregatorTopK = sourceSessionContext.topK ?? state.settings.llmAggregatorTopK;
-                    contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.llmAggregatorPresencePenalty;
-                    contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.llmAggregatorFrequencyPenalty;
                     contextDeepSeekIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.llmAggregatorIncludeThoughts;
                     contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.llmAggregatorStreamingOutput;
                     contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.llmAggregatorStreamingSpeed;
@@ -11308,6 +11292,98 @@
             }
             if (isBackgroundProcess) return null;
         },
+        async handleTwinEngineSend() {
+            if (state.isSending || state.isAiToAiChatProcessing) {
+                await uiUtils.showCustomAlert("現在、他の処理を実行中です。");
+                return;
+            }
+            if (state.currentMessages.length === 0) {
+                await uiUtils.showCustomAlert("要約する会話履歴がありません。");
+                return;
+            }
+
+            const confirmed = await uiUtils.showCustomConfirm(
+                `Twin-engine機能が有効です。\n現在の会話履歴全体を「${state.settings.twinEngineProvider}」に送信して要約しますか？\n(入力欄のテキストは送信されません)`
+            );
+            if (!confirmed) return;
+
+            uiUtils.setAiToAiProcessingState(true, "会話履歴の要約を生成中...");
+
+            try {
+                const provider = state.settings.twinEngineProvider;
+                let apiKey, modelName;
+
+                switch(provider) {
+                    case 'gemini':
+                        apiKey = state.settings.twinEngineGeminiApiKey;
+                        modelName = state.settings.twinEngineGeminiModelName;
+                        break;
+                    case 'deepseek':
+                        apiKey = state.settings.twinEngineDeepseekApiKey;
+                        modelName = state.settings.twinEngineDeepseekModelName;
+                        break;
+                    case 'claude':
+                        apiKey = state.settings.twinEngineClaudeApiKey;
+                        modelName = state.settings.twinEngineClaudeModelName;
+                        break;
+                    case 'openai':
+                        apiKey = state.settings.twinEngineOpenaiApiKey;
+                        modelName = state.settings.twinEngineOpenaiModelName;
+                        break;
+                    case 'xai':
+                        apiKey = state.settings.twinEngineXaiApiKey;
+                        modelName = state.settings.twinEngineXaiModelName;
+                        break;
+                    case 'llmaggregator':
+                        apiKey = state.settings.twinEngineLlmaggregatorApiKey;
+                        modelName = state.settings.twinEngineLlmaggregatorModelName;
+                        break;
+                    default:
+                        throw new Error("Twin-engineに設定されたAPIプロバイダーが無効です。");
+                }
+
+                if (!apiKey) {
+                    throw new Error(`${provider.charAt(0).toUpperCase() + provider.slice(1)}のTwin-engine用APIキーが設定されていません。`);
+                }
+                
+                const contextForSummary = {
+                    sessionId: `summary-${state.currentChatId}`,
+                    messages: [...state.currentMessages],
+                    systemPrompt: state.settings.twinEngineSummaryPrompt || '以下の会話を簡潔に要約してください。',
+                    inputText: '',
+                    attachments: [],
+                    apiProvider: provider,
+                };
+
+                const response = await this.handleSend(false, -1, contextForSummary);
+
+                if (response && response.content) {
+                    const summary = response.content;
+                    
+                    const timestamp = new Date().toLocaleString('ja-JP');
+                    const summaryHeader = `--- [${timestamp}] by ${provider} (${modelName}) ---\n`;
+                    const newSummaryContent = summaryHeader + summary.trim() + "\n\n";
+
+                    state.twinEngineSummaryContent = newSummaryContent + state.twinEngineSummaryContent;
+                    elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
+
+                    if (!state.isTwinEngineSummaryVisible) {
+                        this.toggleTwinEngineSummary();
+                    }
+                    elements.twinEngineSummaryEditor.scrollTop = 0;
+
+                    await uiUtils.showCustomAlert("会話履歴の要約を生成し、要約パネルに追記しました。");
+
+                } else {
+                    throw new Error("APIから有効な要約を取得できませんでした。");
+                }
+
+            } catch (error) {
+                await uiUtils.showCustomAlert(`Twin-engineでの要約生成中にエラーが発生しました: ${error.message}`);
+            } finally {
+                uiUtils.setAiToAiProcessingState(false);
+            }
+        },
         async toggleApiProvider() {
             if(state.isSending || state.isAiToAiChatProcessing) {
                 await uiUtils.showCustomAlert('現在処理中のため、APIプロバイダーを変更できません。');
@@ -11765,7 +11841,7 @@
              newSettings.twinEngineXaiModelName = elements.twinEngineXaiModelNameSelect.value;
              newSettings.twinEngineLlmaggregatorApiKey = elements.twinEngineLlmaggregatorApiKeyInput.value.trim();
              newSettings.twinEngineLlmaggregatorModelName = elements.twinEngineLlmaggregatorModelNameSelect.value;
-             newSettings.enableTwinEngineAutoSummary = document.getElementById('enable-twin-engine-auto-summary').checked;
+             newSettings.enableTwinEngine = document.getElementById('enable-twin-engine').checked;
              newSettings.twinEngineSummaryPrompt = document.getElementById('twin-engine-summary-prompt').value.trim();
              newSettings.modelName = elements.geminiModelNameSelect.value;
              newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
@@ -12236,8 +12312,6 @@
                     defaultSettingsCopy.showClipboardStackButton = false;
                     defaultSettingsCopy.clipboardStackHeight = DEFAULT_CLIPBOARD_STACK_HEIGHT;
                     defaultSettingsCopy.showTwinEngineSummaryButton = false;
-                    defaultSettingsCopy.enableTwinEngineAutoSummary = false;
-                    defaultSettingsCopy.twinEngineSummaryPrompt = '以下の会話履歴を第三者の視点から客観的に、重要なポイントを箇条書きで3〜5項目にまとめてください。';
                     defaultSettingsCopy.showUserIcon = false;
                     defaultSettingsCopy.userIconBlob = null;
                     defaultSettingsCopy.showUserName = false;
@@ -13669,84 +13743,6 @@
             
             dialog.showModal();
         },
-        async triggerTwinEngineSummary(messages) {
-            if (!state.settings.enableTwinEngineAutoSummary || messages.length === 0) {
-                return;
-            }
-
-            const provider = state.settings.twinEngineProvider;
-            const apiKey = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ApiKey`];
-            const model = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ModelName`];
-
-            if (!provider || !apiKey || !model) {
-                console.warn("Twin-engine自動要約が有効ですが、プロバイダー、APIキー、またはモデルが設定されていません。");
-                return;
-            }
-
-            const historyText = messages.map(msg => {
-                const role = msg.role === 'model' ? 'AI' : 'ユーザー';
-                let content = msg.content || '';
-                if (msg.attachments && msg.attachments.length > 0) {
-                    content += ` [添付ファイル: ${msg.attachments.map(a => a.name).join(', ')}]`;
-                }
-                return `${role}: ${content}`;
-            }).join('\n\n');
-
-            const summaryPrompt = state.settings.twinEngineSummaryPrompt || '以下の会話履歴を要約してください。';
-            const fullPrompt = `${summaryPrompt}\n\n--- 会話履歴 ---\n${historyText}`;
-
-            const messagesForApi = [{
-                role: 'user',
-                parts: [{ text: fullPrompt }]
-            }];
-            
-            const generationConfig = { temperature: 0.3, maxOutputTokens: 1024 };
-            const systemInstruction = null;
-
-            try {
-                const callApiFunction = apiUtils[`call${provider.charAt(0).toUpperCase() + provider.slice(1)}Api`];
-                if (typeof callApiFunction !== 'function') {
-                    throw new Error(`Unsupported Twin-engine provider: ${provider}`);
-                }
-                
-                let response;
-                if (provider === 'openai' || provider === 'xai' || provider === 'llmaggregator' || provider === 'deepseek') {
-                     response = await callApiFunction(messagesForApi, generationConfig, systemInstruction, false, provider);
-                } else {
-                     response = await callApiFunction(messagesForApi, generationConfig, systemInstruction, false, false, false);
-                }
-                
-                const data = await response.json();
-                let responseContent = '';
-                
-                if (provider === 'gemini') {
-                    responseContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                } else if (provider === 'claude') {
-                    responseContent = data.content?.[0]?.text || '';
-                } else {
-                    responseContent = data.choices?.[0]?.message?.content || '';
-                }
-
-                if (!responseContent) {
-                    throw new Error('APIから空の要約が返されました。');
-                }
-                
-                state.twinEngineSummaryContent = responseContent;
-                if (elements.twinEngineSummaryEditor) {
-                    elements.twinEngineSummaryEditor.value = responseContent;
-                }
-
-                const summaryBtn = elements.twinEngineSummaryBtn;
-                if(summaryBtn && !summaryBtn.classList.contains('hidden')) {
-                    summaryBtn.style.animation = 'pulse 1s 1';
-                    setTimeout(() => { summaryBtn.style.animation = '' }, 1000);
-                }
-
-            } catch (error) {
-                console.error(`Twin-engine要約API呼び出し失敗 (${provider}):`, error);
-                throw error;
-            }
-        },
     };
 
     const apiUtils = {
@@ -15113,3 +15109,4 @@
 </script>
 </body>
 </html>
+
