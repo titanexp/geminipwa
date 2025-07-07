@@ -6771,6 +6771,24 @@
                         return 'base';
                     } else if (bodyClasses.contains('pastel-purple-mode')) {
                         return 'base';
+                    } else if (bodyClasses.contains('pastel-rainbow-mode')) {
+                        return 'base';
+                    } else {
+                        return 'default';
+                    }
+                };
+
+                const currentTheme = getCurrentMermaidTheme();
+                mermaid.initialize({
+                    startOnLoad: false,
+                    theme: currentTheme,
+                    securityLevel: 'loose',
+                    fontFamily: 'var(--font-family)',
+                    flowchart: { useMaxWidth: true, htmlLabels: true },
+                    sequence: { useMaxWidth: true },
+                    gantt: { useMaxWidth: true },
+                    journey: { useMaxWidth: true },
+                    pie: { useMaxWidth: true },
                     themeVariables: {
                         primaryColor: currentTheme === 'dark' ? '#404040' : '#ffffff',
                         primaryTextColor: currentTheme === 'dark' ? '#e0e0e0' : '#333333',
@@ -10250,7 +10268,6 @@
                 uiUtils.setSendingState(true);
                 if (isRetry) {
                     if (retryUserMessageIndex + 1 < state.currentMessages.length) {
-                    if (retryUserMessageIndex + 1 < state.currentMessages.length) {
                         state.currentMessages.splice(retryUserMessageIndex + 1);
                     }
                     uiUtils.renderChatMessages(true);
@@ -10550,26 +10567,45 @@
             state.partialStreamContent = '';
             state.partialThoughtStreamContent = '';
 
-            let userMessageIndex = -1;
+            let userMessageIndex = isRetry ? retryUserMessageIndex : -1;
             let existingSiblingGroupId = null;
             let firstResponseIndexForRetry = -1;
             let siblingGroupIdToUse = null;
-            let messagesForApiPreparation;
 
-            if (isRetry) {
-                userMessageIndex = retryUserMessageIndex;
-                let currentContextMessagesForRetry = isBackgroundProcess ? [...sourceSessionContext.messages] : [...state.currentMessages];
-
+            if (!isBackgroundProcess && !isRetry) {
+                const userMessage = {
+                    role: 'user', content: text, timestamp: Date.now(),
+                    attachments: attachmentsToSend,
+                    generatedByApiProvider: null
+                };
+                state.currentMessages.push(userMessage);
+                userMessageIndex = state.currentMessages.length - 1;
+                state.messageCollapsedStates.set(userMessageIndex, false);
+                uiUtils.appendMessage(userMessage.role, userMessage.content, userMessageIndex, false, null, userMessage.attachments);
+                elements.userInput.value = '';
+                state.pendingAttachments = [];
+                uiUtils.adjustTextareaHeight();
+                uiUtils.updateAttachmentBadgeVisibility();
+                currentContextMessages = [...state.currentMessages];
+            } else if (isBackgroundProcess && !isRetry) {
+                const userMessage = {
+                    role: 'user', content: text, timestamp: Date.now(),
+                    attachments: attachmentsToSend,
+                    generatedByApiProvider: null
+                };
+                currentContextMessages.push(userMessage);
+                userMessageIndex = currentContextMessages.length - 1;
+            } else if (isRetry) {
                 let siblingStartIndex = userMessageIndex + 1;
-                while (siblingStartIndex < currentContextMessagesForRetry.length && currentContextMessagesForRetry[siblingStartIndex].role !== 'model') {
+                while (siblingStartIndex < currentContextMessages.length && currentContextMessages[siblingStartIndex].role !== 'model') {
                     siblingStartIndex++;
                 }
-                if (siblingStartIndex < currentContextMessagesForRetry.length && currentContextMessagesForRetry[siblingStartIndex].role === 'model') {
+                if (siblingStartIndex < currentContextMessages.length && currentContextMessages[siblingStartIndex].role === 'model') {
                      firstResponseIndexForRetry = siblingStartIndex;
-                     const firstResponse = currentContextMessagesForRetry[firstResponseIndexForRetry];
+                     const firstResponse = currentContextMessages[firstResponseIndexForRetry];
                      if (firstResponse.isCascaded && firstResponse.siblingGroupId) {
                          existingSiblingGroupId = firstResponse.siblingGroupId;
-                         currentContextMessagesForRetry.forEach(msg => {
+                         currentContextMessages.forEach(msg => {
                              if (msg.siblingGroupId === existingSiblingGroupId) {
                                  msg.isSelected = false;
                              }
@@ -10577,91 +10613,164 @@
                          siblingGroupIdToUse = existingSiblingGroupId;
                      }
                 }
-                messagesForApiPreparation = currentContextMessagesForRetry.slice(0, userMessageIndex + 1);
-            } else if (isBackgroundProcess) {
-                messagesForApiPreparation = [...sourceSessionContext.messages];
-                if(sourceSessionContext.inputText) {
-                     messagesForApiPreparation.push({
-                        role: 'user',
-                        content: sourceSessionContext.inputText,
-                        attachments: sourceSessionContext.attachments || []
-                     });
-                }
-            } else {
-                messagesForApiPreparation = [...state.currentMessages];
-                userMessageIndex = messagesForApiPreparation.length - 1;
             }
 
-            let apiMessages;
-            const useTwinEngineHistory = state.settings.enableTwinEngine && !isBackgroundProcess && !isRetry;
+            let messagesToProcess;
 
-            if (useTwinEngineHistory) {
-                apiMessages = [];
-                const summaryHistory = state.twinEngineSummaryContent || elements.twinEngineSummaryEditor.value;
-
-                if (summaryHistory.trim()) {
-                    apiMessages.push({
-                        role: 'user',
-                        parts: [{ text: 'これまでの会話の要約は以下の通りです。これを踏まえて応答してください。' }]
-                    });
-                    apiMessages.push({
-                        role: 'model',
-                        parts: [{ text: summaryHistory }]
-                    });
-                }
-
-                const lastUserMessage = messagesForApiPreparation[messagesForApiPreparation.length - 1];
-                const userParts = [];
-                if (lastUserMessage.content && lastUserMessage.content.trim() !== '') {
-                    userParts.push({ text: lastUserMessage.content });
-                }
-                if (lastUserMessage.attachments && lastUserMessage.attachments.length > 0) {
-                    lastUserMessage.attachments.forEach(att => {
-                        if (att.textData) {
-                            userParts.push({ text: att.textData });
-                        } else if (att.base64Data) {
-                            userParts.push({
-                                inlineData: { mimeType: att.mimeType, data: att.base64Data }
-                            });
-                        }
-                    });
-                }
+            if (state.settings.enableTwinEngine && !isBackgroundProcess) {
+                messagesToProcess = [];
+                const summaryContent = state.twinEngineSummaryContent.trim();
                 
-                apiMessages.push({
-                    role: 'user',
-                    parts: userParts.length > 0 ? userParts : [{ text: '' }]
+                if (summaryContent) {
+                    messagesToProcess.push({
+                        role: 'user',
+                        content: 'これまでの会話の要約は以下の通りです。この文脈を踏まえて、次の応答を生成してください。',
+                        timestamp: Date.now() - 2,
+                        attachments: [],
+                    });
+                    messagesToProcess.push({
+                        role: 'model',
+                        content: `承知いたしました。以下の要約を基に会話を継続します。\n\n---\n${summaryContent}\n---`,
+                        timestamp: Date.now() - 1,
+                    });
+                }
+
+                if (isRetry) {
+                    const retryUserMessage = currentContextMessages[retryUserMessageIndex];
+                    if (retryUserMessage) {
+                        messagesToProcess.push(retryUserMessage);
+                    }
+                } else {
+                    const lastUserMessage = currentContextMessages[currentContextMessages.length - 1];
+                    if (lastUserMessage && lastUserMessage.role === 'user') {
+                        messagesToProcess.push(lastUserMessage);
+                    }
+                }
+            } else {
+                messagesToProcess = isRetry
+                    ? currentContextMessages.slice(0, userMessageIndex + 1)
+                    : [...currentContextMessages];
+            }
+
+            try {
+                let titleToSave = null;
+                let isNewChatForDBSave = !currentContextSessionId;
+                let existingChatForDBSave = null;
+
+                if (currentContextSessionId && !isBackgroundProcess) {
+                    existingChatForDBSave = await dbUtils.getChat(currentContextSessionId);
+                    if (existingChatForDBSave) {
+                        titleToSave = existingChatForDBSave.title;
+                        isNewChatForDBSave = false;
+                    } else {
+                        isNewChatForDBSave = true;
+                        currentContextSessionId = null;
+                        state.currentChatId = null;
+                    }
+                } else if (isBackgroundProcess && sourceSessionContext?.sessionId) {
+                     existingChatForDBSave = await dbUtils.getChat(sourceSessionContext.sessionId);
+                     if (existingChatForDBSave) {
+                        titleToSave = existingChatForDBSave.title;
+                        isNewChatForDBSave = false;
+                     } else {
+                        isNewChatForDBSave = true;
+                        sourceSessionContext.sessionId = null;
+                     }
+                }
+
+                if (isNewChatForDBSave || !titleToSave) {
+                    const firstUserMsg = currentContextMessages.find(m => m.role === 'user');
+                    titleToSave = firstUserMsg ? firstUserMsg.content.substring(0, 50) : "無題のチャット";
+                }
+
+                const chatToSave = {
+                    messages: currentContextMessages.map(msg => ({
+                        role: msg.role, content: msg.content, timestamp: msg.timestamp,
+                        thoughtSummary: msg.thoughtSummary || null,
+                        deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
+                        xaiThoughtSummary: msg.xaiThoughtSummary || null,
+                        generatedByApiProvider: msg.generatedByApiProvider || null,
+                        ...(msg.finishReason && { finishReason: msg.finishReason }),
+                        ...(msg.safetyRatings && { safetyRatings: msg.safetyRatings }),
+                        ...(msg.error && { error: msg.error }),
+                        ...(msg.isCascaded !== undefined && { isCascaded: msg.isCascaded }),
+                        ...(msg.isSelected !== undefined && { isSelected: msg.isSelected }),
+                        ...(msg.siblingGroupId !== undefined && { siblingGroupId: msg.siblingGroupId }),
+                        ...(msg.groundingMetadata && { groundingMetadata: msg.groundingMetadata }),
+                        ...(msg.attachments && msg.attachments.length > 0 && { attachments: msg.attachments.map(att => ({ name: att.name, mimeType: att.mimeType, textData: att.textData })) }),
+                        ...(msg.usageMetadata && { usageMetadata: msg.usageMetadata }),
+                        ...(msg.thoughtSummaryOpen !== undefined && { thoughtSummaryOpen: msg.thoughtSummaryOpen }),
+                    })),
+                    updatedAt: Date.now(),
+                    title: titleToSave
+                };
+
+                if (isNewChatForDBSave) {
+                    chatToSave.createdAt = Date.now();
+                } else if (existingChatForDBSave) {
+                    chatToSave.id = currentContextSessionId || sourceSessionContext?.sessionId;
+                    chatToSave.createdAt = existingChatForDBSave.createdAt;
+                }
+
+                if (state.settings.persistMessageCollapseState) {
+                    if (!isBackgroundProcess) {
+                        chatToSave.collapsedStates = Object.fromEntries(state.messageCollapsedStates);
+                    } else if (existingChatForDBSave) {
+                         chatToSave.collapsedStates = existingChatForDBSave.collapsedStates || {};
+                    } else {
+                        chatToSave.collapsedStates = {};
+                    }
+                }
+
+                const savedId = await new Promise((resolve, reject) => {
+                    const store = dbUtils._getStore(CHATS_STORE, 'readwrite');
+                    const request = chatToSave.id ? store.put(chatToSave) : store.add(chatToSave);
+                    request.onsuccess = (event) => resolve(event.target.result || chatToSave.id);
+                    request.onerror = (event) => reject(`チャット保存エラー: ${event.target.error.name} - ${event.target.error.message}`);
                 });
 
-            } else {
-                apiMessages = messagesForApiPreparation
-                    .filter(msg => {
-                        if (msg.role === 'user') return true;
-                        if (msg.role === 'model') return !msg.isCascaded || (msg.isCascaded && msg.isSelected);
-                        return false;
-                    })
-                    .map(msg => {
-                        const parts = [];
-                        if (msg.content && msg.content.trim() !== '') {
-                            parts.push({ text: msg.content });
-                        }
-                        if (msg.role === 'user' && msg.attachments && msg.attachments.length > 0) {
-                            msg.attachments.forEach(att => {
-                                if (att.textData) {
-                                    parts.push({ text: att.textData });
-                                } else if (att.base64Data) {
-                                    parts.push({
-                                        inlineData: {
-                                            mimeType: att.mimeType,
-                                            data: att.base64Data
-                                        }
-                                    });
-                                }
-                            });
-                        }
-                        return { role: msg.role, parts: parts.length > 0 ? parts : [{text: ''}] };
-                    });
+                if (!isBackgroundProcess && !state.currentChatId && savedId) {
+                    state.currentChatId = savedId;
+                    uiUtils.updateChatTitle(chatToSave.title);
+                } else if (isBackgroundProcess && !sourceSessionContext.sessionId && savedId) {
+                    sourceSessionContext.sessionId = savedId;
+                }
+
+            } catch (error) {
+                if (!isBackgroundProcess) {
+                    if(currentContextSessionId){
+                         uiUtils.displayError("チャットの保存に失敗しましたが、送信を試みます。", false);
+                    }
+                }
             }
 
+            const apiMessages = messagesToProcess
+                .filter(msg => {
+                    if (msg.role === 'user') return true;
+                    if (msg.role === 'model') return !msg.isCascaded || (msg.isCascaded && msg.isSelected);
+                    return false;
+                })
+                .map(msg => {
+                    const parts = [];
+                    if (msg.content && msg.content.trim() !== '') {
+                        parts.push({ text: msg.content });
+                    }
+                    if (msg.role === 'user' && msg.attachments && msg.attachments.length > 0) {
+                        msg.attachments.forEach(att => {
+                            if (att.textData) {
+                                parts.push({ text: att.textData });
+                            } else if (att.base64Data) {
+                                parts.push({
+                                    inlineData: {
+                                        mimeType: att.mimeType,
+                                        data: att.base64Data
+                                    }
+                                });
+                            }
+                        });
+                    }
+                    return { role: msg.role, parts: parts.length > 0 ? parts : [{text: ''}] };
+                });
             const dummyUserTextToUse = contextEnableDummyUser && contextDummyUser?.trim() ? contextDummyUser.trim() : null;
             const dummyModelTextToUse = contextEnableDummyModel && contextDummyModel?.trim() ? contextDummyModel.trim() : null;
 
@@ -11383,7 +11492,8 @@
 
                     const newChatData = {
                         messages: importedMessages,
-                        updatedAt: Date.now(), createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                        createdAt: Date.now(),
                         title: newTitle.substring(0, 100)
                     };
                     const newChatId = await new Promise((resolve, reject) => {
@@ -13723,7 +13833,7 @@
                     let errorMsg = `APIエラー (${response.status}): ${response.statusText}`;
                     try {
                         const errorData = await response.json();
-                                                if (errorData.error && errorData.error.message) {
+                        if (errorData.error && errorData.error.message) {
                             errorMsg = `APIエラー (${response.status}): ${errorData.error.message}`;
                         }
                     } catch (e) {  }
