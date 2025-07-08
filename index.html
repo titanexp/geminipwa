@@ -3684,7 +3684,7 @@
                         </label>
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                             ※ チェック時、これまでに発生したJavaScriptエラーのログを応答します。
-                        </p>
+                         </p>
                         <hr style="margin: 15px 0;">
                         <label for="dummy-dummy-model">ダミー Model プロンプト:</label>
                         <textarea id="dummy-dummy-model" placeholder="この内容は、Dummy AIの応答の先頭に付与されます。" aria-label="Dummy AI ダミー Model プロンプト"></textarea>
@@ -4669,6 +4669,13 @@
                             ※ それまでは、要約ではなく全ての会話履歴をAIに送信します。<br>
                             ※ 0を指定すると、最初の応答から要約を開始します。
                         </p>
+                        <label class="checkbox-label" style="margin-top: 15px; margin-bottom: 5px;">
+                            <input type="checkbox" id="twin-engine-always-include-first-user-message">
+                            要約送信時に、最初のユーザーメッセージを常に含める
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                            ※ 有効にすると、会話の初期コンテキスト（目的や指示）をAIに常にリマインドさせることができます。
+                        </p>
                         <label for="twin-engine-summary-prompt">Twin-engine 要約用プロンプト:</label>
                         <textarea id="twin-engine-summary-prompt" placeholder="例: 以下の会話履歴を、重要なポイントを箇条書きで簡潔に要約してください。" aria-label="Twin-engine 要約用プロンプト"></textarea>
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
@@ -5614,6 +5621,7 @@
                 enableTwinEngine: false,
                 twinEngineSummarizeAfterTurns: DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS,
                 twinEngineSummaryPrompt: '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。',
+                twinEngineAlwaysIncludeFirstUserMessage: false,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -7558,6 +7566,7 @@
                 elements.enableCommonSystemPromptDefaultCheckbox.checked = state.settings.enableCommonSystemPromptDefault;
                 document.getElementById('enable-twin-engine').checked = state.settings.enableTwinEngine;
                 elements.twinEngineSummarizeAfterTurnsInput.value = state.settings.twinEngineSummarizeAfterTurns ?? DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
+                document.getElementById('twin-engine-always-include-first-user-message').checked = state.settings.twinEngineAlwaysIncludeFirstUserMessage;
                 document.getElementById('twin-engine-summary-prompt').value = state.settings.twinEngineSummaryPrompt || '';
 
                 elements.geminiApiKeyInput.value = state.settings.apiKey || '';
@@ -10638,6 +10647,24 @@
                 messagesToProcess = [];
                 const summaryContent = state.twinEngineSummaryContent.trim();
                 
+                if (state.settings.twinEngineAlwaysIncludeFirstUserMessage) {
+                    const firstUserMessage = state.currentMessages.find(msg => msg.role === 'user');
+                    
+                    if (firstUserMessage) {
+                        messagesToProcess.push({
+                            role: 'user',
+                            content: `これはこの会話セッションの最初の指示です。この指示を最優先の前提として応答してください。\n\n【最初の指示】\n${firstUserMessage.content}`,
+                            timestamp: firstUserMessage.timestamp,
+                            attachments: firstUserMessage.attachments || [],
+                        });
+                        messagesToProcess.push({
+                            role: 'model',
+                            content: '承知いたしました。最初の指示を記憶しました。以降の応答はこの指示に基づきます。',
+                            timestamp: firstUserMessage.timestamp + 1,
+                        });
+                    }
+                }
+                
                 if (summaryContent) {
                     messagesToProcess.push({
                         role: 'user',
@@ -10669,98 +10696,79 @@
                     : [...currentContextMessages];
             }
 
-            try {
-                let titleToSave = null;
-                let isNewChatForDBSave = !currentContextSessionId;
-                let existingChatForDBSave = null;
+            if (!isBackgroundProcess) {
+                try {
+                    let titleToSave = null;
+                    let isNewChatForDBSave = !currentContextSessionId;
+                    let existingChatForDBSave = null;
 
-                if (currentContextSessionId && !isBackgroundProcess) {
-                    existingChatForDBSave = await dbUtils.getChat(currentContextSessionId);
-                    if (existingChatForDBSave) {
-                        titleToSave = existingChatForDBSave.title;
-                        isNewChatForDBSave = false;
-                    } else {
-                        isNewChatForDBSave = true;
-                        currentContextSessionId = null;
-                        state.currentChatId = null;
+                    if (currentContextSessionId) {
+                        existingChatForDBSave = await dbUtils.getChat(currentContextSessionId);
+                        if (existingChatForDBSave) {
+                            titleToSave = existingChatForDBSave.title;
+                            isNewChatForDBSave = false;
+                        } else {
+                            isNewChatForDBSave = true;
+                            currentContextSessionId = null;
+                            state.currentChatId = null;
+                        }
                     }
-                } else if (isBackgroundProcess && sourceSessionContext?.sessionId) {
-                     existingChatForDBSave = await dbUtils.getChat(sourceSessionContext.sessionId);
-                     if (existingChatForDBSave) {
-                        titleToSave = existingChatForDBSave.title;
-                        isNewChatForDBSave = false;
-                     } else {
-                        isNewChatForDBSave = true;
-                        sourceSessionContext.sessionId = null;
-                     }
-                }
 
-                if (isNewChatForDBSave || !titleToSave) {
-                    const firstUserMsg = currentContextMessages.find(m => m.role === 'user');
-                    titleToSave = firstUserMsg ? firstUserMsg.content.substring(0, 50) : "無題のチャット";
-                }
+                    if (isNewChatForDBSave || !titleToSave) {
+                        const firstUserMsg = currentContextMessages.find(m => m.role === 'user');
+                        titleToSave = firstUserMsg ? firstUserMsg.content.substring(0, 50) : "無題のチャット";
+                    }
 
-                const chatToSave = {
-                    messages: currentContextMessages.map(msg => ({
-                        role: msg.role, content: msg.content, timestamp: msg.timestamp,
-                        thoughtSummary: msg.thoughtSummary || null,
-                        deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
-                        xaiThoughtSummary: msg.xaiThoughtSummary || null,
-                        generatedByApiProvider: msg.generatedByApiProvider || null,
-                        ...(msg.finishReason && { finishReason: msg.finishReason }),
-                        ...(msg.safetyRatings && { safetyRatings: msg.safetyRatings }),
-                        ...(msg.error && { error: msg.error }),
-                        ...(msg.isCascaded !== undefined && { isCascaded: msg.isCascaded }),
-                        ...(msg.isSelected !== undefined && { isSelected: msg.isSelected }),
-                        ...(msg.siblingGroupId !== undefined && { siblingGroupId: msg.siblingGroupId }),
-                        ...(msg.groundingMetadata && { groundingMetadata: msg.groundingMetadata }),
-                        ...(msg.attachments && msg.attachments.length > 0 && { attachments: msg.attachments.map(att => ({ name: att.name, mimeType: att.mimeType, textData: att.textData })) }),
-                        ...(msg.usageMetadata && { usageMetadata: msg.usageMetadata }),
-                        ...(msg.thoughtSummaryOpen !== undefined && { thoughtSummaryOpen: msg.thoughtSummaryOpen }),
-                    })),
-                    updatedAt: Date.now(),
-                    title: titleToSave
-                };
+                    const chatToSave = {
+                        messages: currentContextMessages.map(msg => ({
+                            role: msg.role, content: msg.content, timestamp: msg.timestamp,
+                            thoughtSummary: msg.thoughtSummary || null,
+                            deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
+                            xaiThoughtSummary: msg.xaiThoughtSummary || null,
+                            generatedByApiProvider: msg.generatedByApiProvider || null,
+                            ...(msg.finishReason && { finishReason: msg.finishReason }),
+                            ...(msg.safetyRatings && { safetyRatings: msg.safetyRatings }),
+                            ...(msg.error && { error: msg.error }),
+                            ...(msg.isCascaded !== undefined && { isCascaded: msg.isCascaded }),
+                            ...(msg.isSelected !== undefined && { isSelected: msg.isSelected }),
+                            ...(msg.siblingGroupId !== undefined && { siblingGroupId: msg.siblingGroupId }),
+                            ...(msg.groundingMetadata && { groundingMetadata: msg.groundingMetadata }),
+                            ...(msg.attachments && msg.attachments.length > 0 && { attachments: msg.attachments.map(att => ({ name: att.name, mimeType: att.mimeType, textData: att.textData })) }),
+                            ...(msg.usageMetadata && { usageMetadata: msg.usageMetadata }),
+                            ...(msg.thoughtSummaryOpen !== undefined && { thoughtSummaryOpen: msg.thoughtSummaryOpen }),
+                        })),
+                        updatedAt: Date.now(),
+                        title: titleToSave
+                    };
 
-                if (isNewChatForDBSave) {
-                    chatToSave.createdAt = Date.now();
-                } else if (existingChatForDBSave) {
-                    chatToSave.id = currentContextSessionId || sourceSessionContext?.sessionId;
-                    chatToSave.createdAt = existingChatForDBSave.createdAt;
-                }
-
-                if (state.settings.persistMessageCollapseState) {
-                    if (!isBackgroundProcess) {
-                        chatToSave.collapsedStates = Object.fromEntries(state.messageCollapsedStates);
+                    if (isNewChatForDBSave) {
+                        chatToSave.createdAt = Date.now();
                     } else if (existingChatForDBSave) {
-                         chatToSave.collapsedStates = existingChatForDBSave.collapsedStates || {};
-                    } else {
-                        chatToSave.collapsedStates = {};
+                        chatToSave.id = currentContextSessionId;
+                        chatToSave.createdAt = existingChatForDBSave.createdAt;
                     }
-                }
 
-                const savedId = await new Promise((resolve, reject) => {
-                    const store = dbUtils._getStore(CHATS_STORE, 'readwrite');
-                    const request = chatToSave.id ? store.put(chatToSave) : store.add(chatToSave);
-                    request.onsuccess = (event) => resolve(event.target.result || chatToSave.id);
-                    request.onerror = (event) => reject(`チャット保存エラー: ${event.target.error.name} - ${event.target.error.message}`);
-                });
+                    if (state.settings.persistMessageCollapseState) {
+                        chatToSave.collapsedStates = Object.fromEntries(state.messageCollapsedStates);
+                    }
 
-                if (!isBackgroundProcess && !state.currentChatId && savedId) {
-                    state.currentChatId = savedId;
-                    uiUtils.updateChatTitle(chatToSave.title);
-                } else if (isBackgroundProcess && !sourceSessionContext.sessionId && savedId) {
-                    sourceSessionContext.sessionId = savedId;
-                }
+                    const savedId = await new Promise((resolve, reject) => {
+                        const store = dbUtils._getStore(CHATS_STORE, 'readwrite');
+                        const request = chatToSave.id ? store.put(chatToSave) : store.add(chatToSave);
+                        request.onsuccess = (event) => resolve(event.target.result || chatToSave.id);
+                        request.onerror = (event) => reject(`チャット保存エラー: ${event.target.error.name} - ${event.target.error.message}`);
+                    });
 
-            } catch (error) {
-                if (!isBackgroundProcess) {
+                    if (!state.currentChatId && savedId) {
+                        state.currentChatId = savedId;
+                        uiUtils.updateChatTitle(chatToSave.title);
+                    }
+                } catch (error) {
                     if(currentContextSessionId){
                          uiUtils.displayError("チャットの保存に失敗しましたが、送信を試みます。", false);
                     }
                 }
             }
-
             const apiMessages = messagesToProcess
                 .filter(msg => {
                     if (msg.role === 'user') return true;
@@ -11119,65 +11127,23 @@
 
                 if (isBackgroundProcess) {
                     if (modelResponseRawContent || modelThoughtSummaryContent || modelResponseMetadata.finishReason) {
-                         const bgModelMessage = {
-                             role: 'model', content: modelResponseRawContent,
-                             timestamp: Date.now(),
-                             ...modelResponseMetadata,
+                         const result = {
+                             content: modelResponseRawContent,
+                             metadata: modelResponseMetadata,
                              usageMetadata: finalUsageMetadataFromStream,
                              generatedByApiProvider: selectedApiProvider
                          };
                          if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
-                             bgModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
-                             bgModelMessage.groundingMetadata = currentGroundingMetadata;
+                             result.thoughtSummary = modelThoughtSummaryContent || null;
+                             result.groundingMetadata = currentGroundingMetadata;
                          } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts) {
-                             bgModelMessage.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
+                             result.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
                          } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts) {
-                             bgModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
+                             result.thoughtSummary = modelThoughtSummaryContent || null;
                          } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts) {
-                             bgModelMessage.xaiThoughtSummary = modelThoughtSummaryContent || null;
+                             result.xaiThoughtSummary = modelThoughtSummaryContent || null;
                          }
-
-                          bgModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
-                                                              (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                              (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
-                                                              (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
-                                                              (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault);
-
-                         currentContextMessages.push(bgModelMessage);
-                         const chatToSaveBg = {
-                            messages: currentContextMessages.map(msg => ({
-                                role: msg.role, content: msg.content, timestamp: msg.timestamp,
-                                thoughtSummary: msg.thoughtSummary || null,
-                                deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
-                                xaiThoughtSummary: msg.xaiThoughtSummary || null,
-                                generatedByApiProvider: msg.generatedByApiProvider || null,
-                                ...(msg.finishReason && { finishReason: msg.finishReason }),
-                                ...(msg.safetyRatings && { safetyRatings: msg.safetyRatings }),
-                                ...(msg.error && { error: msg.error }),
-                                ...(msg.isCascaded !== undefined && { isCascaded: msg.isCascaded }),
-                                ...(msg.isSelected !== undefined && { isSelected: msg.isSelected }),
-                                ...(msg.siblingGroupId !== undefined && { siblingGroupId: msg.siblingGroupId }),
-                                ...(msg.groundingMetadata && { groundingMetadata: msg.groundingMetadata }),
-                                ...(msg.attachments && msg.attachments.length > 0 && { attachments: msg.attachments.map(att => ({ name: att.name, mimeType: att.mimeType, textData: att.textData })) }),
-                                ...(msg.usageMetadata && { usageMetadata: msg.usageMetadata }),
-                                ...(msg.thoughtSummaryOpen !== undefined && { thoughtSummaryOpen: msg.thoughtSummaryOpen }),
-                            })),
-                            updatedAt: Date.now(),
-                            id: sourceSessionContext.sessionId
-                         };
-                         const existingChatForBg = await dbUtils.getChat(sourceSessionContext.sessionId);
-                         if (existingChatForBg) {
-                             chatToSaveBg.createdAt = existingChatForBg.createdAt;
-                             chatToSaveBg.title = existingChatForBg.title;
-                         }
-
-                         await new Promise((resolve, reject) => {
-                            const store = dbUtils._getStore(CHATS_STORE, 'readwrite');
-                            const request = store.put(chatToSaveBg);
-                            request.onsuccess = () => resolve();
-                            request.onerror = (event) => reject(`チャット保存putエラー(BG): ${event.target.error.name} - ${event.target.error.message}`);
-                         });
-                         return { content: modelResponseRawContent, metadata: modelResponseMetadata };
+                         return result;
                     }
                     return { content: "", metadata: modelResponseMetadata };
                 }
@@ -11394,7 +11360,7 @@
                 }
                 
                 const contextForSummary = {
-                    sessionId: `summary-bg-${state.currentChatId}`,
+                    sessionId: null,
                     messages: [...state.currentMessages],
                     systemPrompt: state.settings.twinEngineSummaryPrompt || '以下の会話を簡潔に要約してください。',
                     inputText: '',
@@ -11884,6 +11850,7 @@
              newSettings.twinEngineSummarizeAfterTurns = elements.twinEngineSummarizeAfterTurnsInput.value === '' 
                 ? DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS 
                 : parseInt(elements.twinEngineSummarizeAfterTurnsInput.value, 10);
+             newSettings.twinEngineAlwaysIncludeFirstUserMessage = document.getElementById('twin-engine-always-include-first-user-message').checked;
              newSettings.twinEngineSummaryPrompt = document.getElementById('twin-engine-summary-prompt').value.trim();
              newSettings.modelName = elements.geminiModelNameSelect.value;
              newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
@@ -12412,6 +12379,7 @@
                     defaultSettingsCopy.deepseekApiKeys = [];
                     defaultSettingsCopy.deepseekActiveApiKeyIndex = -1;
                     defaultSettingsCopy.claudeApiKeys = [];
+                    defaultSettingsCopy.claudeApiKeys = [];
                     defaultSettingsCopy.claudeActiveApiKeyIndex = -1;
                     defaultSettingsCopy.openaiApiKeys = [];
                     defaultSettingsCopy.openaiActiveApiKeyIndex = -1;
@@ -12422,6 +12390,7 @@
                     defaultSettingsCopy.enableTwinEngine = false;
                     defaultSettingsCopy.twinEngineSummarizeAfterTurns = DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
                     defaultSettingsCopy.twinEngineSummaryPrompt = '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。';
+                    defaultSettingsCopy.twinEngineAlwaysIncludeFirstUserMessage = false;
 
                     state.settings = defaultSettingsCopy;
 
@@ -15154,3 +15123,4 @@
 </script>
 </body>
 </html>
+
