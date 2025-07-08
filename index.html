@@ -6009,6 +6009,7 @@
                             messages: messagesToSave,
                             updatedAt: now, createdAt: existingChatData ? existingChatData.createdAt : now,
                             title: title,
+                            twinEngineSummaryContent: state.twinEngineSummaryContent || ''
                         };
                         if (state.settings.persistMessageCollapseState) {
                             chatData.collapsedStates = Object.fromEntries(state.messageCollapsedStates);
@@ -6967,6 +6968,7 @@
 
                 let targetContentDiv;
                 let accumulatedContentForDisplay;
+
                 const selectedApiProvider = state.settings.apiProvider;
                 const streamSpeed = selectedApiProvider === 'gemini' ? state.settings.geminiStreamingSpeed : 
                                   selectedApiProvider === 'deepseek' ? state.settings.deepSeekStreamingSpeed :
@@ -9927,15 +9929,14 @@
             try {
                 const chat = await dbUtils.getChat(id);
                 if (chat) {
-                    state.twinEngineSummaryContent = '';
-                    elements.twinEngineSummaryEditor.value = '';
-
                     state.currentChatId = chat.id;
                     state.currentMessages = chat.messages?.map(msg => ({
                         ...msg,
                         attachments: msg.attachments || [],
                         thoughtSummaryOpen: msg.thoughtSummaryOpen || false,
                     })) || [];
+                    state.twinEngineSummaryContent = chat.twinEngineSummaryContent || '';
+                    elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
 
                     let needsSave = false;
                     const groupIds = new Set(state.currentMessages.filter(m => m.siblingGroupId).map(m => m.siblingGroupId));
@@ -10042,7 +10043,8 @@
                         messages: duplicatedMessages,
                         updatedAt: Date.now(),
                         createdAt: Date.now(),
-                        title: newTitle
+                        title: newTitle,
+                        twinEngineSummaryContent: chat.twinEngineSummaryContent || ''
                     };
 
                     if (state.settings.persistMessageCollapseState && chat.collapsedStates) {
@@ -11377,13 +11379,17 @@
                     
                     const timestamp = new Date().toLocaleString('ja-JP');
                     const summaryHeader = `--- [${timestamp}] by ${provider} (${modelName}) ---\n`;
-                    const newSummaryContent = summaryHeader + summary.trim() + "\n\n";
+                    const newSummaryContent = summaryHeader + summary.trim();
 
                     state.twinEngineSummaryContent = newSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
 
                     if (state.isTwinEngineSummaryVisible) {
                         elements.twinEngineSummaryEditor.scrollTop = 0;
+                    }
+                    
+                    if (state.currentChatId) {
+                        await dbUtils.saveChat();
                     }
                     
                 }
@@ -11582,6 +11588,7 @@
                     }),
                     createdAt: chat.createdAt,
                     updatedAt: chat.updatedAt,
+                    twinEngineSummaryContent: chat.twinEngineSummaryContent || '',
                     ...(state.settings.persistMessageCollapseState && chat.collapsedStates && { collapsedStates: chat.collapsedStates })
                 }));
 
@@ -11666,6 +11673,7 @@
                             })),
                             createdAt: typeof chatData.createdAt === 'number' ? chatData.createdAt : importTimestamp,
                             updatedAt: typeof chatData.updatedAt === 'number' ? chatData.updatedAt : importTimestamp,
+                            twinEngineSummaryContent: chatData.twinEngineSummaryContent || ''
                         };
                         if (state.settings.persistMessageCollapseState && chatData.collapsedStates) {
                             newChat.collapsedStates = { ...chatData.collapsedStates };
@@ -14337,7 +14345,7 @@
                                     if (chunk["amazon-bedrock-invocationMetrics"]) {
                                         finalUsage = {
                                             input_tokens: chunk["amazon-bedrock-invocationMetrics"].inputTokenCount,
-                                            output_tokens: chunk["amazon-bedrock-invocationMetrics"].outputTokenCount
+                                                                                        output_tokens: chunk["amazon-bedrock-invocationMetrics"].outputTokenCount
                                         };
                                     } else if (chunk.usage) {
                                         finalUsage = chunk.usage;
