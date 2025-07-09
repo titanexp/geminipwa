@@ -6016,10 +6016,8 @@
                         const chatIdForOperation = existingChatData ? existingChatData.id : state.currentChatId;
                         const chatData = {
                             messages: messagesToSave,
-                            updatedAt: now,
-                            createdAt: existingChatData ? existingChatData.createdAt : now,
+                            updatedAt: now, createdAt: existingChatData ? existingChatData.createdAt : now,
                             title: title,
-                            twinEngineSummary: state.twinEngineSummaryContent,
                         };
                         if (state.settings.persistMessageCollapseState) {
                             chatData.collapsedStates = Object.fromEntries(state.messageCollapsedStates);
@@ -9040,16 +9038,6 @@
                     const newSize = parseInt(elements.messageIconSizeInput.value, 10);
                     if (newSize >= 16 && newSize <= 64) {
                         document.documentElement.style.setProperty('--message-icon-size', `${newSize}px`);
-                    } else if (elements.messageIconSizeInput.value === '') {
-                        document.documentElement.style.setProperty('--message-icon-size', `${DEFAULT_MESSAGE_ICON_SIZE}px`);
-                    }
-                });
-                elements.messageIconOffsetYInput.addEventListener('input', () => {
-                    const uiOffsetY = parseInt(elements.messageIconOffsetYInput.value, 10);
-                    const internalOffsetY = isNaN(uiOffsetY) ? DEFAULT_MESSAGE_ICON_OFFSET_Y : (uiOffsetY * -1);
-
-                    if (internalOffsetY >= -50 && internalOffsetY <= 50) {
-                        document.documentElement.style.setProperty('--message-icon-offset-y', `${internalOffsetY}px`);
                     } else if (elements.messageIconOffsetYInput.value === '') {
                         document.documentElement.style.setProperty('--message-icon-offset-y', `${DEFAULT_MESSAGE_ICON_OFFSET_Y}px`);
                     }
@@ -10082,13 +10070,6 @@
                         thoughtSummaryOpen: msg.thoughtSummaryOpen || false,
                     })) || [];
 
-                    state.twinEngineSummaryContent = chat.twinEngineSummary || '';
-                    elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
-                    
-                    if (state.isTwinEngineSummaryVisible) {
-                        elements.twinEngineSummaryEditor.scrollTop = elements.twinEngineSummaryEditor.scrollHeight;
-                    }
-
                     let needsSave = false;
                     const groupIds = new Set(state.currentMessages.filter(m => m.siblingGroupId).map(m => m.siblingGroupId));
                     groupIds.forEach(gid => {
@@ -10104,6 +10085,12 @@
                     });
 
                     state.pendingAttachments = [];
+                    state.twinEngineSummaryContent = '';
+                    elements.twinEngineSummaryEditor.value = '';
+                    if (state.isTwinEngineSummaryVisible) {
+                        state.isTwinEngineSummaryVisible = false;
+                        elements.twinEngineSummaryArea.classList.add('hidden');
+                    }
                     state.areAllMessagesHidden = false;
                     uiUtils.updateToggleAllContentButton();
                     state.messageCollapsedStates.clear();
@@ -10194,8 +10181,7 @@
                         messages: duplicatedMessages,
                         updatedAt: Date.now(),
                         createdAt: Date.now(),
-                        title: newTitle,
-                        twinEngineSummary: chat.twinEngineSummary || ''
+                        title: newTitle
                     };
 
                     if (state.settings.persistMessageCollapseState && chat.collapsedStates) {
@@ -11660,8 +11646,7 @@
                     }),
                     createdAt: chat.createdAt,
                     updatedAt: chat.updatedAt,
-                    ...(state.settings.persistMessageCollapseState && chat.collapsedStates && { collapsedStates: chat.collapsedStates }),
-                    twinEngineSummary: chat.twinEngineSummary || ''
+                    ...(state.settings.persistMessageCollapseState && chat.collapsedStates && { collapsedStates: chat.collapsedStates })
                 }));
 
                 const jsonString = JSON.stringify(exportableChats, null, 2);
@@ -11745,7 +11730,6 @@
                             })),
                             createdAt: typeof chatData.createdAt === 'number' ? chatData.createdAt : importTimestamp,
                             updatedAt: typeof chatData.updatedAt === 'number' ? chatData.updatedAt : importTimestamp,
-                            twinEngineSummary: chatData.twinEngineSummary || ''
                         };
                         if (state.settings.persistMessageCollapseState && chatData.collapsedStates) {
                             newChat.collapsedStates = { ...chatData.collapsedStates };
@@ -13596,7 +13580,8 @@
                     attachments: [],
                     apiProvider: providerForSettingsB
                 };
-                                const responseFromB = await this.handleSend(false, -1, contextForB);
+
+                const responseFromB = await this.handleSend(false, -1, contextForB);
                 if (responseFromB === "APIキー未設定") throw new Error("APIキーが設定されていません。");
                 if (!responseFromB || !responseFromB.content) {
                     throw new Error(`セッションB (${sessionB_Id}) からの応答がありませんでした。`);
@@ -14128,7 +14113,7 @@
             
             if (provider === 'llmaggregator' && topK !== null) {
                 dsRequestBody.top_k = topK;
-            }
+                            }
 
             try {
                 const response = await fetch(endpoint, {
