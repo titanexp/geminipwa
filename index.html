@@ -6009,7 +6009,7 @@
                             messages: messagesToSave,
                             updatedAt: now, createdAt: existingChatData ? existingChatData.createdAt : now,
                             title: title,
-                            twinEngineSummaryContent: state.twinEngineSummaryContent || ''
+                            twinEngineSummary: state.twinEngineSummaryContent || ''
                         };
                         if (state.settings.persistMessageCollapseState) {
                             chatData.collapsedStates = Object.fromEntries(state.messageCollapsedStates);
@@ -9935,7 +9935,8 @@
                         attachments: msg.attachments || [],
                         thoughtSummaryOpen: msg.thoughtSummaryOpen || false,
                     })) || [];
-                    state.twinEngineSummaryContent = chat.twinEngineSummaryContent || '';
+
+                    state.twinEngineSummaryContent = chat.twinEngineSummary || '';
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
 
                     let needsSave = false;
@@ -10043,8 +10044,7 @@
                         messages: duplicatedMessages,
                         updatedAt: Date.now(),
                         createdAt: Date.now(),
-                        title: newTitle,
-                        twinEngineSummaryContent: chat.twinEngineSummaryContent || ''
+                        title: newTitle
                     };
 
                     if (state.settings.persistMessageCollapseState && chat.collapsedStates) {
@@ -11379,19 +11379,18 @@
                     
                     const timestamp = new Date().toLocaleString('ja-JP');
                     const summaryHeader = `--- [${timestamp}] by ${provider} (${modelName}) ---\n`;
-                    const newSummaryContent = summaryHeader + summary.trim();
+                    const newSummaryContent = state.twinEngineSummaryContent + summaryHeader + summary.trim() + "\n\n";
 
                     state.twinEngineSummaryContent = newSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
 
                     if (state.isTwinEngineSummaryVisible) {
-                        elements.twinEngineSummaryEditor.scrollTop = 0;
+                        elements.twinEngineSummaryEditor.scrollTop = elements.twinEngineSummaryEditor.scrollHeight;
                     }
-                    
+
                     if (state.currentChatId) {
                         await dbUtils.saveChat();
                     }
-                    
                 }
             } catch (error) {
             }
@@ -11588,7 +11587,6 @@
                     }),
                     createdAt: chat.createdAt,
                     updatedAt: chat.updatedAt,
-                    twinEngineSummaryContent: chat.twinEngineSummaryContent || '',
                     ...(state.settings.persistMessageCollapseState && chat.collapsedStates && { collapsedStates: chat.collapsedStates })
                 }));
 
@@ -11673,7 +11671,6 @@
                             })),
                             createdAt: typeof chatData.createdAt === 'number' ? chatData.createdAt : importTimestamp,
                             updatedAt: typeof chatData.updatedAt === 'number' ? chatData.updatedAt : importTimestamp,
-                            twinEngineSummaryContent: chatData.twinEngineSummaryContent || ''
                         };
                         if (state.settings.persistMessageCollapseState && chatData.collapsedStates) {
                             newChat.collapsedStates = { ...chatData.collapsedStates };
@@ -14225,7 +14222,7 @@
                             if (state.settings.claudeIncludeThoughts) {
                 requestBody.thinking = { "type": "enabled" };
                 const budget = state.settings.claudeThinkingBudget;
-                if (budget !== null && Number.isInteger(budget) && budget >= 1024) {
+                                if (budget !== null && Number.isInteger(budget) && budget >= 1024) {
                     requestBody.thinking.budget_tokens = budget;
                 }
             }
@@ -14345,7 +14342,7 @@
                                     if (chunk["amazon-bedrock-invocationMetrics"]) {
                                         finalUsage = {
                                             input_tokens: chunk["amazon-bedrock-invocationMetrics"].inputTokenCount,
-                                                                                        output_tokens: chunk["amazon-bedrock-invocationMetrics"].outputTokenCount
+                                            output_tokens: chunk["amazon-bedrock-invocationMetrics"].outputTokenCount
                                         };
                                     } else if (chunk.usage) {
                                         finalUsage = chunk.usage;
