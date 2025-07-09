@@ -6018,6 +6018,7 @@
                             messages: messagesToSave,
                             updatedAt: now, createdAt: existingChatData ? existingChatData.createdAt : now,
                             title: title,
+                            twinEngineSummary: state.twinEngineSummaryContent || "",
                         };
                         if (state.settings.persistMessageCollapseState) {
                             chatData.collapsedStates = Object.fromEntries(state.messageCollapsedStates);
@@ -9754,6 +9755,7 @@
             if (confirmed) {
                 elements.twinEngineSummaryEditor.value = '';
                 state.twinEngineSummaryContent = '';
+                await dbUtils.saveChat();
             }
         },
         async summarizeCurrentSession(messagesToSummarize) {
@@ -9837,6 +9839,8 @@
 
                     state.twinEngineSummaryContent = newSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
+                    
+                    await dbUtils.saveChat();
 
                     if (state.isTwinEngineSummaryVisible) {
                         elements.twinEngineSummaryEditor.scrollTop = 0;
@@ -9883,6 +9887,8 @@
 
                     state.twinEngineSummaryContent = newSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
+
+                    await dbUtils.saveChat();
 
                     if (state.isTwinEngineSummaryVisible) {
                         elements.twinEngineSummaryEditor.scrollTop = 0;
@@ -10070,11 +10076,6 @@
                 uiUtils.updateAttachmentBadgeVisibility();
             }
 
-            state.isTwinEngineSummaryVisible = false;
-            elements.twinEngineSummaryArea.classList.add('hidden');
-            state.twinEngineSummaryContent = '';
-            elements.twinEngineSummaryEditor.value = '';
-
             try {
                 const chat = await dbUtils.getChat(id);
                 if (chat) {
@@ -10084,6 +10085,9 @@
                         attachments: msg.attachments || [],
                         thoughtSummaryOpen: msg.thoughtSummaryOpen || false,
                     })) || [];
+
+                    state.twinEngineSummaryContent = chat.twinEngineSummary || "";
+                    elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
 
                     let needsSave = false;
                     const groupIds = new Set(state.currentMessages.filter(m => m.siblingGroupId).map(m => m.siblingGroupId));
@@ -10888,7 +10892,8 @@
                             ...(msg.thoughtSummaryOpen !== undefined && { thoughtSummaryOpen: msg.thoughtSummaryOpen }),
                         })),
                         updatedAt: Date.now(),
-                        title: titleToSave
+                        title: titleToSave,
+                        twinEngineSummary: state.twinEngineSummaryContent || "",
                     };
 
                     if (isNewChatForDBSave) {
