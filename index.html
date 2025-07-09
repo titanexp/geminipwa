@@ -6007,9 +6007,10 @@
                         const chatIdForOperation = existingChatData ? existingChatData.id : state.currentChatId;
                         const chatData = {
                             messages: messagesToSave,
-                            updatedAt: now, createdAt: existingChatData ? existingChatData.createdAt : now,
+                            updatedAt: now,
+                            createdAt: existingChatData ? existingChatData.createdAt : now,
                             title: title,
-                            twinEngineSummary: state.twinEngineSummaryContent || ''
+                            twinEngineSummary: state.twinEngineSummaryContent || '',
                         };
                         if (state.settings.persistMessageCollapseState) {
                             chatData.collapsedStates = Object.fromEntries(state.messageCollapsedStates);
@@ -7653,7 +7654,6 @@
                 elements.claudeIncludeThoughtsToggle.checked = state.settings.claudeIncludeThoughts;
                 elements.claudeExpandThoughtsByDefaultToggle.checked = state.settings.claudeExpandThoughtsByDefault;
                 elements.claudeThinkingBudgetInput.value = state.settings.claudeThinkingBudget === null ? '' : state.settings.claudeThinkingBudget;
-
                 elements.openaiSystemPromptDefaultTextarea.value = state.settings.openaiSystemPrompt || '';
                 elements.openaiEnableSystemPromptDefaultCheckbox.checked = state.settings.openaiEnableSystemPromptDefault;
                 elements.openaiTemperatureInput.value = state.settings.openaiTemperature === null ? '' : state.settings.openaiTemperature;
@@ -9938,7 +9938,6 @@
 
                     state.twinEngineSummaryContent = chat.twinEngineSummary || '';
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
-
                     let needsSave = false;
                     const groupIds = new Set(state.currentMessages.filter(m => m.siblingGroupId).map(m => m.siblingGroupId));
                     groupIds.forEach(gid => {
@@ -10044,7 +10043,8 @@
                         messages: duplicatedMessages,
                         updatedAt: Date.now(),
                         createdAt: Date.now(),
-                        title: newTitle
+                        title: newTitle,
+                        twinEngineSummary: chat.twinEngineSummary || ''
                     };
 
                     if (state.settings.persistMessageCollapseState && chat.collapsedStates) {
@@ -11379,18 +11379,15 @@
                     
                     const timestamp = new Date().toLocaleString('ja-JP');
                     const summaryHeader = `--- [${timestamp}] by ${provider} (${modelName}) ---\n`;
-                    const newSummaryContent = state.twinEngineSummaryContent + summaryHeader + summary.trim() + "\n\n";
+                    const newSummaryContent = summaryHeader + summary.trim() + "\n\n";
 
                     state.twinEngineSummaryContent = newSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
 
                     if (state.isTwinEngineSummaryVisible) {
-                        elements.twinEngineSummaryEditor.scrollTop = elements.twinEngineSummaryEditor.scrollHeight;
+                        elements.twinEngineSummaryEditor.scrollTop = 0;
                     }
-
-                    if (state.currentChatId) {
-                        await dbUtils.saveChat();
-                    }
+                    
                 }
             } catch (error) {
             }
@@ -12384,8 +12381,6 @@
                     defaultSettingsCopy.geminiApiKeys = [];
                     defaultSettingsCopy.geminiActiveApiKeyIndex = -1;
                     defaultSettingsCopy.deepseekApiKeys = [];
-                    defaultSettingsCopy.deepseekActiveApiKeyIndex = -1;
-                    defaultSettingsCopy.claudeApiKeys = [];
                     defaultSettingsCopy.claudeApiKeys = [];
                     defaultSettingsCopy.claudeActiveApiKeyIndex = -1;
                     defaultSettingsCopy.openaiApiKeys = [];
@@ -14222,7 +14217,7 @@
                             if (state.settings.claudeIncludeThoughts) {
                 requestBody.thinking = { "type": "enabled" };
                 const budget = state.settings.claudeThinkingBudget;
-                                if (budget !== null && Number.isInteger(budget) && budget >= 1024) {
+                if (budget !== null && Number.isInteger(budget) && budget >= 1024) {
                     requestBody.thinking.budget_tokens = budget;
                 }
             }
