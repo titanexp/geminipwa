@@ -5378,10 +5378,6 @@
             twinEngineLlmaggregatorSettings: document.getElementById('twin-engine-llmaggregator-settings'),
             twinEngineLlmaggregatorApiKeyInput: document.getElementById('twin-engine-llmaggregator-api-key'),
             twinEngineLlmaggregatorModelNameSelect: document.getElementById('twin-engine-llmaggregator-model-name'),
-            enableTwinEngineCheckbox: document.getElementById('enable-twin-engine'),
-            twinEngineSummarizeAfterTurnsInput: document.getElementById('twin-engine-summarize-after-turns'),
-            twinEngineAlwaysIncludeFirstUserMessageCheckbox: document.getElementById('twin-engine-always-include-first-user-message'),
-            twinEngineSummaryPromptTextarea: document.getElementById('twin-engine-summary-prompt'),
         };
 
         const state = {
@@ -10398,7 +10394,9 @@
             } else if (isRetry) {
                 const retryUserMessage = state.currentMessages[retryUserMessageIndex];
                 if (!retryUserMessage || retryUserMessage.role !== 'user') {
-                    uiUtils.setSendingState(false);
+                    if (!isBackgroundProcess) {
+                        uiUtils.setSendingState(false);
+                    }
                     return;
                 }
                 text = retryUserMessage.content || '';
@@ -10439,25 +10437,28 @@
                     return { content: dummyResponseContent, metadata: { finishReason: 'stop' } };
                 }
 
-                uiUtils.setSendingState(true);
-                if (isRetry) {
-                    if (retryUserMessageIndex + 1 < state.currentMessages.length) {
-                        state.currentMessages.splice(retryUserMessageIndex + 1);
+                if (!isBackgroundProcess) {
+                    uiUtils.setSendingState(true);
+                    if (isRetry) {
+                        if (retryUserMessageIndex + 1 < state.currentMessages.length) {
+                            state.currentMessages.splice(retryUserMessageIndex + 1);
+                        }
+                        uiUtils.renderChatMessages(true);
+                    } else {
+                        const userMessage = {
+                            role: 'user', content: text, timestamp: Date.now(),
+                            attachments: attachmentsToSend, generatedByApiProvider: null
+                        };
+                        state.currentMessages.push(userMessage);
+                        const userMessageIndex = state.currentMessages.length - 1;
+                        uiUtils.appendMessage(userMessage.role, userMessage.content, userMessageIndex, false, null, userMessage.attachments);
+                        elements.userInput.value = '';
+                        state.pendingAttachments = [];
+                        uiUtils.adjustTextareaHeight();
+                        uiUtils.updateAttachmentBadgeVisibility();
                     }
-                    uiUtils.renderChatMessages(true);
-                } else {
-                    const userMessage = {
-                        role: 'user', content: text, timestamp: Date.now(),
-                        attachments: attachmentsToSend, generatedByApiProvider: null
-                    };
-                    state.currentMessages.push(userMessage);
-                    const userMessageIndex = state.currentMessages.length - 1;
-                    uiUtils.appendMessage(userMessage.role, userMessage.content, userMessageIndex, false, null, userMessage.attachments);
-                    elements.userInput.value = '';
-                    state.pendingAttachments = [];
-                    uiUtils.adjustTextareaHeight();
-                    uiUtils.updateAttachmentBadgeVisibility();
                 }
+                
                 await dbUtils.saveChat();
                 await sleep(300 + Math.random() * 400);
                 
@@ -10466,10 +10467,18 @@
                 };
                 state.currentMessages.push(modelMessage);
                 const modelMessageIndex = state.currentMessages.length - 1;
-                uiUtils.appendMessage(modelMessage.role, modelMessage.content, modelMessageIndex);
+                
+                if (!isBackgroundProcess) {
+                    uiUtils.appendMessage(modelMessage.role, modelMessage.content, modelMessageIndex);
+                }
+
                 await dbUtils.saveChat();
-                uiUtils.setSendingState(false);
-                if (state.settings.autoScrollOnNewMessage) uiUtils.scrollToBottom();
+
+                if (!isBackgroundProcess) {
+                    uiUtils.setSendingState(false);
+                    if (state.settings.autoScrollOnNewMessage) uiUtils.scrollToBottom();
+                }
+
                 return;
             }
 
@@ -10755,11 +10764,13 @@
                 state.currentMessages.push(userMessage);
                 userMessageIndex = state.currentMessages.length - 1;
                 state.messageCollapsedStates.set(userMessageIndex, false);
-                uiUtils.appendMessage(userMessage.role, userMessage.content, userMessageIndex, false, null, userMessage.attachments);
-                elements.userInput.value = '';
-                state.pendingAttachments = [];
-                uiUtils.adjustTextareaHeight();
-                uiUtils.updateAttachmentBadgeVisibility();
+                if (!isBackgroundProcess) {
+                    uiUtils.appendMessage(userMessage.role, userMessage.content, userMessageIndex, false, null, userMessage.attachments);
+                    elements.userInput.value = '';
+                    state.pendingAttachments = [];
+                    uiUtils.adjustTextareaHeight();
+                    uiUtils.updateAttachmentBadgeVisibility();
+                }
                 currentContextMessages = [...state.currentMessages];
             } else if (isBackgroundProcess && !isRetry) {
                 const userMessage = {
@@ -10918,7 +10929,7 @@
                         uiUtils.updateChatTitle(chatToSave.title);
                     }
                 } catch (error) {
-                    if(currentContextSessionId){
+                    if(currentContextSessionId && !isBackgroundProcess){
                          uiUtils.displayError("チャットの保存に失敗しましたが、送信を試みます。", false);
                     }
                 }
@@ -11068,7 +11079,9 @@
 
                     state.currentMessages.push(modelMessageObjectForStream);
                     state.messageCollapsedStates.set(tempPlaceholderIndex, false);
-                    uiUtils.appendMessage('model', modelMessageObjectForStream.content, tempPlaceholderIndex, true);
+                    if (!isBackgroundProcess) {
+                        uiUtils.appendMessage('model', modelMessageObjectForStream.content, tempPlaceholderIndex, true);
+                    }
                 }
 
                 if (useStreamingForThisCall) {
@@ -11443,13 +11456,15 @@
                          }
                     }
                 } else {
-                    if (useStreamingForThisCall && !isAbort && modelMessageObjectForStream) {
+                    if (useStreamingForThisCall && !isAbort && modelMessageObjectForStream && !isBackgroundProcess) {
                         const tempPlaceholderIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
                         const placeholderElement = document.getElementById(`streaming-message-${tempPlaceholderIndex}`);
                         if (placeholderElement) placeholderElement.remove();
                         if(tempPlaceholderIndex !== -1) state.currentMessages.splice(tempPlaceholderIndex, 1);
                     }
-                    uiUtils.displayError(displayErrorMessage, !isAbort);
+                    if (!isBackgroundProcess) {
+                        uiUtils.displayError(displayErrorMessage, !isAbort);
+                    }
                 }
             } finally {
                 if (!isBackgroundProcess) {
@@ -11923,12 +11938,12 @@
              newSettings.twinEngineXaiModelName = elements.twinEngineXaiModelNameSelect.value;
              newSettings.twinEngineLlmaggregatorApiKey = elements.twinEngineLlmaggregatorApiKeyInput.value.trim();
              newSettings.twinEngineLlmaggregatorModelName = elements.twinEngineLlmaggregatorModelNameSelect.value;
-             newSettings.enableTwinEngine = elements.enableTwinEngineCheckbox.checked;
+             newSettings.enableTwinEngine = document.getElementById('enable-twin-engine').checked;
              newSettings.twinEngineSummarizeAfterTurns = elements.twinEngineSummarizeAfterTurnsInput.value === '' 
                 ? DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS 
                 : parseInt(elements.twinEngineSummarizeAfterTurnsInput.value, 10);
-             newSettings.twinEngineAlwaysIncludeFirstUserMessage = elements.twinEngineAlwaysIncludeFirstUserMessageCheckbox.checked;
-             newSettings.twinEngineSummaryPrompt = elements.twinEngineSummaryPromptTextarea.value.trim();
+             newSettings.twinEngineAlwaysIncludeFirstUserMessage = document.getElementById('twin-engine-always-include-first-user-message').checked;
+             newSettings.twinEngineSummaryPrompt = document.getElementById('twin-engine-summary-prompt').value.trim();
              newSettings.modelName = elements.geminiModelNameSelect.value;
              newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
              newSettings.commonSystemPrompt = elements.commonSystemPromptDefaultTextarea.value.trim();
@@ -13557,8 +13572,7 @@
                     xaiIncludeThoughtsB = state.settings.xaiIncludeThoughts;
                     xaiReasoningEffortB = state.settings.xaiReasoningEffort;
                 }
-
-                const contextForB = {
+                                const contextForB = {
                     sessionId: sessionB_Id,
                     messages: sessionB_Data.messages ? [...sessionB_Data.messages] : [],
                     systemPrompt: systemPromptB,
