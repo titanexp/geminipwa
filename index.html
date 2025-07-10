@@ -9246,7 +9246,7 @@
                     uiUtils.renderChatMessages(true);
                 });
                 elements.showBottomCollapseButtonToggle.addEventListener('change', () => {
-                    state.settings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
+                    state.settings.showBottomCollapseButtonToggle.checked = elements.showBottomCollapseButtonToggle.checked;
                     uiUtils.renderChatMessages(true);
                 });
                 elements.persistMessageCollapseStateCheckbox.addEventListener('change', () => {
@@ -10112,6 +10112,16 @@
                     uiUtils.setSendingState(false);
                     uiUtils.updateAttachmentBadgeVisibility();
                     elements.memoEditor.value = '';
+
+                    if (state.settings.enableTwinEngine) {
+                        const userTurnCount = (chat.messages || []).filter(msg => msg.role === 'user').length;
+                        const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
+                        
+                        if (userTurnCount > summarizeAfterTurns) {
+                             setTimeout(() => this.triggerTwinEngineSummaryInBackground(), 500);
+                        }
+                    }
+
                     if (needsSave) {
                         await dbUtils.saveChat();
                     }
@@ -10733,7 +10743,7 @@
             let siblingGroupIdToUse = null;
 
             if (!isBackgroundProcess && !isRetry) {
-                const userMessage = 
+                const userMessage = {
                     role: 'user', content: text, timestamp: Date.now(),
                     attachments: attachmentsToSend,
                     generatedByApiProvider: null
@@ -12096,7 +12106,7 @@
              newSettings.disableAttachmentConfirmation = elements.disableAttachmentConfirmationToggle.checked;
              newSettings.addPrefixOnImport = elements.addPrefixOnImportToggle.checked;
              newSettings.showTopCollapseButton = elements.showTopCollapseButtonToggle.checked;
-             newSettings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
+             newSettings.showBottomCollapseButtonToggle.checked = elements.showBottomCollapseButtonToggle.checked;
              newSettings.persistMessageCollapseState = elements.persistMessageCollapseStateCheckbox.checked;
              newSettings.messageBubbleOpacity = elements.messageBubbleOpacityInput.value === '' ? DEFAULT_MESSAGE_BUBBLE_OPACITY : parseFloat(elements.messageBubbleOpacityInput.value);
              newSettings.chatOverlayOpacity = elements.chatOverlayOpacityInput.value === '' ? DEFAULT_CHAT_OVERLAY_OPACITY : parseFloat(elements.chatOverlayOpacityInput.value);
@@ -12441,7 +12451,6 @@
                     defaultSettingsCopy.geminiActiveApiKeyIndex = -1;
                     defaultSettingsCopy.deepseekApiKeys = [];
                     defaultSettingsCopy.deepseekActiveApiKeyIndex = -1;
-                    defaultSettingsCopy.claudeApiKeys = [];
                     defaultSettingsCopy.claudeApiKeys = [];
                     defaultSettingsCopy.claudeActiveApiKeyIndex = -1;
                     defaultSettingsCopy.openaiApiKeys = [];
