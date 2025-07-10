@@ -9824,7 +9824,11 @@
                 const response = await this.summarizeCurrentSession([...state.currentMessages]);
 
                 if (response && response.content) {
-                    const newSummaryContent = response.content.trim() + "\n\n";
+                    const provider = response.generatedByApiProvider || state.settings.twinEngineProvider;
+                    const modelName = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ModelName`];
+                    const timestamp = new Date().toLocaleString('ja-JP');
+                    const summaryHeader = `--- [${timestamp}] by ${provider} (${modelName}) ---\n`;
+                    const newSummaryContent = summaryHeader + response.content.trim() + "\n\n";
 
                     state.twinEngineSummaryContent = newSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
@@ -9866,7 +9870,11 @@
                 const response = await this.summarizeCurrentSession([...state.currentMessages]);
 
                 if (response && response.content) {
-                    const newSummaryContent = response.content.trim() + "\n\n";
+                    const provider = response.generatedByApiProvider || state.settings.twinEngineProvider;
+                    const modelName = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ModelName`];
+                    const timestamp = new Date().toLocaleString('ja-JP');
+                    const summaryHeader = `--- [${timestamp}] by ${provider} (${modelName}) ---\n`;
+                    const newSummaryContent = summaryHeader + response.content.trim() + "\n\n";
 
                     state.twinEngineSummaryContent = newSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
@@ -10733,7 +10741,7 @@
             let siblingGroupIdToUse = null;
 
             if (!isBackgroundProcess && !isRetry) {
-                const userMessage = 
+                const userMessage = {
                     role: 'user', content: text, timestamp: Date.now(),
                     attachments: attachmentsToSend,
                     generatedByApiProvider: null
@@ -14745,7 +14753,7 @@
             });
 
             window.addEventListener('unhandledrejection', (event) => {
-                            this.handleError('Unhandled Promise Rejection', {
+                this.handleError('Unhandled Promise Rejection', {
                     reason: event.reason,
                     promise: event.promise
                 });
