@@ -9250,7 +9250,7 @@
                     uiUtils.renderChatMessages(true);
                 });
                 elements.showBottomCollapseButtonToggle.addEventListener('change', () => {
-                    state.settings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
+                    state.settings.showBottomCollapseButtonToggle.checked = elements.showBottomCollapseButtonToggle.checked;
                     uiUtils.renderChatMessages(true);
                 });
                 elements.persistMessageCollapseStateCheckbox.addEventListener('change', () => {
@@ -9828,11 +9828,7 @@
                 const response = await this.summarizeCurrentSession([...state.currentMessages]);
 
                 if (response && response.content) {
-                    const provider = response.generatedByApiProvider || state.settings.twinEngineProvider;
-                    const modelName = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ModelName`];
-                    const timestamp = new Date().toLocaleString('ja-JP');
-                    const summaryHeader = `--- [${timestamp}] by ${provider} (${modelName}) ---\n`;
-                    const newSummaryContent = summaryHeader + response.content.trim() + "\n\n";
+                    const newSummaryContent = response.content.trim() + "\n\n";
 
                     state.twinEngineSummaryContent = newSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
@@ -9874,11 +9870,7 @@
                 const response = await this.summarizeCurrentSession([...state.currentMessages]);
 
                 if (response && response.content) {
-                    const provider = response.generatedByApiProvider || state.settings.twinEngineProvider;
-                    const modelName = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ModelName`];
-                    const timestamp = new Date().toLocaleString('ja-JP');
-                    const summaryHeader = `--- [${timestamp}] by ${provider} (${modelName}) ---\n`;
-                    const newSummaryContent = summaryHeader + response.content.trim() + "\n\n";
+                    const newSummaryContent = response.content.trim() + "\n\n";
 
                     state.twinEngineSummaryContent = newSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
@@ -10124,6 +10116,16 @@
                     uiUtils.setSendingState(false);
                     uiUtils.updateAttachmentBadgeVisibility();
                     elements.memoEditor.value = '';
+
+                    if (state.settings.enableTwinEngine) {
+                        const userTurnCount = (chat.messages || []).filter(msg => msg.role === 'user').length;
+                        const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
+                        
+                        if (userTurnCount > summarizeAfterTurns) {
+                             setTimeout(() => this.triggerTwinEngineSummaryInBackground(), 500);
+                        }
+                    }
+
                     if (needsSave) {
                         await dbUtils.saveChat();
                     }
@@ -10793,12 +10795,7 @@
 
             const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
             
-            const shouldUseSummary = 
-                state.settings.enableTwinEngine &&
-                    !isBackgroundProcess &&
-                        userTurnCount > summarizeAfterTurns &&
-                            state.twinEngineSummaryContent &&
-                                state.twinEngineSummaryContent.trim() !== '';
+            const shouldUseSummary = state.settings.enableTwinEngine && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
 
             if (shouldUseSummary) {
                 messagesToProcess = [];
@@ -12113,7 +12110,7 @@
              newSettings.disableAttachmentConfirmation = elements.disableAttachmentConfirmationToggle.checked;
              newSettings.addPrefixOnImport = elements.addPrefixOnImportToggle.checked;
              newSettings.showTopCollapseButton = elements.showTopCollapseButtonToggle.checked;
-             newSettings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
+             newSettings.showBottomCollapseButtonToggle.checked = elements.showBottomCollapseButtonToggle.checked;
              newSettings.persistMessageCollapseState = elements.persistMessageCollapseStateCheckbox.checked;
              newSettings.messageBubbleOpacity = elements.messageBubbleOpacityInput.value === '' ? DEFAULT_MESSAGE_BUBBLE_OPACITY : parseFloat(elements.messageBubbleOpacityInput.value);
              newSettings.chatOverlayOpacity = elements.chatOverlayOpacityInput.value === '' ? DEFAULT_CHAT_OVERLAY_OPACITY : parseFloat(elements.chatOverlayOpacityInput.value);
@@ -12458,7 +12455,6 @@
                     defaultSettingsCopy.geminiActiveApiKeyIndex = -1;
                     defaultSettingsCopy.deepseekApiKeys = [];
                     defaultSettingsCopy.deepseekActiveApiKeyIndex = -1;
-                    defaultSettingsCopy.claudeApiKeys = [];
                     defaultSettingsCopy.claudeApiKeys = [];
                     defaultSettingsCopy.claudeActiveApiKeyIndex = -1;
                     defaultSettingsCopy.openaiApiKeys = [];
@@ -14762,7 +14758,7 @@
             });
 
             window.addEventListener('unhandledrejection', (event) => {
-                this.handleError('Unhandled Promise Rejection', {
+                            this.handleError('Unhandled Promise Rejection', {
                     reason: event.reason,
                     promise: event.promise
                 });
