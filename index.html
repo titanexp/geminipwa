@@ -9246,7 +9246,7 @@
                     uiUtils.renderChatMessages(true);
                 });
                 elements.showBottomCollapseButtonToggle.addEventListener('change', () => {
-                    state.settings.showBottomCollapseButtonToggle.checked = elements.showBottomCollapseButtonToggle.checked;
+                    state.settings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
                     uiUtils.renderChatMessages(true);
                 });
                 elements.persistMessageCollapseStateCheckbox.addEventListener('change', () => {
@@ -9824,7 +9824,11 @@
                 const response = await this.summarizeCurrentSession([...state.currentMessages]);
 
                 if (response && response.content) {
-                    const newSummaryContent = response.content.trim() + "\n\n";
+                    const provider = response.generatedByApiProvider || state.settings.twinEngineProvider;
+                    const modelName = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ModelName`];
+                    const timestamp = new Date().toLocaleString('ja-JP');
+                    const summaryHeader = `--- [${timestamp}] by ${provider} (${modelName}) ---\n`;
+                    const newSummaryContent = summaryHeader + response.content.trim() + "\n\n";
 
                     state.twinEngineSummaryContent = newSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
@@ -9866,7 +9870,11 @@
                 const response = await this.summarizeCurrentSession([...state.currentMessages]);
 
                 if (response && response.content) {
-                    const newSummaryContent = response.content.trim() + "\n\n";
+                    const provider = response.generatedByApiProvider || state.settings.twinEngineProvider;
+                    const modelName = state.settings[`twinEngine${provider.charAt(0).toUpperCase() + provider.slice(1)}ModelName`];
+                    const timestamp = new Date().toLocaleString('ja-JP');
+                    const summaryHeader = `--- [${timestamp}] by ${provider} (${modelName}) ---\n`;
+                    const newSummaryContent = summaryHeader + response.content.trim() + "\n\n";
 
                     state.twinEngineSummaryContent = newSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
@@ -10112,16 +10120,6 @@
                     uiUtils.setSendingState(false);
                     uiUtils.updateAttachmentBadgeVisibility();
                     elements.memoEditor.value = '';
-
-                    if (state.settings.enableTwinEngine) {
-                        const userTurnCount = (chat.messages || []).filter(msg => msg.role === 'user').length;
-                        const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
-                        
-                        if (userTurnCount > summarizeAfterTurns) {
-                             setTimeout(() => this.triggerTwinEngineSummaryInBackground(), 500);
-                        }
-                    }
-
                     if (needsSave) {
                         await dbUtils.saveChat();
                     }
@@ -10394,9 +10392,7 @@
             } else if (isRetry) {
                 const retryUserMessage = state.currentMessages[retryUserMessageIndex];
                 if (!retryUserMessage || retryUserMessage.role !== 'user') {
-                    if (!isBackgroundProcess) {
-                        uiUtils.setSendingState(false);
-                    }
+                    uiUtils.setSendingState(false);
                     return;
                 }
                 text = retryUserMessage.content || '';
@@ -10437,28 +10433,25 @@
                     return { content: dummyResponseContent, metadata: { finishReason: 'stop' } };
                 }
 
-                if (!isBackgroundProcess) {
-                    uiUtils.setSendingState(true);
-                    if (isRetry) {
-                        if (retryUserMessageIndex + 1 < state.currentMessages.length) {
-                            state.currentMessages.splice(retryUserMessageIndex + 1);
-                        }
-                        uiUtils.renderChatMessages(true);
-                    } else {
-                        const userMessage = {
-                            role: 'user', content: text, timestamp: Date.now(),
-                            attachments: attachmentsToSend, generatedByApiProvider: null
-                        };
-                        state.currentMessages.push(userMessage);
-                        const userMessageIndex = state.currentMessages.length - 1;
-                        uiUtils.appendMessage(userMessage.role, userMessage.content, userMessageIndex, false, null, userMessage.attachments);
-                        elements.userInput.value = '';
-                        state.pendingAttachments = [];
-                        uiUtils.adjustTextareaHeight();
-                        uiUtils.updateAttachmentBadgeVisibility();
+                uiUtils.setSendingState(true);
+                if (isRetry) {
+                    if (retryUserMessageIndex + 1 < state.currentMessages.length) {
+                        state.currentMessages.splice(retryUserMessageIndex + 1);
                     }
+                    uiUtils.renderChatMessages(true);
+                } else {
+                    const userMessage = {
+                        role: 'user', content: text, timestamp: Date.now(),
+                        attachments: attachmentsToSend, generatedByApiProvider: null
+                    };
+                    state.currentMessages.push(userMessage);
+                    const userMessageIndex = state.currentMessages.length - 1;
+                    uiUtils.appendMessage(userMessage.role, userMessage.content, userMessageIndex, false, null, userMessage.attachments);
+                    elements.userInput.value = '';
+                    state.pendingAttachments = [];
+                    uiUtils.adjustTextareaHeight();
+                    uiUtils.updateAttachmentBadgeVisibility();
                 }
-                
                 await dbUtils.saveChat();
                 await sleep(300 + Math.random() * 400);
                 
@@ -10467,18 +10460,10 @@
                 };
                 state.currentMessages.push(modelMessage);
                 const modelMessageIndex = state.currentMessages.length - 1;
-                
-                if (!isBackgroundProcess) {
-                    uiUtils.appendMessage(modelMessage.role, modelMessage.content, modelMessageIndex);
-                }
-
+                uiUtils.appendMessage(modelMessage.role, modelMessage.content, modelMessageIndex);
                 await dbUtils.saveChat();
-
-                if (!isBackgroundProcess) {
-                    uiUtils.setSendingState(false);
-                    if (state.settings.autoScrollOnNewMessage) uiUtils.scrollToBottom();
-                }
-
+                uiUtils.setSendingState(false);
+                if (state.settings.autoScrollOnNewMessage) uiUtils.scrollToBottom();
                 return;
             }
 
@@ -10764,13 +10749,11 @@
                 state.currentMessages.push(userMessage);
                 userMessageIndex = state.currentMessages.length - 1;
                 state.messageCollapsedStates.set(userMessageIndex, false);
-                if (!isBackgroundProcess) {
-                    uiUtils.appendMessage(userMessage.role, userMessage.content, userMessageIndex, false, null, userMessage.attachments);
-                    elements.userInput.value = '';
-                    state.pendingAttachments = [];
-                    uiUtils.adjustTextareaHeight();
-                    uiUtils.updateAttachmentBadgeVisibility();
-                }
+                uiUtils.appendMessage(userMessage.role, userMessage.content, userMessageIndex, false, null, userMessage.attachments);
+                elements.userInput.value = '';
+                state.pendingAttachments = [];
+                uiUtils.adjustTextareaHeight();
+                uiUtils.updateAttachmentBadgeVisibility();
                 currentContextMessages = [...state.currentMessages];
             } else if (isBackgroundProcess && !isRetry) {
                 const userMessage = {
@@ -10929,7 +10912,7 @@
                         uiUtils.updateChatTitle(chatToSave.title);
                     }
                 } catch (error) {
-                    if(currentContextSessionId && !isBackgroundProcess){
+                    if(currentContextSessionId){
                          uiUtils.displayError("チャットの保存に失敗しましたが、送信を試みます。", false);
                     }
                 }
@@ -11079,9 +11062,7 @@
 
                     state.currentMessages.push(modelMessageObjectForStream);
                     state.messageCollapsedStates.set(tempPlaceholderIndex, false);
-                    if (!isBackgroundProcess) {
-                        uiUtils.appendMessage('model', modelMessageObjectForStream.content, tempPlaceholderIndex, true);
-                    }
+                    uiUtils.appendMessage('model', modelMessageObjectForStream.content, tempPlaceholderIndex, true);
                 }
 
                 if (useStreamingForThisCall) {
@@ -11456,15 +11437,13 @@
                          }
                     }
                 } else {
-                    if (useStreamingForThisCall && !isAbort && modelMessageObjectForStream && !isBackgroundProcess) {
+                    if (useStreamingForThisCall && !isAbort && modelMessageObjectForStream) {
                         const tempPlaceholderIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
                         const placeholderElement = document.getElementById(`streaming-message-${tempPlaceholderIndex}`);
                         if (placeholderElement) placeholderElement.remove();
                         if(tempPlaceholderIndex !== -1) state.currentMessages.splice(tempPlaceholderIndex, 1);
                     }
-                    if (!isBackgroundProcess) {
-                        uiUtils.displayError(displayErrorMessage, !isAbort);
-                    }
+                    uiUtils.displayError(displayErrorMessage, !isAbort);
                 }
             } finally {
                 if (!isBackgroundProcess) {
@@ -12125,7 +12104,7 @@
              newSettings.disableAttachmentConfirmation = elements.disableAttachmentConfirmationToggle.checked;
              newSettings.addPrefixOnImport = elements.addPrefixOnImportToggle.checked;
              newSettings.showTopCollapseButton = elements.showTopCollapseButtonToggle.checked;
-             newSettings.showBottomCollapseButtonToggle.checked = elements.showBottomCollapseButtonToggle.checked;
+             newSettings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
              newSettings.persistMessageCollapseState = elements.persistMessageCollapseStateCheckbox.checked;
              newSettings.messageBubbleOpacity = elements.messageBubbleOpacityInput.value === '' ? DEFAULT_MESSAGE_BUBBLE_OPACITY : parseFloat(elements.messageBubbleOpacityInput.value);
              newSettings.chatOverlayOpacity = elements.chatOverlayOpacityInput.value === '' ? DEFAULT_CHAT_OVERLAY_OPACITY : parseFloat(elements.chatOverlayOpacityInput.value);
@@ -12470,6 +12449,7 @@
                     defaultSettingsCopy.geminiActiveApiKeyIndex = -1;
                     defaultSettingsCopy.deepseekApiKeys = [];
                     defaultSettingsCopy.deepseekActiveApiKeyIndex = -1;
+                    defaultSettingsCopy.claudeApiKeys = [];
                     defaultSettingsCopy.claudeApiKeys = [];
                     defaultSettingsCopy.claudeActiveApiKeyIndex = -1;
                     defaultSettingsCopy.openaiApiKeys = [];
@@ -13572,7 +13552,8 @@
                     xaiIncludeThoughtsB = state.settings.xaiIncludeThoughts;
                     xaiReasoningEffortB = state.settings.xaiReasoningEffort;
                 }
-                                const contextForB = {
+
+                const contextForB = {
                     sessionId: sessionB_Id,
                     messages: sessionB_Data.messages ? [...sessionB_Data.messages] : [],
                     systemPrompt: systemPromptB,
@@ -14772,7 +14753,7 @@
             });
 
             window.addEventListener('unhandledrejection', (event) => {
-                            this.handleError('Unhandled Promise Rejection', {
+                this.handleError('Unhandled Promise Rejection', {
                     reason: event.reason,
                     promise: event.promise
                 });
