@@ -3282,6 +3282,9 @@
         #settings-screen.auto-save-mode .app-header .js-save-settings-btn {
             display: none !important;
         }
+        body.full-width-ai-message-enabled .message.model {
+            max-width: 100%;
+        }
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
@@ -4444,7 +4447,7 @@
                                    <label class="checkbox-label">
                                        <input type="checkbox" id="disable-attachment-confirmation-toggle">
                                        添付ファイル削除時の確認ダイアログを無効にする
-                                   </label>
+                                   </p>
                                    <p style="height:10px"></p>
                                    <label class="checkbox-label">
                                        <input type="checkbox" id="add-prefix-on-import-toggle">
@@ -4464,6 +4467,13 @@
                                    </label>
                                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                                        ※  ヘッダー/フッターの縦幅を切り詰め、表示領域を最大化します。画面が小型ないし横長の端末用
+                                   </p>
+                                   <label class="checkbox-label">
+                                       <input type="checkbox" id="full-width-ai-message-toggle">
+                                       AIの応答を画面幅いっぱいに表示する
+                                   </label>
+                                   <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                                       ※ AIの応答メッセージの横幅を最大化し、画面を効率的に使用します。
                                    </p>
                                    <label class="checkbox-label">
                                        <input type="checkbox" id="show-session-linking-settings-toggle">
@@ -5189,6 +5199,7 @@
             swipeNavigationToggle: document.getElementById('swipe-navigation-toggle'),
             preventZoomToggle: document.getElementById('prevent-zoom-toggle'),
             minimizeHeaderFooterToggle: document.getElementById('minimize-header-footer-toggle'),
+            fullWidthAiMessageToggle: document.getElementById('full-width-ai-message-toggle'),
             showSessionLinkingSettingsToggle: document.getElementById('show-session-linking-settings-toggle'),
             sessionLinkingSettingsGroup: document.getElementById('settings-group-session-linking'),
             showChatTitleToggle: document.getElementById('show-chat-title-toggle'),
@@ -5522,6 +5533,7 @@
                 enableSwipeNavigation: true,
                 preventZoom: true,
                 minimizeHeaderFooter: false,
+                fullWidthAiMessage: false,
                 showSessionLinkingSettings: false,
                 showChatTitle: true,
                 showNewChatButton: true,
@@ -7559,6 +7571,9 @@
                 this.applyOpacitySettings();
                 this.applyZoomPreventionSetting();
             },
+            applyFullWidthAiMessageSetting() {
+                document.body.classList.toggle('full-width-ai-message-enabled', state.settings.fullWidthAiMessage);
+            },
             applySettingsToUI() {
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
                 elements.apiProviderSelect.value = state.settings.apiProvider;
@@ -7727,6 +7742,7 @@
                  elements.swipeNavigationToggle.checked = state.settings.enableSwipeNavigation;
                  elements.preventZoomToggle.checked = state.settings.preventZoom;
                  elements.minimizeHeaderFooterToggle.checked = state.settings.minimizeHeaderFooter;
+                 elements.fullWidthAiMessageToggle.checked = state.settings.fullWidthAiMessage;
                  elements.showSessionLinkingSettingsToggle.checked = state.settings.showSessionLinkingSettings;
                  if (elements.sessionLinkingSettingsGroup) {
                      elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !state.settings.showSessionLinkingSettings);
@@ -7837,6 +7853,7 @@
                 this.updateSessionLinkingUI();
                 this.updateApiProviderSelectOptions();
                 this.applyMinimizeUI();
+                this.applyFullWidthAiMessageSetting();
                 this.toggleMultiApiKeysVisibility(state.settings.showMultiApiKeys);
                 elements.settingsScreen.classList.toggle('auto-save-mode', state.settings.autoSaveSettings);
                 this.updateMemoStackHeightSettingsVisibility();
@@ -8752,7 +8769,7 @@
         };
 
         const appLogic = {
-            async initializeApp() {
+            initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -9161,6 +9178,10 @@
                 document.getElementById('minimize-header-footer-toggle').addEventListener('change', (e) => {
                     state.settings.minimizeHeaderFooter = e.target.checked;
                     uiUtils.applyMinimizeUI();
+                });
+                elements.fullWidthAiMessageToggle.addEventListener('change', (e) => {
+                    state.settings.fullWidthAiMessage = e.target.checked;
+                    uiUtils.applyFullWidthAiMessageSetting();
                 });
                 elements.showSessionLinkingSettingsToggle.addEventListener('change', (e) => {
                     if (elements.sessionLinkingSettingsGroup) {
@@ -12060,6 +12081,7 @@
              newSettings.enableSwipeNavigation = elements.swipeNavigationToggle.checked;
              newSettings.preventZoom = elements.preventZoomToggle.checked;
              newSettings.minimizeHeaderFooter = document.getElementById('minimize-header-footer-toggle').checked;
+             newSettings.fullWidthAiMessage = elements.fullWidthAiMessageToggle.checked;
              newSettings.showSessionLinkingSettings = elements.showSessionLinkingSettingsToggle.checked;
              newSettings.showChatTitle = elements.showChatTitleToggle.checked;
              newSettings.showNewChatButton = elements.showNewChatButtonToggle.checked;
@@ -12373,6 +12395,7 @@
                     defaultSettingsCopy.enableSwipeNavigation = true;
                     defaultSettingsCopy.preventZoom = true;
                     defaultSettingsCopy.minimizeHeaderFooter = false;
+                    defaultSettingsCopy.fullWidthAiMessage = false;
                     defaultSettingsCopy.showChatTitle = true;
                     defaultSettingsCopy.showNewChatButton = true;
                     defaultSettingsCopy.showDeleteSessionButton = false;
@@ -14276,7 +14299,7 @@
             }
 
             if (generationConfig.topP !== undefined && generationConfig.topP !== null) {
-                requestBody.top_p = generationConfig.topP;
+                            requestBody.top_p = generationConfig.topP;
             } else if (state.settings.claudeTopP !== null) {
                 requestBody.top_p = state.settings.claudeTopP;
             } else {
