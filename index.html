@@ -4482,12 +4482,12 @@
                                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                                        ※ 履歴画面から2つのチャットを連携させ、AI同士を会話させることができます。👥ボタンを用いた入出力のみ。
                                    </p>
-                                   <label class="checkbox-label" style="margin-top: 15px;">
+                                   <label class="checkbox-label">
                                        <input type="checkbox" id="show-twin-engine-settings-toggle">
                                        Twin-engine設定を表示する
                                    </label>
                                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-                                       ※ 会話履歴の自動要約機能（Twin-engine）に関する設定項目を表示します。この設定がオフの場合、Twin-engine機能は完全に無効化されます。
+                                       ※ 会話履歴の自動要約機能（Twin-engine）に関する設定項目を表示します。無効の場合、機能全体がオフになります。
                                    </p>
                                    <p style="height:10px"></p>
                                     <label for="history-sort-order">履歴のソート順:</label>
@@ -5210,7 +5210,6 @@
             showSessionLinkingSettingsToggle: document.getElementById('show-session-linking-settings-toggle'),
             sessionLinkingSettingsGroup: document.getElementById('settings-group-session-linking'),
             showTwinEngineSettingsToggle: document.getElementById('show-twin-engine-settings-toggle'),
-            twinEngineSettingsGroup: document.getElementById('settings-group-twin-engine'),
             showChatTitleToggle: document.getElementById('show-chat-title-toggle'),
             showNewChatButtonToggle: document.getElementById('show-new-chat-button-toggle'),
             showDeleteSessionButtonToggle: document.getElementById('show-delete-session-button-toggle'),
@@ -7756,10 +7755,11 @@
                  if (elements.sessionLinkingSettingsGroup) {
                      elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !state.settings.showSessionLinkingSettings);
                  }
-                 elements.showTwinEngineSettingsToggle.checked = state.settings.showTwinEngineSettings;
-                 if (elements.twinEngineSettingsGroup) {
-                     elements.twinEngineSettingsGroup.classList.toggle('hidden', !state.settings.showTwinEngineSettings);
-                 }
+                elements.showTwinEngineSettingsToggle.checked = state.settings.showTwinEngineSettings;
+                const twinEngineSettingsGroup = document.getElementById('settings-group-twin-engine');
+                if (twinEngineSettingsGroup) {
+                    twinEngineSettingsGroup.classList.toggle('hidden', !state.settings.showTwinEngineSettings);
+                }
                  elements.showChatTitleToggle.checked = state.settings.showChatTitle;
                  elements.showNewChatButtonToggle.checked = state.settings.showNewChatButton;
                  elements.showDeleteSessionButtonToggle.checked = state.settings.showDeleteSessionButton;
@@ -7798,8 +7798,6 @@
                 elements.showUserIconToggle.checked = state.settings.showUserIcon;
                 elements.showUserNameToggle.checked = state.settings.showUserName;
                 elements.userNameInput.value = state.settings.userName || '';
-                elements.showAiIconToggle.checked = state.settings.showAiIcon;
-                elements.showAiNameToggle.checked = state.settings.showAiName;
                 elements.aiNameInput.value = state.settings.aiName || '';
                 elements.iconNameFontSizeInput.value = state.settings.iconNameFontSize ?? DEFAULT_ICON_NAME_FONT_SIZE;
                 elements.iconNameOffsetYInput.value = state.settings.iconNameOffsetY !== null ? (state.settings.iconNameOffsetY * -1) : (DEFAULT_ICON_NAME_OFFSET_Y * -1);
@@ -7991,11 +7989,6 @@
                         }
                     });
 
-                    if (elements.twinEngineSummaryBtn) {
-                        const showButton = state.settings.showTwinEngineSettings && state.settings.showTwinEngineSummaryButton;
-                        elements.twinEngineSummaryBtn.classList.toggle('hidden', !showButton);
-                    }
-
                     if (elements.pasteToInputBtn) {
                         elements.pasteToInputBtn.classList.toggle('hidden', !state.settings.showPasteButtonInFooter);
                     }
@@ -8015,6 +8008,10 @@
 
                     this.adjustHeaderLayout();
                     this.updateProviderToggleButtons();
+                    if (elements.twinEngineSummaryBtn) {
+                        const showButton = state.settings.showTwinEngineSettings && state.settings.showTwinEngineSummaryButton;
+                        elements.twinEngineSummaryBtn.classList.toggle('hidden', !showButton);
+                    }
                 };
             
                 requestAnimationFrame(updateVisibility);
@@ -8798,7 +8795,7 @@
         };
 
         const appLogic = {
-            initializeApp() {
+            async initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -9151,11 +9148,8 @@
                     uiUtils.updateChatScreenElementVisibility();
                     uiUtils.updateMemoStackHeightSettingsVisibility();
                 });
-                elements.showTwinEngineSettingsToggle.addEventListener('change', (e) => {
-                    state.settings.showTwinEngineSettings = e.target.checked;
-                    if (elements.twinEngineSettingsGroup) {
-                        elements.twinEngineSettingsGroup.classList.toggle('hidden', !e.target.checked);
-                    }
+                elements.showTwinEngineSummaryButtonToggle.addEventListener('change', () => {
+                    state.settings.showTwinEngineSummaryButton = elements.showTwinEngineSummaryButtonToggle.checked;
                     uiUtils.updateChatScreenElementVisibility();
                 });
                 elements.showClipboardStackButtonToggle.addEventListener('change', () => {
@@ -9218,6 +9212,17 @@
                 elements.showSessionLinkingSettingsToggle.addEventListener('change', (e) => {
                     if (elements.sessionLinkingSettingsGroup) {
                         elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !e.target.checked);
+                    }
+                });
+                elements.showTwinEngineSettingsToggle.addEventListener('change', (e) => {
+                    const isVisible = e.target.checked;
+                    const twinEngineSettingsGroup = document.getElementById('settings-group-twin-engine');
+                    if (twinEngineSettingsGroup) {
+                        twinEngineSettingsGroup.classList.toggle('hidden', !isVisible);
+                    }
+                    if (elements.twinEngineSummaryBtn) {
+                        const showButton = isVisible && state.settings.showTwinEngineSummaryButton;
+                        elements.twinEngineSummaryBtn.classList.toggle('hidden', !showButton);
                     }
                 });
 
@@ -9855,6 +9860,10 @@
         },
 
         async manualResummarize() {
+            if (!state.settings.showTwinEngineSettings) {
+                await uiUtils.showCustomAlert("Twin-engine機能が無効です。設定画面から有効にしてください。");
+                return;
+            }
             if (state.isSending || state.isAiToAiChatProcessing) {
                 await uiUtils.showCustomAlert("現在他の処理を実行中です。完了後に再試行してください。");
                 return;
@@ -10168,7 +10177,7 @@
                     uiUtils.setSendingState(false);
                     uiUtils.updateAttachmentBadgeVisibility();
                     elements.memoEditor.value = '';
-                    if (state.settings.showTwinEngineSettings && state.settings.enableTwinEngine) {
+                    if (state.settings.enableTwinEngine) {
                         const userTurnCount = (chat.messages || []).filter(msg => msg.role === 'user').length;
                         const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
 
@@ -11433,7 +11442,7 @@
                 if (!isBackgroundProcess && !isRetry) {
                     const currentUserTurnCountAfterSend = state.currentMessages.filter(msg => msg.role === 'user').length;
                     const currentSummarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
-                    if (state.settings.showTwinEngineSettings && state.settings.enableTwinEngine && currentUserTurnCountAfterSend > currentSummarizeAfterTurns) {
+                    if (state.settings.enableTwinEngine && currentUserTurnCountAfterSend > currentSummarizeAfterTurns) {
                         setTimeout(() => this.triggerTwinEngineSummaryInBackground(), 0);
                     }
                 }
@@ -12959,7 +12968,7 @@
                 const oldThoughtOpenStates = new Map(state.thoughtSummaryOpenStates);
                 state.thoughtSummaryOpenStates.clear();
                  state.currentMessages.forEach((msg, newIdx) => {
-                    const oldIdxEquivalent = newIdx >= Math.min(...indicesToDelete) ? newIdx + indicesToDelete.filter(i => i <= newIdx).length : newIdx;
+                    const oldIdxEquivalent = newIdx >= Math.min(...indicesToDelete) ? newIdx + 1 : newIdx;
                     if (oldThoughtOpenStates.has(oldIdxEquivalent)) {
                         state.thoughtSummaryOpenStates.set(newIdx, oldThoughtOpenStates.get(oldIdxEquivalent));
                     } else {
