@@ -1540,9 +1540,6 @@
             border-bottom-left-radius: 5px;
             max-width: 90%;
         }
-        body.widen-ai-message-bubble-enabled .message.model {
-            max-width: 100%;
-        }
         .message.error {
             background-color: var(--bg-error-message);
             color: var(--text-error);
@@ -4469,13 +4466,6 @@
                                        ※  ヘッダー/フッターの縦幅を切り詰め、表示領域を最大化します。画面が小型ないし横長の端末用
                                    </p>
                                    <label class="checkbox-label">
-                                       <input type="checkbox" id="widen-ai-message-bubble-toggle">
-                                       AIの応答メッセージの横幅を最大化する
-                                   </label>
-                                   <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-                                       ※ AIからの応答メッセージのバブルを画面幅いっぱいに広げ、表示領域を効率的に使います。
-                                   </p>
-                                   <label class="checkbox-label">
                                        <input type="checkbox" id="show-session-linking-settings-toggle">
                                        AI間会話モード（セッション間リンク）設定を表示する
                                    </label>
@@ -5199,7 +5189,6 @@
             swipeNavigationToggle: document.getElementById('swipe-navigation-toggle'),
             preventZoomToggle: document.getElementById('prevent-zoom-toggle'),
             minimizeHeaderFooterToggle: document.getElementById('minimize-header-footer-toggle'),
-            widenAiMessageBubbleToggle: document.getElementById('widen-ai-message-bubble-toggle'),
             showSessionLinkingSettingsToggle: document.getElementById('show-session-linking-settings-toggle'),
             sessionLinkingSettingsGroup: document.getElementById('settings-group-session-linking'),
             showChatTitleToggle: document.getElementById('show-chat-title-toggle'),
@@ -5533,7 +5522,6 @@
                 enableSwipeNavigation: true,
                 preventZoom: true,
                 minimizeHeaderFooter: false,
-                widenAiMessageBubble: false,
                 showSessionLinkingSettings: false,
                 showChatTitle: true,
                 showNewChatButton: true,
@@ -5648,6 +5636,7 @@
             userIconUrl: null,
             aiIconUrl: null,
             isSending: false,
+            isSummarizing: false,
             abortController: null,
             partialStreamContent: '',
             partialThoughtStreamContent: '',
@@ -5671,6 +5660,7 @@
             thoughtSummaryOpenStates: new Map(),
             linkedSessionIds: [],
             isAiToAiChatProcessing: false,
+            aiToAiProcessingMessage: "AI間会話処理中...",
         };
 
         const sanitizeText = (text, maxLength = 255) => {
@@ -7739,7 +7729,6 @@
                  elements.swipeNavigationToggle.checked = state.settings.enableSwipeNavigation;
                  elements.preventZoomToggle.checked = state.settings.preventZoom;
                  elements.minimizeHeaderFooterToggle.checked = state.settings.minimizeHeaderFooter;
-                 elements.widenAiMessageBubbleToggle.checked = state.settings.widenAiMessageBubble;
                  elements.showSessionLinkingSettingsToggle.checked = state.settings.showSessionLinkingSettings;
                  if (elements.sessionLinkingSettingsGroup) {
                      elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !state.settings.showSessionLinkingSettings);
@@ -7850,16 +7839,12 @@
                 this.updateSessionLinkingUI();
                 this.updateApiProviderSelectOptions();
                 this.applyMinimizeUI();
-                this.applyWidenAiMessageBubbleSetting();
                 this.toggleMultiApiKeysVisibility(state.settings.showMultiApiKeys);
                 elements.settingsScreen.classList.toggle('auto-save-mode', state.settings.autoSaveSettings);
                 this.updateMemoStackHeightSettingsVisibility();
             },
             applyMinimizeUI() {
                 elements.appContainer.classList.toggle('minimized-ui', state.settings.minimizeHeaderFooter);
-            },
-            applyWidenAiMessageBubbleSetting() {
-                document.body.classList.toggle('widen-ai-message-bubble-enabled', !!state.settings.widenAiMessageBubble);
             },
             applySettingsUIDetailsOpenStates() {
                 const detailsElements = document.querySelectorAll('#settings-screen details[id]');
@@ -8339,8 +8324,6 @@
                     elements.pasteToInputBtn.disabled = true;
                     elements.rollDiceBtn.disabled = true;
                     if (elements.aiToAiChatBtn) elements.aiToAiChatBtn.disabled = true;
-                    elements.loadingIndicator.classList.remove('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
                 } else {
                     elements.sendButton.textContent = '送';
                     elements.sendButton.classList.remove('sending');
@@ -8355,9 +8338,26 @@
                                           state.currentChatId && state.linkedSessionIds.includes(state.currentChatId);
                         elements.aiToAiChatBtn.disabled = !showAiToAiBtn;
                     }
+                    this.adjustTextareaHeight();
+                }
+                this.updateLoadingIndicator();
+            },
+            updateLoadingIndicator() {
+                if (state.isSending) {
+                    elements.loadingIndicator.textContent = '応答中';
+                    elements.loadingIndicator.classList.remove('hidden');
+                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
+                } else if (state.isAiToAiChatProcessing) {
+                    elements.loadingIndicator.textContent = state.aiToAiProcessingMessage;
+                    elements.loadingIndicator.classList.remove('hidden');
+                    elements.loadingIndicator.setAttribute('aria-live', 'assertive');
+                } else if (state.isSummarizing) {
+                    elements.loadingIndicator.textContent = '要約中...';
+                    elements.loadingIndicator.classList.remove('hidden');
+                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
+                } else {
                     elements.loadingIndicator.classList.add('hidden');
                     elements.loadingIndicator.removeAttribute('aria-live');
-                    this.adjustTextareaHeight();
                 }
             },
             adjustTextareaHeight(textarea = elements.userInput, maxHeight = TEXTAREA_MAX_HEIGHT) {
@@ -8639,12 +8639,9 @@
             },
             setAiToAiProcessingState(processing, message = "AI間会話処理中...") {
                 state.isAiToAiChatProcessing = processing;
+                state.aiToAiProcessingMessage = message;
 
                 if (processing) {
-                    elements.loadingIndicator.textContent = message;
-                    elements.loadingIndicator.classList.remove('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'assertive');
-
                     elements.sendButton.disabled = true;
                     elements.userInput.disabled = true;
                     elements.attachFileBtn.disabled = true;
@@ -8652,10 +8649,6 @@
                     elements.rollDiceBtn.disabled = true;
                     if (elements.aiToAiChatBtn) elements.aiToAiChatBtn.disabled = true;
                 } else {
-                    elements.loadingIndicator.textContent = '応答中';
-                    elements.loadingIndicator.classList.add('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
-
                     elements.sendButton.disabled = elements.userInput.value.trim() === '' && state.pendingAttachments.length === 0;
                     elements.userInput.disabled = false;
                     elements.attachFileBtn.disabled = false;
@@ -8668,6 +8661,7 @@
                         elements.aiToAiChatBtn.disabled = !showAiToAiBtn;
                     }
                 }
+                this.updateLoadingIndicator();
             },
             updateSessionLinkingUI() {
                 this.renderHistoryList();
@@ -8769,7 +8763,7 @@
         };
 
         const appLogic = {
-            initializeApp() {
+            async initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -8808,7 +8802,6 @@
                     uiUtils.applyTheme();
                     uiUtils.applyFontFamily();
                     uiUtils.applySidePanelSettingsToUI();
-                    uiUtils.applyWidenAiMessageBubbleSetting();
     
                     if (state.settings.backgroundImageBlob instanceof Blob) {
                         uiUtils.revokeExistingObjectUrl();
@@ -9179,10 +9172,6 @@
                 document.getElementById('minimize-header-footer-toggle').addEventListener('change', (e) => {
                     state.settings.minimizeHeaderFooter = e.target.checked;
                     uiUtils.applyMinimizeUI();
-                });
-                elements.widenAiMessageBubbleToggle.addEventListener('change', (e) => {
-                    state.settings.widenAiMessageBubble = e.target.checked;
-                    uiUtils.applyWidenAiMessageBubbleSetting();
                 });
                 elements.showSessionLinkingSettingsToggle.addEventListener('change', (e) => {
                     if (elements.sessionLinkingSettingsGroup) {
@@ -9885,24 +9874,30 @@
             }
         },
         async triggerTwinEngineSummaryInBackground() {
-            if (state.currentMessages.length === 0 || state.isSending || state.isAiToAiChatProcessing) {
+            if (state.currentMessages.length === 0 || state.isSending || state.isAiToAiChatProcessing || state.isSummarizing) {
                 return;
             }
-
+        
+            state.isSummarizing = true;
+            uiUtils.updateLoadingIndicator();
+        
             try {
                 const response = await this.summarizeCurrentSession([...state.currentMessages]);
-
+        
                 if (response && response.content) {
                     const newSummaryContent = response.content.trim() + "\n\n";
-
+        
                     state.twinEngineSummaryContent = newSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
-
+        
                     if (state.isTwinEngineSummaryVisible) {
                         elements.twinEngineSummaryEditor.scrollTop = 0;
                     }
                 }
             } catch (error) {
+            } finally {
+                state.isSummarizing = false;
+                uiUtils.updateLoadingIndicator();
             }
         },
         scrollToTop() {
@@ -12082,7 +12077,6 @@
              newSettings.enableSwipeNavigation = elements.swipeNavigationToggle.checked;
              newSettings.preventZoom = elements.preventZoomToggle.checked;
              newSettings.minimizeHeaderFooter = document.getElementById('minimize-header-footer-toggle').checked;
-             newSettings.widenAiMessageBubble = elements.widenAiMessageBubbleToggle.checked;
              newSettings.showSessionLinkingSettings = elements.showSessionLinkingSettingsToggle.checked;
              newSettings.showChatTitle = elements.showChatTitleToggle.checked;
              newSettings.showNewChatButton = elements.showNewChatButtonToggle.checked;
@@ -12396,7 +12390,6 @@
                     defaultSettingsCopy.enableSwipeNavigation = true;
                     defaultSettingsCopy.preventZoom = true;
                     defaultSettingsCopy.minimizeHeaderFooter = false;
-                    defaultSettingsCopy.widenAiMessageBubble = false;
                     defaultSettingsCopy.showChatTitle = true;
                     defaultSettingsCopy.showNewChatButton = true;
                     defaultSettingsCopy.showDeleteSessionButton = false;
@@ -13794,7 +13787,7 @@
                             const previewBtn = document.createElement('button');
                             previewBtn.textContent = '表示';
                                                         previewBtn.classList.add('attachment-preview-btn');
-                                                                                    previewBtn.onclick = (e) => { e.preventDefault(); appLogic.previewAttachment(messageIndex, newAttachmentIndex); };
+                            previewBtn.onclick = (e) => { e.preventDefault(); appLogic.previewAttachment(messageIndex, newAttachmentIndex); };
                             actionsDiv.appendChild(previewBtn);
                         }
 
@@ -13879,8 +13872,7 @@
             const endpoint = `${baseUrl}${model}:${endpointMethod}key=${apiKey}`;
 
             const finalGenerationConfig = { ...generationConfig };
-
-            if (state.settings.geminiThinkingBudget !== null || state.settings.geminiIncludeThoughts) {
+                        if (state.settings.geminiThinkingBudget !== null || state.settings.geminiIncludeThoughts) {
                 finalGenerationConfig.thinkingConfig = finalGenerationConfig.thinkingConfig || {};
                 if (state.settings.geminiThinkingBudget !== null && Number.isInteger(state.settings.geminiThinkingBudget) && state.settings.geminiThinkingBudget >= 0) {
                     finalGenerationConfig.thinkingConfig.thinkingBudget = state.settings.geminiThinkingBudget;
@@ -15217,3 +15209,4 @@
 </script>
 </body>
 </html>
+
