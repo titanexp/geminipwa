@@ -4752,24 +4752,31 @@
                             <label for="twin-engine-llmaggregator-model-name">モデル名 (Twin-engine):</label>
                             <select id="twin-engine-llmaggregator-model-name" aria-label="LLM Aggregator モデル名 (Twin-engine)"></select>
                         </div>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: 15px;">
+                            ※ 参考:「セッションの過去の会話 → ある程度セッションが進んだ時点で別の AI で要約 → システムプロンプトとその要約だけを現在の AI に渡して続きの対話を開始する」というワークフローを、行う機能（予定）
+                        </p>
                         <hr style="margin: 20px 0;">
-                        <h4 style="margin-top:15px; margin-bottom:10px; font-size:14px; border:0; padding:0; color: var(--text-secondary);">アドバンスド (Twin-engine)</h4>
-                        
+                        <h4 style="font-size: 14px; color: var(--text-link); margin-bottom: 10px;">アドバンスド (Twin-engine)</h4>
+
                         <label for="twin-engine-dummy-user">ダミー User プロンプト (要約時のみ追加):</label>
                         <textarea id="twin-engine-dummy-user" placeholder="API送信直前に user ロールとして履歴末尾に追加されます" aria-label="Twin-engine ダミー User プロンプト"></textarea>
                         <label class="checkbox-label" style="margin-top: -5px; margin-bottom: 15px;">
                             <input type="checkbox" id="twin-engine-enable-dummy-user">
                             このダミーUserプロンプトを有効にする
                         </label>
-    
+
                         <label for="twin-engine-dummy-model">ダミー Model プロンプト (要約時のみ追加):</label>
                         <textarea id="twin-engine-dummy-model" placeholder="API送信直前に model ロールとして履歴最末尾に追加されます" aria-label="Twin-engine ダミー Model プロンプト"></textarea>
                         <label class="checkbox-label" style="margin-top: -5px;">
                             <input type="checkbox" id="twin-engine-enable-dummy-model">
                             このダミーModelプロンプトを有効にする
                         </label>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: 15px;">
-                            ※ 参考:「セッションの過去の会話 → ある程度セッションが進んだ時点で別の AI で要約 → システムプロンプトとその要約だけを現在の AI に渡して続きの対話を開始する」というワークフローを、行う機能（予定）
+                        <label class="checkbox-label" style="margin-top: -5px; margin-bottom: 15px;">
+                            <input type="checkbox" id="twin-engine-concat-dummy-model">
+                            ダミーモデルと要約結果を連結
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                            ※チェック時、要約結果の先頭に上記ダミーModelの内容を付与。
                         </p>
                     </div>
                 </details>
@@ -5417,6 +5424,7 @@
             twinEngineEnableDummyUserCheckbox: document.getElementById('twin-engine-enable-dummy-user'),
             twinEngineDummyModelInput: document.getElementById('twin-engine-dummy-model'),
             twinEngineEnableDummyModelCheckbox: document.getElementById('twin-engine-enable-dummy-model'),
+            twinEngineConcatDummyModelCheckbox: document.getElementById('twin-engine-concat-dummy-model'),
         };
 
         const state = {
@@ -5675,7 +5683,8 @@
                 twinEngineDummyUser: '',
                 twinEngineEnableDummyUser: false,
                 twinEngineDummyModel: '',
-                twinEngineEnableDummyModel: false
+                twinEngineEnableDummyModel: false,
+                twinEngineConcatDummyModel: false,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -7628,6 +7637,7 @@
                 elements.twinEngineEnableDummyUserCheckbox.checked = state.settings.twinEngineEnableDummyUser;
                 elements.twinEngineDummyModelInput.value = state.settings.twinEngineDummyModel || '';
                 elements.twinEngineEnableDummyModelCheckbox.checked = state.settings.twinEngineEnableDummyModel;
+                elements.twinEngineConcatDummyModelCheckbox.checked = state.settings.twinEngineConcatDummyModel;
 
                 elements.geminiApiKeyInput.value = state.settings.apiKey || '';
                 elements.geminiModelNameSelect.value = state.settings.modelName || DEFAULT_MODEL;
@@ -8823,7 +8833,7 @@
         };
 
         const appLogic = {
-            initializeApp() {
+            async initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -9882,6 +9892,10 @@
                 const response = await this.handleSend(false, -1, contextForSummary);
 
                 if (response && response.content) {
+                    if (state.settings.twinEngineConcatDummyModel && state.settings.twinEngineDummyModel) {
+                        const prefix = state.settings.twinEngineDummyModel.trim();
+                        response.content = `${prefix}\n\n${response.content}`;
+                    }
                     return response;
                 }
                 return null;
@@ -12027,6 +12041,7 @@
              newSettings.twinEngineEnableDummyUser = elements.twinEngineEnableDummyUserCheckbox.checked;
              newSettings.twinEngineDummyModel = elements.twinEngineDummyModelInput.value.trim();
              newSettings.twinEngineEnableDummyModel = elements.twinEngineEnableDummyModelCheckbox.checked;
+             newSettings.twinEngineConcatDummyModel = elements.twinEngineConcatDummyModelCheckbox.checked;
              newSettings.modelName = elements.geminiModelNameSelect.value;
              newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
              newSettings.commonSystemPrompt = elements.commonSystemPromptDefaultTextarea.value.trim();
@@ -12570,6 +12585,11 @@
                     defaultSettingsCopy.twinEngineSummarizeAfterTurns = DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
                     defaultSettingsCopy.twinEngineSummaryPrompt = '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。';
                     defaultSettingsCopy.twinEngineAlwaysIncludeFirstUserMessage = false;
+                    defaultSettingsCopy.twinEngineDummyUser = '';
+                    defaultSettingsCopy.twinEngineEnableDummyUser = false;
+                    defaultSettingsCopy.twinEngineDummyModel = '';
+                    defaultSettingsCopy.twinEngineEnableDummyModel = false;
+                    defaultSettingsCopy.twinEngineConcatDummyModel = false;
 
                     state.settings = defaultSettingsCopy;
 
