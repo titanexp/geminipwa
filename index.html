@@ -4482,6 +4482,13 @@
                                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                                        ※ 履歴画面から2つのチャットを連携させ、AI同士を会話させることができます。👥ボタンを用いた入出力のみ。
                                    </p>
+                                   <label class="checkbox-label" style="margin-top: 15px;">
+                                       <input type="checkbox" id="show-twin-engine-settings-toggle">
+                                       Twin-engine設定を表示する
+                                   </label>
+                                   <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                                       ※ 会話履歴の自動要約機能（Twin-engine）に関する設定項目を表示します。この設定がオフの場合、Twin-engine機能は完全に無効化されます。
+                                   </p>
                                    <p style="height:10px"></p>
                                     <label for="history-sort-order">履歴のソート順:</label>
                                     <select id="history-sort-order" aria-label="履歴のソート順">
@@ -5202,6 +5209,8 @@
             extendAiBubbleWidthToggle: document.getElementById('extend-ai-bubble-width-toggle'),
             showSessionLinkingSettingsToggle: document.getElementById('show-session-linking-settings-toggle'),
             sessionLinkingSettingsGroup: document.getElementById('settings-group-session-linking'),
+            showTwinEngineSettingsToggle: document.getElementById('show-twin-engine-settings-toggle'),
+            twinEngineSettingsGroup: document.getElementById('settings-group-twin-engine'),
             showChatTitleToggle: document.getElementById('show-chat-title-toggle'),
             showNewChatButtonToggle: document.getElementById('show-new-chat-button-toggle'),
             showDeleteSessionButtonToggle: document.getElementById('show-delete-session-button-toggle'),
@@ -5535,6 +5544,7 @@
                 minimizeHeaderFooter: false,
                 extendAiBubbleWidth: false,
                 showSessionLinkingSettings: false,
+                showTwinEngineSettings: false,
                 showChatTitle: true,
                 showNewChatButton: true,
                 showDeleteSessionButton: false,
@@ -7746,6 +7756,10 @@
                  if (elements.sessionLinkingSettingsGroup) {
                      elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !state.settings.showSessionLinkingSettings);
                  }
+                 elements.showTwinEngineSettingsToggle.checked = state.settings.showTwinEngineSettings;
+                 if (elements.twinEngineSettingsGroup) {
+                     elements.twinEngineSettingsGroup.classList.toggle('hidden', !state.settings.showTwinEngineSettings);
+                 }
                  elements.showChatTitleToggle.checked = state.settings.showChatTitle;
                  elements.showNewChatButtonToggle.checked = state.settings.showNewChatButton;
                  elements.showDeleteSessionButtonToggle.checked = state.settings.showDeleteSessionButton;
@@ -7967,7 +7981,6 @@
                         { id: '#show-scroll-to-bottom-button-toggle', element: elements.scrollToBottomBtn },
                         { id: '#show-toggle-all-content-button-toggle', element: elements.toggleAllContentBtn },
                         { id: '#show-memo-button-toggle', element: elements.toggleMemoBtn },
-                        { id: '#show-twin-engine-summary-button-toggle', element: elements.twinEngineSummaryBtn },
                         { id: '#show-clipboard-stack-button-toggle', element: elements.toggleClipboardStackBtn },
                     ];
 
@@ -7977,6 +7990,11 @@
                             item.element.classList.toggle('hidden', !checkbox.checked);
                         }
                     });
+
+                    if (elements.twinEngineSummaryBtn) {
+                        const showButton = state.settings.showTwinEngineSettings && state.settings.showTwinEngineSummaryButton;
+                        elements.twinEngineSummaryBtn.classList.toggle('hidden', !showButton);
+                    }
 
                     if (elements.pasteToInputBtn) {
                         elements.pasteToInputBtn.classList.toggle('hidden', !state.settings.showPasteButtonInFooter);
@@ -8780,7 +8798,7 @@
         };
 
         const appLogic = {
-            async initializeApp() {
+            initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -9133,8 +9151,11 @@
                     uiUtils.updateChatScreenElementVisibility();
                     uiUtils.updateMemoStackHeightSettingsVisibility();
                 });
-                elements.showTwinEngineSummaryButtonToggle.addEventListener('change', () => {
-                    state.settings.showTwinEngineSummaryButton = elements.showTwinEngineSummaryButtonToggle.checked;
+                elements.showTwinEngineSettingsToggle.addEventListener('change', (e) => {
+                    state.settings.showTwinEngineSettings = e.target.checked;
+                    if (elements.twinEngineSettingsGroup) {
+                        elements.twinEngineSettingsGroup.classList.toggle('hidden', !e.target.checked);
+                    }
                     uiUtils.updateChatScreenElementVisibility();
                 });
                 elements.showClipboardStackButtonToggle.addEventListener('change', () => {
@@ -10147,7 +10168,7 @@
                     uiUtils.setSendingState(false);
                     uiUtils.updateAttachmentBadgeVisibility();
                     elements.memoEditor.value = '';
-                    if (state.settings.enableTwinEngine) {
+                    if (state.settings.showTwinEngineSettings && state.settings.enableTwinEngine) {
                         const userTurnCount = (chat.messages || []).filter(msg => msg.role === 'user').length;
                         const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
 
@@ -10824,7 +10845,7 @@
 
             const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
             
-            const shouldUseSummary = state.settings.enableTwinEngine && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
+            const shouldUseSummary = state.settings.showTwinEngineSettings && state.settings.enableTwinEngine && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
 
             if (shouldUseSummary) {
                 messagesToProcess = [];
@@ -11412,7 +11433,7 @@
                 if (!isBackgroundProcess && !isRetry) {
                     const currentUserTurnCountAfterSend = state.currentMessages.filter(msg => msg.role === 'user').length;
                     const currentSummarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
-                    if (state.settings.enableTwinEngine && currentUserTurnCountAfterSend > currentSummarizeAfterTurns) {
+                    if (state.settings.showTwinEngineSettings && state.settings.enableTwinEngine && currentUserTurnCountAfterSend > currentSummarizeAfterTurns) {
                         setTimeout(() => this.triggerTwinEngineSummaryInBackground(), 0);
                     }
                 }
@@ -12100,6 +12121,7 @@
              newSettings.minimizeHeaderFooter = document.getElementById('minimize-header-footer-toggle').checked;
              newSettings.extendAiBubbleWidth = elements.extendAiBubbleWidthToggle.checked;
              newSettings.showSessionLinkingSettings = elements.showSessionLinkingSettingsToggle.checked;
+             newSettings.showTwinEngineSettings = elements.showTwinEngineSettingsToggle.checked;
              newSettings.showChatTitle = elements.showChatTitleToggle.checked;
              newSettings.showNewChatButton = elements.showNewChatButtonToggle.checked;
              newSettings.showDeleteSessionButton = elements.showDeleteSessionButtonToggle.checked;
@@ -12409,6 +12431,7 @@
                     defaultSettingsCopy.thoughtSummaryFontSize = DEFAULT_THOUGHT_SUMMARY_FONT_SIZE;
                     defaultSettingsCopy.enableSessionLinking = false;
                     defaultSettingsCopy.showSessionLinkingSettings = false;
+                    defaultSettingsCopy.showTwinEngineSettings = false;
                     defaultSettingsCopy.enableSwipeNavigation = true;
                     defaultSettingsCopy.preventZoom = true;
                     defaultSettingsCopy.minimizeHeaderFooter = false;
