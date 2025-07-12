@@ -3355,7 +3355,7 @@
                 <button id="footer-api-provider-toggle-btn" class="footer-action-button api-provider-toggle-btn" title="APIプロバイダー切替"></button>
                 <button id="roll-dice-btn" title="ランダム数値を入力" class="footer-action-button hidden">🎲</button>
                 <button id="ai-to-ai-chat-btn" title="AI間会話ステップ実行" class="footer-action-button hidden">👥</button>
-                <button id="toggle-twin-engine-mode-footer-btn" title="Twin-engine 自動/手動切替" class="footer-action-button hidden">🛞</button>
+                <button id="footer-twin-engine-toggle-btn" title="Twin-engineモード切替" class="footer-action-button hidden">🛞</button>
                 <button id="paste-to-input-btn" title="入力欄に貼り付け" class="footer-action-button">貼</button>
                 <textarea id="user-input" placeholder="メッセージを入力..." rows="1" aria-label="メッセージ入力"></textarea>
                 <button id="attach-file-btn" title="ファイルを添付" class="footer-action-button">+<span class="attachment-badge"></span></button>
@@ -4442,6 +4442,7 @@
                                        ズームを禁止する (テキスト入力時の自動ズーム防止)
                                    </label>
                                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+
                                        ※ スマホ等でテキスト入力時に意図せずズームするのを防ぎます。
                                    </p>
                                    <label class="checkbox-label">
@@ -4706,15 +4707,13 @@
                                 ※ 有効にすると、AIの応答完了後に自動的に会話履歴の要約が生成されます。無効時は手動での要約実行（セミオート）のみ可能です。
                             </p>
                         </div>
-                        <div style="padding-left: 20px;">
-                            <label class="checkbox-label" style="margin-bottom: 5px;">
-                                <input type="checkbox" id="show-twin-engine-footer-button-toggle">
-                                フッターにTwin-engineモード切替ボタンを表示する
-                            </label>
-                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-                                ※ Twin-engineが有効な場合のみフッターに自動/手動切替ボタンを表示します。
-                            </p>
-                        </div>
+                        <label class="checkbox-label" style="margin-top: 5px; padding-left: 20px;">
+                            <input type="checkbox" id="show-footer-twin-engine-toggle-btn">
+                            フッターにTwin-engineモード切替ボタンを表示する
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px; padding-left: 20px;">
+                            ※ Twin-engineが有効な場合のみ表示されます。
+                        </p>
                         <label for="twin-engine-summarize-after-turns" style="margin-top: 15px;">要約開始ターン数:</label>
                         <input type="number" id="twin-engine-summarize-after-turns" min="0" step="1" placeholder="例: 5 (0で即時要約)">
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
@@ -5355,8 +5354,8 @@
             twinEngineSummaryArea: document.getElementById('twin-engine-summary-area'),
             twinEngineSummaryEditor: document.getElementById('twin-engine-summary-editor'),
             twinEngineModeToggleBtn: document.getElementById('twin-engine-mode-toggle-btn'),
-            toggleTwinEngineModeFooterBtn: document.getElementById('toggle-twin-engine-mode-footer-btn'),
-            showTwinEngineFooterButtonToggle: document.getElementById('show-twin-engine-footer-button-toggle'),
+            footerTwinEngineToggleBtn: document.getElementById('footer-twin-engine-toggle-btn'),
+            showFooterTwinEngineToggleButton: document.getElementById('show-footer-twin-engine-toggle-btn'),
             twinEngineEnableFullAutoToggle: document.getElementById('twin-engine-enable-full-auto-toggle'),
             twinEngineFullAutoSettingContainer: document.getElementById('twin-engine-full-auto-setting-container'),
             copyTwinEngineSummaryBtn: document.getElementById('copy-twin-engine-summary-btn'),
@@ -5711,7 +5710,7 @@
                 llmaggregatorActiveApiKeyIndex: -1,
                 enableTwinEngine: false,
                 twinEngineEnableFullAuto: false,
-                showTwinEngineFooterButton: false,
+                showFooterTwinEngineToggleButton: false,
                 twinEngineSummarizeAfterTurns: DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS,
                 twinEngineSummaryPrompt: '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。',
                 twinEngineAlwaysIncludeFirstUserMessage: false,
@@ -7666,7 +7665,7 @@
                 elements.enableCommonSystemPromptDefaultCheckbox.checked = state.settings.enableCommonSystemPromptDefault;
                 document.getElementById('enable-twin-engine').checked = state.settings.enableTwinEngine;
                 elements.twinEngineEnableFullAutoToggle.checked = state.settings.twinEngineEnableFullAuto;
-                elements.showTwinEngineFooterButtonToggle.checked = state.settings.showTwinEngineFooterButton;
+                elements.showFooterTwinEngineToggleButton.checked = state.settings.showFooterTwinEngineToggleButton;
                 elements.twinEngineFullAutoSettingContainer.classList.toggle('hidden', !state.settings.enableTwinEngine);
                 elements.twinEngineSummarizeAfterTurnsInput.value = state.settings.twinEngineSummarizeAfterTurns ?? DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
                 document.getElementById('twin-engine-always-include-first-user-message').checked = state.settings.twinEngineAlwaysIncludeFirstUserMessage;
@@ -8079,11 +8078,13 @@
                         elements.aiToAiChatBtn.classList.toggle('hidden', !showAiToAiBtn);
                     }
                     
-                    if (elements.toggleTwinEngineModeFooterBtn) {
-                        const showFooterButton = state.settings.showTwinEngineFooterButton && state.settings.enableTwinEngine;
-                        elements.toggleTwinEngineModeFooterBtn.classList.toggle('hidden', !showFooterButton);
+                    if (elements.footerTwinEngineToggleBtn) {
+                        const showButton = state.settings.showTwinEngineSettings && 
+                                           state.settings.enableTwinEngine &&
+                                           state.settings.showFooterTwinEngineToggleButton;
+                        elements.footerTwinEngineToggleBtn.classList.toggle('hidden', !showButton);
                     }
-
+                    
                     if (elements.footerApiProviderToggleBtn) {
                         elements.footerApiProviderToggleBtn.classList.toggle('hidden', !state.settings.showApiProviderToggleFooter);
                     }
@@ -8167,15 +8168,15 @@
                 }
                 elements.twinEngineModeToggleBtn.disabled = !isEnabled;
 
-                if (elements.toggleTwinEngineModeFooterBtn) {
+                if (elements.footerTwinEngineToggleBtn) {
                     if (isFullAuto) {
-                        elements.toggleTwinEngineModeFooterBtn.textContent = '🛞';
-                        elements.toggleTwinEngineModeFooterBtn.title = 'Twin-engine: 自動 (クリックで手動に)';
+                        elements.footerTwinEngineToggleBtn.textContent = '🛞';
+                        elements.footerTwinEngineToggleBtn.title = 'Twin-engineモード: 自動 (手動に切替)';
                     } else {
-                        elements.toggleTwinEngineModeFooterBtn.textContent = '✋️';
-                        elements.toggleTwinEngineModeFooterBtn.title = 'Twin-engine: 手動 (クリックで自動に)';
+                        elements.footerTwinEngineToggleBtn.textContent = '✋️';
+                        elements.footerTwinEngineToggleBtn.title = 'Twin-engineモード: 手動 (自動に切替)';
                     }
-                    elements.toggleTwinEngineModeFooterBtn.disabled = !isEnabled;
+                    elements.footerTwinEngineToggleBtn.disabled = !isEnabled;
                 }
             },
             updateHistoryHeaderButtonVisibility() {
@@ -9007,11 +9008,7 @@
                 elements.clearTwinEngineSummaryBtn.addEventListener('click', () => this.confirmClearTwinEngineSummary());
                 elements.resummarizeBtn.addEventListener('click', () => this.manualResummarize());
                 elements.twinEngineModeToggleBtn.addEventListener('click', () => this.toggleTwinEngineMode());
-                elements.toggleTwinEngineModeFooterBtn.addEventListener('click', () => this.toggleTwinEngineMode());
-                elements.showTwinEngineFooterButtonToggle.addEventListener('change', () => {
-                    state.settings.showTwinEngineFooterButton = elements.showTwinEngineFooterButtonToggle.checked;
-                    uiUtils.updateChatScreenElementVisibility();
-                });
+                elements.footerTwinEngineToggleBtn.addEventListener('click', () => this.toggleTwinEngineMode());
 
                 elements.scrollToTopBtn.addEventListener('click', () => this.scrollToTop());
                 elements.scrollToBottomBtn.addEventListener('click', () => this.scrollToBottom());
@@ -9138,12 +9135,23 @@
                     enableTwinEngineCheckbox.addEventListener('change', (e) => {
                         elements.twinEngineFullAutoSettingContainer.classList.toggle('hidden', !e.target.checked);
                         uiUtils.updateTwinEngineModeButton();
-                        if (elements.toggleTwinEngineModeFooterBtn) {
-                            const showFooterButton = state.settings.showTwinEngineFooterButton && e.target.checked;
-                            elements.toggleTwinEngineModeFooterBtn.classList.toggle('hidden', !showFooterButton);
-                        }
+                        uiUtils.updateChatScreenElementVisibility();
                     });
                 }
+
+                elements.showTwinEngineSettingsToggle.addEventListener('change', (e) => {
+                    const isVisible = e.target.checked;
+                    const twinEngineSettingsGroup = document.getElementById('settings-group-twin-engine');
+                    if (twinEngineSettingsGroup) {
+                        twinEngineSettingsGroup.classList.toggle('hidden', !isVisible);
+                    }
+                    if (elements.twinEngineSummaryBtn) {
+                        const showButton = isVisible && state.settings.showTwinEngineSummaryButton;
+                        elements.twinEngineSummaryBtn.classList.toggle('hidden', !showButton);
+                    }
+                    uiUtils.updateChatScreenElementVisibility();
+                });
+
                 elements.uploadBackgroundBtn.addEventListener('click', () => elements.backgroundImageInput.click());
                 elements.backgroundImageInput.addEventListener('change', (event) => {
                     const file = event.target.files[0];
@@ -9192,7 +9200,6 @@
                     }
                 });
                 elements.iconNameOffsetYInput.addEventListener('input', () => {
-
                     const uiOffsetY = parseInt(elements.iconNameOffsetYInput.value, 10);
                     const internalOffsetY = isNaN(uiOffsetY) ? DEFAULT_ICON_NAME_OFFSET_Y : (uiOffsetY * -1);
                     if (internalOffsetY >= -20 && internalOffsetY <= 20) {
@@ -12133,7 +12140,7 @@
              newSettings.twinEngineLlmaggregatorModelName = elements.twinEngineLlmaggregatorModelNameSelect.value;
              newSettings.enableTwinEngine = document.getElementById('enable-twin-engine').checked;
              newSettings.twinEngineEnableFullAuto = elements.twinEngineEnableFullAutoToggle.checked;
-             newSettings.showTwinEngineFooterButton = elements.showTwinEngineFooterButtonToggle.checked;
+             newSettings.showFooterTwinEngineToggleButton = elements.showFooterTwinEngineToggleButton.checked;
              newSettings.twinEngineSummarizeAfterTurns = elements.twinEngineSummarizeAfterTurnsInput.value === '' 
                 ? DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS 
                 : parseInt(elements.twinEngineSummarizeAfterTurnsInput.value, 10);
@@ -12685,7 +12692,7 @@
                     defaultSettingsCopy.llmaggregatorActiveApiKeyIndex = -1;
                     defaultSettingsCopy.enableTwinEngine = false;
                     defaultSettingsCopy.twinEngineEnableFullAuto = false;
-                    defaultSettingsCopy.showTwinEngineFooterButton = false;
+                    defaultSettingsCopy.showFooterTwinEngineToggleButton = false;
                     defaultSettingsCopy.twinEngineSummarizeAfterTurns = DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
                     defaultSettingsCopy.twinEngineSummaryPrompt = '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。';
                     defaultSettingsCopy.twinEngineAlwaysIncludeFirstUserMessage = false;
@@ -14302,7 +14309,7 @@
                     throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
                 }
             } else {
-                            if (state.settings.showMultiApiKeys) {
+                if (state.settings.showMultiApiKeys) {
                     apiKey = multiApiKeyUtils.getActiveApiKey('deepseek');
                 } else {
                     apiKey = state.settings.deepSeekApiKey;
