@@ -1371,6 +1371,7 @@
         }
         .twin-engine-summary-actions-container .resummarize-btn {
             background-color: var(--bg-button-update);
+            margin-right: auto;
         }
         .twin-engine-summary-actions-container .resummarize-btn:hover:not(:disabled) {
             background-color: var(--bg-button-update-hover);
@@ -3329,8 +3330,8 @@
 
             <div id="twin-engine-summary-area" class="hidden">
                 <div class="twin-engine-summary-actions-container">
-                    <button id="resummarize-btn" class="resummarize-btn" title="現在のチャット履歴を手動で要約">手動で要約</button>
-                    <button id="toggle-twin-engine-auto-mode-btn" class="orange-button" title="自動要約モードを切り替え" style="margin-right: auto; margin-left: 8px; padding: 4px 10px; font-size: 12px;"></button>
+                    <button id="manual-summarize-btn" class="resummarize-btn" title="現在のチャット履歴を要約">現在の履歴を要約</button>
+                    <button id="toggle-auto-summarize-mode-btn" title="要約の自動/手動実行を切り替え" style="background-color: var(--bg-button-action); margin-right: auto;"></button>
                     <button id="copy-twin-engine-summary-btn" class="copy-twin-engine-summary-btn" title="内容をコピー">コピー</button>
                     <button id="clear-twin-engine-summary-btn" class="clear-twin-engine-summary-btn" title="内容を全て削除">全削除</button>
                 </div>
@@ -4424,6 +4425,7 @@
                                    </label>
                                    <p style="height:10px"></p>
                                    <label class="checkbox-label">
+                                   <label class="checkbox-label">
                                        <input type="checkbox" id="swipe-navigation-toggle">
                                        チャット画面から左右スワイプで画面移動
                                    </label>
@@ -4687,14 +4689,16 @@
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                             ※ 有効にすると、メッセージを送信してAIの応答が完了した後、バックグラウンドで自動的に会話履歴の要約が生成され、「要約セッション履歴」パネルに追記されます。
                         </p>
-                        <label class="checkbox-label" style="margin-top: 15px; margin-bottom: 5px;">
-                            <input type="checkbox" id="twin-engine-auto-summarize-toggle">
-                            メッセージ応答後に自動で要約する (全自動モード)
-                        </label>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-                            ※チェック時、メッセージ応答後に自動的に要約が更新されます。<br>
-                            ※OFFの場合は「手動で要約」ボタンでのみ要約が実行されます。
-                        </p>
+                        <div id="twin-engine-auto-summarize-setting" class="hidden">
+                            <label class="checkbox-label" style="margin-top: 15px; margin-bottom: 5px;">
+                                <input type="checkbox" id="twin-engine-auto-summarize-toggle">
+                                要約を自動で実行する
+                            </label>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                                ※ 有効にすると、メッセージ応答後に自動で要約プロセスが実行されます。<br>
+                                ※ 無効の場合、要約パネルのボタンから手動での実行が必要です。
+                            </p>
+                        </div>
                         <label for="twin-engine-summarize-after-turns" style="margin-top: 15px;">要約開始ターン数:</label>
                         <input type="number" id="twin-engine-summarize-after-turns" min="0" step="1" placeholder="例: 5 (0で即時要約)">
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
@@ -5336,9 +5340,10 @@
             twinEngineSummaryEditor: document.getElementById('twin-engine-summary-editor'),
             copyTwinEngineSummaryBtn: document.getElementById('copy-twin-engine-summary-btn'),
             clearTwinEngineSummaryBtn: document.getElementById('clear-twin-engine-summary-btn'),
-            resummarizeBtn: document.getElementById('resummarize-btn'),
+            manualSummarizeBtn: document.getElementById('manual-summarize-btn'),
+            toggleAutoSummarizeModeBtn: document.getElementById('toggle-auto-summarize-mode-btn'),
             twinEngineAutoSummarizeToggle: document.getElementById('twin-engine-auto-summarize-toggle'),
-            toggleTwinEngineAutoModeBtn: document.getElementById('toggle-twin-engine-auto-mode-btn'),
+            twinEngineAutoSummarizeSetting: document.getElementById('twin-engine-auto-summarize-setting'),
             twinEngineSummarizeAfterTurnsInput: document.getElementById('twin-engine-summarize-after-turns'),
             showUserIconToggle: document.getElementById('show-user-icon-toggle'),
             userIconInput: document.getElementById('user-icon-input'),
@@ -5644,20 +5649,6 @@
                 toggleButtonBottomFontSize: DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE,
                 toggleButtonBottomTextCollapse: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE,
                 toggleButtonBottomTextExpand: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND,
-                apiProvider: 'gemini',
-                twinEngineProvider: 'gemini',
-                twinEngineGeminiApiKey: '',
-                twinEngineGeminiModelName: DEFAULT_MODEL,
-                twinEngineDeepseekApiKey: '',
-                twinEngineDeepseekModelName: DEFAULT_DEEPSEEK_MODEL,
-                twinEngineClaudeApiKey: '',
-                twinEngineClaudeModelName: DEFAULT_CLAUDE_MODEL,
-                twinEngineOpenaiApiKey: '',
-                twinEngineOpenaiModelName: DEFAULT_OPENAI_MODEL,
-                twinEngineXaiApiKey: '',
-                twinEngineXaiModelName: DEFAULT_XAI_MODEL,
-                twinEngineLlmaggregatorApiKey: '',
-                twinEngineLlmaggregatorModelName: DEFAULT_LLMAGGREGATOR_MODEL,
                 thoughtSummaryOpacity: DEFAULT_THOUGHT_SUMMARY_OPACITY,
                 settingsUIDetailsOpenStates: {},
                 showApiProviderToggleHeader: false,
@@ -7641,7 +7632,9 @@
                 elements.commonSystemPromptDefaultTextarea.value = state.settings.commonSystemPrompt || '';
                 elements.enableCommonSystemPromptDefaultCheckbox.checked = state.settings.enableCommonSystemPromptDefault;
                 document.getElementById('enable-twin-engine').checked = state.settings.enableTwinEngine;
+                elements.twinEngineAutoSummarizeSetting.classList.toggle('hidden', !state.settings.enableTwinEngine);
                 elements.twinEngineAutoSummarizeToggle.checked = state.settings.twinEngineAutoSummarize;
+                this.updateAutoSummarizeModeButton();
                 elements.twinEngineSummarizeAfterTurnsInput.value = state.settings.twinEngineSummarizeAfterTurns ?? DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
                 document.getElementById('twin-engine-always-include-first-user-message').checked = state.settings.twinEngineAlwaysIncludeFirstUserMessage;
                 document.getElementById('twin-engine-summary-prompt').value = state.settings.twinEngineSummaryPrompt || '';
@@ -7916,24 +7909,8 @@
                 this.updateSessionLinkingUI();
                 this.updateApiProviderSelectOptions();
                 this.toggleMultiApiKeysVisibility(state.settings.showMultiApiKeys);
-                this.updateTwinEngineAutoModeButton();
                 elements.settingsScreen.classList.toggle('auto-save-mode', state.settings.autoSaveSettings);
                 this.updateMemoStackHeightSettingsVisibility();
-            },
-            updateTwinEngineAutoModeButton() {
-                const btn = elements.toggleTwinEngineAutoModeBtn;
-                if (!btn) return;
-                
-                const isAutoMode = state.settings.twinEngineAutoSummarize;
-                btn.textContent = `自動要約: ${isAutoMode ? 'ON' : 'OFF'}`;
-                
-                if (isAutoMode) {
-                    btn.classList.remove('orange-button');
-                    btn.style.backgroundColor = 'var(--bg-button-save)';
-                } else {
-                    btn.classList.add('orange-button');
-                    btn.style.backgroundColor = '';
-                }
             },
             applyMinimizeUI() {
                 elements.appContainer.classList.toggle('minimized-ui', state.settings.minimizeHeaderFooter);
@@ -8861,7 +8838,7 @@
         };
 
         const appLogic = {
-            initialize() {
+            initializeApp() {
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({
                         breaks: true,
@@ -8964,19 +8941,11 @@
                 elements.twinEngineSummaryBtn.addEventListener('click', () => this.toggleTwinEngineSummary());
                 elements.copyTwinEngineSummaryBtn.addEventListener('click', () => this.copyTwinEngineSummaryText());
                 elements.clearTwinEngineSummaryBtn.addEventListener('click', () => this.confirmClearTwinEngineSummary());
-                elements.resummarizeBtn.addEventListener('click', () => this.manualResummarize());
-                elements.toggleTwinEngineAutoModeBtn.addEventListener('click', () => {
-                    const newMode = !state.settings.twinEngineAutoSummarize;
-                    state.settings.twinEngineAutoSummarize = newMode;
-                    elements.twinEngineAutoSummarizeToggle.checked = newMode;
-                    uiUtils.updateTwinEngineAutoModeButton();
-                    if (state.settings.autoSaveSettings) {
-                        this.saveSettings(false);
-                    }
-                });
-                elements.twinEngineAutoSummarizeToggle.addEventListener('change', (e) => {
-                    state.settings.twinEngineAutoSummarize = e.target.checked;
-                    uiUtils.updateTwinEngineAutoModeButton();
+                elements.manualSummarizeBtn.addEventListener('click', () => this.manualResummarize());
+                elements.toggleAutoSummarizeModeBtn.addEventListener('click', () => this.toggleAutoSummarizeMode());
+
+                document.getElementById('enable-twin-engine').addEventListener('change', (e) => {
+                    elements.twinEngineAutoSummarizeSetting.classList.toggle('hidden', !e.target.checked);
                 });
 
                 elements.scrollToTopBtn.addEventListener('click', () => this.scrollToTop());
@@ -9963,17 +9932,17 @@
 
             const confirmed = await uiUtils.showCustomConfirm(
                 "現在のチャット履歴全体を要約しますか？\n" +
-                "（既存の要約内容は上書きされます）"
+                "(現在の要約は上書きされます)"
             );
 
             if (!confirmed) {
                 return;
             }
 
-            const resummarizeBtn = elements.resummarizeBtn;
-            const originalText = resummarizeBtn.textContent;
-            resummarizeBtn.disabled = true;
-            resummarizeBtn.textContent = "要約中...";
+            const manualSummarizeBtn = elements.manualSummarizeBtn;
+            const originalText = manualSummarizeBtn.textContent;
+            manualSummarizeBtn.disabled = true;
+            manualSummarizeBtn.textContent = "要約中...";
 
             try {
                 const response = await this.summarizeCurrentSession([...state.currentMessages]);
@@ -9988,27 +9957,27 @@
                         elements.twinEngineSummaryEditor.scrollTop = 0;
                     }
 
-                    resummarizeBtn.textContent = "要約完了";
+                    manualSummarizeBtn.textContent = "要約完了";
                     setTimeout(() => {
-                        resummarizeBtn.textContent = originalText;
+                        manualSummarizeBtn.textContent = originalText;
                     }, 2000);
 
                 } else {
-                     resummarizeBtn.textContent = "失敗";
+                     manualSummarizeBtn.textContent = "失敗";
                      setTimeout(() => {
-                         resummarizeBtn.textContent = originalText;
+                         manualSummarizeBtn.textContent = originalText;
                      }, 2000);
                 }
             } catch (error) {
                 await uiUtils.showCustomAlert(`再要約エラー: ${error.message}`);
-                 resummarizeBtn.textContent = "エラー";
+                 manualSummarizeBtn.textContent = "エラー";
                  setTimeout(() => {
-                     resummarizeBtn.textContent = originalText;
+                     manualSummarizeBtn.textContent = originalText;
                  }, 2000);
             } finally {
-                resummarizeBtn.disabled = false;
-                if(resummarizeBtn.textContent.includes("要約中")) {
-                    resummarizeBtn.textContent = originalText;
+                manualSummarizeBtn.disabled = false;
+                if(manualSummarizeBtn.textContent.includes("要約中")) {
+                    manualSummarizeBtn.textContent = originalText;
                 }
             }
         },
@@ -10265,7 +10234,7 @@
                     uiUtils.setSendingState(false);
                     uiUtils.updateAttachmentBadgeVisibility();
                     elements.memoEditor.value = '';
-                    if (state.settings.enableTwinEngine && state.settings.twinEngineAutoSummarize) {
+                    if (state.settings.enableTwinEngine) {
                         const userTurnCount = (chat.messages || []).filter(msg => msg.role === 'user').length;
                         const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
 
@@ -10942,7 +10911,7 @@
 
             const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
             
-            const shouldUseSummary = state.settings.enableTwinEngine && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
+            const shouldUseSummary = state.settings.showTwinEngineSettings && state.settings.enableTwinEngine && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
 
             if (shouldUseSummary) {
                 messagesToProcess = [];
@@ -11613,6 +11582,25 @@
                 }
             }
             if (isBackgroundProcess) return null;
+        },
+        updateAutoSummarizeModeButton() {
+            const button = elements.toggleAutoSummarizeModeBtn;
+            if (!button) return;
+
+            if (state.settings.twinEngineAutoSummarize) {
+                button.textContent = "自動実行中 (手動へ)";
+                button.style.backgroundColor = 'var(--bg-button-save)';
+            } else {
+                button.textContent = "手動実行中 (自動へ)";
+                button.style.backgroundColor = 'var(--bg-button-action)';
+            }
+        },
+
+        async toggleAutoSummarizeMode() {
+            state.settings.twinEngineAutoSummarize = !state.settings.twinEngineAutoSummarize;
+            elements.twinEngineAutoSummarizeToggle.checked = state.settings.twinEngineAutoSummarize;
+            this.updateAutoSummarizeModeButton();
+            await this.saveSettings(false);
         },
         async toggleApiProvider() {
             if(state.isSending || state.isAiToAiChatProcessing) {
@@ -12702,9 +12690,6 @@
 
              const message = state.currentMessages[index];
              if (!message) return;
-
-             const rawContent = message.content;
-             state.editingMessageIndex = index;
 
              const rawContent = message.content;
              state.editingMessageIndex = index;
@@ -14111,7 +14096,7 @@
                          readResult = await reader.read();
                      } catch (readError) {
                          if (readError.name === 'AbortError' || readError.message === "User aborted" || readError.message.includes("aborted")) {
-                             if (!isCancelled) {
+                                                      if (!isCancelled) {
                                  isCancelled = true;
                                  throw new Error("リクエストがキャンセルされました。");
                              }
