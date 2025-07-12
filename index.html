@@ -4722,29 +4722,13 @@
                             ※ それまでは、要約ではなく全ての会話履歴をAIに送信します。<br>
                             ※ 0を指定すると、最初の応答から要約を開始します。
                         </p>
-
-                        <div id="twin-engine-inclusion-settings" style="margin-top: 15px; border: 1px solid var(--border-tertiary); padding: 10px; border-radius: 5px;">
-                            <h4 style="font-size: 13px; color: var(--text-secondary); margin-top: 0; margin-bottom: 10px;">要約送信時に含める会話履歴</h4>
-                            
-                            <label for="twin-engine-inclusion-mode-select">含めるメッセージのモード:</label>
-                            <select id="twin-engine-inclusion-mode-select" style="margin-bottom: 10px;">
-                                <option value="none">常に要約のみを使用する</option>
-                                <option value="first">最初のユーザーメッセージのみ</option>
-                                <option value="last_n">最新のN件のユーザーメッセージ</option>
-                                <option value="first_and_last_n">最初のメッセージと最新のN件</option>
-                            </select>
-                        
-                            <div id="twin-engine-inclusion-count-container" class="hidden">
-                                <label for="twin-engine-inclusion-count-input">含める件数 (N):</label>
-                                <input type="number" id="twin-engine-inclusion-count-input" min="1" step="1" placeholder="例: 3">
-                            </div>
-                        
-                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: 8px; margin-bottom: 0;">
-                                ※ AIに会話の重要なコンテキストを常にリマインドさせるための設定です。「最新のN件」などを指定することで、直近の文脈を失いにくくなります。
-                            </p>
-                        </div>
-                        
-                        <label for="twin-engine-summary-prompt" style="margin-top:15px;">Twin-engine 要約用プロンプト:</label>
+                        <label for="twin-engine-include-initial-user-messages-count" style="margin-top: 15px;">常に含める初期ユーザーメッセージ数:</label>
+                        <input type="number" id="twin-engine-include-initial-user-messages-count" min="0" step="1" placeholder="例: 1 (0で無効)">
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                            ※ ここで指定した数の初期ユーザーメッセージが、要約とともに常にAIに送信されます。<br>
+                            ※ 会話の前提条件や重要な指示をAIに記憶させ続けるのに役立ちます。0を指定するとこの機能は無効になります。
+                        </p>
+                        <label for="twin-engine-summary-prompt">Twin-engine 要約用プロンプト:</label>
                         <textarea id="twin-engine-summary-prompt" placeholder="例: 以下の会話履歴を、重要なポイントを箇条書きで簡潔に要約してください。" aria-label="Twin-engine 要約用プロンプト"></textarea>
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                             ※ ここに入力した内容が、会話履歴とともにTwin-engine用AIへの指示として送信されます。
@@ -5378,9 +5362,6 @@
             clearTwinEngineSummaryBtn: document.getElementById('clear-twin-engine-summary-btn'),
             resummarizeBtn: document.getElementById('resummarize-btn'),
             twinEngineSummarizeAfterTurnsInput: document.getElementById('twin-engine-summarize-after-turns'),
-            twinEngineInclusionModeSelect: document.getElementById('twin-engine-inclusion-mode-select'),
-            twinEngineInclusionCountContainer: document.getElementById('twin-engine-inclusion-count-container'),
-            twinEngineInclusionCountInput: document.getElementById('twin-engine-inclusion-count-input'),
             showUserIconToggle: document.getElementById('show-user-icon-toggle'),
             userIconInput: document.getElementById('user-icon-input'),
             uploadUserIconBtn: document.getElementById('upload-user-icon-btn'),
@@ -5731,9 +5712,8 @@
                 twinEngineEnableFullAuto: false,
                 showFooterTwinEngineToggleButton: false,
                 twinEngineSummarizeAfterTurns: DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS,
-                twinEngineInclusionMode: 'first',
-                twinEngineInclusionCount: 1,
                 twinEngineSummaryPrompt: '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。',
+                twinEngineIncludeInitialUserMessagesCount: 1,
                 twinEngineDummyUser: '',
                 twinEngineEnableDummyUser: false,
                 twinEngineDummyModel: '',
@@ -5913,6 +5893,10 @@
                             state.settings.theme = loadedSettings.darkMode === true ? 'dark' : 'light';
                         }
 
+                        if (loadedSettings.twinEngineAlwaysIncludeFirstUserMessage === true && loadedSettings.twinEngineIncludeInitialUserMessagesCount === undefined) {
+                            loadedSettings.twinEngineIncludeInitialUserMessagesCount = 1;
+                        }
+
                         const oldGlobalParams = ['temperature', 'maxTokens', 'topP', 'presencePenalty', 'frequencyPenalty', 'systemPrompt', 'enableSystemPromptDefault'];
                         const oldGlobalAdvanced = ['streamingOutput', 'streamingSpeed', 'dummyUser', 'enableDummyUser', 'dummyModel', 'enableDummyModel', 'concatDummyModel'];
                         const providerPrefixes = ['gemini', 'deepSeek', 'claude', 'openai', 'xai', 'llmaggregator'];
@@ -5960,6 +5944,7 @@
                              if (key === 'darkMode') continue;
                              if (key === 'memoWidth') continue;
                              if (key === 'showCollapseButtons') continue;
+                             if (key === 'twinEngineAlwaysIncludeFirstUserMessage') continue;
 
                              if (key in defaultSettings) {
                                 const loadedValue = loadedSettings[key];
@@ -6009,7 +5994,7 @@
                                      let num;
                                      if (key.toLowerCase().includes('temperature') || key.toLowerCase().includes('topp') || key.toLowerCase().includes('penalty') ||
                                          key.toLowerCase().includes('opacity') || key.toLowerCase().includes('fontsize') || key.toLowerCase().includes('offsety') ||
-                                         key.toLowerCase().includes('iconsize')) {
+                                         key.toLowerCase().includes('iconsize') || key === 'twinEngineIncludeInitialUserMessagesCount') {
                                          num = parseFloat(loadedValue);
                                      } else {
                                          num = parseInt(loadedValue, 10);
@@ -7688,9 +7673,7 @@
                 elements.showFooterTwinEngineToggleButtonToggle.checked = state.settings.showFooterTwinEngineToggleButton;
                 elements.twinEngineFullAutoSettingContainer.classList.toggle('hidden', !state.settings.enableTwinEngine);
                 elements.twinEngineSummarizeAfterTurnsInput.value = state.settings.twinEngineSummarizeAfterTurns ?? DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
-                elements.twinEngineInclusionModeSelect.value = state.settings.twinEngineInclusionMode || 'first';
-                elements.twinEngineInclusionCountInput.value = state.settings.twinEngineInclusionCount || 1;
-                elements.twinEngineInclusionCountContainer.classList.toggle('hidden', !['last_n', 'first_and_last_n'].includes(elements.twinEngineInclusionModeSelect.value));
+                document.getElementById('twin-engine-include-initial-user-messages-count').value = state.settings.twinEngineIncludeInitialUserMessagesCount ?? 1;
                 document.getElementById('twin-engine-summary-prompt').value = state.settings.twinEngineSummaryPrompt || '';
                 elements.twinEngineDummyUserInput.value = state.settings.twinEngineDummyUser || '';
                 elements.twinEngineEnableDummyUserCheckbox.checked = state.settings.twinEngineEnableDummyUser;
@@ -8926,7 +8909,7 @@
         };
 
     const appLogic = {
-        async initializeApp() {
+        initializeApp() {
             if (typeof marked !== 'undefined') {
                 marked.setOptions({
                     breaks: true,
@@ -9161,11 +9144,6 @@
                     uiUtils.updateChatScreenElementVisibility();
                 });
             }
-
-            elements.twinEngineInclusionModeSelect.addEventListener('change', () => {
-                const mode = elements.twinEngineInclusionModeSelect.value;
-                elements.twinEngineInclusionCountContainer.classList.toggle('hidden', !['last_n', 'first_and_last_n'].includes(mode));
-            });
 
             elements.uploadBackgroundBtn.addEventListener('click', () => elements.backgroundImageInput.click());
             elements.backgroundImageInput.addEventListener('change', (event) => {
@@ -10977,7 +10955,6 @@
             let existingSiblingGroupId = null;
             let firstResponseIndexForRetry = -1;
             let siblingGroupIdToUse = null;
-            let messagesToProcess;
 
             if (!isBackgroundProcess && !isRetry) {
                 const userMessage = {
@@ -11034,28 +11011,31 @@
                 messagesToProcess = [];
                 const summaryContent = state.twinEngineSummaryContent.trim();
                 
-                const { twinEngineInclusionMode, twinEngineInclusionCount } = state.settings;
-                const allUserMessages = state.currentMessages.filter(msg => msg.role === 'user');
-                const includedMessages = new Set();
-            
-                if (twinEngineInclusionMode === 'first' || twinEngineInclusionMode === 'first_and_last_n') {
-                    if (allUserMessages.length > 0) {
-                        const firstUserMessage = allUserMessages[0];
+                const includeCount = state.settings.twinEngineIncludeInitialUserMessagesCount || 0;
+                if (includeCount > 0) {
+                    const initialUserMessages = state.currentMessages
+                        .filter(msg => msg.role === 'user')
+                        .slice(0, includeCount);
+
+                    if (initialUserMessages.length > 0) {
+                        const reminderContent = initialUserMessages.map((msg, index) => {
+                            return `【最初の指示 ${index + 1}/${initialUserMessages.length}】\n${msg.content}`;
+                        }).join('\n\n');
+
                         messagesToProcess.push({
                             role: 'user',
-                            content: `これはこの会話セッションの最初の指示です。この指示を最優先の前提として応答してください。\n\n【最初の指示】\n${firstUserMessage.content}`,
-                            timestamp: firstUserMessage.timestamp,
-                            attachments: firstUserMessage.attachments || [],
+                            content: `これはこの会話セッションの最初の重要な指示です。この内容を最優先の前提として応答してください。\n\n${reminderContent}`,
+                            timestamp: initialUserMessages[0].timestamp,
+                            attachments: [],
                         });
                         messagesToProcess.push({
                             role: 'model',
-                            content: '承知いたしました。最初の指示を記憶しました。以降の応答はこの指示に基づきます。',
-                            timestamp: firstUserMessage.timestamp + 1,
+                            content: `承知いたしました。最初の${initialUserMessages.length}件の指示を記憶しました。以降の応答はこの指示に基づきます。`,
+                            timestamp: initialUserMessages[0].timestamp + 1,
                         });
-                        includedMessages.add(firstUserMessage);
                     }
                 }
-            
+                
                 if (summaryContent) {
                     messagesToProcess.push({
                         role: 'user',
@@ -11069,24 +11049,15 @@
                         timestamp: Date.now() - 1,
                     });
                 }
-            
-                if (twinEngineInclusionMode === 'last_n' || twinEngineInclusionMode === 'first_and_last_n') {
-                    const n = twinEngineInclusionCount > 0 ? twinEngineInclusionCount : 1;
-                    const lastNUserMessages = allUserMessages.filter(msg => !includedMessages.has(msg)).slice(-n);
-                    lastNUserMessages.forEach(msg => {
-                        messagesToProcess.push(msg);
-                        includedMessages.add(msg);
-                    });
-                }
-                
+
                 if (isRetry) {
                     const retryUserMessage = currentContextMessages[retryUserMessageIndex];
-                    if (retryUserMessage && !includedMessages.has(retryUserMessage)) {
+                    if (retryUserMessage) {
                         messagesToProcess.push(retryUserMessage);
                     }
                 } else {
                     const lastUserMessage = currentContextMessages[currentContextMessages.length - 1];
-                    if (lastUserMessage && lastUserMessage.role === 'user' && !includedMessages.has(lastUserMessage)) {
+                    if (lastUserMessage && lastUserMessage.role === 'user') {
                         messagesToProcess.push(lastUserMessage);
                     }
                 }
@@ -11095,7 +11066,6 @@
                     ? currentContextMessages.slice(0, userMessageIndex + 1)
                     : [...currentContextMessages];
             }
-            
 
             if (!isBackgroundProcess) {
                 try {
@@ -12178,9 +12148,7 @@
              newSettings.twinEngineSummarizeAfterTurns = elements.twinEngineSummarizeAfterTurnsInput.value === '' 
                 ? DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS 
                 : parseInt(elements.twinEngineSummarizeAfterTurnsInput.value, 10);
-             newSettings.twinEngineInclusionMode = elements.twinEngineInclusionModeSelect.value;
-             const countValue = parseInt(elements.twinEngineInclusionCountInput.value, 10);
-             newSettings.twinEngineInclusionCount = isNaN(countValue) || countValue < 1 ? 1 : countValue;
+             newSettings.twinEngineIncludeInitialUserMessagesCount = parseInt(document.getElementById('twin-engine-include-initial-user-messages-count').value, 10) || 0;
              newSettings.twinEngineSummaryPrompt = document.getElementById('twin-engine-summary-prompt').value.trim();
              newSettings.twinEngineDummyUser = elements.twinEngineDummyUserInput.value.trim();
              newSettings.twinEngineEnableDummyUser = elements.twinEngineEnableDummyUserCheckbox.checked;
@@ -12730,9 +12698,8 @@
                     defaultSettingsCopy.twinEngineEnableFullAuto = false;
                     defaultSettingsCopy.showFooterTwinEngineToggleButton = false;
                     defaultSettingsCopy.twinEngineSummarizeAfterTurns = DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
-                    defaultSettingsCopy.twinEngineInclusionMode = 'first';
-                    defaultSettingsCopy.twinEngineInclusionCount = 1;
                     defaultSettingsCopy.twinEngineSummaryPrompt = '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。';
+                    defaultSettingsCopy.twinEngineIncludeInitialUserMessagesCount = 1;
                     defaultSettingsCopy.twinEngineDummyUser = '';
                     defaultSettingsCopy.twinEngineEnableDummyUser = false;
                     defaultSettingsCopy.twinEngineDummyModel = '';
@@ -14166,7 +14133,7 @@
             try {
                 const response = await fetch(endpoint, {
                     method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(requestBody),
                     signal
                 });
@@ -14305,8 +14272,7 @@
                              });
                          }
                          if (lastCandidateInfo.groundingMetadata) {
-                             currentGroundingMetadata = lastCandidateInfo.groundingMetadata;
-                         }
+                                                  }
                      } else if (chunkJson.promptFeedback) {
                          lastCandidateInfo = { finishReason: 'SAFETY', safetyRatings: chunkJson.promptFeedback.safetyRatings };
                          return null;
