@@ -4524,7 +4524,6 @@
                                        ヘッダーに「新規」ボタンを表示する（「新」ボタン）
                                    </label>
                                    <label class="checkbox-label">
-                                   <label class="checkbox-label">
                                        <input type="checkbox" id="show-delete-session-button-toggle">
                                        ヘッダーに「全削除」ボタンを表示する（「削」ボタン）
                                    </label>
@@ -5714,8 +5713,8 @@
                 twinEngineEnableFullAuto: false,
                 showFooterTwinEngineToggleButton: false,
                 twinEngineSummarizeAfterTurns: DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS,
-                twinEngineSummaryPrompt: '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。',
                 twinEngineIncludeUserMessageTurns: 1,
+                twinEngineSummaryPrompt: '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。',
                 twinEngineDummyUser: '',
                 twinEngineEnableDummyUser: false,
                 twinEngineDummyModel: '',
@@ -9105,6 +9104,8 @@
                         state.linkedSessionIds = [];
                     }
                     uiUtils.updateSessionLinkingUI();
+                });
+            }
             elements.setThinkingBudgetBtns.forEach(button => {
                 button.addEventListener('click', () => {
                     const value = button.dataset.value;
@@ -11001,7 +11002,8 @@
             const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
             
             const shouldUseSummary = state.settings.enableTwinEngine && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
-
+            
+            let messagesToProcess;
             if (shouldUseSummary) {
                 messagesToProcess = [];
                 const summaryContent = state.twinEngineSummaryContent.trim();
@@ -12321,7 +12323,6 @@
              newSettings.iconNameOffsetY = (elements.iconNameOffsetYInput.value === '' ? DEFAULT_ICON_NAME_OFFSET_Y : parseInt(elements.iconNameOffsetYInput.value, 10) * -1);
              newSettings.messageIconSize = parseInt(elements.messageIconSizeInput.value, 10) || DEFAULT_MESSAGE_ICON_SIZE;
              newSettings.messageIconOffsetY = (elements.messageIconOffsetYInput.value === '' ? DEFAULT_MESSAGE_ICON_OFFSET_Y : parseInt(elements.messageIconOffsetYInput.value, 10) * -1);
-
              newSettings.showUserNameBubble = elements.userNameBubbleToggle.checked;
              newSettings.userNameBubbleUseThemeColor = elements.userNameBubbleUseThemeColorToggle.checked;
              newSettings.userNameBubbleColor = elements.userNameBubbleColorInput.value.trim() || DEFAULT_USER_NAME_BUBBLE_COLOR;
@@ -12696,8 +12697,8 @@
                     defaultSettingsCopy.twinEngineEnableFullAuto = false;
                     defaultSettingsCopy.showFooterTwinEngineToggleButton = false;
                     defaultSettingsCopy.twinEngineSummarizeAfterTurns = DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
-                    defaultSettingsCopy.twinEngineSummaryPrompt = '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。';
                     defaultSettingsCopy.twinEngineIncludeUserMessageTurns = 1;
+                    defaultSettingsCopy.twinEngineSummaryPrompt = '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。';
                     defaultSettingsCopy.twinEngineDummyUser = '';
                     defaultSettingsCopy.twinEngineEnableDummyUser = false;
                     defaultSettingsCopy.twinEngineDummyModel = '';
@@ -13851,7 +13852,7 @@
             }
         },
         removeAttachment: async function(messageIndex, attachmentIndex, listItemElement) {
-                    const message = state.currentMessages[messageIndex];
+            const message = state.currentMessages[messageIndex];
             if (!message || !message.attachments || !message.attachments[attachmentIndex]) return;
 
             const attachmentName = message.attachments[attachmentIndex].name;
@@ -14099,7 +14100,7 @@
             const finalGenerationConfig = { ...generationConfig };
                         if (state.settings.geminiThinkingBudget !== null || state.settings.geminiIncludeThoughts) {
                 finalGenerationConfig.thinkingConfig = finalGenerationConfig.thinkingConfig || {};
-                if (state.settings.geminiThinkingBudget !== null && Number.isInteger(state.settings.geminiThinkingBudget) && state.settings.geminiThinkingBudget >= 0) {
+                                if (state.settings.geminiThinkingBudget !== null && Number.isInteger(state.settings.geminiThinkingBudget) && state.settings.geminiThinkingBudget >= 0) {
                     finalGenerationConfig.thinkingConfig.thinkingBudget = state.settings.geminiThinkingBudget;
                 }
                 if (state.settings.geminiIncludeThoughts) {
@@ -14384,7 +14385,7 @@
                 if (!useStreaming) {
                     const data = await response.json();
                     let reasoningContent = null;
-                    const choice = data.choices?.;
+                    const choice = data.choices?.[0];
                     if (choice && choice.message && choice.message.reasoning_content) {
                         reasoningContent = choice.message.reasoning_content;
                     }
@@ -14437,7 +14438,7 @@
                                 let contentTextChunk = null;
                                 let reasoningTextChunk = null;
                                 
-                                if (chunk.choices && chunk.choices.length > 0 && chunk.choices[0].delta) {
+                                if (chunk.choices && chunk.choices[0] && chunk.choices[0].delta) {
                                     const delta = chunk.choices[0].delta;
                                     if (delta.reasoning_content) {
                                         reasoningTextChunk = delta.reasoning_content;
@@ -14447,7 +14448,7 @@
                                     }
                                 }
 
-                                if (chunk.choices && chunk.choices.length > 0 && chunk.choices[0].finish_reason) {
+                                if (chunk.choices && chunk.choices[0] && chunk.choices[0].finish_reason) {
                                     finalFinishReason = chunk.choices[0].finish_reason;
                                 }
                                 if (chunk.usage) {
