@@ -4722,14 +4722,27 @@
                             ※ それまでは、要約ではなく全ての会話履歴をAIに送信します。<br>
                             ※ 0を指定すると、最初の応答から要約を開始します。
                         </p>
-                        <label for="twin-engine-include-user-message-turns" style="margin-top: 15px;">含めるユーザーメッセージのターン番号:</label>
-                        <input type="text" id="twin-engine-include-user-message-turns" placeholder="例: 1, 3-5, 8 (カンマや範囲で指定)">
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-                            ※ 要約送信時に常に含めるユーザーメッセージのターン番号を、古い順を1として指定します。<br>
-                            ※ カンマ区切り(例: 1,3,5)やハイフンでの範囲指定(例: 2-4)が可能です。<br>
-                            ※ これにより、会話の重要な初期コンテキストをAIにリマインドさせることができます。
-                        </p>
-                        <label for="twin-engine-summary-prompt">Twin-engine 要約用プロンプト:</label>
+
+                        <div id="twin-engine-inclusion-settings" style="margin-top: 15px; border: 1px solid var(--border-tertiary); padding: 10px; border-radius: 5px;">
+                            <h4 style="font-size: 13px; color: var(--text-secondary); margin-top: 0; margin-bottom: 10px;">要約送信時に含める会話履歴</h4>
+                            
+                            <label for="twin-engine-inclusion-user-message-count">要約に含める直近のユーザーメッセージ数:</label>
+                            <input type="number" id="twin-engine-inclusion-user-message-count" min="0" step="1" placeholder="例: 3 (0で含めない)">
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                                ※ 要約とともに、ここで指定した数だけ直近のユーザープロンプトをAIに送信します。
+                            </p>
+                        
+                            <label class="checkbox-label" style="margin-bottom: 5px;">
+                                <input type="checkbox" id="twin-engine-include-first-user-message">
+                                最初のユーザーメッセージを常に含める
+                            </label>
+                            
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 0;">
+                                ※ 上記設定を組み合わせることで、AIに会話の重要なコンテキストを常にリマインドさせ、直近の文脈を見失うのを防ぎます。
+                            </p>
+                        </div>
+                        
+                        <label for="twin-engine-summary-prompt" style="margin-top:15px;">Twin-engine 要約用プロンプト:</label>
                         <textarea id="twin-engine-summary-prompt" placeholder="例: 以下の会話履歴を、重要なポイントを箇条書きで簡潔に要約してください。" aria-label="Twin-engine 要約用プロンプト"></textarea>
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                             ※ ここに入力した内容が、会話履歴とともにTwin-engine用AIへの指示として送信されます。
@@ -5363,7 +5376,8 @@
             clearTwinEngineSummaryBtn: document.getElementById('clear-twin-engine-summary-btn'),
             resummarizeBtn: document.getElementById('resummarize-btn'),
             twinEngineSummarizeAfterTurnsInput: document.getElementById('twin-engine-summarize-after-turns'),
-            twinEngineIncludeUserMessageTurnsInput: document.getElementById('twin-engine-include-user-message-turns'),
+            twinEngineInclusionUserMessageCountInput: document.getElementById('twin-engine-inclusion-user-message-count'),
+            twinEngineIncludeFirstUserMessageCheckbox: document.getElementById('twin-engine-include-first-user-message'),
             showUserIconToggle: document.getElementById('show-user-icon-toggle'),
             userIconInput: document.getElementById('user-icon-input'),
             uploadUserIconBtn: document.getElementById('upload-user-icon-btn'),
@@ -5714,8 +5728,9 @@
                 twinEngineEnableFullAuto: false,
                 showFooterTwinEngineToggleButton: false,
                 twinEngineSummarizeAfterTurns: DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS,
+                twinEngineInclusionUserMessageCount: 1,
+                twinEngineIncludeFirstUserMessage: true,
                 twinEngineSummaryPrompt: '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。',
-                twinEngineIncludeUserMessageTurns: '',
                 twinEngineDummyUser: '',
                 twinEngineEnableDummyUser: false,
                 twinEngineDummyModel: '',
@@ -5822,32 +5837,6 @@
             }
         }
 
-        function parseTurnNumbers(str) {
-            if (!str || typeof str !== 'string') {
-                return [];
-            }
-            const numbers = new Set();
-            const parts = str.split(',');
-
-            for (const part of parts) {
-                const trimmedPart = part.trim();
-                if (trimmedPart.includes('-')) {
-                    const [start, end] = trimmedPart.split('-').map(Number);
-                    if (!isNaN(start) && !isNaN(end) && start > 0 && start <= end) {
-                        for (let i = start; i <= end; i++) {
-                            numbers.add(i);
-                        }
-                    }
-                } else {
-                    const num = Number(trimmedPart);
-                    if (!isNaN(num) && num > 0) {
-                        numbers.add(num);
-                    }
-                }
-            }
-            return Array.from(numbers).sort((a, b) => a - b);
-        }
-
         const dbUtils = {
             openDB() {
                 return new Promise((resolve, reject) => {
@@ -5919,6 +5908,25 @@
 
                         if (loadedSettings.hasOwnProperty('darkMode') && !loadedSettings.hasOwnProperty('theme')) {
                             state.settings.theme = loadedSettings.darkMode === true ? 'dark' : 'light';
+                        }
+                        
+                        if (loadedSettings.hasOwnProperty('twinEngineInclusionMode')) {
+                            const mode = loadedSettings.twinEngineInclusionMode;
+                            const count = loadedSettings.twinEngineInclusionCount || 1;
+
+                            if (mode === 'none') {
+                                state.settings.twinEngineInclusionUserMessageCount = 0;
+                                state.settings.twinEngineIncludeFirstUserMessage = false;
+                            } else if (mode === 'first') {
+                                state.settings.twinEngineInclusionUserMessageCount = 0;
+                                state.settings.twinEngineIncludeFirstUserMessage = true;
+                            } else if (mode === 'last_n') {
+                                state.settings.twinEngineInclusionUserMessageCount = count;
+                                state.settings.twinEngineIncludeFirstUserMessage = false;
+                            } else if (mode === 'first_and_last_n') {
+                                state.settings.twinEngineInclusionUserMessageCount = count;
+                                state.settings.twinEngineIncludeFirstUserMessage = true;
+                            }
                         }
 
                         const oldGlobalParams = ['temperature', 'maxTokens', 'topP', 'presencePenalty', 'frequencyPenalty', 'systemPrompt', 'enableSystemPromptDefault'];
@@ -7696,7 +7704,8 @@
                 elements.showFooterTwinEngineToggleButtonToggle.checked = state.settings.showFooterTwinEngineToggleButton;
                 elements.twinEngineFullAutoSettingContainer.classList.toggle('hidden', !state.settings.enableTwinEngine);
                 elements.twinEngineSummarizeAfterTurnsInput.value = state.settings.twinEngineSummarizeAfterTurns ?? DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
-                elements.twinEngineIncludeUserMessageTurnsInput.value = state.settings.twinEngineIncludeUserMessageTurns || '';
+                elements.twinEngineInclusionUserMessageCountInput.value = state.settings.twinEngineInclusionUserMessageCount ?? 1;
+                elements.twinEngineIncludeFirstUserMessageCheckbox.checked = state.settings.twinEngineIncludeFirstUserMessage;
                 document.getElementById('twin-engine-summary-prompt').value = state.settings.twinEngineSummaryPrompt || '';
                 elements.twinEngineDummyUserInput.value = state.settings.twinEngineDummyUser || '';
                 elements.twinEngineEnableDummyUserCheckbox.checked = state.settings.twinEngineEnableDummyUser;
@@ -8932,7 +8941,7 @@
         };
 
     const appLogic = {
-        initializeApp() {
+        async initializeApp() {
             if (typeof marked !== 'undefined') {
                 marked.setOptions({
                     breaks: true,
@@ -9167,7 +9176,7 @@
                     uiUtils.updateChatScreenElementVisibility();
                 });
             }
-
+            
             elements.uploadBackgroundBtn.addEventListener('click', () => elements.backgroundImageInput.click());
             elements.backgroundImageInput.addEventListener('change', (event) => {
                 const file = event.target.files[0];
@@ -10978,6 +10987,7 @@
             let existingSiblingGroupId = null;
             let firstResponseIndexForRetry = -1;
             let siblingGroupIdToUse = null;
+            let messagesToProcess;
 
             if (!isBackgroundProcess && !isRetry) {
                 const userMessage = {
@@ -11034,45 +11044,26 @@
                 messagesToProcess = [];
                 const summaryContent = state.twinEngineSummaryContent.trim();
                 
-                const turnSpecifier = state.settings.twinEngineIncludeUserMessageTurns || '';
-                if (turnSpecifier) {
-                    const targetTurnNumbers = parseTurnNumbers(turnSpecifier);
-                    if (targetTurnNumbers.length > 0) {
-                        const userMessages = state.currentMessages.filter(msg => msg.role === 'user');
-                        const messagesToInclude = [];
-
-                        targetTurnNumbers.forEach(turnNum => {
-                            const messageIndex = turnNum - 1;
-                            if (messageIndex >= 0 && messageIndex < userMessages.length) {
-                                if (!messagesToInclude.includes(userMessages[messageIndex])) {
-                                     messagesToInclude.push(userMessages[messageIndex]);
-                                }
-                            }
-                        });
-
-                        if (messagesToInclude.length > 0) {
-                            const combinedInstructions = messagesToInclude.map(msg => {
-                                const originalTurnNumber = userMessages.indexOf(msg) + 1;
-                                return `【過去の重要な指示 (ユーザー発言 ${originalTurnNumber}番目)】\n${msg.content}`;
-                            }).join('\n\n');
-
-                            const contextAttachments = messagesToInclude.flatMap(msg => msg.attachments || []);
-
-                            messagesToProcess.push({
-                                role: 'user',
-                                content: `これはこの会話セッションの重要な前提となる、過去のユーザーからの指示です。これらの指示を最優先の前提として応答してください。\n\n${combinedInstructions}`,
-                                timestamp: Date.now() - 3,
-                                attachments: contextAttachments,
-                            });
-                            messagesToProcess.push({
-                                role: 'model',
-                                content: '承知いたしました。過去の重要な指示を記憶しました。以降の応答はこれらの指示に基づきます。',
-                                timestamp: Date.now() - 2,
-                            });
-                        }
-                    }
+                const { twinEngineIncludeFirstUserMessage, twinEngineInclusionUserMessageCount } = state.settings;
+                const allUserMessages = state.currentMessages.filter(msg => msg.role === 'user');
+                const includedMessages = new Set();
+            
+                if (twinEngineIncludeFirstUserMessage && allUserMessages.length > 0) {
+                    const firstUserMessage = allUserMessages[0];
+                    messagesToProcess.push({
+                        role: 'user',
+                        content: `これはこの会話セッションの最初の指示です。この指示を最優先の前提として応答してください。\n\n【最初の指示】\n${firstUserMessage.content}`,
+                        timestamp: firstUserMessage.timestamp,
+                        attachments: firstUserMessage.attachments || [],
+                    });
+                    messagesToProcess.push({
+                        role: 'model',
+                        content: '承知いたしました。最初の指示を記憶しました。以降の応答はこの指示に基づきます。',
+                        timestamp: firstUserMessage.timestamp + 1,
+                    });
+                    includedMessages.add(firstUserMessage);
                 }
-
+            
                 if (summaryContent) {
                     messagesToProcess.push({
                         role: 'user',
@@ -11086,15 +11077,26 @@
                         timestamp: Date.now() - 1,
                     });
                 }
-
+            
+                if (twinEngineInclusionUserMessageCount > 0) {
+                    const recentUserMessages = allUserMessages
+                        .filter(msg => !includedMessages.has(msg))
+                        .slice(-twinEngineInclusionUserMessageCount);
+                    
+                    recentUserMessages.forEach(msg => {
+                        messagesToProcess.push(msg);
+                        includedMessages.add(msg);
+                    });
+                }
+                
                 if (isRetry) {
                     const retryUserMessage = currentContextMessages[retryUserMessageIndex];
-                    if (retryUserMessage) {
+                    if (retryUserMessage && !includedMessages.has(retryUserMessage)) {
                         messagesToProcess.push(retryUserMessage);
                     }
                 } else {
                     const lastUserMessage = currentContextMessages[currentContextMessages.length - 1];
-                    if (lastUserMessage && lastUserMessage.role === 'user') {
+                    if (lastUserMessage && lastUserMessage.role === 'user' && !includedMessages.has(lastUserMessage)) {
                         messagesToProcess.push(lastUserMessage);
                     }
                 }
@@ -11103,6 +11105,7 @@
                     ? currentContextMessages.slice(0, userMessageIndex + 1)
                     : [...currentContextMessages];
             }
+            
 
             if (!isBackgroundProcess) {
                 try {
@@ -12185,7 +12188,9 @@
              newSettings.twinEngineSummarizeAfterTurns = elements.twinEngineSummarizeAfterTurnsInput.value === '' 
                 ? DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS 
                 : parseInt(elements.twinEngineSummarizeAfterTurnsInput.value, 10);
-             newSettings.twinEngineIncludeUserMessageTurns = elements.twinEngineIncludeUserMessageTurnsInput.value.trim() || '';
+             const inclusionCount = parseInt(elements.twinEngineInclusionUserMessageCountInput.value, 10);
+             newSettings.twinEngineInclusionUserMessageCount = isNaN(inclusionCount) || inclusionCount < 0 ? 0 : inclusionCount;
+             newSettings.twinEngineIncludeFirstUserMessage = elements.twinEngineIncludeFirstUserMessageCheckbox.checked;
              newSettings.twinEngineSummaryPrompt = document.getElementById('twin-engine-summary-prompt').value.trim();
              newSettings.twinEngineDummyUser = elements.twinEngineDummyUserInput.value.trim();
              newSettings.twinEngineEnableDummyUser = elements.twinEngineEnableDummyUserCheckbox.checked;
@@ -12735,9 +12740,9 @@
                     defaultSettingsCopy.twinEngineEnableFullAuto = false;
                     defaultSettingsCopy.showFooterTwinEngineToggleButton = false;
                     defaultSettingsCopy.twinEngineSummarizeAfterTurns = DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
+                    defaultSettingsCopy.twinEngineInclusionUserMessageCount = 1;
+                    defaultSettingsCopy.twinEngineIncludeFirstUserMessage = true;
                     defaultSettingsCopy.twinEngineSummaryPrompt = '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。';
-                    defaultSettingsCopy.twinEngineIncludeUserMessageTurns = '';
-
                     defaultSettingsCopy.twinEngineDummyUser = '';
                     defaultSettingsCopy.twinEngineEnableDummyUser = false;
                     defaultSettingsCopy.twinEngineDummyModel = '';
@@ -13063,6 +13068,27 @@
               } else if (state.editingMessageIndex === index) {
                   state.editingMessageIndex = null;
               }
+        },
+        finishEditing(messageElement) {
+            if (!messageElement) return;
+            const editArea = messageElement.querySelector('.message-edit-area');
+            const contentDiv = messageElement.querySelector('.message-content');
+            const cascadeControls = messageElement.querySelector('.message-cascade-controls');
+            const textarea = messageElement.querySelector('.edit-textarea');
+
+            messageElement.style.removeProperty('width');
+            messageElement.classList.remove('editing');
+            if(contentDiv) contentDiv.classList.remove('hidden');
+            if(cascadeControls) cascadeControls.classList.remove('hidden');
+            if(editArea) {
+                editArea.classList.add('hidden');
+                editArea.innerHTML = '';
+            }
+
+            const index = parseInt(messageElement.dataset.index, 10);
+            if (state.editingMessageIndex === index) {
+                state.editingMessageIndex = null;
+            }
         },
         async copyMessageText(index, buttonElement) {
             const message = state.currentMessages[index];
@@ -13512,7 +13538,14 @@
                             reader.onload = () => resolve(reader.result);
                             reader.onerror = (error) => reject(error);
                             reader.readAsText(file);
-                                                    });
+                        });
+                        attachmentsToAdd.push({
+                            file: file,
+                            name: fileName,
+                            mimeType: guessedMimeType,
+                            textData: textData,
+                            base64Data: null 
+                        });
                     } else {
                         const base64Data = await fileToBase64(file);
                         attachmentsToAdd.push({
@@ -13862,7 +13895,7 @@
                 uiUtils.setAiToAiProcessingState(false);
             }
         },
-        async removeAttachment: async function(messageIndex, attachmentIndex, listItemElement) {
+        removeAttachment: async function(messageIndex, attachmentIndex, listItemElement) {
             const message = state.currentMessages[messageIndex];
             if (!message || !message.attachments || !message.attachments[attachmentIndex]) return;
 
@@ -13885,7 +13918,7 @@
                 try {
                     await dbUtils.saveChat();
                 } catch(e) {
-                    await uiUtils.showCustomAlert('添付ファイルの削除状態の保存に失敗しました。');
+                                    await uiUtils.showCustomAlert('添付ファイルの削除状態の保存に失敗しました。');
                 }
             }
         },
@@ -14023,7 +14056,7 @@
                         if (guessedMimeType.startsWith('image/')) {
                             const previewBtn = document.createElement('button');
                             previewBtn.textContent = '表示';
-                                                        previewBtn.classList.add('attachment-preview-btn');
+                            previewBtn.classList.add('attachment-preview-btn');
                             previewBtn.onclick = (e) => { e.preventDefault(); appLogic.previewAttachment(messageIndex, newAttachmentIndex); };
                             actionsDiv.appendChild(previewBtn);
                         }
@@ -14689,7 +14722,7 @@
                 }
             }
         },
-        _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, generationConfig, useStreaming, enableVision) {
+        _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, useStreaming, enableVision) {
             const oaMessages = [];
             if (systemInstruction && systemInstruction.parts?.[0]?.text) {
                 oaMessages.push({ role: "system", content: systemInstruction.parts[0].text });
