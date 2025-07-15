@@ -7204,7 +7204,7 @@
                     const msgData = state.currentMessages[index];
                     if (msgData && msgData.role === 'model' && msgData.isCascaded) {
                         const siblings = appLogic.getCascadedSiblings(index);
-                        if (siblings.length > 1) {
+                    if (siblings.length > 1) {
                             this.renderChatMessages();
                         }
                     }
@@ -8880,38 +8880,38 @@
 
     const appLogic = {
         async initializeApp() {
-            if (typeof marked !== 'undefined') {
-                marked.setOptions({
-                    breaks: true,
-                    gfm: true,
-                    sanitize: false,
-                    smartypants: false
-                });
-            }
-            if (typeof mermaid !== 'undefined') {
-                mermaid.initialize({
-                    startOnLoad: false,
-                    theme: 'default',
-                    securityLevel: 'loose',
-                    fontFamily: 'var(--font-family)',
-                    flowchart: { useMaxWidth: true, htmlLabels: true },
-                    sequence: { useMaxWidth: true },
-                    gantt: { useMaxWidth: true },
-                    journey: { useMaxWidth: true },
-                    pie: { useMaxWidth: true }
-                });
-            }
-
-            elements.appVersionSpan.textContent = APP_VERSION;
-
-            window.addEventListener('beforeinstallprompt', (event) => {
-                event.preventDefault();
-            });
-
-            uiUtils.showScreen('chat');
-            registerServiceWorker();
-
             try {
+                if (typeof marked !== 'undefined') {
+                    marked.setOptions({
+                        breaks: true,
+                        gfm: true,
+                        sanitize: false,
+                        smartypants: false
+                    });
+                }
+                if (typeof mermaid !== 'undefined') {
+                    mermaid.initialize({
+                        startOnLoad: false,
+                        theme: 'default',
+                        securityLevel: 'loose',
+                        fontFamily: 'var(--font-family)',
+                        flowchart: { useMaxWidth: true, htmlLabels: true },
+                        sequence: { useMaxWidth: true },
+                        gantt: { useMaxWidth: true },
+                        journey: { useMaxWidth: true },
+                        pie: { useMaxWidth: true }
+                    });
+                }
+
+                elements.appVersionSpan.textContent = APP_VERSION;
+
+                window.addEventListener('beforeinstallprompt', (event) => {
+                    event.preventDefault();
+                });
+
+                uiUtils.showScreen('chat');
+                registerServiceWorker();
+
                 await dbUtils.openDB();
                 await dbUtils.loadSettings();
                 
@@ -8958,11 +8958,77 @@
                 if (state.settings.autoScrollOnNewMessage) {
                     uiUtils.scrollToBottom();
                 }
-
             } catch (error) {
                 await uiUtils.showCustomAlert(`アプリの初期化に失敗しました: ${error}`);
-                elements.appContainer.innerHTML = `<p style="padding: 20px; text-align: center; color: red;">アプリの起動に失敗しました。</p>`;
+                await this._showFatalErrorScreen(error);
             } 
+        },
+        async _showFatalErrorScreen(error) {
+            const errorHtml = `
+                <div style="padding: 20px; text-align: center; color: var(--text-primary); height: 100%; overflow-y: auto; display: flex; flex-direction: column; justify-content: center;">
+                    <div>
+                        <h2 style="color: var(--text-error); margin-bottom: 15px;">アプリの起動に失敗しました。</h2>
+                        <p style="font-size: 14px; margin-bottom: 25px;">
+                            ブラウザのプライベートモードを使用しているか、データが破損している可能性があります。<br>
+                            以下のボタンで問題を解決できる場合があります。
+                        </p>
+                        <div style="display: flex; flex-direction: column; gap: 20px; max-width: 450px; margin: 0 auto; text-align: left;">
+                            
+                            <div>
+                                <button id="recovery-update-app-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-update); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">アプリを更新 (キャッシュクリア)</button>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    ※ サーバー側のhtmlファイルなどはブラウザにキャッシュされるため、このボタンで明示的にサーバーから再取得しない限り更新されない。
+                                </p>
+                            </div>
+
+                            <div>
+                                <button id="recovery-force-reload-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-edit); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">🔄 強制復旧 (キャッシュクリア&リロード)</button>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    ※ アプリが不安定な場合に使用。全キャッシュをクリアして強制的に再起動します。「アプリを更新」の処理に加えて、ブラウザが保持しているこの「GeminiPWA」アプリに関連する他の種類のキャッシュも可能な限り削除します。<br>※ ユーザーデータ（チャット履歴・設定）は保持されます。
+                                </p>
+                            </div>
+
+                            <div>
+                                <button id="recovery-clear-history-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-edit); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">全履歴削除</button>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    ※ ブラウザに保存されているチャット履歴を全て削除します。設定は保持されます。
+                                </p>
+                            </div>
+
+                            <div>
+                                <button id="recovery-clear-data-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-delete); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">⚠⚠⚠全データクリア (履歴と設定)⚠⚠⚠</button>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    ※ ブラウザに保存されている設定や履歴を全て削除。<br>！！間違えて押そうとしていないか注意！！
+                                </p>
+                            </div>
+                            
+                        </div>
+                        <p style="font-size: 12px; margin-top: 30px; color: var(--text-secondary); max-width: 600px; margin-left: auto; margin-right: auto; word-wrap: break-word;">エラー詳細: <span id="recovery-error-details"></span></p>
+                    </div>
+                </div>
+            `;
+            
+            elements.appContainer.innerHTML = errorHtml;
+            
+            const errorDetailsEl = document.getElementById('recovery-error-details');
+            if (errorDetailsEl) {
+                errorDetailsEl.textContent = error.message || String(error);
+            }
+
+            document.getElementById('recovery-update-app-btn').addEventListener('click', () => this.updateApp());
+            document.getElementById('recovery-force-reload-btn').addEventListener('click', () => {
+                 if (typeof errorRecovery !== 'undefined') {
+                    errorRecovery.manualRecovery();
+                } else {
+                    alert("強制復旧機能が利用できません。手動でキャッシュをクリアしてリロードしてください。");
+                }
+            });
+            document.getElementById('recovery-clear-history-btn').addEventListener('click', () => this.confirmClearAllHistory());
+            document.getElementById('recovery-clear-data-btn').addEventListener('click', () => this.confirmClearAllData());
+
+            const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+            document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mode', 'pastel-blue-mode', 'pastel-yellow-mode', 'pastel-purple-mode', 'pastel-rainbow-mode');
+            document.body.classList.add(prefersDark ? 'dark-mode' : 'light-mode-forced');
         },
         setupEventListeners() {
             elements.gotoHistoryBtn.addEventListener('click', () => uiUtils.showScreen('history'));
@@ -14632,7 +14698,7 @@
                                     }
                                 } else if (chunk.type === 'message_delta' && chunk.usage) {
                                     finalUsage = chunk.usage;
-                                }
+                                                                    }
                             } catch (e) {
                             }
                         }
