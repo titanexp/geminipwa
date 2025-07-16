@@ -1370,13 +1370,20 @@
             font-size: 12px;
         }
         .twin-engine-summary-actions-container .resummarize-btn {
+            margin-left: auto;
             background-color: var(--bg-button-update);
         }
         .twin-engine-summary-actions-container #twin-engine-mode-toggle-btn {
-            margin-right: auto;
             background-color: var(--bg-button-action);
             min-width: 110px;
             text-align: center;
+        }
+        .twin-engine-summary-actions-container #twin-engine-api-key-cycle-btn {
+            background-color: var(--bg-button-action);
+            min-width: 60px;
+        }
+        .twin-engine-summary-actions-container #twin-engine-api-key-cycle-btn:hover:not(:disabled) {
+            background-color: var(--bg-button-action-hover);
         }
         .twin-engine-summary-actions-container #twin-engine-mode-toggle-btn:hover:not(:disabled) {
             background-color: var(--bg-button-action-hover);
@@ -3445,6 +3452,7 @@
             <div id="twin-engine-summary-area" class="hidden">
                 <div class="twin-engine-summary-actions-container">
                     <button id="twin-engine-mode-toggle-btn" title="要約モードを切り替え"></button>
+                    <button id="twin-engine-api-key-cycle-btn" title="要約に使用するAPIキーを切り替え">キー:</button>
                     <button id="resummarize-btn" class="resummarize-btn" title="現在のチャット履歴を要約">要約実行</button>
                     <button id="copy-twin-engine-summary-btn" class="copy-twin-engine-summary-btn" title="内容をコピー">コピー</button>
                     <button id="clear-twin-engine-summary-btn" class="clear-twin-engine-summary-btn" title="内容を全て削除">全削除</button>
@@ -5435,6 +5443,7 @@
             twinEngineSummaryArea: document.getElementById('twin-engine-summary-area'),
             twinEngineSummaryEditor: document.getElementById('twin-engine-summary-editor'),
             twinEngineModeToggleBtn: document.getElementById('twin-engine-mode-toggle-btn'),
+            twinEngineApiKeyCycleBtn: document.getElementById('twin-engine-api-key-cycle-btn'),
             footerTwinEngineModeToggleBtn: document.getElementById('footer-twin-engine-mode-toggle-btn'),
             twinEngineEnableFullAutoToggle: document.getElementById('twin-engine-enable-full-auto-toggle'),
             showFooterTwinEngineToggleButtonToggle: document.getElementById('show-footer-twin-engine-toggle-button-toggle'),
@@ -8041,6 +8050,7 @@
                 elements.settingsScreen.classList.toggle('auto-save-mode', state.settings.autoSaveSettings);
                 this.updateMemoStackHeightSettingsVisibility();
                 this.updateTwinEngineModeButton();
+                this.updateTwinEngineApiKeyCycleButton();
             },
             applyMinimizeUI() {
                 elements.appContainer.classList.toggle('minimized-ui', state.settings.minimizeHeaderFooter);
@@ -8245,6 +8255,32 @@
                     elements.footerTwinEngineModeToggleBtn.textContent = footerText;
                     elements.footerTwinEngineModeToggleBtn.title = footerTitle;
                     elements.footerTwinEngineModeToggleBtn.disabled = !isEnabled;
+                }
+            },
+            updateTwinEngineApiKeyCycleButton() {
+                const button = elements.twinEngineApiKeyCycleBtn;
+                if (!button) return;
+
+                const configs = state.settings.twinEngineApiConfigs;
+                const activeId = state.settings.twinEngineActiveConfigId;
+                
+                if (configs.length === 0) {
+                    button.classList.add('hidden');
+                    return;
+                }
+
+                button.classList.remove('hidden');
+                button.disabled = configs.length <= 1;
+
+                const activeConfig = configs.find(c => c.id === activeId) || configs[0];
+
+                if (activeConfig) {
+                    const initial = activeConfig.label?.trim().charAt(0) || '?';
+                    button.textContent = `キー: ${initial}`;
+                    button.title = `現在のキー: ${activeConfig.label || 'ラベル未設定'}`;
+                } else {
+                    button.textContent = 'キー: -';
+                    button.title = 'APIキーが設定されていません';
                 }
             },
             updateHistoryHeaderButtonVisibility() {
@@ -9136,6 +9172,7 @@
             elements.pasteClipboardStackBtn.addEventListener('click', () => this.pasteIntoClipboardStack());
 
             elements.twinEngineSummaryBtn.addEventListener('click', () => this.toggleTwinEngineSummary());
+            elements.twinEngineApiKeyCycleBtn.addEventListener('click', () => this.cycleTwinEngineApiKey());
             elements.copyTwinEngineSummaryBtn.addEventListener('click', () => this.copyTwinEngineSummaryText());
             elements.clearTwinEngineSummaryBtn.addEventListener('click', () => this.confirmClearTwinEngineSummary());
             elements.resummarizeBtn.addEventListener('click', () => this.manualResummarize());
@@ -10021,6 +10058,7 @@
 
             if (state.isTwinEngineSummaryVisible) {
                 elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
+                uiUtils.updateTwinEngineApiKeyCycleButton();
                 elements.twinEngineSummaryEditor.focus();
                 elements.twinEngineSummaryEditor.scrollTop = elements.twinEngineSummaryEditor.scrollHeight;
             }
@@ -10068,17 +10106,40 @@
             }
         },
         async toggleTwinEngineMode() {
-    if (!state.settings.enableTwinEngine) return;
-    
-    const newValue = !state.settings.twinEngineEnableFullAuto;
-    state.settings.twinEngineEnableFullAuto = newValue;
-    elements.twinEngineEnableFullAutoToggle.checked = newValue;
+            if (!state.settings.enableTwinEngine) return;
+            
+            const newValue = !state.settings.twinEngineEnableFullAuto;
+            state.settings.twinEngineEnableFullAuto = newValue;
+            elements.twinEngineEnableFullAutoToggle.checked = newValue;
 
-    uiUtils.updateTwinEngineModeButton();
+            uiUtils.updateTwinEngineModeButton();
 
 
-    await this.saveSettings(false);
-},
+            await this.saveSettings(false);
+        },
+        async cycleTwinEngineApiKey() {
+            const configs = state.settings.twinEngineApiConfigs;
+            if (configs.length <= 1) {
+                return;
+            }
+
+            const currentId = state.settings.twinEngineActiveConfigId;
+            const currentIndex = configs.findIndex(c => c.id === currentId);
+            
+            const nextIndex = (currentIndex === -1) ? 0 : (currentIndex + 1) % configs.length;
+            
+            const nextConfig = configs[nextIndex];
+            if (nextConfig) {
+                state.settings.twinEngineActiveConfigId = nextConfig.id;
+            }
+
+            uiUtils.updateTwinEngineApiKeyCycleButton();
+            twinEngineApiConfigUtils.renderList();
+
+            if (state.settings.autoSaveSettings) {
+                await this.saveSettings(false);
+            }
+        },
         async summarizeCurrentSession(messagesToSummarize) {
             if (!messagesToSummarize || messagesToSummarize.length === 0) {
                 return null;
@@ -15636,6 +15697,7 @@
             elements.addTwinEngineApiConfigBtn.textContent = configs.length >= this.MAX_CONFIGS 
                 ? `最大${this.MAX_CONFIGS}個まで` 
                 : '新しいAPI設定を追加';
+            uiUtils.updateTwinEngineApiKeyCycleButton();
         },
     
         createConfigItem(config) {
