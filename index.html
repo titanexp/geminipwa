@@ -1370,20 +1370,13 @@
             font-size: 12px;
         }
         .twin-engine-summary-actions-container .resummarize-btn {
-            margin-left: auto;
             background-color: var(--bg-button-update);
         }
         .twin-engine-summary-actions-container #twin-engine-mode-toggle-btn {
+            margin-right: auto;
             background-color: var(--bg-button-action);
             min-width: 110px;
             text-align: center;
-        }
-        .twin-engine-summary-actions-container #twin-engine-api-key-cycle-btn {
-            background-color: var(--bg-button-action);
-            min-width: 60px;
-        }
-        .twin-engine-summary-actions-container #twin-engine-api-key-cycle-btn:hover:not(:disabled) {
-            background-color: var(--bg-button-action-hover);
         }
         .twin-engine-summary-actions-container #twin-engine-mode-toggle-btn:hover:not(:disabled) {
             background-color: var(--bg-button-action-hover);
@@ -3208,10 +3201,10 @@
         }
         .api-key-item {
             display: flex;
-            flex-direction: column;
+            align-items: center;
             gap: 5px;
-            margin-bottom: 10px;
-            padding: 10px;
+            margin-bottom: 5px;
+            padding: 5px;
             border: 1px solid var(--border-secondary);
             border-radius: 5px;
             background-color: var(--bg-tertiary);
@@ -3225,7 +3218,7 @@
             background-color: rgba(var(--bg-button-rgb, 74, 144, 226), 0.1);
         }
         .api-key-item-label {
-            flex: 1;
+            flex: 0 0 100px;
             font-size: 12px;
             font-weight: bold;
             color: var(--text-secondary);
@@ -3300,118 +3293,12 @@
         #settings-screen.auto-save-mode .app-header .js-save-settings-btn {
             display: none !important;
         }
-        .twin-engine-api-config-item {
-        }
-        .twin-engine-api-config-item .api-key-item-label {
-            flex: 0 0 120px;
-        }
-        .twin-engine-api-config-item .api-key-item-input {
-            flex: 1;
-        }
-        .twin-engine-config-provider, .twin-engine-config-model {
-            padding: 6px 8px;
-            font-size: 13px;
-            border: 1px solid var(--border-primary);
-            border-radius: 3px;
-            background-color: var(--bg-input);
-            color: var(--text-primary);
-            margin-bottom: 0;
-            margin-left: 5px;
-            flex: 1;
-            min-width: 120px;
-        }
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
 </head>
 <body>
-<script>
-    (function() {
-        const TIMEOUT = 10000;
-        const RECOVERY_ATTEMPT_KEY = 'GeminiPWA_RecoveryAttempt';
-        let recoveryAttempt = parseInt(sessionStorage.getItem(RECOVERY_ATTEMPT_KEY) || '0', 10);
-
-        const watchdogTimer = setTimeout(() => {
-            handleInitializationFailure();
-        }, TIMEOUT);
-
-        window.initializationSuccess = function() {
-            clearTimeout(watchdogTimer);
-            sessionStorage.removeItem(RECOVERY_ATTEMPT_KEY);
-        };
-
-        async function handleInitializationFailure() {
-            recoveryAttempt++;
-            sessionStorage.setItem(RECOVERY_ATTEMPT_KEY, recoveryAttempt);
-
-            if (recoveryAttempt === 1) {
-                alert('アプリの起動に時間がかかっています。キャッシュをクリアして再起動します。(ステップ1/3)');
-                await clearCachesAndReload();
-            } else if (recoveryAttempt === 2) {
-                alert('再起動に失敗しました。より強力なキャッシュクリアを試みます。(ステップ2/3)');
-                await clearAllCachesAndReload();
-            } else {
-                const confirmed = confirm(
-                    '複数回の再起動に失敗しました。アプリのデータが破損している可能性があります。\n\n' +
-                    'すべてのデータ（設定とチャット履歴）を消去してアプリをリセットしますか？\n' +
-                    'この操作は元に戻せません。「キャンセル」を押すと、現状のままリロードします。(ステップ3/3)'
-                );
-                if (confirmed) {
-                    await clearAllSiteDataAndReload();
-                } else {
-                    sessionStorage.removeItem(RECOVERY_ATTEMPT_KEY);
-                    window.location.reload(true);
-                }
-            }
-        }
-
-        async function clearCachesAndReload() {
-            try {
-                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                    await new Promise(resolve => {
-                        navigator.serviceWorker.addEventListener('message', function handler(event) {
-                            if (event.data && event.data.action === 'cacheCleared') {
-                                navigator.serviceWorker.removeEventListener('message', handler);
-                                resolve();
-                            }
-                        });
-                        navigator.serviceWorker.controller.postMessage({ action: 'clearCache' });
-                    });
-                }
-            } catch(e) { }
-            window.location.reload(true);
-        }
-
-        async function clearAllCachesAndReload() {
-            try {
-                if ('caches' in window) {
-                    const cacheNames = await caches.keys();
-                    await Promise.all(cacheNames.map(name => caches.delete(name)));
-                }
-            } catch(e) { }
-            await clearCachesAndReload();
-        }
-
-        async function clearAllSiteDataAndReload() {
-            try {
-                await new Promise((resolve, reject) => {
-                    const deleteRequest = indexedDB.deleteDatabase('GeminiPWA_DB');
-                    deleteRequest.onsuccess = () => resolve();
-                    deleteRequest.onerror = () => reject();
-                    deleteRequest.onblocked = () => window.location.reload();
-                });
-            } catch (e) { }
-            
-            try {
-                localStorage.clear();
-                sessionStorage.clear();
-            } catch(e) { }
-            
-            await clearAllCachesAndReload();
-        }
-    })();
-</script>
     <div class="app-container">
 
         <div id="chat-screen" class="screen active">
@@ -3452,7 +3339,6 @@
             <div id="twin-engine-summary-area" class="hidden">
                 <div class="twin-engine-summary-actions-container">
                     <button id="twin-engine-mode-toggle-btn" title="要約モードを切り替え"></button>
-                    <button id="twin-engine-api-key-cycle-btn" title="要約に使用するAPIキーを切り替え">キー:</button>
                     <button id="resummarize-btn" class="resummarize-btn" title="現在のチャット履歴を要約">要約実行</button>
                     <button id="copy-twin-engine-summary-btn" class="copy-twin-engine-summary-btn" title="内容をコピー">コピー</button>
                     <button id="clear-twin-engine-summary-btn" class="clear-twin-engine-summary-btn" title="内容を全て削除">全削除</button>
@@ -4853,12 +4739,52 @@
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                             ※ ここに入力した内容が、会話履歴とともにTwin-engine用AIへの指示として送信されます。
                         </p>
-                        <hr style="margin: 20px 0;">
-                        <h4 style="font-size: 14px; color: var(--text-link); margin-bottom: 10px;">Twin-engine用 API設定</h4>
-                        <div id="twin-engine-api-configs-list" class="api-keys-list" style="margin-top:10px; margin-bottom: 15px;">
+                        <label for="twin-engine-provider-select">使用するAPIプロバイダー (Twin-engine):</label>
+                        <select id="twin-engine-provider-select" aria-label="Twin-engine APIプロバイダー選択">
+                            <option value="gemini">Gemini (Google)</option>
+                            <option value="deepseek">DeepSeek</option>
+                            <option value="claude">Claude (Anthropic API)</option>
+                            <option value="openai">ChatGPT (OpenAI API)</option>
+                            <option value="xai">Grok (xAI API)</option>
+                            <option value="llmaggregator">LLM Aggregator</option>
+                            <option value="dummy">Dummy AI</option>
+                        </select>
+                        <div id="twin-engine-gemini-settings" class="twin-engine-provider-settings hidden" style="margin-top:15px;">
+                            <label for="twin-engine-gemini-api-key">Gemini APIキー (Twin-engine):</label>
+                            <input type="password" id="twin-engine-gemini-api-key" placeholder="APIキーを入力" aria-label="Gemini APIキー (Twin-engine)">
+                            <label for="twin-engine-gemini-model-name">モデル名 (Twin-engine):</label>
+                            <select id="twin-engine-gemini-model-name" aria-label="Gemini モデル名 (Twin-engine)"></select>
                         </div>
-                        <button type="button" id="add-twin-engine-api-config-btn" class="add-api-key-btn">新しいAPI設定を追加</button>
-
+                        <div id="twin-engine-deepseek-settings" class="twin-engine-provider-settings hidden" style="margin-top:15px;">
+                            <label for="twin-engine-deepseek-api-key">DeepSeek APIキー (Twin-engine):</label>
+                            <input type="password" id="twin-engine-deepseek-api-key" placeholder="APIキーを入力" aria-label="DeepSeek APIキー (Twin-engine)">
+                            <label for="twin-engine-deepseek-model-name">モデル名 (Twin-engine):</label>
+                            <select id="twin-engine-deepseek-model-name" aria-label="DeepSeek モデル名 (Twin-engine)"></select>
+                        </div>
+                        <div id="twin-engine-claude-settings" class="twin-engine-provider-settings hidden" style="margin-top:15px;">
+                            <label for="twin-engine-claude-api-key">Claude APIキー (Twin-engine):</label>
+                            <input type="password" id="twin-engine-claude-api-key" placeholder="APIキーを入力" aria-label="Claude APIキー (Twin-engine)">
+                            <label for="twin-engine-claude-model-name">モデル名 (Twin-engine):</label>
+                            <select id="twin-engine-claude-model-name" aria-label="Claude モデル名 (Twin-engine)"></select>
+                        </div>
+                        <div id="twin-engine-openai-settings" class="twin-engine-provider-settings hidden" style="margin-top:15px;">
+                            <label for="twin-engine-openai-api-key">ChatGPT APIキー (Twin-engine):</label>
+                            <input type="password" id="twin-engine-openai-api-key" placeholder="APIキーを入力" aria-label="OpenAI APIキー (Twin-engine)">
+                            <label for="twin-engine-openai-model-name">モデル名 (Twin-engine):</label>
+                            <select id="twin-engine-openai-model-name" aria-label="OpenAI モデル名 (Twin-engine)"></select>
+                        </div>
+                        <div id="twin-engine-xai-settings" class="twin-engine-provider-settings hidden" style="margin-top:15px;">
+                            <label for="twin-engine-xai-api-key">xAI APIキー (Twin-engine):</label>
+                            <input type="password" id="twin-engine-xai-api-key" placeholder="APIキーを入力" aria-label="xAI APIキー (Twin-engine)">
+                            <label for="twin-engine-xai-model-name">モデル名 (Twin-engine):</label>
+                            <select id="twin-engine-xai-model-name" aria-label="xAI モデル名 (Twin-engine)"></select>
+                        </div>
+                        <div id="twin-engine-llmaggregator-settings" class="twin-engine-provider-settings hidden" style="margin-top:15px;">
+                            <label for="twin-engine-llmaggregator-api-key">LLM Aggregator APIキー (Twin-engine):</label>
+                            <input type="password" id="twin-engine-llmaggregator-api-key" placeholder="APIキーを入力" aria-label="LLM Aggregator APIキー (Twin-engine)">
+                            <label for="twin-engine-llmaggregator-model-name">モデル名 (Twin-engine):</label>
+                            <select id="twin-engine-llmaggregator-model-name" aria-label="LLM Aggregator モデル名 (Twin-engine)"></select>
+                        </div>
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: 15px;">
                             ※ 参考:「セッションの過去の会話 → ある程度セッションが進んだ時点で別の AI で要約 → システムプロンプトとその要約だけを現在の AI に渡して続きの対話を開始する」というワークフローを、行う機能（予定）
                         </p>
@@ -5008,15 +4934,6 @@
         const CHATS_STORE = 'chats';
         const CHAT_UPDATEDAT_INDEX = 'updatedAtIndex';
         const CHAT_CREATEDAT_INDEX = 'createdAtIndex';
-        const API_PROVIDERS = [
-            { value: 'gemini', text: 'Gemini (Google)' },
-            { value: 'deepseek', text: 'DeepSeek' },
-            { value: 'claude', text: 'Claude (Anthropic API)' },
-            { value: 'openai', text: 'ChatGPT (OpenAI API)' },
-            { value: 'xai', text: 'Grok (xAI API)' },
-            { value: 'llmaggregator', text: 'LLM Aggregator' },
-            { value: 'dummy', text: 'Dummy AI' }
-        ];
         const DEFAULT_MODEL = 'gemini-2.5-flash-preview-05-20';
         const DEFAULT_DEEPSEEK_MODEL = 'deepseek-reasoner';
         const DEFAULT_CLAUDE_MODEL = 'claude-3-7-sonnet-20250219';
@@ -5443,7 +5360,6 @@
             twinEngineSummaryArea: document.getElementById('twin-engine-summary-area'),
             twinEngineSummaryEditor: document.getElementById('twin-engine-summary-editor'),
             twinEngineModeToggleBtn: document.getElementById('twin-engine-mode-toggle-btn'),
-            twinEngineApiKeyCycleBtn: document.getElementById('twin-engine-api-key-cycle-btn'),
             footerTwinEngineModeToggleBtn: document.getElementById('footer-twin-engine-mode-toggle-btn'),
             twinEngineEnableFullAutoToggle: document.getElementById('twin-engine-enable-full-auto-toggle'),
             showFooterTwinEngineToggleButtonToggle: document.getElementById('show-footer-twin-engine-toggle-button-toggle'),
@@ -5524,9 +5440,25 @@
             addXaiApiKeyBtn: document.getElementById('add-xai-api-key-btn'),
             llmaggregatorApiKeysList: document.getElementById('llmaggregator-api-keys-list'),
             addLlmaggregatorApiKeyBtn: document.getElementById('add-llmaggregator-api-key-btn'),
-            twinEngineSummaryPromptInput: document.getElementById('twin-engine-summary-prompt'),
-            twinEngineApiConfigsList: document.getElementById('twin-engine-api-configs-list'),
-            addTwinEngineApiConfigBtn: document.getElementById('add-twin-engine-api-config-btn'),
+            twinEngineProviderSelect: document.getElementById('twin-engine-provider-select'),
+            twinEngineGeminiSettings: document.getElementById('twin-engine-gemini-settings'),
+            twinEngineGeminiApiKeyInput: document.getElementById('twin-engine-gemini-api-key'),
+            twinEngineGeminiModelNameSelect: document.getElementById('twin-engine-gemini-model-name'),
+            twinEngineDeepseekSettings: document.getElementById('twin-engine-deepseek-settings'),
+            twinEngineDeepseekApiKeyInput: document.getElementById('twin-engine-deepseek-api-key'),
+            twinEngineDeepseekModelNameSelect: document.getElementById('twin-engine-deepseek-model-name'),
+            twinEngineClaudeSettings: document.getElementById('twin-engine-claude-settings'),
+            twinEngineClaudeApiKeyInput: document.getElementById('twin-engine-claude-api-key'),
+            twinEngineClaudeModelNameSelect: document.getElementById('twin-engine-claude-model-name'),
+            twinEngineOpenaiSettings: document.getElementById('twin-engine-openai-settings'),
+            twinEngineOpenaiApiKeyInput: document.getElementById('twin-engine-openai-api-key'),
+            twinEngineOpenaiModelNameSelect: document.getElementById('twin-engine-openai-model-name'),
+            twinEngineXaiSettings: document.getElementById('twin-engine-xai-settings'),
+            twinEngineXaiApiKeyInput: document.getElementById('twin-engine-xai-api-key'),
+            twinEngineXaiModelNameSelect: document.getElementById('twin-engine-xai-model-name'),
+            twinEngineLlmaggregatorSettings: document.getElementById('twin-engine-llmaggregator-settings'),
+            twinEngineLlmaggregatorApiKeyInput: document.getElementById('twin-engine-llmaggregator-api-key'),
+            twinEngineLlmaggregatorModelNameSelect: document.getElementById('twin-engine-llmaggregator-model-name'),
             twinEngineDummyUserInput: document.getElementById('twin-engine-dummy-user'),
             twinEngineEnableDummyUserCheckbox: document.getElementById('twin-engine-enable-dummy-user'),
             twinEngineDummyModelInput: document.getElementById('twin-engine-dummy-model'),
@@ -5742,8 +5674,19 @@
                 toggleButtonBottomTextCollapse: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE,
                 toggleButtonBottomTextExpand: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND,
                 apiProvider: 'gemini',
-                twinEngineApiConfigs: [],
-                twinEngineActiveConfigId: null,
+                twinEngineProvider: 'gemini',
+                twinEngineGeminiApiKey: '',
+                twinEngineGeminiModelName: DEFAULT_MODEL,
+                twinEngineDeepseekApiKey: '',
+                twinEngineDeepseekModelName: DEFAULT_DEEPSEEK_MODEL,
+                twinEngineClaudeApiKey: '',
+                twinEngineClaudeModelName: DEFAULT_CLAUDE_MODEL,
+                twinEngineOpenaiApiKey: '',
+                twinEngineOpenaiModelName: DEFAULT_OPENAI_MODEL,
+                twinEngineXaiApiKey: '',
+                twinEngineXaiModelName: DEFAULT_XAI_MODEL,
+                twinEngineLlmaggregatorApiKey: '',
+                twinEngineLlmaggregatorModelName: DEFAULT_LLMAGGREGATOR_MODEL,
                 thoughtSummaryOpacity: DEFAULT_THOUGHT_SUMMARY_OPACITY,
                 settingsUIDetailsOpenStates: {},
                 showApiProviderToggleHeader: false,
@@ -6128,55 +6071,6 @@
                                 'llmaggregator-advanced-group': true,
                             };
                         }
-                        
-                        if ((!loadedSettings.twinEngineApiConfigs || loadedSettings.twinEngineApiConfigs.length === 0) && loadedSettings.twinEngineProvider) {
-                            const provider = loadedSettings.twinEngineProvider;
-                            let apiKey = '';
-                            let modelName = '';
-                            
-                            switch(provider) {
-                                case 'gemini':
-                                    apiKey = loadedSettings.twinEngineGeminiApiKey || '';
-                                    modelName = loadedSettings.twinEngineGeminiModelName || DEFAULT_MODEL;
-                                    break;
-                                case 'deepseek':
-                                    apiKey = loadedSettings.twinEngineDeepseekApiKey || '';
-                                    modelName = loadedSettings.twinEngineDeepseekModelName || DEFAULT_DEEPSEEK_MODEL;
-                                    break;
-                                case 'claude':
-                                    apiKey = loadedSettings.twinEngineClaudeApiKey || '';
-                                    modelName = loadedSettings.twinEngineClaudeModelName || DEFAULT_CLAUDE_MODEL;
-                                    break;
-                                case 'openai':
-                                    apiKey = loadedSettings.twinEngineOpenaiApiKey || '';
-                                    modelName = loadedSettings.twinEngineOpenaiModelName || DEFAULT_OPENAI_MODEL;
-                                    break;
-                                case 'xai':
-                                    apiKey = loadedSettings.twinEngineXaiApiKey || '';
-                                    modelName = loadedSettings.twinEngineXaiModelName || DEFAULT_XAI_MODEL;
-                                    break;
-                                case 'llmaggregator':
-                                    apiKey = loadedSettings.twinEngineLlmaggregatorApiKey || '';
-                                    modelName = loadedSettings.twinEngineLlmaggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
-                                    break;
-                            }
-                        
-                            if (provider !== 'dummy') {
-                                const oldConfig = {
-                                    id: `migrated-${Date.now()}`,
-                                    label: `移行した設定 (${provider})`,
-                                    provider: provider,
-                                    apiKey: apiKey,
-                                    modelName: modelName,
-                                };
-                                state.settings.twinEngineApiConfigs = [oldConfig];
-                                state.settings.twinEngineActiveConfigId = oldConfig.id;
-                            }
-                        } else if (loadedSettings.twinEngineApiConfigs) {
-                            state.settings.twinEngineApiConfigs = loadedSettings.twinEngineApiConfigs;
-                            state.settings.twinEngineActiveConfigId = loadedSettings.twinEngineActiveConfigId;
-                        }
-
                         resolve(state.settings);
                     };
                     request.onerror = (event) => reject(`設定読み込みエラー: ${event.target.error}`);
@@ -7299,7 +7193,7 @@
                     const msgData = state.currentMessages[index];
                     if (msgData && msgData.role === 'model' && msgData.isCascaded) {
                         const siblings = appLogic.getCascadedSiblings(index);
-                    if (siblings.length > 1) {
+                        if (siblings.length > 1) {
                             this.renderChatMessages();
                         }
                     }
@@ -7766,7 +7660,15 @@
             applySettingsToUI() {
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
                 elements.apiProviderSelect.value = state.settings.apiProvider;
-                twinEngineApiConfigUtils.renderList();
+                elements.twinEngineProviderSelect.value = state.settings.twinEngineProvider || 'gemini';
+                elements.twinEngineGeminiApiKeyInput.value = state.settings.twinEngineGeminiApiKey || '';
+                elements.twinEngineDeepseekApiKeyInput.value = state.settings.twinEngineDeepseekApiKey || '';
+                elements.twinEngineClaudeApiKeyInput.value = state.settings.twinEngineClaudeApiKey || '';
+                elements.twinEngineOpenaiApiKeyInput.value = state.settings.twinEngineOpenaiApiKey || '';
+                elements.twinEngineXaiApiKeyInput.value = state.settings.twinEngineXaiApiKey || '';
+                elements.twinEngineLlmaggregatorApiKeyInput.value = state.settings.twinEngineLlmaggregatorApiKey || '';
+                this.updateTwinEngineApiSettingsVisibility(state.settings.twinEngineProvider);
+                this.updateAllTwinEngineUserModelOptions();
                 elements.commonSystemPromptDefaultTextarea.value = state.settings.commonSystemPrompt || '';
                 elements.enableCommonSystemPromptDefaultCheckbox.checked = state.settings.enableCommonSystemPromptDefault;
                 document.getElementById('enable-twin-engine').checked = state.settings.enableTwinEngine;
@@ -7775,7 +7677,7 @@
                 elements.twinEngineFullAutoSettingContainer.classList.toggle('hidden', !state.settings.enableTwinEngine);
                 elements.twinEngineSummarizeAfterTurnsInput.value = state.settings.twinEngineSummarizeAfterTurns ?? DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
                 document.getElementById('twin-engine-initial-turns-to-include').value = state.settings.twinEngineInitialTurnsToInclude ?? 1;
-                elements.twinEngineSummaryPromptInput.value = state.settings.twinEngineSummaryPrompt || '';
+                document.getElementById('twin-engine-summary-prompt').value = state.settings.twinEngineSummaryPrompt || '';
                 elements.twinEngineDummyUserInput.value = state.settings.twinEngineDummyUser || '';
                 elements.twinEngineEnableDummyUserCheckbox.checked = state.settings.twinEngineEnableDummyUser;
                 elements.twinEngineDummyModelInput.value = state.settings.twinEngineDummyModel || '';
@@ -8050,7 +7952,6 @@
                 elements.settingsScreen.classList.toggle('auto-save-mode', state.settings.autoSaveSettings);
                 this.updateMemoStackHeightSettingsVisibility();
                 this.updateTwinEngineModeButton();
-                this.updateTwinEngineApiKeyCycleButton();
             },
             applyMinimizeUI() {
                 elements.appContainer.classList.toggle('minimized-ui', state.settings.minimizeHeaderFooter);
@@ -8114,6 +8015,36 @@
 
                 if (showDummy) {
                     paramGroups.forEach(group => group.classList.add('hidden'));
+                }
+            },
+            updateTwinEngineApiSettingsVisibility(provider) {
+                const allSettingsDivs = document.querySelectorAll('.twin-engine-provider-settings');
+                allSettingsDivs.forEach(div => div.classList.add('hidden'));
+
+                if (provider !== 'dummy') {
+                    const activeSettingsDiv = document.getElementById(`twin-engine-${provider}-settings`);
+                    if (activeSettingsDiv) {
+                        activeSettingsDiv.classList.remove('hidden');
+                    }
+                }
+            },
+
+            updateAllTwinEngineUserModelOptions() {
+                this.populateTwinEngineUserModelOptions('gemini', elements.twinEngineGeminiModelNameSelect, elements.geminiModelNameSelect, 'twinEngineGeminiModelName', DEFAULT_MODEL);
+                this.populateTwinEngineUserModelOptions('deepseek', elements.twinEngineDeepseekModelNameSelect, elements.deepSeekModelNameSelect, 'twinEngineDeepseekModelName', DEFAULT_DEEPSEEK_MODEL);
+                this.populateTwinEngineUserModelOptions('claude', elements.twinEngineClaudeModelNameSelect, elements.claudeModelNameSelect, 'twinEngineClaudeModelName', DEFAULT_CLAUDE_MODEL);
+                this.populateTwinEngineUserModelOptions('openai', elements.twinEngineOpenaiModelNameSelect, elements.openaiModelNameSelect, 'twinEngineOpenaiModelName', DEFAULT_OPENAI_MODEL);
+                this.populateTwinEngineUserModelOptions('xai', elements.twinEngineXaiModelNameSelect, elements.xaiModelNameSelect, 'twinEngineXaiModelName', DEFAULT_XAI_MODEL);
+                this.populateTwinEngineUserModelOptions('llmaggregator', elements.twinEngineLlmaggregatorModelNameSelect, elements.llmAggregatorModelNameSelect, 'twinEngineLlmaggregatorModelName', DEFAULT_LLMAGGREGATOR_MODEL);
+            },
+
+            populateTwinEngineUserModelOptions(provider, twinEngineSelect, mainSelect, settingKey, defaultModel) {
+                twinEngineSelect.innerHTML = mainSelect.innerHTML;
+                const selectedValue = state.settings[settingKey] || defaultModel;
+                if (selectedValue && Array.from(twinEngineSelect.options).some(opt => opt.value === selectedValue)) {
+                    twinEngineSelect.value = selectedValue;
+                } else if (twinEngineSelect.options.length > 0) {
+                    twinEngineSelect.value = defaultModel;
                 }
             },
             updateChatScreenElementVisibility() {
@@ -8257,32 +8188,6 @@
                     elements.footerTwinEngineModeToggleBtn.disabled = !isEnabled;
                 }
             },
-            updateTwinEngineApiKeyCycleButton() {
-                const button = elements.twinEngineApiKeyCycleBtn;
-                if (!button) return;
-
-                const configs = state.settings.twinEngineApiConfigs;
-                const activeId = state.settings.twinEngineActiveConfigId;
-                
-                if (configs.length === 0) {
-                    button.classList.add('hidden');
-                    return;
-                }
-
-                button.classList.remove('hidden');
-                button.disabled = configs.length <= 1;
-
-                const activeConfig = configs.find(c => c.id === activeId) || configs[0];
-
-                if (activeConfig) {
-                    const initial = activeConfig.label?.trim().charAt(0) || '?';
-                    button.textContent = `キー: ${initial}`;
-                    button.title = `現在のキー: ${activeConfig.label || 'ラベル未設定'}`;
-                } else {
-                    button.textContent = 'キー: -';
-                    button.title = 'APIキーが設定されていません';
-                }
-            },
             updateHistoryHeaderButtonVisibility() {
                 const showBulkActions = state.settings.showBulkHistoryActions;
                 if (elements.exportAllSessionsBtn) {
@@ -8345,7 +8250,7 @@
                         const option = document.createElement('option');
                         option.value = modelId;
                         option.textContent = modelId;
-                        optgroup.appendChild(optgroup);
+                        optgroup.appendChild(option);
                     });
                     select.appendChild(optgroup);
                 }
@@ -8458,7 +8363,7 @@
                         const option = document.createElement('option');
                         option.value = modelId;
                         option.textContent = modelId;
-                        optgroup.appendChild(optgroup);
+                        optgroup.appendChild(option);
                     });
                     select.appendChild(optgroup);
                 }
@@ -8919,11 +8824,21 @@
                 const apiProviderSelect = elements.apiProviderSelect;
                 if (!apiProviderSelect) return;
 
+                const allProviderOptions = [
+                    { value: 'gemini', text: 'Gemini (Google)' },
+                    { value: 'deepseek', text: 'DeepSeek' },
+                    { value: 'claude', text: 'Claude (Anthropic API)' },
+                    { value: 'openai', text: 'ChatGPT (OpenAI API)' },
+                    { value: 'xai', text: 'Grok (xAI API)' },
+                    { value: 'llmaggregator', text: 'LLM Aggregator' },
+                    { value: 'dummy', text: 'Dummy AI' }
+                ];
+
                 const currentValue = apiProviderSelect.value;
                 apiProviderSelect.innerHTML = '';
 
                 const cycleSettings = state.settings.apiProviderCycle;
-                const enabledOptions = API_PROVIDERS.filter(option => 
+                const enabledOptions = allProviderOptions.filter(option => 
                     cycleSettings[option.value] === true
                 );
 
@@ -9002,38 +8917,38 @@
 
     const appLogic = {
         async initializeApp() {
-            try {
-                if (typeof marked !== 'undefined') {
-                    marked.setOptions({
-                        breaks: true,
-                        gfm: true,
-                        sanitize: false,
-                        smartypants: false
-                    });
-                }
-                if (typeof mermaid !== 'undefined') {
-                    mermaid.initialize({
-                        startOnLoad: false,
-                        theme: 'default',
-                        securityLevel: 'loose',
-                        fontFamily: 'var(--font-family)',
-                        flowchart: { useMaxWidth: true, htmlLabels: true },
-                        sequence: { useMaxWidth: true },
-                        gantt: { useMaxWidth: true },
-                        journey: { useMaxWidth: true },
-                        pie: { useMaxWidth: true }
-                    });
-                }
-
-                elements.appVersionSpan.textContent = APP_VERSION;
-
-                window.addEventListener('beforeinstallprompt', (event) => {
-                    event.preventDefault();
+            if (typeof marked !== 'undefined') {
+                marked.setOptions({
+                    breaks: true,
+                    gfm: true,
+                    sanitize: false,
+                    smartypants: false
                 });
+            }
+            if (typeof mermaid !== 'undefined') {
+                mermaid.initialize({
+                    startOnLoad: false,
+                    theme: 'default',
+                    securityLevel: 'loose',
+                    fontFamily: 'var(--font-family)',
+                    flowchart: { useMaxWidth: true, htmlLabels: true },
+                    sequence: { useMaxWidth: true },
+                    gantt: { useMaxWidth: true },
+                    journey: { useMaxWidth: true },
+                    pie: { useMaxWidth: true }
+                });
+            }
 
-                uiUtils.showScreen('chat');
-                registerServiceWorker();
+            elements.appVersionSpan.textContent = APP_VERSION;
 
+            window.addEventListener('beforeinstallprompt', (event) => {
+                event.preventDefault();
+            });
+
+            uiUtils.showScreen('chat');
+            registerServiceWorker();
+
+            try {
                 await dbUtils.openDB();
                 await dbUtils.loadSettings();
                 
@@ -9081,80 +8996,10 @@
                     uiUtils.scrollToBottom();
                 }
 
-                if (typeof window.initializationSuccess === 'function') {
-                    window.initializationSuccess();
-                }
             } catch (error) {
                 await uiUtils.showCustomAlert(`アプリの初期化に失敗しました: ${error}`);
-                await this._showFatalErrorScreen(error);
+                elements.appContainer.innerHTML = `<p style="padding: 20px; text-align: center; color: red;">アプリの起動に失敗しました。</p>`;
             } 
-        },
-        async _showFatalErrorScreen(error) {
-            const errorHtml = `
-                <div style="padding: 20px; text-align: center; color: var(--text-primary); height: 100%; overflow-y: auto; display: flex; flex-direction: column; justify-content: center;">
-                    <div>
-                        <h2 style="color: var(--text-error); margin-bottom: 15px;">アプリの起動に失敗しました。</h2>
-                        <p style="font-size: 14px; margin-bottom: 25px;">
-                            IndexedDBへの書き込みや読み込みが正常に機能しない、あるいはデータが破損している可能性があります。<br>
-                            以下のボタンで問題を解決できる場合があります。また、ユーザーが何も操作しなくても、アプリが起動しない問題を自動検知し、段階的に復旧処理を試みます。
-                        </p>
-                        <div style="display: flex; flex-direction: column; gap: 20px; max-width: 450px; margin: 0 auto; text-align: left;">
-                            
-                            <div>
-                                <button id="recovery-update-app-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-update); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">アプリを更新 (キャッシュクリア)</button>
-                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
-                                    ※ サーバー側のhtmlファイルなどはブラウザにキャッシュされるため、このボタンで明示的にサーバーから再取得しない限り更新されない。
-                                </p>
-                            </div>
-
-                            <div>
-                                <button id="recovery-force-reload-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-edit); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">🔄 強制復旧 (キャッシュクリア&リロード)</button>
-                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
-                                    ※ アプリが不安定な場合に使用。全キャッシュをクリアして強制的に再起動します。「アプリを更新」の処理に加えて、ブラウザが保持しているこの「GeminiPWA」アプリに関連する他の種類のキャッシュも可能な限り削除します。<br>※ ユーザーデータ（チャット履歴・設定）は保持されます。
-                                </p>
-                            </div>
-
-                            <div>
-                                <button id="recovery-clear-history-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-edit); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">全履歴削除</button>
-                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
-                                    ※ ブラウザに保存されているチャット履歴を全て削除します。設定は保持されます。
-                                </p>
-                            </div>
-
-                            <div>
-                                <button id="recovery-clear-data-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-delete); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">⚠⚠⚠全データクリア (履歴と設定)⚠⚠⚠</button>
-                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
-                                    ※ ブラウザに保存されている設定や履歴を全て削除。<br>！！間違えて押そうとしていないか注意！！
-                                </p>
-                            </div>
-                            
-                        </div>
-                        <p style="font-size: 12px; margin-top: 30px; color: var(--text-secondary); max-width: 600px; margin-left: auto; margin-right: auto; word-wrap: break-word;">エラー詳細: <span id="recovery-error-details"></span></p>
-                    </div>
-                </div>
-            `;
-            
-            elements.appContainer.innerHTML = errorHtml;
-            
-            const errorDetailsEl = document.getElementById('recovery-error-details');
-            if (errorDetailsEl) {
-                errorDetailsEl.textContent = error.message || String(error);
-            }
-
-            document.getElementById('recovery-update-app-btn').addEventListener('click', () => this.updateApp());
-            document.getElementById('recovery-force-reload-btn').addEventListener('click', () => {
-                 if (typeof errorRecovery !== 'undefined') {
-                    errorRecovery.manualRecovery();
-                } else {
-                    alert("強制復旧機能が利用できません。手動でキャッシュをクリアしてリロードしてください。");
-                }
-            });
-            document.getElementById('recovery-clear-history-btn').addEventListener('click', () => this.confirmClearAllHistory());
-            document.getElementById('recovery-clear-data-btn').addEventListener('click', () => this.confirmClearAllData());
-
-            const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-            document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mode', 'pastel-blue-mode', 'pastel-yellow-mode', 'pastel-purple-mode', 'pastel-rainbow-mode');
-            document.body.classList.add(prefersDark ? 'dark-mode' : 'light-mode-forced');
         },
         setupEventListeners() {
             elements.gotoHistoryBtn.addEventListener('click', () => uiUtils.showScreen('history'));
@@ -9172,7 +9017,6 @@
             elements.pasteClipboardStackBtn.addEventListener('click', () => this.pasteIntoClipboardStack());
 
             elements.twinEngineSummaryBtn.addEventListener('click', () => this.toggleTwinEngineSummary());
-            elements.twinEngineApiKeyCycleBtn.addEventListener('click', () => this.cycleTwinEngineApiKey());
             elements.copyTwinEngineSummaryBtn.addEventListener('click', () => this.copyTwinEngineSummaryText());
             elements.clearTwinEngineSummaryBtn.addEventListener('click', () => this.confirmClearTwinEngineSummary());
             elements.resummarizeBtn.addEventListener('click', () => this.manualResummarize());
@@ -9772,7 +9616,9 @@
             elements.showMultiApiKeysToggle.addEventListener('change', (e) => {
                 uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
             });
-            twinEngineApiConfigUtils.initialize();
+            elements.twinEngineProviderSelect.addEventListener('change', (event) => {
+                uiUtils.updateTwinEngineApiSettingsVisibility(event.target.value);
+            });
         },
         handlePopState(event) {
             const targetScreen = event.state?.screen || 'chat';
@@ -10058,7 +9904,6 @@
 
             if (state.isTwinEngineSummaryVisible) {
                 elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
-                uiUtils.updateTwinEngineApiKeyCycleButton();
                 elements.twinEngineSummaryEditor.focus();
                 elements.twinEngineSummaryEditor.scrollTop = elements.twinEngineSummaryEditor.scrollHeight;
             }
@@ -10114,29 +9959,7 @@
 
             uiUtils.updateTwinEngineModeButton();
 
-
-            await this.saveSettings(false);
-        },
-        async cycleTwinEngineApiKey() {
-            const configs = state.settings.twinEngineApiConfigs;
-            if (configs.length <= 1) {
-                return;
-            }
-
-            const currentId = state.settings.twinEngineActiveConfigId;
-            const currentIndex = configs.findIndex(c => c.id === currentId);
-            
-            const nextIndex = (currentIndex === -1) ? 0 : (currentIndex + 1) % configs.length;
-            
-            const nextConfig = configs[nextIndex];
-            if (nextConfig) {
-                state.settings.twinEngineActiveConfigId = nextConfig.id;
-            }
-
-            uiUtils.updateTwinEngineApiKeyCycleButton();
-            twinEngineApiConfigUtils.renderList();
-
-            if (state.settings.autoSaveSettings) {
+            if (!state.settings.autoSaveSettings) {
                 await this.saveSettings(false);
             }
         },
@@ -10144,18 +9967,25 @@
             if (!messagesToSummarize || messagesToSummarize.length === 0) {
                 return null;
             }
-        
+
             try {
-                const activeConfig = state.settings.twinEngineApiConfigs.find(
-                    c => c.id === state.settings.twinEngineActiveConfigId
-                );
-        
-                if (!activeConfig || (activeConfig.provider !== 'dummy' && !activeConfig.apiKey)) {
-                    throw new Error("Twin-engine用のアクティブなAPI設定（とAPIキー）がありません。設定画面を確認してください。");
+                const provider = state.settings.twinEngineProvider;
+                let apiKey;
+
+                switch(provider) {
+                    case 'gemini': apiKey = state.settings.twinEngineGeminiApiKey; break;
+                    case 'deepseek': apiKey = state.settings.twinEngineDeepseekApiKey; break;
+                    case 'claude': apiKey = state.settings.twinEngineClaudeApiKey; break;
+                    case 'openai': apiKey = state.settings.twinEngineOpenaiApiKey; break;
+                    case 'xai': apiKey = state.settings.twinEngineXaiApiKey; break;
+                    case 'llmaggregator': apiKey = state.settings.twinEngineLlmaggregatorApiKey; break;
+                    default: throw new Error("Twin-engineに設定されたAPIプロバイダーが無効です。");
                 }
-        
-                const { provider, apiKey, modelName } = activeConfig;
-        
+
+                if (!apiKey) {
+                    throw new Error(`${provider.charAt(0).toUpperCase() + provider.slice(1)}のTwin-engine用APIキーが設定されていません。`);
+                }
+
                 const contextForSummary = {
                     sessionId: null,
                     messages: messagesToSummarize,
@@ -10163,19 +9993,15 @@
                     inputText: '',
                     attachments: [],
                     apiProvider: provider,
-                    _apiKeyOverride: apiKey,
-                    _modelNameOverride: modelName,
-                    temperature: state.settings[`${provider}Temperature`],
-                    maxTokens: state.settings[`${provider}MaxTokens`],
                     dummyUser: state.settings.twinEngineDummyUser,
                     enableDummyUser: state.settings.twinEngineEnableDummyUser,
                     dummyModel: state.settings.twinEngineDummyModel,
                     enableDummyModel: state.settings.twinEngineEnableDummyModel,
-                    concatDummyModel: state.settings.twinEngineConcatDummyModel
+                    concatDummyModel: false
                 };
-        
+
                 const response = await this.handleSend(false, -1, contextForSummary);
-        
+
                 if (response && response.content) {
                     if (state.settings.twinEngineConcatDummyModel && state.settings.twinEngineDummyModel) {
                         const prefix = state.settings.twinEngineDummyModel.trim();
@@ -10184,12 +10010,13 @@
                     return response;
                 }
                 return null;
-        
+
             } catch (error) {
                 await uiUtils.showCustomAlert(`要約処理中にエラーが発生しました: ${error.message}`);
                 return null;
             }
         },
+
         async manualResummarize() {
             if (!state.settings.enableTwinEngine) {
                 await uiUtils.showCustomAlert("Twin-engine機能が無効です。設定画面から有効にしてください。");
@@ -10778,37 +10605,8 @@
         },
         async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
             const isBackgroundProcess = !!sourceSessionContext;
-            
-            let apiKeyToUse, modelNameToUse, selectedApiProvider;
-            
-            if (isBackgroundProcess) {
-                selectedApiProvider = sourceSessionContext.apiProvider;
-                apiKeyToUse = sourceSessionContext._apiKeyOverride;
-                modelNameToUse = sourceSessionContext._modelNameOverride;
-            } else {
-                selectedApiProvider = state.settings.apiProvider;
-                if (state.settings.showMultiApiKeys) {
-                    apiKeyToUse = multiApiKeyUtils.getActiveApiKey(selectedApiProvider);
-                } else {
-                    switch(selectedApiProvider) {
-                        case 'gemini': apiKeyToUse = state.settings.apiKey; break;
-                        case 'deepseek': apiKeyToUse = state.settings.deepSeekApiKey; break;
-                        case 'claude': apiKeyToUse = state.settings.claudeApiKey; break;
-                        case 'openai': apiKeyToUse = state.settings.openaiApiKey; break;
-                        case 'xai': apiKeyToUse = state.settings.xaiApiKey; break;
-                        case 'llmaggregator': apiKeyToUse = state.settings.llmAggregatorApiKey; break;
-                    }
-                }
-                 switch(selectedApiProvider) {
-                    case 'gemini': modelNameToUse = state.settings.modelName; break;
-                    case 'deepseek': modelNameToUse = state.settings.deepSeekModelName; break;
-                    case 'claude': modelNameToUse = state.settings.claudeModelName; break;
-                    case 'openai': modelNameToUse = state.settings.openaiModelName; break;
-                    case 'xai': modelNameToUse = state.settings.xaiModelName; break;
-                    case 'llmaggregator': modelNameToUse = state.settings.llmAggregatorModelName; break;
-                }
-            }
-            
+            const selectedApiProvider = isBackgroundProcess ? (sourceSessionContext.apiProvider || state.settings.apiProvider) : state.settings.apiProvider;
+
             let text = '';
             let attachmentsToSend = [];
             if (isBackgroundProcess) {
@@ -11133,7 +10931,12 @@
                 }
             }
             
-            if (!apiKeyToUse && selectedApiProvider !== 'dummy') {
+            if ((selectedApiProvider === 'gemini' && !(multiApiKeyUtils.getActiveApiKey('gemini') || state.settings.apiKey)) ||
+                (selectedApiProvider === 'deepseek' && !(multiApiKeyUtils.getActiveApiKey('deepseek') || state.settings.deepSeekApiKey)) ||
+                (selectedApiProvider === 'claude' && !(multiApiKeyUtils.getActiveApiKey('claude') || state.settings.claudeApiKey)) ||
+                (selectedApiProvider === 'openai' && !(multiApiKeyUtils.getActiveApiKey('openai') || state.settings.openaiApiKey)) ||
+                (selectedApiProvider === 'xai' && !(multiApiKeyUtils.getActiveApiKey('xai') || state.settings.xaiApiKey)) ||
+                (selectedApiProvider === 'llmaggregator' && !(multiApiKeyUtils.getActiveApiKey('llmaggregator') || state.settings.llmAggregatorApiKey))) {
                 if (!isBackgroundProcess) {
                     await uiUtils.showCustomAlert(`${selectedApiProvider} APIキーが設定されていません。設定画面を開きます。`);
                     uiUtils.showScreen('settings');
@@ -11427,18 +11230,18 @@
             try {
                 let apiResponseObject;
                 if (selectedApiProvider === 'gemini') {
-                    apiResponseObject = await apiUtils.callGeminiApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, usePseudoForThisCall, contextGeminiEnableGrounding);
+                    apiResponseObject = await apiUtils.callGeminiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, usePseudoForThisCall, contextGeminiEnableGrounding);
                 } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
-                    apiResponseObject = await apiUtils.callDeepSeekApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, selectedApiProvider);
+                    apiResponseObject = await apiUtils.callDeepSeekApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, selectedApiProvider);
                 } else if (selectedApiProvider === 'claude') {
-                    apiResponseObject = await apiUtils.callClaudeApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
+                    apiResponseObject = await apiUtils.callClaudeApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                 } else if (selectedApiProvider === 'openai') {
                     const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
-                    apiResponseObject = await apiUtils.callOpenAICompatibleApi(apiKeyToUse, modelNameToUse, 'openai', apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, hasImage);
+                    apiResponseObject = await apiUtils.callOpenAICompatibleApi('openai', apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, hasImage);
                 } else if (selectedApiProvider === 'xai') {
                     const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
                     const enableVisionForThisCall = contextXaiVisionEnable || hasImage;
-                    apiResponseObject = await apiUtils.callXaiApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, enableVisionForThisCall);
+                    apiResponseObject = await apiUtils.callXaiApi(apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, enableVisionForThisCall);
                 } else {
                     throw new Error("不明なAPIプロバイダーが選択されています。");
                 }
@@ -12326,10 +12129,19 @@
             }
 
              newSettings.apiProvider = elements.apiProviderSelect.value;
-             newSettings.modelName = elements.geminiModelNameSelect.value;
-             newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
-             newSettings.commonSystemPrompt = elements.commonSystemPromptDefaultTextarea.value.trim();
-             newSettings.enableCommonSystemPromptDefault = elements.enableCommonSystemPromptDefaultCheckbox.checked;
+             newSettings.twinEngineProvider = elements.twinEngineProviderSelect.value;
+             newSettings.twinEngineGeminiApiKey = elements.twinEngineGeminiApiKeyInput.value.trim();
+             newSettings.twinEngineGeminiModelName = elements.twinEngineGeminiModelNameSelect.value;
+             newSettings.twinEngineDeepseekApiKey = elements.twinEngineDeepseekApiKeyInput.value.trim();
+             newSettings.twinEngineDeepseekModelName = elements.twinEngineDeepseekModelNameSelect.value;
+             newSettings.twinEngineClaudeApiKey = elements.twinEngineClaudeApiKeyInput.value.trim();
+             newSettings.twinEngineClaudeModelName = elements.twinEngineClaudeModelNameSelect.value;
+             newSettings.twinEngineOpenaiApiKey = elements.twinEngineOpenaiApiKeyInput.value.trim();
+             newSettings.twinEngineOpenaiModelName = elements.twinEngineOpenaiModelNameSelect.value;
+             newSettings.twinEngineXaiApiKey = elements.twinEngineXaiApiKeyInput.value.trim();
+             newSettings.twinEngineXaiModelName = elements.twinEngineXaiModelNameSelect.value;
+             newSettings.twinEngineLlmaggregatorApiKey = elements.twinEngineLlmaggregatorApiKeyInput.value.trim();
+             newSettings.twinEngineLlmaggregatorModelName = elements.twinEngineLlmaggregatorModelNameSelect.value;
              newSettings.enableTwinEngine = document.getElementById('enable-twin-engine').checked;
              newSettings.twinEngineEnableFullAuto = elements.twinEngineEnableFullAutoToggle.checked;
              newSettings.showFooterTwinEngineToggleButton = elements.showFooterTwinEngineToggleButtonToggle.checked;
@@ -12338,12 +12150,16 @@
                 : parseInt(elements.twinEngineSummarizeAfterTurnsInput.value, 10);
              const initialTurns = parseInt(document.getElementById('twin-engine-initial-turns-to-include').value, 10);
              newSettings.twinEngineInitialTurnsToInclude = isNaN(initialTurns) || initialTurns < 0 ? 0 : initialTurns;
-             newSettings.twinEngineSummaryPrompt = elements.twinEngineSummaryPromptInput.value.trim();
+             newSettings.twinEngineSummaryPrompt = document.getElementById('twin-engine-summary-prompt').value.trim();
              newSettings.twinEngineDummyUser = elements.twinEngineDummyUserInput.value.trim();
              newSettings.twinEngineEnableDummyUser = elements.twinEngineEnableDummyUserCheckbox.checked;
              newSettings.twinEngineDummyModel = elements.twinEngineDummyModelInput.value.trim();
              newSettings.twinEngineEnableDummyModel = elements.twinEngineEnableDummyModelCheckbox.checked;
              newSettings.twinEngineConcatDummyModel = elements.twinEngineConcatDummyModelCheckbox.checked;
+             newSettings.modelName = elements.geminiModelNameSelect.value;
+             newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
+             newSettings.commonSystemPrompt = elements.commonSystemPromptDefaultTextarea.value.trim();
+             newSettings.enableCommonSystemPromptDefault = elements.enableCommonSystemPromptDefaultCheckbox.checked;
              
              newSettings.deepSeekModelName = elements.deepSeekModelNameSelect.value;
              newSettings.deepSeekAdditionalModels = elements.deepSeekAdditionalModelsTextarea.value.trim();
@@ -12885,8 +12701,6 @@
                     defaultSettingsCopy.twinEngineSummarizeAfterTurns = DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
                     defaultSettingsCopy.twinEngineInitialTurnsToInclude = 1;
                     defaultSettingsCopy.twinEngineSummaryPrompt = '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。';
-                    defaultSettingsCopy.twinEngineApiConfigs = [];
-                    defaultSettingsCopy.twinEngineActiveConfigId = null;
                     defaultSettingsCopy.twinEngineDummyUser = '';
                     defaultSettingsCopy.twinEngineEnableDummyUser = false;
                     defaultSettingsCopy.twinEngineDummyModel = '';
@@ -13327,7 +13141,7 @@
                 const oldThoughtOpenStates = new Map(state.thoughtSummaryOpenStates);
                 state.thoughtSummaryOpenStates.clear();
                  state.currentMessages.forEach((msg, newIdx) => {
-                    const oldIdxEquivalent = newIdx >= Math.min(...indicesToDelete) ? newIdx + indicesToDelete.filter(i => i <= newIdx).length : newIdx;
+                    const oldIdxEquivalent = newIdx >= Math.min(...indicesToDelete) ? newIdx + 1 : newIdx;
                     if (oldThoughtOpenStates.has(oldIdxEquivalent)) {
                         state.thoughtSummaryOpenStates.set(newIdx, oldThoughtOpenStates.get(oldIdxEquivalent));
                     } else {
@@ -14069,7 +13883,7 @@
                 uiUtils.setAiToAiProcessingState(false);
             }
         },
-                removeAttachment: async function(messageIndex, attachmentIndex, listItemElement) {
+        removeAttachment: async function(messageIndex, attachmentIndex, listItemElement) {
             const message = state.currentMessages[messageIndex];
             if (!message || !message.attachments || !message.attachments[attachmentIndex]) return;
 
@@ -14291,14 +14105,23 @@
     };
 
     const apiUtils = {
-        async callGeminiApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding) {
+        async callGeminiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding) {
+            let apiKey;
+                        if (state.settings.showMultiApiKeys) {
+                apiKey = multiApiKeyUtils.getActiveApiKey('gemini');
+            } else {
+                apiKey = state.settings.apiKey;
+            }
+            
+            let baseUrl = GEMINI_API_BASE_URL;
+            
             if (!apiKey) {
                 throw new Error("APIキーが設定されていません。");
             }
-            let baseUrl = GEMINI_API_BASE_URL;
-            
             state.abortController = new AbortController();
             const { signal } = state.abortController;
+
+            const model = state.settings.modelName || DEFAULT_MODEL;
             
             let endpointMethod = useStreaming
                 ? (usePseudo ? 'generateContent?alt=sse&' : 'streamGenerateContent?alt=sse&')
@@ -14307,7 +14130,7 @@
             const endpoint = `${baseUrl}${model}:${endpointMethod}key=${apiKey}`;
 
             const finalGenerationConfig = { ...generationConfig };
-            if (state.settings.geminiThinkingBudget !== null || state.settings.geminiIncludeThoughts) {
+                        if (state.settings.geminiThinkingBudget !== null || state.settings.geminiIncludeThoughts) {
                 finalGenerationConfig.thinkingConfig = finalGenerationConfig.thinkingConfig || {};
                 if (state.settings.geminiThinkingBudget !== null && Number.isInteger(state.settings.geminiThinkingBudget) && state.settings.geminiThinkingBudget >= 0) {
                     finalGenerationConfig.thinkingConfig.thinkingBudget = state.settings.geminiThinkingBudget;
@@ -14506,14 +14329,27 @@
                  }
              }
         },
-        async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
-            let baseUrl;
+        async callDeepSeekApi(messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
+            let apiKey, model, baseUrl, topK;
             if (provider === 'llmaggregator') {
+                if (state.settings.showMultiApiKeys) {
+                    apiKey = multiApiKeyUtils.getActiveApiKey('llmaggregator');
+                } else {
+                    apiKey = state.settings.llmAggregatorApiKey;
+                }
+                model = state.settings.llmAggregatorModelName;
                 baseUrl = state.settings.llmAggregatorApiBackend;
+                topK = state.settings.llmAggregatorTopK;
                 if (!baseUrl) {
                     throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
                 }
             } else {
+                if (state.settings.showMultiApiKeys) {
+                    apiKey = multiApiKeyUtils.getActiveApiKey('deepseek');
+                } else {
+                    apiKey = state.settings.deepSeekApiKey;
+                }
+                model = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
                 baseUrl = state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
             }
 
@@ -14553,8 +14389,8 @@
                 ...(generationConfig.frequencyPenalty !== undefined && { frequency_penalty: generationConfig.frequencyPenalty }),
             };
             
-            if (provider === 'llmaggregator' && generationConfig.topK !== null) {
-                dsRequestBody.top_k = generationConfig.topK;
+            if (provider === 'llmaggregator' && topK !== null) {
+                dsRequestBody.top_k = topK;
             }
 
             try {
@@ -14657,7 +14493,7 @@
                             } catch (e) {}
                         }
                     }
-                    if (finalFinishReason && finalFinishReason !== 'null') break;
+                                        if (finalFinishReason && finalFinishReason !== 'null') break;
                 }
 
                 yield {
@@ -14679,13 +14515,15 @@
                 }
             }
         },
-        async callClaudeApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming) {
+        async callClaudeApi(messagesForApi, generationConfig, systemInstruction, useStreaming) {
+            const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('claude') : state.settings.claudeApiKey;
             if (!apiKey) {
                 throw new Error("Claude APIキーが設定されていません。");
             }
             state.abortController = new AbortController();
             const { signal } = state.abortController;
-            
+
+            const model = state.settings.claudeModelName || DEFAULT_CLAUDE_MODEL;
             const baseUrl = CLAUDE_API_BASE_URL;
             
             const anthropicRequest = this.convertToClaudeRequest(messagesForApi, systemInstruction);
@@ -14848,12 +14686,12 @@
                                     }
                                 } else if (chunk.type === 'message_delta' && chunk.usage) {
                                     finalUsage = chunk.usage;
-                                                                    }
+                                }
                             } catch (e) {
                             }
                         }
                     }
-                    if (finalFinishReason && finalFinishReason !== 'null') break;
+                                        if (finalFinishReason && finalFinishReason !== 'null') break;
                 }
                 yield {
                     type: 'metadata',
@@ -14872,7 +14710,7 @@
                 }
             }
         },
-        _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, useStreaming, enableVision, generationConfig) {
+        _createOpenAICompatibleRequestBody(model, messagesForApi, systemInstruction, useStreaming, enableVision) {
             const oaMessages = [];
             if (systemInstruction && systemInstruction.parts?.[0]?.text) {
                 oaMessages.push({ role: "system", content: systemInstruction.parts[0].text });
@@ -14926,12 +14764,16 @@
 
             return body;
         },
-        async callOpenAICompatibleApi(apiKey, model, provider, messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
-            let baseUrl;
+        async callOpenAICompatibleApi(provider, messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
+            let apiKey, model, baseUrl;
             
             if (provider === 'openai') {
+                apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('openai') : state.settings.openaiApiKey;
+                model = state.settings.openaiModelName || DEFAULT_OPENAI_MODEL;
                 baseUrl = OPENAI_API_BASE_URL;
             } else if (provider === 'llmaggregator') {
+                apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('llmaggregator') : state.settings.llmAggregatorApiKey;
+                model = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
                 baseUrl = state.settings.llmAggregatorApiBackend;
                 if (!baseUrl) {
                     throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
@@ -14956,9 +14798,9 @@
                 model,
                 messagesForApi,
                 systemInstruction,
+                generationConfig,
                 useStreaming,
-                enableVision,
-                generationConfig
+                enableVision
             );
             
             if (provider === 'llmaggregator' && generationConfig.topK !== null) {
@@ -15060,7 +14902,8 @@
                 }
             }
         },
-        async callXaiApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
+        async callXaiApi(messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
+            const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('xai') : state.settings.xaiApiKey;
             if (!apiKey) {
                 throw new Error("xAI APIキーが設定されていません。");
             }
@@ -15073,12 +14916,12 @@
             };
             
             const body = this._createOpenAICompatibleRequestBody(
-                model,
+                state.settings.xaiModelName || DEFAULT_XAI_MODEL,
                 messagesForApi,
                 systemInstruction,
+                generationConfig,
                 useStreaming,
-                enableVision,
-                generationConfig
+                enableVision
             );
 
             const reasoningModels = ['grok-3-mini', 'grok-3-mini-fast'];
@@ -15513,10 +15356,6 @@
             const item = document.createElement('div');
             item.className = `api-key-item ${key.isActive ? 'active' : ''}`;
 
-            const row1 = document.createElement('div');
-            row1.style.display = 'flex';
-            row1.style.gap = '5px';
-
             const labelInput = document.createElement('input');
             labelInput.type = 'text';
             labelInput.className = 'api-key-item-label';
@@ -15556,11 +15395,10 @@
             actions.appendChild(selectBtn);
             actions.appendChild(deleteBtn);
 
-            row1.appendChild(labelInput);
-            row1.appendChild(keyInput);
-            row1.appendChild(actions);
+            item.appendChild(labelInput);
+            item.appendChild(keyInput);
+            item.appendChild(actions);
 
-            item.appendChild(row1);
             return item;
         },
 
@@ -15621,199 +15459,6 @@
         }
     };
 
-     const twinEngineApiConfigUtils = {
-        MAX_CONFIGS: 1000,
-    
-        initialize() {
-            elements.addTwinEngineApiConfigBtn.addEventListener('click', () => this.addConfig());
-            this.renderList();
-        },
-    
-        // 追加: 新しい命名規則でラベルを生成するヘルパー関数
-        generateNextConfigLabel() {
-            const index = state.settings.twinEngineApiConfigs.length;
-            const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-            const char = alphabet[index % 26];
-            const numberSuffix = Math.floor(index / 26);
-            
-            // "A設定", "Z設定", "A2設定", "B2設定" のようなラベルを生成します
-            return `${char}${numberSuffix > 0 ? numberSuffix + 1 : ''}設定`;
-        },
-
-        addConfig() {
-            const configs = state.settings.twinEngineApiConfigs;
-            if (configs.length >= this.MAX_CONFIGS) {
-                uiUtils.showCustomAlert(`最大${this.MAX_CONFIGS}個までのAPI設定を作成できます。`);
-                return;
-            }
-            const newConfig = {
-                id: Date.now().toString(),
-                // 変更: 新しい命名規則でラベルを生成するように修正
-                label: this.generateNextConfigLabel(),
-                provider: 'gemini',
-                apiKey: '',
-                modelName: DEFAULT_MODEL
-            };
-            configs.push(newConfig);
-            if (configs.length === 1) {
-                state.settings.twinEngineActiveConfigId = newConfig.id;
-            }
-            this.renderList();
-        },
-    
-        deleteConfig(configId) {
-            const configs = state.settings.twinEngineApiConfigs;
-            const index = configs.findIndex(c => c.id === configId);
-            if (index === -1) return;
-            
-            configs.splice(index, 1);
-            if (state.settings.twinEngineActiveConfigId === configId) {
-                state.settings.twinEngineActiveConfigId = configs.length > 0 ? configs[0].id : null;
-            }
-            this.renderList();
-        },
-    
-        selectConfig(configId) {
-            state.settings.twinEngineActiveConfigId = configId;
-            this.renderList();
-        },
-    
-        updateConfigValue(configId, key, value) {
-            const config = state.settings.twinEngineApiConfigs.find(c => c.id === configId);
-            if (config) {
-                config[key] = value;
-                if (key === 'provider') {
-                    config.modelName = this.getDefaultModelForProvider(value);
-                    this.renderList();
-                }
-            }
-        },
-    
-        renderList() {
-            const configs = state.settings.twinEngineApiConfigs;
-            const container = elements.twinEngineApiConfigsList;
-            container.innerHTML = '';
-    
-            if (configs.length === 0) {
-                const emptyMsg = document.createElement('p');
-                emptyMsg.textContent = 'Twin-engine用のAPI設定がありません。';
-                emptyMsg.style.cssText = 'color: var(--text-secondary); font-size: 13px; text-align: center; margin: 10px 0;';
-                container.appendChild(emptyMsg);
-            } else {
-                configs.forEach(config => {
-                    const item = this.createConfigItem(config);
-                    container.appendChild(item);
-                });
-            }
-            elements.addTwinEngineApiConfigBtn.disabled = configs.length >= this.MAX_CONFIGS;
-            elements.addTwinEngineApiConfigBtn.textContent = configs.length >= this.MAX_CONFIGS 
-                ? `最大${this.MAX_CONFIGS}個まで` 
-                : '新しいAPI設定を追加';
-            uiUtils.updateTwinEngineApiKeyCycleButton();
-        },
-    
-        createConfigItem(config) {
-            const item = document.createElement('div');
-            item.className = 'api-key-item twin-engine-api-config-item';
-            item.dataset.configId = config.id;
-            const isActive = state.settings.twinEngineActiveConfigId === config.id;
-            if (isActive) item.classList.add('active');
-
-            const labelInput = document.createElement('input');
-            labelInput.type = 'text';
-            labelInput.className = 'api-key-item-label twin-engine-config-label';
-            labelInput.value = config.label;
-            labelInput.addEventListener('change', (e) => this.updateConfigValue(config.id, 'label', e.target.value));
-
-            const keyInput = document.createElement('input');
-            keyInput.type = 'password';
-            keyInput.className = 'api-key-item-input twin-engine-config-apikey';
-            keyInput.value = config.apiKey;
-            keyInput.placeholder = 'APIキーを入力...';
-            keyInput.addEventListener('input', (e) => this.updateConfigValue(config.id, 'apiKey', e.target.value));
-
-            const providerSelect = document.createElement('select');
-            providerSelect.className = 'twin-engine-config-provider';
-            API_PROVIDERS.forEach(providerInfo => {
-                if (providerInfo.value !== 'dummy') {
-                    const option = document.createElement('option');
-                    option.value = providerInfo.value;
-                    option.textContent = providerInfo.text;
-                    providerSelect.add(option);
-                }
-            });
-            providerSelect.value = config.provider;
-            providerSelect.addEventListener('change', (e) => this.updateConfigValue(config.id, 'provider', e.target.value));
-
-            const modelSelect = document.createElement('select');
-            modelSelect.className = 'twin-engine-config-model';
-            this.populateModelOptions(modelSelect, config.provider);
-            modelSelect.value = config.modelName;
-            modelSelect.addEventListener('change', (e) => this.updateConfigValue(config.id, 'modelName', e.target.value));
-
-            const actions = document.createElement('div');
-            actions.className = 'api-key-item-actions';
-            const selectBtn = document.createElement('button');
-            selectBtn.className = `api-key-select-btn ${isActive ? 'active' : ''}`;
-            selectBtn.textContent = isActive ? '使用中' : '選択';
-            selectBtn.disabled = isActive;
-            selectBtn.addEventListener('click', () => this.selectConfig(config.id));
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'api-key-delete-btn';
-            deleteBtn.textContent = '削';
-            deleteBtn.addEventListener('click', () => this.deleteConfig(config.id));
-            actions.appendChild(selectBtn);
-            actions.appendChild(deleteBtn);
-    
-            const row1 = document.createElement('div');
-            row1.style.display = 'flex';
-            row1.style.gap = '5px';
-            row1.style.marginBottom = '5px';
-            row1.appendChild(labelInput);
-            row1.appendChild(keyInput);
-            row1.appendChild(actions);
-    
-            const row2 = document.createElement('div');
-            row2.style.display = 'flex';
-            row2.style.gap = '5px';
-            row2.appendChild(providerSelect);
-            row2.appendChild(modelSelect);
-            
-            item.appendChild(row1);
-            item.appendChild(row2);
-            return item;
-        },
-    
-        populateModelOptions(selectElement, provider) {
-            selectElement.innerHTML = '';
-            let sourceSelect;
-            switch (provider) {
-                case 'gemini': sourceSelect = elements.geminiModelNameSelect; break;
-                case 'deepseek': sourceSelect = elements.deepSeekModelNameSelect; break;
-                case 'claude': sourceSelect = elements.claudeModelNameSelect; break;
-                case 'openai': sourceSelect = elements.openaiModelNameSelect; break;
-                case 'xai': sourceSelect = elements.xaiModelNameSelect; break;
-                case 'llmaggregator': sourceSelect = elements.llmAggregatorModelNameSelect; break;
-                default: return;
-            }
-            sourceSelect.querySelectorAll('optgroup, option').forEach(el => {
-                selectElement.add(el.cloneNode(true));
-            });
-        },
-    
-        getDefaultModelForProvider(provider) {
-            switch (provider) {
-                case 'gemini': return DEFAULT_MODEL;
-                case 'deepseek': return DEFAULT_DEEPSEEK_MODEL;
-                case 'claude': return DEFAULT_CLAUDE_MODEL;
-                case 'openai': return DEFAULT_OPENAI_MODEL;
-                case 'xai': return DEFAULT_XAI_MODEL;
-                case 'llmaggregator': return DEFAULT_LLMAGGREGATOR_MODEL;
-                default: return '';
-            }
-        },
-    };
-    
     errorRecovery.init();
 
     window.errorRecovery = errorRecovery;
@@ -15822,4 +15467,3 @@
 </script>
 </body>
 </html>
-const twinEngineApiConfigUtils = {
