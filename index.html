@@ -3821,6 +3821,15 @@
                             ※ チェック時、これまでに発生したJavaScriptエラーのログを応答します。
                          </p>
                         <hr style="margin: 15px 0;">
+                        <label class="checkbox-label" style="margin-top: 15px;">
+                            <input type="checkbox" id="dummy-twin-engine-debug-mode">
+                            Twin-engineデバッグモードを有効にする
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                            ※ 有効時、Twin-engineが起動するタイミングで、要約AIに送信されるはずの完全なプロンプトを応答として返します。<br>
+                            ※ この機能はデバッグ専用です。
+                        </p>
+                        <hr style="margin: 15px 0;">
                         <label for="dummy-dummy-model">ダミー Model プロンプト:</label>
                         <textarea id="dummy-dummy-model" placeholder="この内容は、Dummy AIの応答の先頭に付与されます。" aria-label="Dummy AI ダミー Model プロンプト"></textarea>
                         <label class="checkbox-label" style="margin-top: -5px; margin-bottom: 15px;">
@@ -5510,6 +5519,7 @@
             apiProviderCycleDummyCheckbox: document.getElementById('api-provider-cycle-dummy'),
             imagePreviewDialog: document.getElementById('imagePreviewDialog'),
             dummyErrorDebugModeCheckbox: document.getElementById('dummy-error-debug-mode'),
+            dummyTwinEngineDebugModeCheckbox: document.getElementById('dummy-twin-engine-debug-mode'),
             dummyDummyModelInput: document.getElementById('dummy-dummy-model'),
             dummyEnableDummyModelCheckbox: document.getElementById('dummy-enable-dummy-model'),
             geminiApiKeysList: document.getElementById('gemini-api-keys-list'),
@@ -5760,6 +5770,7 @@
                 dummyErrorDebugMode: false,
                 dummyDummyModel: '',
                 dummyEnableDummyModel: false,
+                dummyTwinEngineDebugMode: false,
                 geminiApiKeys: [],
                 geminiActiveApiKeyIndex: -1,
                 deepseekApiKeys: [],
@@ -7971,6 +7982,7 @@
                  elements.apiProviderCycleDummyCheckbox.checked = state.settings.apiProviderCycle.dummy;
                  elements.dummyDummyModelInput.value = state.settings.dummyDummyModel || '';
                  elements.dummyEnableDummyModelCheckbox.checked = state.settings.dummyEnableDummyModel;
+                 elements.dummyTwinEngineDebugModeCheckbox.checked = state.settings.dummyTwinEngineDebugMode;
 
                 elements.showMemoButtonToggle.checked = state.settings.showMemoButton;
                 elements.showTwinEngineSummaryButtonToggle.checked = state.settings.showTwinEngineSummaryButton;
@@ -8741,7 +8753,7 @@
                     removeBtn.classList.add('remove-file-btn');
                     removeBtn.title = '削除';
                     removeBtn.textContent = '×';
-                    removeBtn.onclick = () => appLogic.removeSelectedFile(index);
+                    removeBtn.onclick = () => appLogic.removeSelectedFile(indexToRemove);
 
                     li.appendChild(infoDiv);
                     li.appendChild(removeBtn);
@@ -10842,44 +10854,91 @@
             }
             
             if (selectedApiProvider === 'dummy') {
-                let dummyResponseContent = '';
-                if (state.settings.dummyEnableDummyModel && state.settings.dummyDummyModel) {
-                    dummyResponseContent += state.settings.dummyDummyModel;
-                }
-                if (state.settings.dummyErrorDebugMode) {
-                    const errorLog = errorRecovery.getErrorLogAsString();
-                    if (dummyResponseContent) {
-                        dummyResponseContent += '\n\n';
+                if (!isBackgroundProcess) {
+                    uiUtils.setSendingState(true);
+                    if (isRetry) {
+                        if (retryUserMessageIndex + 1 < state.currentMessages.length) {
+                            state.currentMessages.splice(retryUserMessageIndex + 1);
+                        }
+                        uiUtils.renderChatMessages(true);
+                    } else {
+                        const userMessage = {
+                            role: 'user', content: text, timestamp: Date.now(),
+                            attachments: attachmentsToSend, generatedByApiProvider: null
+                        };
+                        state.currentMessages.push(userMessage);
+                        const userMessageIndex = state.currentMessages.length - 1;
+                        uiUtils.appendMessage(userMessage.role, userMessage.content, userMessageIndex, false, null, userMessage.attachments);
+                        elements.userInput.value = '';
+                        state.pendingAttachments = [];
+                        uiUtils.adjustTextareaHeight();
+                        uiUtils.updateAttachmentBadgeVisibility();
                     }
-                    dummyResponseContent += errorLog;
+                    await dbUtils.saveChat();
+                    await sleep(300 + Math.random() * 400);
                 }
-
+            
+                let dummyResponseContent = '';
+            
+                if (state.settings.dummyTwinEngineDebugMode && !isBackgroundProcess) {
+                    const userTurnCount = state.currentMessages.filter(msg => msg.role === 'user').length;
+                    const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
+                    const isTwinEngineActive = state.settings.enableTwinEngine && userTurnCount > summarizeAfterTurns;
+            
+                    let debugOutput = "--- Twin-engine デバッグモード ---\n\n";
+                    if (isTwinEngineActive) {
+                        debugOutput += `Twin-engineはアクティブです。\n(現在のユーザーターン数: ${userTurnCount} / 閾値: ${summarizeAfterTurns})\n\n`;
+                        
+                        const messagesToSummarize = [...state.currentMessages];
+                        const summaryPrompt = state.settings.twinEngineSummaryPrompt || '以下の会話を簡潔に要約してください。';
+                        
+                        debugOutput += "--- システムプロンプト (要約指示) ---\n";
+                        debugOutput += `${summaryPrompt}\n\n`;
+            
+                        debugOutput += "--- 会話履歴 ---\n";
+                        messagesToSummarize.forEach(msg => {
+                            debugOutput += `[${msg.role}]\n${msg.content}\n`;
+                            if (msg.attachments && msg.attachments.length > 0) {
+                                debugOutput += `  (添付ファイル: ${msg.attachments.map(a => a.name).join(', ')})\n`;
+                            }
+                            debugOutput += "\n";
+                        });
+            
+                        const twinEngineDummyUser = state.settings.twinEngineDummyUser;
+                        const twinEngineEnableDummyUser = state.settings.twinEngineEnableDummyUser;
+                        if (twinEngineEnableDummyUser && twinEngineDummyUser) {
+                            debugOutput += "--- ダミーUserプロンプト (Twin-engine) ---\n";
+                            debugOutput += `[user]\n${twinEngineDummyUser}\n\n`;
+                        }
+            
+                        const twinEngineDummyModel = state.settings.twinEngineDummyModel;
+                        const twinEngineEnableDummyModel = state.settings.twinEngineEnableDummyModel;
+                        if (twinEngineEnableDummyModel && twinEngineDummyModel) {
+                            debugOutput += "--- ダミーModelプロンプト (Twin-engine) ---\n";
+                            debugOutput += `[model]\n${twinEngineDummyModel}\n\n`;
+                        }
+            
+                        dummyResponseContent = debugOutput.trim();
+                    } else {
+                        dummyResponseContent = `--- Twin-engine デバッグモード ---\n\nTwin-engineはまだ起動していません。\n(Twin-engine有効: ${state.settings.enableTwinEngine}, 現在のユーザーターン数: ${userTurnCount}, 閾値: ${summarizeAfterTurns})`;
+                    }
+                } else {
+                    if (state.settings.dummyEnableDummyModel && state.settings.dummyDummyModel) {
+                        dummyResponseContent += state.settings.dummyDummyModel;
+                    }
+                    if (state.settings.dummyErrorDebugMode) {
+                        const errorLog = errorRecovery.getErrorLogAsString();
+                        if (dummyResponseContent) {
+                            dummyResponseContent += '\n\n';
+                        }
+                        dummyResponseContent += errorLog;
+                    }
+                }
+            
                 if (isBackgroundProcess) {
                     return { content: dummyResponseContent, metadata: { finishReason: 'stop' } };
                 }
-
-                uiUtils.setSendingState(true);
-                if (isRetry) {
-                    if (retryUserMessageIndex + 1 < state.currentMessages.length) {
-                        state.currentMessages.splice(retryUserMessageIndex + 1);
-                    }
-                    uiUtils.renderChatMessages(true);
-                } else {
-                    const userMessage = {
-                        role: 'user', content: text, timestamp: Date.now(),
-                        attachments: attachmentsToSend, generatedByApiProvider: null
-                    };
-                    state.currentMessages.push(userMessage);
-                    const userMessageIndex = state.currentMessages.length - 1;
-                    uiUtils.appendMessage(userMessage.role, userMessage.content, userMessageIndex, false, null, userMessage.attachments);
-                    elements.userInput.value = '';
-                    state.pendingAttachments = [];
-                    uiUtils.adjustTextareaHeight();
-                    uiUtils.updateAttachmentBadgeVisibility();
-                }
-                await dbUtils.saveChat();
-                await sleep(300 + Math.random() * 400);
-                
+            
                 const modelMessage = {
                     role: 'model', content: dummyResponseContent, timestamp: Date.now(), generatedByApiProvider: 'dummy'
                 };
@@ -12551,6 +12610,7 @@
                  dummy: elements.apiProviderCycleDummyCheckbox.checked,
              };
              newSettings.dummyErrorDebugMode = elements.dummyErrorDebugModeCheckbox.checked;
+             newSettings.dummyTwinEngineDebugMode = elements.dummyTwinEngineDebugModeCheckbox.checked;
              newSettings.dummyDummyModel = elements.dummyDummyModelInput.value.trim();
              newSettings.dummyEnableDummyModel = elements.dummyEnableDummyModelCheckbox.checked;
 
@@ -12864,6 +12924,7 @@
                     defaultSettingsCopy.apiProviderCycle = { gemini: true, deepseek: true, claude: true, openai: true, xai: true, llmaggregator: true, dummy: true };
                     defaultSettingsCopy.llmAggregatorTopK = null;
                     defaultSettingsCopy.dummyErrorDebugMode = false;
+                    defaultSettingsCopy.dummyTwinEngineDebugMode = false;
                     defaultSettingsCopy.dummyDummyModel = '';
                     defaultSettingsCopy.dummyEnableDummyModel = false;
                     defaultSettingsCopy.geminiApiKeys = [];
@@ -13989,7 +14050,7 @@
                     streamingOutputB = state.settings.openaiStreamingOutput;
                     streamingSpeedB = state.settings.openaiStreamingSpeed;
                     dummyUserB = state.settings.openaiDummyUser;
-                    enableDummyUserB = state.settings.openaiEnableDummyUser;
+                                        enableDummyUserB = state.settings.openaiEnableDummyUser;
                     dummyModelB = state.settings.openaiDummyModel;
                     enableDummyModelB = state.settings.openaiEnableDummyModel;
                     concatDummyModelB = state.settings.openaiConcatDummyModel;
@@ -15629,14 +15690,12 @@
             this.renderList();
         },
     
-        // 追加: 新しい命名規則でラベルを生成するヘルパー関数
         generateNextConfigLabel() {
             const index = state.settings.twinEngineApiConfigs.length;
             const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
             const char = alphabet[index % 26];
             const numberSuffix = Math.floor(index / 26);
             
-            // "A設定", "Z設定", "A2設定", "B2設定" のようなラベルを生成します
             return `${char}${numberSuffix > 0 ? numberSuffix + 1 : ''}設定`;
         },
 
@@ -15648,7 +15707,6 @@
             }
             const newConfig = {
                 id: Date.now().toString(),
-                // 変更: 新しい命名規則でラベルを生成するように修正
                 label: this.generateNextConfigLabel(),
                 provider: 'gemini',
                 apiKey: '',
