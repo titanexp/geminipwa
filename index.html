@@ -3821,28 +3821,28 @@
                             このダミーModelプロンプトを有効にする
                         </label>
                     </div>
-
-
-                                <details style="margin-top: 15px;">
-            <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor:pointer; font-weight: normal;">テスト用の機能</summary>
-            <div style="padding-left: 15px; margin-top: 10px;">
-                        <label class="checkbox-label">
+                        <label class="checkbox-label" style="margin-top: 15px;">
                             <input type="checkbox" id="dummy-error-debug-mode">
                             エラーログを応答する (デバッグモード)
                         </label>
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                             ※ チェック時、これまでに発生したJavaScriptエラーのログを応答します。
                          </p>
-                <label class="checkbox-label">
-                    <input type="checkbox" id="dummy-twin-engine-debug-mode">
-                    Twin-engineデバッグモードを有効にする
-                </label>
-                <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                    ※ 有効時、Twin-engineが起動するタイミングで、要約AIに送信されるはずの完全なプロンプトを応答として返します。<br>
-                    ※ この機能はデバッグ専用です。
-                </p>
-            </div>
-        </details>
+
+                        <details style="margin-top: 15px;">
+                            <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor:pointer; font-weight: normal;">テスト用の機能</summary>
+                            <div style="padding-left: 15px; margin-top: 10px;">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="dummy-twin-engine-debug-mode">
+                                    Twin-engineデバッグモードを有効にする
+                                </label>
+                                <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                                    ※ 有効時、Twin-engineが起動するタイミングで、要約AIに送信されるはずの完全なプロンプトを応答として返します。<br>
+                                    ※ この機能はデバッグ専用です。
+                                </p>
+                            </div>
+                        </details>
+
                 </details>
 
                 <details id="gemini-params-group" class="settings-group" open>
@@ -4819,13 +4819,6 @@
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                             ※ Twin-engineで生成された要約履歴を表示・編集するためのパネルを開閉します。
                         </p>
-                        <label class="checkbox-label" style="margin-bottom: 5px;">
-                            <input type="checkbox" id="enable-twin-engine">
-                            Twin-engineを起動する (会話履歴の要約)
-                        </label>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-                            ※ 有効にすると、会話履歴を別のAIで要約し、文脈を維持する機能が利用可能になります。
-                        </p>
                         <div id="twin-engine-full-auto-setting-container" class="hidden" style="padding-left: 20px;">
                             <label class="checkbox-label" style="margin-bottom: 5px;">
                                 <input type="checkbox" id="twin-engine-enable-full-auto-toggle">
@@ -5789,7 +5782,6 @@
                 xaiActiveApiKeyIndex: -1,
                 llmaggregatorApiKeys: [],
                 llmaggregatorActiveApiKeyIndex: -1,
-                enableTwinEngine: false,
                 twinEngineEnableFullAuto: false,
                 showFooterTwinEngineToggleButton: false,
                 twinEngineSummarizeAfterTurns: DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS,
@@ -7786,10 +7778,9 @@
                 twinEngineApiConfigUtils.renderList();
                 elements.commonSystemPromptDefaultTextarea.value = state.settings.commonSystemPrompt || '';
                 elements.enableCommonSystemPromptDefaultCheckbox.checked = state.settings.enableCommonSystemPromptDefault;
-                document.getElementById('enable-twin-engine').checked = state.settings.enableTwinEngine;
                 elements.twinEngineEnableFullAutoToggle.checked = state.settings.twinEngineEnableFullAuto;
                 elements.showFooterTwinEngineToggleButtonToggle.checked = state.settings.showFooterTwinEngineToggleButton;
-                elements.twinEngineFullAutoSettingContainer.classList.toggle('hidden', !state.settings.enableTwinEngine);
+                elements.twinEngineFullAutoSettingContainer.classList.toggle('hidden', !state.settings.showTwinEngineSettings);
                 elements.twinEngineSummarizeAfterTurnsInput.value = state.settings.twinEngineSummarizeAfterTurns ?? DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
                 document.getElementById('twin-engine-initial-turns-to-include').value = state.settings.twinEngineInitialTurnsToInclude ?? 1;
                 elements.twinEngineSummaryPromptInput.value = state.settings.twinEngineSummaryPrompt || '';
@@ -8178,7 +8169,7 @@
                     }
                     
                     if (elements.footerTwinEngineModeToggleBtn) {
-                        const showButton = state.settings.showTwinEngineSettings && state.settings.enableTwinEngine && state.settings.showFooterTwinEngineToggleButton;
+                        const showButton = state.settings.showTwinEngineSettings && state.settings.showFooterTwinEngineToggleButton;
                         elements.footerTwinEngineModeToggleBtn.classList.toggle('hidden', !showButton);
                     }
 
@@ -8248,7 +8239,7 @@
                 });
             },
             updateTwinEngineModeButton() {
-                const isEnabled = state.settings.enableTwinEngine;
+                const isEnabled = state.settings.showTwinEngineSettings;
                 const isFullAuto = isEnabled && state.settings.twinEngineEnableFullAuto;
                 
                 let headerText, headerTitle, footerText, footerTitle;
@@ -9317,14 +9308,20 @@
                 });
             });
 
-            const enableTwinEngineCheckbox = document.getElementById('enable-twin-engine');
-            if(enableTwinEngineCheckbox) {
-                enableTwinEngineCheckbox.addEventListener('change', (e) => {
-                    elements.twinEngineFullAutoSettingContainer.classList.toggle('hidden', !e.target.checked);
-                    uiUtils.updateTwinEngineModeButton();
-                    uiUtils.updateChatScreenElementVisibility();
-                });
-            }
+            elements.showTwinEngineSettingsToggle.addEventListener('change', (e) => {
+                state.settings.showTwinEngineSettings = e.target.checked;
+                const isVisible = e.target.checked;
+                const twinEngineSettingsGroup = document.getElementById('settings-group-twin-engine');
+                if (twinEngineSettingsGroup) {
+                    twinEngineSettingsGroup.classList.toggle('hidden', !isVisible);
+                }
+                if (elements.twinEngineSummaryBtn) {
+                    const showButton = isVisible && state.settings.showTwinEngineSummaryButton;
+                    elements.twinEngineSummaryBtn.classList.toggle('hidden', !showButton);
+                }
+                uiUtils.updateChatScreenElementVisibility();
+                uiUtils.updateTwinEngineModeButton();
+            });
             
             elements.uploadBackgroundBtn.addEventListener('click', () => elements.backgroundImageInput.click());
             elements.backgroundImageInput.addEventListener('change', (event) => {
@@ -10122,7 +10119,7 @@
             state.twinEngineSummaryContent = '';
         },
         async toggleTwinEngineMode() {
-            if (!state.settings.enableTwinEngine) return;
+            if (!state.settings.showTwinEngineSettings) return;
             
             const newValue = !state.settings.twinEngineEnableFullAuto;
             state.settings.twinEngineEnableFullAuto = newValue;
@@ -10212,7 +10209,7 @@
             }
         },
         async manualResummarize() {
-            if (!state.settings.enableTwinEngine) {
+            if (!state.settings.showTwinEngineSettings) {
                 await uiUtils.showCustomAlert("Twin-engine機能が無効です。設定画面から有効にしてください。");
                 return;
             }
@@ -10521,7 +10518,7 @@
                     uiUtils.setSendingState(false);
                     uiUtils.updateAttachmentBadgeVisibility();
                     elements.memoEditor.value = '';
-                    if (state.settings.enableTwinEngine && state.settings.twinEngineEnableFullAuto) {
+                    if (state.settings.showTwinEngineSettings && state.settings.twinEngineEnableFullAuto) {
                         const userTurnCount = (chat.messages || []).filter(msg => msg.role === 'user').length;
                         const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
 
@@ -10884,7 +10881,7 @@
                 if (state.settings.dummyTwinEngineDebugMode && !isBackgroundProcess) {
                     const userTurnCount = state.currentMessages.filter(msg => msg.role === 'user').length;
                     const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
-                    const isTwinEngineActive = state.settings.enableTwinEngine && userTurnCount > summarizeAfterTurns;
+                    const isTwinEngineActive = state.settings.showTwinEngineSettings && userTurnCount > summarizeAfterTurns;
             
                     let debugOutput = "--- Twin-engine デバッグモード ---\n\n";
                     if (isTwinEngineActive) {
@@ -10921,7 +10918,7 @@
             
                         dummyResponseContent = debugOutput.trim();
                     } else {
-                        dummyResponseContent = `--- Twin-engine デバッグモード ---\n\nTwin-engineはまだ起動していません。\n(Twin-engine有効: ${state.settings.enableTwinEngine}, 現在のユーザーターン数: ${userTurnCount}, 閾値: ${summarizeAfterTurns})`;
+                        dummyResponseContent = `--- Twin-engine デバッグモード ---\n\nTwin-engineはまだ起動していません。\n(Twin-engine有効: ${state.settings.showTwinEngineSettings}, 現在のユーザーターン数: ${userTurnCount}, 閾値: ${summarizeAfterTurns})`;
                     }
                 } else {
                     if (state.settings.dummyEnableDummyModel && state.settings.dummyDummyModel) {
@@ -11270,7 +11267,7 @@
 
             const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
             
-            const shouldUseSummary = state.settings.enableTwinEngine && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
+            const shouldUseSummary = state.settings.showTwinEngineSettings && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
 
             if (shouldUseSummary) {
                 messagesToProcess = [];
@@ -11689,7 +11686,7 @@
                         let rawContentFromApi = "";
                         if (choice) {
                             rawContentFromApi = choice.message?.content || "";
-                            modelResponseMetadata = { finishReason: choice.finish_reason };
+                            modelResponseMetadata = { finish_reason: choice.finish_reason };
                             if (data.usage) {
                                finalUsageMetadataFromStream = {
                                     candidatesTokenCount: data.usage.completion_tokens,
@@ -11701,7 +11698,7 @@
                             }
                         } else {
                             rawContentFromApi = `${selectedApiProvider.toUpperCase()}からの応答がありません。`;
-                            modelResponseMetadata = { finishReason: 'ERROR' };
+                            modelResponseMetadata = { finish_reason: 'ERROR' };
                             if (data.error) rawContentFromApi += ` (エラー: ${data.error.message})`;
                         }
                         modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
@@ -11858,7 +11855,7 @@
                 if (!isBackgroundProcess) {
                    const currentUserTurnCountAfterSend = state.currentMessages.filter(msg => msg.role === 'user').length;
                  const currentSummarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
-                  if (state.settings.enableTwinEngine && state.settings.twinEngineEnableFullAuto && currentUserTurnCountAfterSend > currentSummarizeAfterTurns) {
+                  if (state.settings.showTwinEngineSettings && state.settings.twinEngineEnableFullAuto && currentUserTurnCountAfterSend > currentSummarizeAfterTurns) {
                   setTimeout(() => this.triggerTwinEngineSummaryInBackground(), 0);
                     }
                }
@@ -12390,7 +12387,6 @@
              newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
              newSettings.commonSystemPrompt = elements.commonSystemPromptDefaultTextarea.value.trim();
              newSettings.enableCommonSystemPromptDefault = elements.enableCommonSystemPromptDefaultCheckbox.checked;
-             newSettings.enableTwinEngine = document.getElementById('enable-twin-engine').checked;
              newSettings.twinEngineEnableFullAuto = elements.twinEngineEnableFullAutoToggle.checked;
              newSettings.showFooterTwinEngineToggleButton = elements.showFooterTwinEngineToggleButtonToggle.checked;
              newSettings.twinEngineSummarizeAfterTurns = elements.twinEngineSummarizeAfterTurnsInput.value === '' 
@@ -12941,7 +12937,6 @@
                     defaultSettingsCopy.xaiActiveApiKeyIndex = -1;
                     defaultSettingsCopy.llmaggregatorApiKeys = [];
                     defaultSettingsCopy.llmaggregatorActiveApiKeyIndex = -1;
-                    defaultSettingsCopy.enableTwinEngine = false;
                     defaultSettingsCopy.twinEngineEnableFullAuto = false;
                     defaultSettingsCopy.showFooterTwinEngineToggleButton = false;
                     defaultSettingsCopy.twinEngineSummarizeAfterTurns = DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
@@ -13456,7 +13451,7 @@
             }
 
             if (confirmed) {
-                const isTwinEngineAutoOn = state.settings.enableTwinEngine && state.settings.twinEngineEnableFullAuto;
+                const isTwinEngineAutoOn = state.settings.showTwinEngineSettings && state.settings.twinEngineEnableFullAuto;
                 const messagesUpToRetryPoint = state.currentMessages.slice(0, index + 1);
                 const userTurnsUpToRetryPoint = messagesUpToRetryPoint.filter(msg => msg.role === 'user').length;
                 const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
@@ -14240,7 +14235,7 @@
                     if (file.size > MAX_FILE_SIZE) {
                         await uiUtils.showCustomAlert(`ファイル "${file.name}" はサイズが大きすぎます。`);
                         continue;
-                    }
+                                            }
                     if (currentTotalSize + file.size > MAX_TOTAL_ATTACHMENT_SIZE) {
                         await uiUtils.showCustomAlert('合計ファイルサイズの上限を超えたため、一部のファイルは追加されませんでした。');
                         break;
@@ -15891,21 +15886,16 @@
 const thinkingBudgetDiv = createParamInput('Thinking Budget:', 'thinkingBudget', 'number', '例: 5000', '1');
 paramsContainer.appendChild(thinkingBudgetDiv);
 
-// ▼▼▼▼▼ ここからが追加するコード ▼▼▼▼▼
-
-// ボタンを配置するためのコンテナを作成
 const buttonContainer = document.createElement('div');
 buttonContainer.style.display = 'flex';
 buttonContainer.style.gap = '5px';
-buttonContainer.style.marginTop = '3px'; // 入力欄との間に少し余白を設ける
+buttonContainer.style.marginTop = '3px';
 
-// ボタンを作成するヘルパー関数
 const createBudgetButton = (text, value) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = text;
     button.dataset.value = value;
-    // メイン設定のボタンとスタイルを合わせる
     button.style.cssText = `
         padding: 2px 6px;
         font-size: 11px;
@@ -15919,21 +15909,18 @@ const createBudgetButton = (text, value) => {
     button.addEventListener('click', () => {
         const input = thinkingBudgetDiv.querySelector('input');
         if (value === 'null') {
-            input.value = ''; // '無'ボタンで入力欄を空にする
+            input.value = '';
         } else {
-            input.value = value; // '0'ボタンで入力欄に0を設定
+            input.value = value;
         }
-        // changeイベントを発火させて、値の変更を保存ロジックに通知する
         input.dispatchEvent(new Event('change', { bubbles: true }));
     });
     return button;
 };
 
-// 「無」と「0」のボタンを作成してコンテナに追加
 buttonContainer.appendChild(createBudgetButton('無', 'null'));
 buttonContainer.appendChild(createBudgetButton('0', '0'));
 
-// 作成したボタンコンテナを入力欄の下に追加
 thinkingBudgetDiv.appendChild(buttonContainer);
             details.appendChild(paramsContainer);
             
