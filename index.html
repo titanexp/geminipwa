@@ -4614,16 +4614,12 @@
                                        ※ AIの応答メッセージの最大幅を広げ、画面をより広く使います。
                                    </p>
                                    <label class="checkbox-label">
-    <input type="checkbox" id="enable-session-linking-toggle">
-    AI間会話モード（セッション間リンク）を有効にする
-</label>
-<p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-    ※ 有効にすると、履歴画面で2つのセッションをリンクし、AI同士の会話をステップ実行できます。（👥ボタンを用いた入出力のみ。）
-</p>
-<label class="checkbox-label">
-    <input type="checkbox" id="disable-load-chat-confirmation-while-sending-toggle">
-    メッセージ送信中に別チャットを読み込む際の確認ダイアログを表示しない (非推奨)
-</label>
+                                       <input type="checkbox" id="show-session-linking-settings-toggle">
+                                       AI間会話モード（セッション間リンク）設定を表示する
+                                   </label>
+                                   <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                                       ※ 履歴画面から2つのチャットを連携させ、AI同士を会話させることができます。👥ボタンを用いた入出力のみ。
+                                   </p>
                                    <label class="checkbox-label">
                                        <input type="checkbox" id="show-twin-engine-settings-toggle">
                                        Twin-engine設定を表示する
@@ -4905,7 +4901,24 @@
                         </p>
                     </div>
                 </details>
-
+                 <details class="settings-group" id="settings-group-session-linking">
+                    <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">AI間会話モード（セッション間リンク）</summary>
+                    <div style="margin-top:10px;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="enable-session-linking">
+                            セッション間リンク機能を有効にする
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                            ※ 有効にすると、履歴画面で2つのセッションをリンクし、AI同士の会話をステップ実行できます。（👥ボタンを用いた入出力のみ。）<br>
+                            ※ Max Tokensが足りないと失敗します。
+                        </p>
+                               <p style="height:10px"></p>
+                               <label class="checkbox-label">
+                                   <input type="checkbox" id="disable-load-chat-confirmation-while-sending-toggle">
+                                   メッセージ送信中に別チャットを読み込む際の確認ダイアログを表示しない (非推奨)
+                               </label>
+                    </div>
+                </details>
 
                 <div class="danger-zone">
 
@@ -5342,11 +5355,13 @@
             messageBodyFontSizeInput: document.getElementById('message-body-font-size-input'),
             codeBlockFontSizeInput: document.getElementById('code-block-font-size-input'),
             thoughtSummaryFontSizeInput: document.getElementById('thought-summary-font-size'),
-            enableSessionLinkingToggle: document.getElementById('enable-session-linking-toggle'),
+            enableSessionLinkingCheckbox: document.getElementById('enable-session-linking'),
             swipeNavigationToggle: document.getElementById('swipe-navigation-toggle'),
             preventZoomToggle: document.getElementById('prevent-zoom-toggle'),
             minimizeHeaderFooterToggle: document.getElementById('minimize-header-footer-toggle'),
             extendAiBubbleWidthToggle: document.getElementById('extend-ai-bubble-width-toggle'),
+            showSessionLinkingSettingsToggle: document.getElementById('show-session-linking-settings-toggle'),
+            sessionLinkingSettingsGroup: document.getElementById('settings-group-session-linking'),
             showTwinEngineSettingsToggle: document.getElementById('show-twin-engine-settings-toggle'),
             showChatTitleToggle: document.getElementById('show-chat-title-toggle'),
             showNewChatButtonToggle: document.getElementById('show-new-chat-button-toggle'),
@@ -5677,7 +5692,7 @@
                 preventZoom: true,
                 minimizeHeaderFooter: false,
                 extendAiBubbleWidth: false,
-
+                showSessionLinkingSettings: false,
                 showTwinEngineSettings: false,
                 showChatTitle: true,
                 showNewChatButton: true,
@@ -7924,7 +7939,7 @@
                  elements.autoScrollOnThoughtCheckbox.checked = state.settings.autoScrollOnThought;
                  elements.historySortOrderSelect.value = state.settings.historySortOrder || 'updatedAt';
                  if (elements.themeSelect) elements.themeSelect.value = state.settings.theme || 'light';
-                 elements.enableSessionLinkingToggle.checked = state.settings.enableSessionLinking;
+                 elements.enableSessionLinkingCheckbox.checked = state.settings.enableSessionLinking;
                  elements.fontFamilyInput.value = state.settings.fontFamily || '';
                  elements.messageBodyFontSizeInput.value = state.settings.messageBodyFontSize ?? '';
                  elements.codeBlockFontSizeInput.value = state.settings.codeBlockFontSize ?? '';
@@ -7933,8 +7948,10 @@
                  elements.preventZoomToggle.checked = state.settings.preventZoom;
                  elements.minimizeHeaderFooterToggle.checked = state.settings.minimizeHeaderFooter;
                  elements.extendAiBubbleWidthToggle.checked = state.settings.extendAiBubbleWidth;
-
-
+                 elements.showSessionLinkingSettingsToggle.checked = state.settings.showSessionLinkingSettings;
+                 if (elements.sessionLinkingSettingsGroup) {
+                     elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !state.settings.showSessionLinkingSettings);
+                 }
                 elements.showTwinEngineSettingsToggle.checked = state.settings.showTwinEngineSettings;
                 const twinEngineSettingsGroup = document.getElementById('settings-group-twin-engine');
                 if (twinEngineSettingsGroup) {
@@ -9265,13 +9282,13 @@
                 });
             }
             if (elements.enableSessionLinkingCheckbox) {
-                elements.enableSessionLinkingToggle.addEventListener('change', (e) => {
-    state.settings.enableSessionLinking = e.target.checked;
-    if (!state.settings.enableSessionLinking) {
-        state.linkedSessionIds = [];
-    }
-    uiUtils.updateSessionLinkingUI();
-});
+                elements.enableSessionLinkingCheckbox.addEventListener('change', () => {
+                    state.settings.enableSessionLinking = elements.enableSessionLinkingCheckbox.checked;
+                    if (!state.settings.enableSessionLinking) {
+                        state.linkedSessionIds = [];
+                    }
+                    uiUtils.updateSessionLinkingUI();
+                });
             }
             elements.setThinkingBudgetBtns.forEach(button => {
                 button.addEventListener('click', () => {
@@ -9501,7 +9518,11 @@
                 state.settings.extendAiBubbleWidth = e.target.checked;
                 uiUtils.applyAiBubbleWidthSetting();
             });
-
+            elements.showSessionLinkingSettingsToggle.addEventListener('change', (e) => {
+                if (elements.sessionLinkingSettingsGroup) {
+                    elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !e.target.checked);
+                }
+            });
             elements.showTwinEngineSettingsToggle.addEventListener('change', (e) => {
                 const isVisible = e.target.checked;
                 const twinEngineSettingsGroup = document.getElementById('settings-group-twin-engine');
@@ -12508,7 +12529,7 @@
              newSettings.autoScrollOnThought = elements.autoScrollOnThoughtCheckbox.checked;
              newSettings.historySortOrder = elements.historySortOrderSelect.value;
              newSettings.theme = elements.themeSelect.value;
-             newSettings.enableSessionLinking = elements.enableSessionLinkingToggle.checked;
+             newSettings.enableSessionLinking = elements.enableSessionLinkingCheckbox.checked;
              newSettings.fontFamily = elements.fontFamilyInput.value.trim();
              newSettings.messageBodyFontSize = elements.messageBodyFontSizeInput.value === '' ? null : parseInt(elements.messageBodyFontSizeInput.value, 10);
              newSettings.codeBlockFontSize = elements.codeBlockFontSizeInput.value === '' ? null : parseInt(elements.codeBlockFontSizeInput.value, 10);
@@ -12517,7 +12538,7 @@
              newSettings.preventZoom = elements.preventZoomToggle.checked;
              newSettings.minimizeHeaderFooter = document.getElementById('minimize-header-footer-toggle').checked;
              newSettings.extendAiBubbleWidth = elements.extendAiBubbleWidthToggle.checked;
-
+             newSettings.showSessionLinkingSettings = elements.showSessionLinkingSettingsToggle.checked;
              newSettings.showTwinEngineSettings = elements.showTwinEngineSettingsToggle.checked;
              newSettings.showChatTitle = elements.showChatTitleToggle.checked;
              newSettings.showNewChatButton = elements.showNewChatButtonToggle.checked;
