@@ -13926,14 +13926,23 @@
                 return;
             }
             const selectedApiProvider = state.settings.apiProvider;
-             if ((selectedApiProvider === 'gemini' && !state.settings.apiKey) ||
-                 (selectedApiProvider === 'deepseek' && !state.settings.deepSeekApiKey) ||
-                 (selectedApiProvider === 'claude' && !state.settings.claudeApiKey) ||
-                 (selectedApiProvider === 'openai' && !state.settings.openaiApiKey) ||
-                 (selectedApiProvider === 'xai' && !state.settings.xaiApiKey) ||
-                 (selectedApiProvider === 'llmaggregator' && !state.settings.llmAggregatorApiKey)
-                ) {
-                await uiUtils.showCustomAlert("選択中のAPIプロバイダーのAPIキーが設定されていません。");
+            let apiKeyToCheck;
+
+            if (state.settings.showMultiApiKeys) {
+                apiKeyToCheck = multiApiKeyUtils.getActiveApiKey(selectedApiProvider);
+            } else {
+                switch(selectedApiProvider) {
+                    case 'gemini': apiKeyToCheck = state.settings.apiKey; break;
+                    case 'deepseek': apiKeyToCheck = state.settings.deepSeekApiKey; break;
+                    case 'claude': apiKeyToCheck = state.settings.claudeApiKey; break;
+                    case 'openai': apiKeyToCheck = state.settings.openaiApiKey; break;
+                    case 'xai': apiKeyToCheck = state.settings.xaiApiKey; break;
+                    case 'llmaggregator': apiKeyToCheck = state.settings.llmAggregatorApiKey; break;
+                }
+            }
+
+            if (!apiKeyToCheck) {
+                await uiUtils.showCustomAlert("選択中のAPIプロバイダーのアクティブなAPIキーが設定されていません。");
                 uiUtils.showScreen('settings');
                 return;
             }
@@ -13960,7 +13969,38 @@
                     throw new Error(`セッションB (${sessionB_Id}) のデータが取得できませんでした。`);
                 }
 
-                let providerForSettingsB = state.settings.apiProvider;
+                                let apiKeyForB;
+                let modelNameToUseB;
+                const providerForSettingsB = state.settings.apiProvider; // 現在のプロバイダー設定を使用
+
+                if (state.settings.showMultiApiKeys) {
+                    apiKeyForB = multiApiKeyUtils.getActiveApiKey(providerForSettingsB);
+                } else {
+                    switch(providerForSettingsB) {
+                        case 'gemini': apiKeyForB = state.settings.apiKey; break;
+                        case 'deepseek': apiKeyForB = state.settings.deepSeekApiKey; break;
+                        case 'claude': apiKeyForB = state.settings.claudeApiKey; break;
+                        case 'openai': apiKeyForB = state.settings.openaiApiKey; break;
+                        case 'xai': apiKeyForB = state.settings.xaiApiKey; break;
+                        case 'llmaggregator': apiKeyForB = state.settings.llmAggregatorApiKey; break;
+                    }
+                }
+                
+                switch(providerForSettingsB) {
+                    case 'gemini': modelNameToUseB = state.settings.modelName; break;
+                    case 'deepseek': modelNameToUseB = state.settings.deepSeekModelName; break;
+                    case 'claude': modelNameToUseB = state.settings.claudeModelName; break;
+                    case 'openai': modelNameToUseB = state.settings.openaiModelName; break;
+                    case 'xai': modelNameToUseB = state.settings.xaiModelName; break;
+                    case 'llmaggregator': modelNameToUseB = state.settings.llmAggregatorModelName; break;
+                }
+                
+                if (!apiKeyForB) {
+                    throw new Error("APIキーが設定されていません。");
+                }
+                if (!modelNameToUseB) {
+                    throw new Error("モデルが設定されていません。");
+                }
                 let systemPromptB, enableSystemPromptDefaultB, dummyUserB, enableDummyUserB, dummyModelB, enableDummyModelB,
                     temperatureB, maxTokensB, topPB,
                     streamingOutputB, streamingSpeedB, concatDummyModelB,
@@ -14104,7 +14144,9 @@
                     visionEnable: providerForSettingsB === 'xai' ? xaiVisionEnableB : undefined,
                     inputText: inputForB,
                     attachments: [],
-                    apiProvider: providerForSettingsB
+                    apiProvider: providerForSettingsB,
+                    _apiKeyOverride: apiKeyForB,
+                    _modelNameOverride: modelNameToUseB 
                 };
 
                 const responseFromB = await this.handleSend(false, -1, contextForB);
