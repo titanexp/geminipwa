@@ -10787,7 +10787,7 @@
                 }
             }
         },
-        async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
+                async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
             const isBackgroundProcess = !!sourceSessionContext;
             
             let apiKeyToUse, modelNameToUse, selectedApiProvider;
@@ -11262,17 +11262,13 @@
                 }
             }
 
-            const userTurnCount = isBackgroundProcess 
-                ? (sourceSessionContext.messages || []).filter(msg => msg.role === 'user').length
-                : state.currentMessages.filter(msg => msg.role === 'user').length;
-
-            const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
+            const shouldUseSummaryCondition = state.settings.enableTwinEngine && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
+            const summaryContent = state.twinEngineSummaryContent.trim();
             
-            const shouldUseSummary = state.settings.enableTwinEngine && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
+            const shouldUseSummary = shouldUseSummaryCondition && summaryContent;
 
             if (shouldUseSummary) {
                 messagesToProcess = [];
-                const summaryContent = state.twinEngineSummaryContent.trim();
                 const initialTurnsToInclude = state.settings.twinEngineInitialTurnsToInclude || 0;
                 const includedMessageIndices = new Set();
 
@@ -11939,6 +11935,7 @@
             }
             if (isBackgroundProcess) return null;
         },
+
         async toggleApiProvider() {
             if(state.isSending || state.isAiToAiChatProcessing) {
                 await uiUtils.showCustomAlert('現在処理中のため、APIプロバイダーを変更できません。');
