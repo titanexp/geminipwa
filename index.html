@@ -10787,7 +10787,7 @@
                 }
             }
         },
-                async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
+        async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
             const isBackgroundProcess = !!sourceSessionContext;
             
             let apiKeyToUse, modelNameToUse, selectedApiProvider;
@@ -11262,13 +11262,23 @@
                 }
             }
 
-            const shouldUseSummaryCondition = state.settings.enableTwinEngine && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
-            const summaryContent = state.twinEngineSummaryContent.trim();
+            const userTurnCount = isBackgroundProcess 
+                ? (sourceSessionContext.messages || []).filter(msg => msg.role === 'user').length
+                : state.currentMessages.filter(msg => msg.role === 'user').length;
+
+            const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
             
-            const shouldUseSummary = shouldUseSummaryCondition && summaryContent;
+            // Twin-engineのロジックを適用すべきか（ターン数などの条件を満たすか）を判定
+            const isTwinEngineLogicActive = state.settings.enableTwinEngine && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
+            // 有効な要約コンテンツ（空文字列でない）が存在するかを判定
+            const hasValidSummary = state.twinEngineSummaryContent && state.twinEngineSummaryContent.trim() !== '';
+            // 実際に「要約を使用して」APIリクエストを構築すべきかを最終決定
+            const shouldUseSummary = isTwinEngineLogicActive && hasValidSummary;
 
             if (shouldUseSummary) {
                 messagesToProcess = [];
+                const summaryContent = state.twinEngineSummaryContent.trim();
+                // ... (要約ベースの履歴を構築する処理)
                 const initialTurnsToInclude = state.settings.twinEngineInitialTurnsToInclude || 0;
                 const includedMessageIndices = new Set();
 
@@ -11935,7 +11945,6 @@
             }
             if (isBackgroundProcess) return null;
         },
-
         async toggleApiProvider() {
             if(state.isSending || state.isAiToAiChatProcessing) {
                 await uiUtils.showCustomAlert('現在処理中のため、APIプロバイダーを変更できません。');
