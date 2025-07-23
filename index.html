@@ -7951,28 +7951,10 @@
                  if (elements.sessionLinkingSettingsGroup) {
                      elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !state.settings.showSessionLinkingSettings);
                  }
-                 elements.showTwinEngineSettingsToggle.checked = state.settings.showTwinEngineSettings;
-                 const twinEngineSettingsGroup = document.getElementById('settings-group-twin-engine');
-                 if (twinEngineSettingsGroup) {
-                     twinEngineSettingsGroup.classList.toggle('hidden', !state.settings.showTwinEngineSettings);
-                 }
-                const enableTwinEngineCheckbox = document.getElementById('enable-twin-engine');
-                const twinEngineFullAutoCheckbox = document.getElementById('twin-engine-enable-full-auto-toggle');
-                const twinEngineSettingsContainer = document.getElementById('twin-engine-full-auto-setting-container');
-
-                if (state.settings.showTwinEngineSettings) {
-                    enableTwinEngineCheckbox.disabled = false;
-                    twinEngineFullAutoCheckbox.disabled = !state.settings.enableTwinEngine;
-                    if (twinEngineSettingsContainer) {
-                        twinEngineSettingsContainer.style.opacity = state.settings.enableTwinEngine ? '1' : '0.5';
-                    }
-                } else {
-                    // 設定非表示の場合、関連チェックボックスを無効化
-                    enableTwinEngineCheckbox.disabled = true;
-                    twinEngineFullAutoCheckbox.disabled = true;
-                    if (twinEngineSettingsContainer) {
-                        twinEngineSettingsContainer.style.opacity = '0.5';
-                    }
+                elements.showTwinEngineSettingsToggle.checked = state.settings.showTwinEngineSettings;
+                const twinEngineSettingsGroup = document.getElementById('settings-group-twin-engine');
+                if (twinEngineSettingsGroup) {
+                    twinEngineSettingsGroup.classList.toggle('hidden', !state.settings.showTwinEngineSettings);
                 }
                  elements.showChatTitleToggle.checked = state.settings.showChatTitle;
                  elements.showNewChatButtonToggle.checked = state.settings.showNewChatButton;
@@ -9546,12 +9528,10 @@
                 if (twinEngineSettingsGroup) {
                     twinEngineSettingsGroup.classList.toggle('hidden', !isVisible);
                 }
-                // 設定表示がオフなら、機能も強制的にオフにする
-                if (!isVisible) {
-                    document.getElementById('enable-twin-engine').checked = false;
-                    document.getElementById('twin-engine-enable-full-auto-toggle').checked = false;
+                if (elements.twinEngineSummaryBtn) {
+                    const showButton = isVisible && state.settings.showTwinEngineSummaryButton;
+                    elements.twinEngineSummaryBtn.classList.toggle('hidden', !showButton);
                 }
-                uiUtils.updateChatScreenElementVisibility();
             });
 
             elements.memoHeightInput.addEventListener('input', () => {
@@ -10230,7 +10210,7 @@
             }
         },
         async manualResummarize() {
-            if (!state.settings.showTwinEngineSettings || !state.settings.enableTwinEngine) {
+            if (!state.settings.enableTwinEngine) {
                 await uiUtils.showCustomAlert("Twin-engine機能が無効です。設定画面から有効にしてください。");
                 return;
             }
@@ -10287,7 +10267,7 @@
             }
         },
         async triggerTwinEngineSummaryInBackground() {
-            if (!state.settings.showTwinEngineSettings || !state.settings.enableTwinEngine || state.currentMessages.length === 0 || state.isSending || state.isAiToAiChatProcessing || state.isSummarizing) {
+            if (state.currentMessages.length === 0 || state.isSending || state.isAiToAiChatProcessing || state.isSummarizing) {
                 return;
             }
         
@@ -11295,7 +11275,7 @@
 
             const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
             
-            const shouldUseSummary = state.settings.showTwinEngineSettings && state.settings.enableTwinEngine && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
+            const shouldUseSummary = state.settings.enableTwinEngine && !isBackgroundProcess && userTurnCount > summarizeAfterTurns;
 
             if (shouldUseSummary) {
                 messagesToProcess = [];
@@ -13481,7 +13461,7 @@
             }
 
             if (confirmed) {
-                const isTwinEngineAutoOn = state.settings.showTwinEngineSettings && state.settings.enableTwinEngine && state.settings.twinEngineEnableFullAuto;
+                const isTwinEngineAutoOn = state.settings.enableTwinEngine && state.settings.twinEngineEnableFullAuto;
                 const messagesUpToRetryPoint = state.currentMessages.slice(0, index + 1);
                 const userTurnsUpToRetryPoint = messagesUpToRetryPoint.filter(msg => msg.role === 'user').length;
                 const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
