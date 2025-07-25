@@ -10270,7 +10270,7 @@
                 await uiUtils.showCustomAlert("Twin-engine機能が無効です。設定画面から有効にしてください。");
                 return;
             }
-            if (state.isSending || state.isAiToAiChatProcessing) {
+            if (state.isSending || state.isAiToAiChatProcessing || state.isSummarizing) {
                 await uiUtils.showCustomAlert("現在他の処理を実行中です。完了後に再試行してください。");
                 return;
             }
@@ -10279,47 +10279,44 @@
                 return;
             }
 
-            const resummarizeBtn = elements.resummarizeBtn;
+            const buttonsToUpdate = [elements.resummarizeBtn, elements.footerResummarizeBtn];
+            const originalPanelBtnText = elements.resummarizeBtn.textContent;
 
-            const originalText = resummarizeBtn.textContent;
-            resummarizeBtn.disabled = true;
-            resummarizeBtn.textContent = "要約中...";
+            state.isSummarizing = true;
+            uiUtils.updateLoadingIndicator();
+            buttonsToUpdate.forEach(btn => {
+                btn.disabled = true;
+                if (btn.id === 'resummarize-btn') {
+                    btn.textContent = "要約中...";
+                }
+            });
 
             try {
                 const response = await this.summarizeCurrentSession([...state.currentMessages]);
 
                 if (response && response.content) {
                     const newSummaryContent = response.content.trim() + "\n\n";
-
                     state.twinEngineSummaryContent = newSummaryContent;
                     elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
 
                     if (state.isTwinEngineSummaryVisible) {
                         elements.twinEngineSummaryEditor.scrollTop = 0;
                     }
-
-                    resummarizeBtn.textContent = "要約完了";
-                    setTimeout(() => {
-                        resummarizeBtn.textContent = originalText;
-                    }, 2000);
-
+                    elements.resummarizeBtn.textContent = "要約完了";
                 } else {
-                     resummarizeBtn.textContent = "失敗";
-                     setTimeout(() => {
-                         resummarizeBtn.textContent = originalText;
-                     }, 2000);
+                    elements.resummarizeBtn.textContent = "失敗";
                 }
             } catch (error) {
                 await uiUtils.showCustomAlert(`再要約エラー: ${error.message}`);
-                 resummarizeBtn.textContent = "エラー";
-                 setTimeout(() => {
-                     resummarizeBtn.textContent = originalText;
-                 }, 2000);
+                elements.resummarizeBtn.textContent = "エラー";
             } finally {
-                resummarizeBtn.disabled = false;
-                if(resummarizeBtn.textContent.includes("要約中")) {
-                    resummarizeBtn.textContent = originalText;
-                }
+                state.isSummarizing = false;
+                uiUtils.updateLoadingIndicator();
+                buttonsToUpdate.forEach(btn => btn.disabled = false);
+                
+                setTimeout(() => {
+                    elements.resummarizeBtn.textContent = originalPanelBtnText;
+                }, 2000);
             }
         },
         async triggerTwinEngineSummaryInBackground() {
