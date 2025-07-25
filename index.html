@@ -3320,6 +3320,12 @@
             flex: 1;
             min-width: 120px;
         }
+        #footer-resummarize-btn {
+            background-color: var(--bg-button);
+        }
+        #footer-resummarize-btn:hover:not(:disabled) {
+            background-color: var(--bg-button-hover);
+        }
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
@@ -3453,7 +3459,7 @@
                 <div class="twin-engine-summary-actions-container">
                     <button id="twin-engine-mode-toggle-btn" title="要約モードを切り替え"></button>
                     <button id="twin-engine-api-key-cycle-btn" title="要約に使用するAPIキーを切り替え">キー:</button>
-                    <button id="resummarize-btn" class="resummarize-btn" title="現在のチャット履歴を要約">要約実行</button>
+                    <button id="resummarize-btn" class="resummarize-btn" title="現在のチャット履歴を要約">要約実行♻️</button>
                     <button id="copy-twin-engine-summary-btn" class="copy-twin-engine-summary-btn" title="内容をコピー">コピー</button>
                     <button id="clear-twin-engine-summary-btn" class="clear-twin-engine-summary-btn" title="内容を全て削除">全削除</button>
                 </div>
@@ -10338,6 +10344,7 @@
                     }
                 }
             } catch (error) {
+                throw error;
             } finally {
                 state.isSummarizing = false;
                 uiUtils.updateLoadingIndicator();
@@ -10839,6 +10846,31 @@
         },
         async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
             const isBackgroundProcess = !!sourceSessionContext;
+
+            if (!isBackgroundProcess && !isRetry && state.settings.showTwinEngineSettings && state.settings.twinEngineEnableFullAuto) {
+                const currentSummaryIsEmpty = !state.twinEngineSummaryContent || state.twinEngineSummaryContent.trim() === '';
+                const userTurnCount = state.currentMessages.filter(msg => msg.role === 'user').length;
+                const summarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
+
+                if (currentSummaryIsEmpty && userTurnCount >= summarizeAfterTurns) {
+                    uiUtils.setSendingState(true);
+                    state.isSummarizing = true;
+                    uiUtils.updateLoadingIndicator();
+
+                    try {
+                        await this.triggerTwinEngineSummaryInBackground();
+                        const newSummaryIsEmpty = !state.twinEngineSummaryContent || state.twinEngineSummaryContent.trim() === '';
+                        if (newSummaryIsEmpty) {
+                             await uiUtils.showCustomAlert("メッセージ送信前の自動要約に失敗しました。そのまま送信を続けます。");
+                        }
+                    } catch (error) {
+                        await uiUtils.showCustomAlert(`メッセージ送信前の自動要約中にエラーが発生しました: ${error.message}`);
+                    } finally {
+                        state.isSummarizing = false;
+                        uiUtils.updateLoadingIndicator();
+                    }
+                }
+            }
             
             let apiKeyToUse, modelNameToUse, selectedApiProvider;
             
