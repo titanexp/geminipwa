@@ -4648,11 +4648,22 @@
                     AIの応答完了時にWebhookを送信する
                 </label>
                 <div id="webhook-settings-container" class="hidden">
-                    <label for="webhook-url-input">Webhook URL:</label>
-                    <input type="text" id="webhook-url-input" placeholder="https://example.com/webhook" aria-label="Webhook URL">
-                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                        ※ AIの応答が完了するたびに、指定されたURLにPOSTリクエストで応答内容をJSON形式で送信します。
-                    </p>
+                            <label for="webhook-url-input">Webhook URL:</label>
+                            <input type="text" id="webhook-url-input" placeholder="https://example.com/webhook" aria-label="Webhook URL">
+                            <div style="margin-top: 8px; margin-bottom: 5px;">
+                                <label style="font-size: 14px; margin-bottom: 5px; display: block;">送信形式:</label>
+                                <div style="display: flex; gap: 15px;">
+                                    <label class="checkbox-label" style="margin-bottom: 0;">
+                                        <input type="radio" name="webhook-format" id="webhook-format-json" value="json" checked> JSON
+                                    </label>
+                                    <label class="checkbox-label" style="margin-bottom: 0;">
+                                        <input type="radio" name="webhook-format" id="webhook-format-text" value="text"> プレーンテキスト
+                                    </label>
+                                </div>
+                            </div>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px; margin-bottom: 10px;">
+                                ※ AIの応答完了時に指定URLへPOSTリクエストを送信します。
+                            </p>
                 </div>
                 <hr style="margin: 10px 0; border-top: 1px solid var(--border-tertiary);">
                 <label class="checkbox-label">
@@ -5639,6 +5650,8 @@
             enableWebhookNotificationToggle: document.getElementById('enable-webhook-notification-toggle'),
             webhookUrlInput: document.getElementById('webhook-url-input'),
             webhookSettingsContainer: document.getElementById('webhook-settings-container'),
+            webhookFormatJsonRadio: document.getElementById('webhook-format-json'),
+            webhookFormatTextRadio: document.getElementById('webhook-format-text'),
         };
 
         const state = {
@@ -5893,6 +5906,7 @@
                 twinEngineConcatDummyModel: false,
                 enableWebhookNotification: false,
                 webhookUrl: '',
+                webhookFormat: 'json', // 'json' or 'text'
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -9118,6 +9132,7 @@
         };
 
     const appLogic = {
+
         async sendWebhookNotification(responseMessage) {
             if (!state.settings.enableWebhookNotification || !state.settings.webhookUrl) {
                 return;
@@ -9129,21 +9144,32 @@
                 console.error("Webhook送信失敗: 無効なURLです。", url);
                 return;
             }
-            const payload = {
-                type: "ai_response",
-                timestamp: new Date().toISOString(),
-                sessionId: state.currentChatId,
-                sessionTitle: elements.chatTitle.textContent.replace(/^: /, ''),
-                content: responseMessage.content,
-                provider: responseMessage.generatedByApiProvider
-            };
+
+            let body;
+            let headers;
+            const format = state.settings.webhookFormat;
+
+            if (format === 'text') {
+                body = responseMessage.content;
+                headers = { 'Content-Type': 'text/plain' };
+            } else { // default to json
+                const payload = {
+                    type: "ai_response",
+                    timestamp: new Date().toISOString(),
+                    sessionId: state.currentChatId,
+                    sessionTitle: elements.chatTitle.textContent.replace(/^: /, ''),
+                    content: responseMessage.content,
+                    provider: responseMessage.generatedByApiProvider
+                };
+                body = JSON.stringify(payload);
+                headers = { 'Content-Type': 'application/json' };
+            }
+            
             try {
                 const response = await fetch(url, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload),
+                    headers: headers,
+                    body: body,
                     mode: 'cors'
                 });
                 if (!response.ok) {
@@ -12770,6 +12796,7 @@
              newSettings.dummyEnableDummyModel = elements.dummyEnableDummyModelCheckbox.checked;
              newSettings.enableWebhookNotification = elements.enableWebhookNotificationToggle.checked;
              newSettings.webhookUrl = elements.webhookUrlInput.value.trim();
+             newSettings.webhookFormat = elements.webhookFormatTextRadio.checked ? 'text' : 'json';
 
             const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
                 let num = isInteger ? parseInt(value, 10) : parseFloat(value);
@@ -15955,6 +15982,11 @@
             elements.enableWebhookNotificationToggle.checked = state.settings.enableWebhookNotification;
             elements.webhookUrlInput.value = state.settings.webhookUrl || '';
             elements.webhookSettingsContainer.classList.toggle('hidden', !state.settings.enableWebhookNotification);
+            if (state.settings.webhookFormat === 'text') {
+                elements.webhookFormatTextRadio.checked = true;
+            } else {
+                elements.webhookFormatJsonRadio.checked = true;
+            }
         },
     
         createConfigItem(config) {
