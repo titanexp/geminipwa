@@ -4644,6 +4644,18 @@
                 </label>
                 <hr style="margin: 10px 0; border-top: 1px solid var(--border-tertiary);">
                 <label class="checkbox-label">
+                    <input type="checkbox" id="enable-webhook-notification-toggle">
+                    AIの応答完了時にWebhookを送信する
+                </label>
+                <div id="webhook-settings-container" class="hidden">
+                    <label for="webhook-url-input">Webhook URL:</label>
+                    <input type="text" id="webhook-url-input" placeholder="https://example.com/webhook" aria-label="Webhook URL">
+                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                        ※ AIの応答が完了するたびに、指定されたURLにPOSTリクエストで応答内容をJSON形式で送信します。
+                    </p>
+                </div>
+                <hr style="margin: 10px 0; border-top: 1px solid var(--border-tertiary);">
+                <label class="checkbox-label">
                     <input type="checkbox" id="show-multi-api-keys-toggle">
                     複数APIキー管理機能を使用する
                 </label>
@@ -5624,6 +5636,9 @@
             twinEngineDummyModelInput: document.getElementById('twin-engine-dummy-model'),
             twinEngineEnableDummyModelCheckbox: document.getElementById('twin-engine-enable-dummy-model'),
             twinEngineConcatDummyModelCheckbox: document.getElementById('twin-engine-concat-dummy-model'),
+            enableWebhookNotificationToggle: document.getElementById('enable-webhook-notification-toggle'),
+            webhookUrlInput: document.getElementById('webhook-url-input'),
+            webhookSettingsContainer: document.getElementById('webhook-settings-container'),
         };
 
         const state = {
@@ -5876,6 +5891,8 @@
                 twinEngineDummyModel: '',
                 twinEngineEnableDummyModel: false,
                 twinEngineConcatDummyModel: false,
+                enableWebhookNotification: false,
+                webhookUrl: '',
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -9101,6 +9118,41 @@
         };
 
     const appLogic = {
+        async sendWebhookNotification(responseMessage) {
+            if (!state.settings.enableWebhookNotification || !state.settings.webhookUrl) {
+                return;
+            }
+            const url = state.settings.webhookUrl;
+            try {
+                new URL(url);
+            } catch (e) {
+                console.error("Webhook送信失敗: 無効なURLです。", url);
+                return;
+            }
+            const payload = {
+                type: "ai_response",
+                timestamp: new Date().toISOString(),
+                sessionId: state.currentChatId,
+                sessionTitle: elements.chatTitle.textContent.replace(/^: /, ''),
+                content: responseMessage.content,
+                provider: responseMessage.generatedByApiProvider
+            };
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload),
+                    mode: 'cors'
+                });
+                if (!response.ok) {
+                    console.error(`Webhook送信失敗: サーバーがエラーステータスを返しました (${response.status})`, await response.text());
+                }
+            } catch (error) {
+                console.error("Webhook送信中にネットワークエラーが発生しました:", error);
+            }
+        },
         async initializeApp() {
             try {
                 if (typeof marked !== 'undefined') {
@@ -9880,6 +9932,9 @@
                 uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
             });
             twinEngineApiConfigUtils.initialize();
+            elements.enableWebhookNotificationToggle.addEventListener('change', (e) => {
+                elements.webhookSettingsContainer.classList.toggle('hidden', !e.target.checked);
+            });
         },
         handlePopState(event) {
             const targetScreen = event.state?.screen || 'chat';
@@ -11941,6 +11996,10 @@
                          uiUtils.renderChatMessages();
                          await dbUtils.saveChat();
                     }
+                    const lastMessage = state.currentMessages[state.currentMessages.length - 1];
+                    if (lastMessage && lastMessage.role === 'model') {
+                        this.sendWebhookNotification(lastMessage).catch(console.error);
+                    }
                 } else {
                      if (useStreamingForThisCall && !isBackgroundProcess && modelMessageObjectForStream) {
                         const tempPlaceholderIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
@@ -12709,6 +12768,8 @@
              newSettings.dummyTwinEngineDebugMode = elements.dummyTwinEngineDebugModeCheckbox.checked;
              newSettings.dummyDummyModel = elements.dummyDummyModelInput.value.trim();
              newSettings.dummyEnableDummyModel = elements.dummyEnableDummyModelCheckbox.checked;
+             newSettings.enableWebhookNotification = elements.enableWebhookNotificationToggle.checked;
+             newSettings.webhookUrl = elements.webhookUrlInput.value.trim();
 
             const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
                 let num = isInteger ? parseInt(value, 10) : parseFloat(value);
@@ -15891,6 +15952,9 @@
                 ? `最大${this.MAX_CONFIGS}個まで` 
                 : '新しいAPI設定を追加';
             uiUtils.updateTwinEngineApiKeyCycleButton();
+            elements.enableWebhookNotificationToggle.checked = state.settings.enableWebhookNotification;
+            elements.webhookUrlInput.value = state.settings.webhookUrl || '';
+            elements.webhookSettingsContainer.classList.toggle('hidden', !state.settings.enableWebhookNotification);
         },
     
         createConfigItem(config) {
