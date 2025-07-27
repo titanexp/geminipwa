@@ -5647,6 +5647,10 @@
             twinEngineEnableDummyModelCheckbox: document.getElementById('twin-engine-enable-dummy-model'),
             twinEngineConcatDummyModelCheckbox: document.getElementById('twin-engine-concat-dummy-model'),
             enableWebhookNotificationToggle: document.getElementById('enable-webhook-notification-toggle'),
+            webhookUrlInput: document.getElementById('webhook-url-input'),
+            webhookSettingsContainer: document.getElementById('webhook-settings-container'),
+            webhookFormatJsonRadio: document.getElementById('webhook-format-json'),
+            webhookFormatTextRadio: document.getElementById('webhook-format-text'),
         };
 
         const state = {
@@ -12821,24 +12825,8 @@
              newSettings.dummyDummyModel = elements.dummyDummyModelInput.value.trim();
              newSettings.dummyEnableDummyModel = elements.dummyEnableDummyModelCheckbox.checked;
              newSettings.enableWebhookNotification = elements.enableWebhookNotificationToggle.checked;
-            newSettings.webhookConfigs = [];
-            document.querySelectorAll('#webhook-configs-list-container .api-key-item').forEach(item => {
-                const configId = item.dataset.configId;
-                const labelInput = item.querySelector('.twin-engine-config-label, input[type="text"]');
-                const urlInput = item.querySelector('input[type="text"][placeholder*="Webhook URL"]');
-                const formatSelect = item.querySelector('select');
-                const enabledCheckbox = item.querySelector('input[type="checkbox"]');
-
-                if (configId && urlInput) {
-                    newSettings.webhookConfigs.push({
-                        id: configId,
-                        label: labelInput ? labelInput.value : '',
-                        url: urlInput.value.trim(),
-                        format: formatSelect ? formatSelect.value : 'json',
-                        enabled: enabledCheckbox ? enabledCheckbox.checked : false
-                    });
-                }
-            });
+             newSettings.webhookUrl = elements.webhookUrlInput.value.trim();
+             newSettings.webhookFormat = elements.webhookFormatTextRadio.checked ? 'text' : 'json';
 
             const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
                 let num = isInteger ? parseInt(value, 10) : parseFloat(value);
@@ -16158,6 +16146,13 @@
                 : '新しいAPI設定を追加';
             uiUtils.updateTwinEngineApiKeyCycleButton();
             elements.enableWebhookNotificationToggle.checked = state.settings.enableWebhookNotification;
+            elements.webhookUrlInput.value = state.settings.webhookUrl || '';
+            elements.webhookSettingsContainer.classList.toggle('hidden', !state.settings.enableWebhookNotification);
+            if (state.settings.webhookFormat === 'text') {
+                elements.webhookFormatTextRadio.checked = true;
+            } else {
+                elements.webhookFormatJsonRadio.checked = true;
+            }
         },
     
         createConfigItem(config) {
