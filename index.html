@@ -6020,7 +6020,20 @@
                     request.onerror = (event) => reject(`IndexedDBエラー: ${event.target.error}`);
                     request.onsuccess = (event) => {
                         state.db = event.target.result;
-                        state.db.onerror = (event) => { };
+                        state.db.onclose = () => {
+                            state.db = null;
+                        };
+                        state.db.onversionchange = () => {
+                            if (state.db) {
+                                state.db.close();
+                                state.db = null;
+                            }
+                            uiUtils.showCustomAlert("アプリの新しいバージョンが利用可能です。データを保護するため、ページをリロードしてください。")
+                                .then(() => window.location.reload());
+                        };
+                        state.db.onerror = (event) => {
+                            console.error(`IndexedDBの予期せぬエラー: ${event.target.error}`);
+                        };
                         resolve(state.db);
                     };
                     request.onupgradeneeded = (event) => {
