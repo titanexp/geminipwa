@@ -4643,27 +4643,28 @@
                     履歴インポート時にタイトルへ接頭辞を付与する
                 </label>
                 <hr style="margin: 10px 0; border-top: 1px solid var(--border-tertiary);">
-                <details id="webhook-management-details" style="margin-top: 10px;">
-                    <summary style="font-size: 13px; color: var(--text-link); cursor: pointer; font-weight: bold; list-style: revert; margin-bottom: 10px;">
-                        AIの応答内容を指定URLに転送する (複数選択可)
-                    </summary>
-                    <div style="padding-left: 15px; margin-top: 10px; border-left: 1px solid var(--border-secondary); padding-top: 5px;">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="enable-webhook-notification-toggle">
-                            Webhook転送機能を有効にする
-                        </label>
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-                            ※ AIの応答完了時に、以下で有効に設定したURLへPOSTリクエストを自動送信します。
-                        </p>
-                        
-                        <div id="webhook-configs-list-container">
-                        </div>
-
-                        <button type="button" id="add-webhook-config-btn" class="add-api-key-btn" style="margin-top: 10px;">
-                            新しいWebhook設定を追加
-                        </button>
-                    </div>
-                </details>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="enable-webhook-notification-toggle">
+                    AIの応答完了時にWebhookを送信する
+                </label>
+                <div id="webhook-settings-container" class="hidden">
+                            <label for="webhook-url-input">Webhook URL:</label>
+                            <input type="text" id="webhook-url-input" placeholder="https://example.com/webhook" aria-label="Webhook URL">
+                            <div style="margin-top: 8px; margin-bottom: 5px;">
+                                <label style="font-size: 14px; margin-bottom: 5px; display: block;">送信形式:</label>
+                                <div style="display: flex; gap: 15px;">
+                                    <label class="checkbox-label" style="margin-bottom: 0;">
+                                        <input type="radio" name="webhook-format" id="webhook-format-json" value="json" checked> JSON
+                                    </label>
+                                    <label class="checkbox-label" style="margin-bottom: 0;">
+                                        <input type="radio" name="webhook-format" id="webhook-format-text" value="text"> プレーンテキスト
+                                    </label>
+                                </div>
+                            </div>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px; margin-bottom: 10px;">
+                                ※ AIの応答完了時に指定URLへPOSTリクエストを送信します。
+                            </p>
+                </div>
                 <hr style="margin: 10px 0; border-top: 1px solid var(--border-tertiary);">
                 <label class="checkbox-label">
                     <input type="checkbox" id="show-multi-api-keys-toggle">
@@ -5647,6 +5648,10 @@
             twinEngineEnableDummyModelCheckbox: document.getElementById('twin-engine-enable-dummy-model'),
             twinEngineConcatDummyModelCheckbox: document.getElementById('twin-engine-concat-dummy-model'),
             enableWebhookNotificationToggle: document.getElementById('enable-webhook-notification-toggle'),
+            webhookUrlInput: document.getElementById('webhook-url-input'),
+            webhookSettingsContainer: document.getElementById('webhook-settings-container'),
+            webhookFormatJsonRadio: document.getElementById('webhook-format-json'),
+            webhookFormatTextRadio: document.getElementById('webhook-format-text'),
         };
 
         const state = {
@@ -5899,8 +5904,9 @@
                 twinEngineDummyModel: '',
                 twinEngineEnableDummyModel: false,
                 twinEngineConcatDummyModel: false,
-            enableWebhookNotification: false,
-            webhookConfigs: [],
+                enableWebhookNotification: false,
+                webhookUrl: '',
+                webhookFormat: 'json', // 'json' or 'text'
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -9141,68 +9147,57 @@
     const appLogic = {
 
         async sendWebhookNotification(responseMessage) {
-            if (!state.settings.enableWebhookNotification || !state.settings.webhookConfigs || state.settings.webhookConfigs.length === 0) {
+            if (!state.settings.enableWebhookNotification || !state.settings.webhookUrl) {
                 return;
             }
-        
-            const enabledConfigs = state.settings.webhookConfigs.filter(c => c.enabled && c.url);
-            if (enabledConfigs.length === 0) {
+            const url = state.settings.webhookUrl;
+            try {
+                new URL(url);
+            } catch (e) {
+                console.error("Webhook送信失敗: 無効なURLです。", url);
                 return;
             }
-        
-            const sendPromises = enabledConfigs.map(config => {
-                return (async () => {
-                    const { url, format } = config;
-        
-                    try {
-                        new URL(url);
-                    } catch (e) {
-                        console.error(`Webhook送信失敗: 無効なURLです (${url})`);
-                        return;
-                    }
-        
-                    let body;
-                    let headers = {};
-        
-                    if (format === 'text') {
-                        body = responseMessage.content;
-                        headers['Content-Type'] = 'text/plain';
-                    } else {
-                        const payload = {
-                            type: "ai_response",
-                            timestamp: new Date().toISOString(),
-                            sessionId: state.currentChatId,
-                            sessionTitle: elements.chatTitle.textContent.replace(/^: /, ''),
-                            content: responseMessage.content,
-                            provider: responseMessage.generatedByApiProvider,
-                        };
-                        body = JSON.stringify(payload);
-                        headers['Content-Type'] = 'application/json';
-                    }
-        
-                    const fetchOptions = {
-                        method: 'POST',
-                        headers: headers,
-                        body: body,
-                        mode: 'cors'
-                    };
-        
-                    if (format !== 'text') {
-                        fetchOptions.mode = 'no-cors';
-                    }
-        
-                    try {
-                        const response = await fetch(url, fetchOptions);
-                        if (fetchOptions.mode === 'cors' && !response.ok) {
-                            console.error(`Webhook送信失敗 (${url}): サーバーがエラーステータス (${response.status}) を返しました`);
-                        }
-                    } catch (error) {
-                        console.error(`Webhook送信中にネットワークエラーが発生しました (${url}):`, error);
-                    }
-                })();
-            });
-        
-            await Promise.all(sendPromises);
+
+            let body;
+            let headers;
+            const format = state.settings.webhookFormat;
+
+            if (format === 'text') {
+                body = responseMessage.content;
+                headers = { 'Content-Type': 'text/plain' };
+            } else { // default to json
+                const payload = {
+                    type: "ai_response",
+                    timestamp: new Date().toISOString(),
+                    sessionId: state.currentChatId,
+                    sessionTitle: elements.chatTitle.textContent.replace(/^: /, ''),
+                    content: responseMessage.content,
+                    provider: responseMessage.generatedByApiProvider
+                };
+                body = JSON.stringify(payload);
+                headers = { 'Content-Type': 'application/json' };
+            }
+            
+            const fetchOptions = {
+                method: 'POST',
+                headers: headers,
+                body: body,
+                mode: 'cors'
+            };
+
+            if (format !== 'text') {
+                fetchOptions.mode = 'no-cors';
+            }
+
+            try {
+                const response = await fetch(url, fetchOptions);
+
+                if (fetchOptions.mode === 'cors' && !response.ok) {
+                    console.error(`Webhook送信失敗: サーバーがエラーステータスを返しました (${response.status})`, await response.text());
+                }
+            } catch (error) {
+                console.error("Webhook送信中にネットワークエラーが発生しました:", error);
+            }
         },
         async initializeApp() {
             try {
@@ -9275,8 +9270,7 @@
                 state.currentScreen = 'chat';
                 
                 updateMessageMaxWidthVar();
-            this.setupEventListeners();
-            webhookConfigUtils.initialize();
+                this.setupEventListeners();
                 this.updateZoomState();
                 uiUtils.adjustTextareaHeight();
                 uiUtils.setSendingState(false);
@@ -12819,9 +12813,10 @@
              newSettings.dummyErrorDebugMode = elements.dummyErrorDebugModeCheckbox.checked;
              newSettings.dummyTwinEngineDebugMode = elements.dummyTwinEngineDebugModeCheckbox.checked;
              newSettings.dummyDummyModel = elements.dummyDummyModelInput.value.trim();
-             newSettings.dummyEnableDummyModel = elements.dummyEnableDummy_modelCheckbox.checked;
+             newSettings.dummyEnableDummyModel = elements.dummyEnableDummyModelCheckbox.checked;
              newSettings.enableWebhookNotification = elements.enableWebhookNotificationToggle.checked;
-             newSettings.webhookConfigs = state.settings.webhookConfigs;
+             newSettings.webhookUrl = elements.webhookUrlInput.value.trim();
+             newSettings.webhookFormat = elements.webhookFormatTextRadio.checked ? 'text' : 'json';
 
             const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
                 let num = isInteger ? parseInt(value, 10) : parseFloat(value);
@@ -15617,7 +15612,6 @@
             this.triggerForceReload('Manual Recovery', { reason: 'User triggered' }, true);
         }
     };
-
             const multiApiKeyUtils = {
         MAX_API_KEYS: 10,
 
@@ -15912,141 +15906,6 @@
         }
     };
 
-    const webhookConfigUtils = {
-        MAX_CONFIGS: 10,
-    
-        initialize() {
-            document.getElementById('add-webhook-config-btn').addEventListener('click', () => this.addConfig());
-            this.renderList();
-        },
-    
-        addConfig() {
-            const configs = state.settings.webhookConfigs;
-            if (configs.length >= this.MAX_CONFIGS) {
-                uiUtils.showCustomAlert(`最大${this.MAX_CONFIGS}個までWebhook設定を追加できます。`);
-                return;
-            }
-            configs.push({
-                id: `wh-${Date.now()}`,
-                label: `通知先 ${configs.length + 1}`,
-                url: '',
-                format: 'json',
-                enabled: true,
-            });
-            this.renderList();
-        },
-    
-        deleteConfig(configId) {
-            const index = state.settings.webhookConfigs.findIndex(c => c.id === configId);
-            if (index > -1) {
-                state.settings.webhookConfigs.splice(index, 1);
-                this.renderList();
-            }
-        },
-    
-        updateConfig(configId, key, value) {
-            const config = state.settings.webhookConfigs.find(c => c.id === configId);
-            if (config) {
-                config[key] = value;
-            }
-        },
-    
-        renderList() {
-            const container = document.getElementById('webhook-configs-list-container');
-            const configs = state.settings.webhookConfigs;
-            container.innerHTML = '';
-    
-            if (configs.length === 0) {
-                const emptyMsg = document.createElement('p');
-                emptyMsg.textContent = 'Webhook設定がありません。';
-                emptyMsg.style.cssText = 'color: var(--text-secondary); font-size: 13px; text-align: center; margin: 10px 0;';
-                container.appendChild(emptyMsg);
-            } else {
-                configs.forEach(config => {
-                    container.appendChild(this.createConfigItem(config));
-                });
-            }
-            document.getElementById('add-webhook-config-btn').disabled = configs.length >= this.MAX_CONFIGS;
-        },
-    
-        createConfigItem(config) {
-            const item = document.createElement('div');
-            item.className = 'api-key-item';
-            item.style.marginBottom = '15px';
-    
-            const row1 = document.createElement('div');
-            row1.style.display = 'flex';
-            row1.style.gap = '10px';
-            row1.style.alignItems = 'center';
-            row1.style.marginBottom = '8px';
-    
-            const labelInput = document.createElement('input');
-            labelInput.type = 'text';
-            labelInput.value = config.label;
-            labelInput.placeholder = 'ラベル (例: Slack通知)';
-            labelInput.className = 'api-key-item-input';
-            labelInput.style.flexGrow = '1';
-            labelInput.addEventListener('change', (e) => this.updateConfig(config.id, 'label', e.target.value));
-    
-            const enabledLabel = document.createElement('label');
-            enabledLabel.className = 'checkbox-label';
-            enabledLabel.style.marginBottom = '0';
-            const enabledCheckbox = document.createElement('input');
-            enabledCheckbox.type = 'checkbox';
-            enabledCheckbox.checked = config.enabled;
-            enabledCheckbox.addEventListener('change', (e) => this.updateConfig(config.id, 'enabled', e.target.checked));
-            enabledLabel.appendChild(enabledCheckbox);
-            enabledLabel.appendChild(document.createTextNode(' 有効'));
-            
-            row1.appendChild(labelInput);
-            row1.appendChild(enabledLabel);
-    
-            const urlInput = document.createElement('input');
-            urlInput.type = 'text';
-            urlInput.value = config.url;
-            urlInput.placeholder = 'Webhook URL (https://...)';
-            urlInput.className = 'api-key-item-input';
-            urlInput.style.marginBottom = '8px';
-            urlInput.addEventListener('change', (e) => this.updateConfig(config.id, 'url', e.target.value));
-    
-            const row3 = document.createElement('div');
-            row3.style.display = 'flex';
-            row3.style.gap = '10px';
-            row3.style.alignItems = 'center';
-            
-            const formatLabel = document.createElement('label');
-            formatLabel.textContent = '形式:';
-            formatLabel.style.fontSize = '13px';
-    
-            const formatSelect = document.createElement('select');
-            formatSelect.style.width = '120px';
-            ['json', 'text'].forEach(format => {
-                const option = document.createElement('option');
-                option.value = format;
-                option.textContent = format.toUpperCase();
-                formatSelect.add(option);
-            });
-            formatSelect.value = config.format;
-            formatSelect.addEventListener('change', (e) => this.updateConfig(config.id, 'format', e.target.value));
-            
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'api-key-delete-btn';
-            deleteBtn.textContent = '削除';
-            deleteBtn.style.marginLeft = 'auto';
-            deleteBtn.addEventListener('click', () => this.deleteConfig(config.id));
-            
-            row3.appendChild(formatLabel);
-            row3.appendChild(formatSelect);
-            row3.appendChild(deleteBtn);
-    
-            item.appendChild(row1);
-            item.appendChild(urlInput);
-            item.appendChild(row3);
-            
-            return item;
-        },
-    };
-
      const twinEngineApiConfigUtils = {
         MAX_CONFIGS: 1000,
     
@@ -16141,6 +16000,13 @@
                 : '新しいAPI設定を追加';
             uiUtils.updateTwinEngineApiKeyCycleButton();
             elements.enableWebhookNotificationToggle.checked = state.settings.enableWebhookNotification;
+            elements.webhookUrlInput.value = state.settings.webhookUrl || '';
+            elements.webhookSettingsContainer.classList.toggle('hidden', !state.settings.enableWebhookNotification);
+            if (state.settings.webhookFormat === 'text') {
+                elements.webhookFormatTextRadio.checked = true;
+            } else {
+                elements.webhookFormatJsonRadio.checked = true;
+            }
         },
     
         createConfigItem(config) {
