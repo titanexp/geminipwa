@@ -3326,16 +3326,6 @@
         #footer-resummarize-btn:hover:not(:disabled) {
             background-color: var(--bg-button-hover);
         }
-.webhook-config-item {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    margin-bottom: 15px;
-    padding: 12px;
-    border: 1px solid var(--border-secondary);
-    border-radius: 5px;
-    background-color: var(--bg-tertiary);
-}
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
@@ -4658,11 +4648,11 @@
                     AIの応答内容を指定URLに転送する
                 </label>
 <div id="webhook-settings-container" class="hidden">
-    <div id="webhook-configs-list" class="api-keys-list" style="margin-top:10px; margin-bottom: 15px;">
+    <div id="webhooks-list" class="api-keys-list" style="margin-bottom: 15px;">
     </div>
-    <button type="button" id="add-webhook-config-btn" class="add-api-key-btn">新しいWebhook URLを追加</button>
+    <button type="button" id="add-webhook-btn" class="add-api-key-btn">新しいWebhookを追加</button>
     <p style="font-size: 11px; color: var(--text-secondary); margin-top: 15px;">
-        ※ AIの応答完了時に、有効化されている全てのURLへPOSTリクエストを自動転送します。
+        ※ AIの応答完了時に、有効化されたすべてのURLへPOSTリクエストを自動転送します。
     </p>
 </div>
                 <hr style="margin: 10px 0; border-top: 1px solid var(--border-tertiary);">
@@ -5652,7 +5642,8 @@
             webhookSettingsContainer: document.getElementById('webhook-settings-container'),
             webhookFormatJsonRadio: document.getElementById('webhook-format-json'),
             webhookFormatTextRadio: document.getElementById('webhook-format-text'),
-            addWebhookConfigBtn: document.getElementById('add-webhook-config-btn'),
+            webhooksList: document.getElementById('webhooks-list'),
+addWebhookBtn: document.getElementById('add-webhook-btn'),
         };
 
         const state = {
@@ -5905,8 +5896,8 @@
                 twinEngineDummyModel: '',
                 twinEngineEnableDummyModel: false,
                 twinEngineConcatDummyModel: false,
-                enableWebhookNotification: false,
-                webhookConfigs: [], 
+enableWebhookNotification: false,
+webhooks: [],
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -6137,7 +6128,17 @@
                         if (loadedSettings.hasOwnProperty('expandDeepSeekThoughtsByDefault') && !loadedSettings.hasOwnProperty('deepSeekExpandThoughtsByDefault') && state.settings.hasOwnProperty('deepSeekExpandThoughtsByDefault')) {
                             state.settings.deepSeekExpandThoughtsByDefault = loadedSettings.expandDeepSeekThoughtsByDefault;
                         }
-
+if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
+    loadedSettings.webhooks = [{
+        id: 'migrated-' + Date.now(),
+        label: '以前の設定',
+        url: loadedSettings.webhookUrl,
+        enabled: loadedSettings.enableWebhookNotification,
+        format: loadedSettings.webhookFormat || 'json'
+    }];
+    delete loadedSettings.webhookUrl;
+    delete loadedSettings.webhookFormat;
+}
                         for (const key in loadedSettings) {
                              if (key === 'darkMode') continue;
                              if (key === 'memoWidth') continue;
@@ -6313,19 +6314,7 @@
                             state.settings.twinEngineApiConfigs = loadedSettings.twinEngineApiConfigs;
                             state.settings.twinEngineActiveConfigId = loadedSettings.twinEngineActiveConfigId;
                         }
-                        if (loadedSettings.hasOwnProperty('webhookUrl') && loadedSettings.webhookUrl) {
-                            if (!state.settings.webhookConfigs || state.settings.webhookConfigs.length === 0) {
-                                state.settings.webhookConfigs = [{
-                                    id: Date.now().toString(),
-                                    enabled: state.settings.enableWebhookNotification,
-                                    label: '移行したURL',
-                                    url: loadedSettings.webhookUrl,
-                                    format: loadedSettings.webhookFormat || 'json'
-                                }];
-                            }
-                            delete state.settings.webhookUrl;
-                            delete state.settings.webhookFormat;
-                        }
+
                         resolve(state.settings);
                     };
                     request.onerror = (event) => reject(`設定読み込みエラー: ${event.target.error}`);
@@ -9158,73 +9147,64 @@
 
     const appLogic = {
 
-        async sendWebhookNotification(responseMessage) {
-            if (!state.settings.enableWebhookNotification || !state.settings.webhookConfigs || state.settings.webhookConfigs.length === 0) {
+async sendWebhookNotification(responseMessage) {
+    if (!state.settings.enableWebhookNotification || !state.settings.webhooks || state.settings.webhooks.length === 0) {
+        return;
+    }
+
+    const enabledWebhooks = state.settings.webhooks.filter(w => w.enabled && w.url && w.url.trim());
+    if (enabledWebhooks.length === 0) {
+        return;
+    }
+
+    const promises = enabledWebhooks.map(webhook => {
+        return (async () => {
+            try {
+                new URL(webhook.url);
+            } catch (e) {
+                console.error(`Webhook送信失敗 (無効なURL: ${webhook.label}):`, webhook.url);
                 return;
             }
 
-            const enabledConfigs = state.settings.webhookConfigs.filter(config => config.enabled && config.url);
-            if (enabledConfigs.length === 0) {
-                return;
+            const format = webhook.format || 'json';
+            let body;
+            let headers;
+
+            if (format === 'text') {
+                body = responseMessage.content;
+                headers = { 'Content-Type': 'text/plain' };
+            } else {
+                const payload = {
+                    type: "ai_response",
+                    timestamp: new Date().toISOString(),
+                    sessionId: state.currentChatId,
+                    sessionTitle: elements.chatTitle.textContent.replace(/^: /, ''),
+                    content: responseMessage.content,
+                    provider: responseMessage.generatedByApiProvider,
+                    webhookLabel: webhook.label
+                };
+                body = JSON.stringify(payload);
+                headers = { 'Content-Type': 'application/json' };
             }
 
-            const sendPromises = enabledConfigs.map(config => {
-                return (async () => {
-                    try {
-                        new URL(config.url);
-                    } catch (e) {
-                        console.error(`Webhook送信失敗: 無効なURLです。`, config.url);
-                        return { status: 'rejected', reason: `Invalid URL: ${config.url}` };
-                    }
-
-                    let body;
-                    let headers;
-
-                    if (config.format === 'text') {
-                        body = responseMessage.content;
-                        headers = { 'Content-Type': 'text/plain' };
-                    } else {
-                        const payload = {
-                            type: "ai_response",
-                            timestamp: new Date().toISOString(),
-                            sessionId: state.currentChatId,
-                            sessionTitle: elements.chatTitle.textContent.replace(/^: /, ''),
-                            content: responseMessage.content,
-                            provider: responseMessage.generatedByApiProvider,
-                            webhookLabel: config.label
-                        };
-                        body = JSON.stringify(payload);
-                        headers = { 'Content-Type': 'application/json' };
-                    }
-
-                    try {
-                        const response = await fetch(config.url, {
-                            method: 'POST',
-                            headers: headers,
-                            body: body,
-                            mode: 'cors'
-                        });
-
-                        if (!response.ok) {
-                            console.error(`Webhook送信失敗 (${config.label}): サーバーがエラーステータスを返しました (${response.status})`);
-                            return { status: 'rejected', reason: `Server error: ${response.status}` };
-                        }
-                        return { status: 'fulfilled', value: `Success for ${config.label}` };
-                    } catch (error) {
-                        console.error(`Webhook送信中にネットワークエラーが発生しました (${config.label}):`, error);
-                        return { status: 'rejected', reason: error.message };
-                    }
-                })();
-            });
-
-            const results = await Promise.allSettled(sendPromises);
-
-            results.forEach((result, index) => {
-                if (result.status === 'rejected') {
-                    console.log(`Webhook to "${enabledConfigs[index].label}" failed:`, result.reason);
+            try {
+                const response = await fetch(webhook.url, {
+                    method: 'POST',
+                    headers: headers,
+                    body: body,
+                    mode: 'cors'
+                });
+                if (!response.ok) {
+                    console.error(`Webhook送信失敗 (${webhook.label}): サーバーがエラーステータス ${response.status} を返しました`);
                 }
-            });
-        },
+            } catch (error) {
+                console.error(`Webhook送信中にネットワークエラー (${webhook.label}):`, error);
+            }
+        })();
+    });
+
+    await Promise.allSettled(promises);
+},
         async initializeApp() {
             try {
                 if (typeof marked !== 'undefined') {
@@ -9296,7 +9276,8 @@
                 state.currentScreen = 'chat';
                 
                 updateMessageMaxWidthVar();
-                this.setupEventListeners();
+                webhookUtils.initialize();
+this.setupEventListeners();
                 this.updateZoomState();
                 uiUtils.adjustTextareaHeight();
                 uiUtils.setSendingState(false);
@@ -9380,303 +9361,634 @@
             document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mode', 'pastel-blue-mode', 'pastel-yellow-mode', 'pastel-purple-mode', 'pastel-rainbow-mode');
             document.body.classList.add(prefersDark ? 'dark-mode' : 'light-mode-forced');
         },
+        setupEventListeners() {
+            elements.gotoHistoryBtn.addEventListener('click', () => uiUtils.showScreen('history'));
+            elements.gotoSettingsBtn.addEventListener('click', () => uiUtils.showScreen('settings'));
+            elements.backToChatFromHistoryBtn.addEventListener('click', () => history.back());
+            elements.backToChatFromSettingsBtn.addEventListener('click', () => history.back());
+            elements.toggleMemoBtn.addEventListener('click', () => this.toggleMemo());
+            elements.copyMemoBtn.addEventListener('click', () => this.copyMemoText());
+            elements.pasteMemoBtn.addEventListener('click', () => this.pasteIntoMemo());
+            elements.deleteMemoBtn.addEventListener('click', () => this.confirmClearMemo());
 
-            applySettingsToUI() {
-                this.toggleApiSettingsVisibility(state.settings.apiProvider);
-                elements.apiProviderSelect.value = state.settings.apiProvider;
-                twinEngineApiConfigUtils.renderList();
-                elements.commonSystemPromptDefaultTextarea.value = state.settings.commonSystemPrompt || '';
-                elements.enableCommonSystemPromptDefaultCheckbox.checked = state.settings.enableCommonSystemPromptDefault;
-                elements.twinEngineEnableFullAutoToggle.checked = state.settings.twinEngineEnableFullAuto;
-                elements.showFooterTwinEngineToggleButtonToggle.checked = state.settings.showFooterTwinEngineToggleButton;
-                elements.showFooterResummarizeButtonToggle.checked = state.settings.showFooterResummarizeButton;
-                elements.twinEngineFullAutoSettingContainer.classList.toggle('hidden', !state.settings.showTwinEngineSettings);
-                elements.twinEngineSummarizeAfterTurnsInput.value = state.settings.twinEngineSummarizeAfterTurns ?? DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS;
-                document.getElementById('twin-engine-initial-turns-to-include').value = state.settings.twinEngineInitialTurnsToInclude ?? 1;
-                elements.twinEngineSummaryPromptInput.value = state.settings.twinEngineSummaryPrompt || '';
-                elements.twinEngineDummyUserInput.value = state.settings.twinEngineDummyUser || '';
-                elements.twinEngineEnableDummyUserCheckbox.checked = state.settings.twinEngineEnableDummyUser;
-                elements.twinEngineDummyModelInput.value = state.settings.twinEngineDummyModel || '';
-                elements.twinEngineEnableDummyModelCheckbox.checked = state.settings.twinEngineEnableDummyModel;
-                elements.twinEngineConcatDummyModelCheckbox.checked = state.settings.twinEngineConcatDummyModel;
+            elements.toggleClipboardStackBtn.addEventListener('click', () => this.toggleClipboardStack());
+            elements.deleteClipboardStackBtn.addEventListener('click', () => this.confirmClearClipboardStack());
+            elements.copyClipboardStackBtn.addEventListener('click', () => this.copyClipboardStackText());
+            elements.pasteClipboardStackBtn.addEventListener('click', () => this.pasteIntoClipboardStack());
 
-                elements.geminiApiKeyInput.value = state.settings.apiKey || '';
-                elements.geminiModelNameSelect.value = state.settings.modelName || DEFAULT_MODEL;
-                elements.geminiAdditionalModelsTextarea.value = state.settings.additionalModels || '';
-                elements.deepSeekApiKeyInput.value = state.settings.deepSeekApiKey || '';
-                elements.deepSeekModelNameSelect.value = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
-                elements.deepSeekAdditionalModelsTextarea.value = state.settings.deepSeekAdditionalModels || '';
-                elements.deepSeekApiEndpointInput.value = state.settings.deepSeekApiEndpoint || '';
-                elements.claudeApiKeyInput.value = state.settings.claudeApiKey || '';
-                elements.claudeModelNameSelect.value = state.settings.claudeModelName || DEFAULT_CLAUDE_MODEL;
-                elements.claudeAdditionalModelsTextarea.value = state.settings.claudeAdditionalModels || '';
-                elements.openaiApiKeyInput.value = state.settings.openaiApiKey || '';
-                elements.openaiModelNameSelect.value = state.settings.openaiModelName || DEFAULT_OPENAI_MODEL;
-                elements.openaiAdditionalModelsTextarea.value = state.settings.openaiAdditionalModels || '';
-                elements.xaiApiKeyInput.value = state.settings.xaiApiKey || '';
-                elements.xaiModelNameSelect.value = state.settings.xaiModelName || DEFAULT_XAI_MODEL;
-                elements.xaiAdditionalModelsTextarea.value = state.settings.xaiAdditionalModels || '';
-                elements.llmAggregatorApiBackendInput.value = state.settings.llmAggregatorApiBackend || '';
-                elements.llmAggregatorApiKeyInput.value = state.settings.llmAggregatorApiKey || '';
-                elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
-                elements.llmAggregatorAdditionalModelsTextarea.value = state.settings.llmAggregatorAdditionalModels || '';
+            elements.twinEngineSummaryBtn.addEventListener('click', () => this.toggleTwinEngineSummary());
+            elements.twinEngineApiKeyCycleBtn.addEventListener('click', () => this.cycleTwinEngineApiKey());
+            elements.copyTwinEngineSummaryBtn.addEventListener('click', () => this.copyTwinEngineSummaryText());
+            elements.clearTwinEngineSummaryBtn.addEventListener('click', () => this.clearTwinEngineSummary());
+            elements.resummarizeBtn.addEventListener('click', () => this.manualResummarize());
+            elements.footerResummarizeBtn.addEventListener('click', () => this.manualResummarize());
+            elements.twinEngineModeToggleBtn.addEventListener('click', () => this.toggleTwinEngineMode());
+            elements.footerTwinEngineModeToggleBtn.addEventListener('click', () => this.toggleTwinEngineMode());
+
+            elements.scrollToTopBtn.addEventListener('click', () => this.scrollToTop());
+            elements.scrollToBottomBtn.addEventListener('click', () => this.scrollToBottom());
+            elements.aiToAiChatBtn.addEventListener('click', () => this.initiateAiToAiStep());
+            elements.pasteToInputBtn.addEventListener('click', () => this.pasteToUserInput());
+            elements.rollDiceBtn.addEventListener('click', () => this.rollDiceAndInput());
+
+            elements.newChatBtn.addEventListener('click', () => {
+                uiUtils.showCustomConfirm("現在のチャットを保存して新規チャットを開始しますか？").then(confirmed => {
+                    if (confirmed) this.confirmStartNewChat();
+                });
+            });
+            elements.deleteSessionBtn.addEventListener('click', () => this.confirmDeleteCurrentSession());
+            elements.copySessionBtn.addEventListener('click', () => this.copyCurrentSessionText());
+            elements.toggleAllContentBtn.addEventListener('click', () => this.toggleAllMessagesVisibility());
+            elements.headerApiProviderToggleBtn.addEventListener('click', () => this.toggleApiProvider());
+            elements.footerApiProviderToggleBtn.addEventListener('click', () => this.toggleApiProvider());
+            elements.sendButton.addEventListener('click', () => {
+                if (state.isSending) this.abortRequest();
+                else this.handleSend();
+            });
+            elements.userInput.addEventListener('input', () => uiUtils.adjustTextareaHeight());
+            elements.userInput.addEventListener('keypress', (e) => {
+                if (state.settings.enterToSend && e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const canSend = state.settings.apiProvider === 'dummy' || !(elements.userInput.value.trim() === '' && state.pendingAttachments.length === 0);
+                    if (canSend && !state.isSending) {
+                         this.handleSend();
+                    }
+                }
+            });
+             elements.userInput.addEventListener('input', () => uiUtils.updateAttachmentBadgeVisibility());
+
+            elements.importHistoryBtn.addEventListener('click', () => elements.importHistoryInput.click());
+            elements.importHistoryInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) this.handleHistoryImport(file);
+                event.target.value = null;
+            });
+            elements.exportAllSessionsBtn.addEventListener('click', () => this.exportAllSessions());
+            elements.importAllSessionsBtn.addEventListener('click', () => elements.importAllSessionsInput.click());
+            elements.importAllSessionsInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) this.handleAllSessionsImport(file);
+                event.target.value = null;
+            });
+
+            elements.saveSettingsBtns.forEach(button => {
+                button.addEventListener('click', () => this.saveSettings(true));
+            });
+            elements.updateAppBtn.addEventListener('click', () => this.updateApp());
+            elements.clearDataBtn.addEventListener('click', () => this.confirmClearAllData());
+            elements.clearHistoryBtn.addEventListener('click', () => this.confirmClearAllHistory());
+            document.getElementById('force-recovery-btn').addEventListener('click', async () => {
+                const confirmed = await uiUtils.showCustomConfirm(
+                    "強制復旧を実行しますか？\n\n" +
+                    "この操作により：\n" +
+                    "• 全キャッシュがクリアされます\n" +
+                    "• アプリが自動的に再起動されます\n" +
+                    "• チャット履歴と設定は保持されます\n\n" +
+                    "アプリが不安定な場合にのみ実行してください。"
+                );
                 
-                multiApiKeyUtils.renderAllApiKeyLists();
-                multiApiKeyUtils.updateMainApiKeyInput('gemini');
-                multiApiKeyUtils.updateMainApiKeyInput('deepseek');
-                multiApiKeyUtils.updateMainApiKeyInput('claude');
-                multiApiKeyUtils.updateMainApiKeyInput('openai');
-                multiApiKeyUtils.updateMainApiKeyInput('xai');
-                multiApiKeyUtils.updateMainApiKeyInput('llmaggregator');
+                if (confirmed) {
+                    if (typeof errorRecovery !== 'undefined') {
+                        errorRecovery.manualRecovery();
+                    } else {
+                        await uiUtils.showCustomAlert("キャッシュをクリアして再起動します...");
+                        window.location.reload(true);
+                    }
+                }
+            });
 
-                elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPrompt || '';
-                elements.geminiEnableSystemPromptDefaultCheckbox.checked = state.settings.geminiEnableSystemPromptDefault;
-                elements.geminiTemperatureInput.value = state.settings.geminiTemperature === null ? '' : state.settings.geminiTemperature;
-                elements.geminiMaxTokensInput.value = state.settings.geminiMaxTokens === null ? '' : state.settings.geminiMaxTokens;
-                elements.geminiTopKInput.value = state.settings.geminiTopK === null ? '' : state.settings.geminiTopK;
-                elements.geminiTopPInput.value = state.settings.geminiTopP === null ? '' : state.settings.geminiTopP;
-                elements.geminiPresencePenaltyInput.value = state.settings.geminiPresencePenalty === null ? '' : state.settings.geminiPresencePenalty;
-                elements.geminiFrequencyPenaltyInput.value = state.settings.geminiFrequencyPenalty === null ? '' : state.settings.geminiFrequencyPenalty;
-                elements.geminiThinkingBudgetInput.value = state.settings.geminiThinkingBudget === null ? '' : state.settings.geminiThinkingBudget;
-                elements.geminiIncludeThoughtsToggle.checked = state.settings.geminiIncludeThoughts;
-                elements.geminiExpandThoughtsByDefaultToggle.checked = state.settings.geminiExpandThoughtsByDefault;
-                elements.geminiStreamingOutputCheckbox.checked = state.settings.geminiStreamingOutput;
-                elements.geminiStreamingSpeedInput.value = state.settings.geminiStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
-                elements.geminiDummyUserInput.value = state.settings.geminiDummyUser || '';
-                elements.geminiEnableDummyUserCheckbox.checked = state.settings.geminiEnableDummyUser;
-                elements.geminiDummyModelInput.value = state.settings.geminiDummyModel || '';
-                elements.geminiEnableDummyModelCheckbox.checked = state.settings.geminiEnableDummyModel;
-                elements.geminiConcatDummyModelCheckbox.checked = state.settings.geminiConcatDummyModel;
-                elements.geminiPseudoStreamingCheckbox.checked = state.settings.geminiPseudoStreaming;
-                elements.geminiEnableGroundingToggle.checked = state.settings.geminiEnableGrounding;
+            if (elements.themeSelect) {
+                elements.themeSelect.addEventListener('change', () => {
+                    state.settings.theme = elements.themeSelect.value;
+                    uiUtils.applyTheme();
+                });
+            }
+            if (elements.apiProviderSelect) {
+                elements.apiProviderSelect.addEventListener('change', (event) => {
+                    const selectedProvider = event.target.value;
+                    state.settings.apiProvider = selectedProvider;
+                    uiUtils.toggleApiSettingsVisibility(selectedProvider);
+                });
+            }
+            if (elements.enableSessionLinkingCheckbox) {
+                elements.enableSessionLinkingCheckbox.addEventListener('change', () => {
+                    state.settings.enableSessionLinking = elements.enableSessionLinkingCheckbox.checked;
+                    if (!state.settings.enableSessionLinking) {
+                        state.linkedSessionIds = [];
+                    }
+                    uiUtils.updateSessionLinkingUI();
+                });
+            }
+            elements.setThinkingBudgetBtns.forEach(button => {
+                button.addEventListener('click', () => {
+                    const value = button.dataset.value;
+                    const targetInput = elements.geminiThinkingBudgetInput;
+                    if (value === 'null') {
+                        targetInput.value = '';
+                    } else {
+                        targetInput.value = value;
+                    }
+                });
+            });
+            elements.setClaudeParamBtns.forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetId = button.dataset.target;
+                    const value = button.dataset.value;
+                    const targetInput = document.getElementById(targetId);
+                    if (targetInput) {
+                        if (value === 'null') {
+                            targetInput.value = '';
+                        } else {
+                            targetInput.value = value;
+                        }
+                    }
+                });
+            });
 
-                elements.deepSeekSystemPromptDefaultTextarea.value = state.settings.deepSeekSystemPrompt || '';
-                elements.deepSeekEnableSystemPromptDefaultCheckbox.checked = state.settings.deepSeekEnableSystemPromptDefault;
-                elements.deepSeekTemperatureInput.value = state.settings.deepSeekTemperature === null ? '' : state.settings.deepSeekTemperature;
-                elements.deepSeekMaxTokensInput.value = state.settings.deepSeekMaxTokens === null ? '' : state.settings.deepSeekMaxTokens;
-                elements.deepSeekTopPInput.value = state.settings.deepSeekTopP === null ? '' : state.settings.deepSeekTopP;
-                elements.deepSeekPresencePenaltyInput.value = state.settings.deepSeekPresencePenalty === null ? '' : state.settings.deepSeekPresencePenalty;
-                elements.deepSeekFrequencyPenaltyInput.value = state.settings.deepSeekFrequencyPenalty === null ? '' : state.settings.deepSeekFrequencyPenalty;
-                elements.deepSeekIncludeThoughtsToggle.checked = state.settings.deepSeekIncludeDeepSeekThoughts;
-                elements.deepSeekExpandThoughtsByDefaultToggle.checked = state.settings.deepSeekExpandThoughtsByDefault;
-                elements.deepSeekStreamingOutputCheckbox.checked = state.settings.deepSeekStreamingOutput;
-                elements.deepSeekStreamingSpeedInput.value = state.settings.deepSeekStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
-                elements.deepSeekDummyUserInput.value = state.settings.deepSeekDummyUser || '';
-                elements.deepSeekEnableDummyUserCheckbox.checked = state.settings.deepSeekEnableDummyUser;
-                elements.deepSeekDummyModelInput.value = state.settings.deepSeekDummyModel || '';
-                elements.deepSeekEnableDummyModelCheckbox.checked = state.settings.deepSeekEnableDummyModel;
-                elements.deepSeekConcatDummyModelCheckbox.checked = state.settings.deepSeekConcatDummyModel;
-
-                elements.claudeSystemPromptDefaultTextarea.value = state.settings.claudeSystemPrompt || '';
-                elements.claudeEnableSystemPromptDefaultCheckbox.checked = state.settings.claudeEnableSystemPromptDefault;
-                elements.claudeTemperatureInput.value = state.settings.claudeTemperature === null ? '' : state.settings.claudeTemperature;
-                elements.claudeMaxTokensInput.value = state.settings.claudeMaxTokens === null ? '' : state.settings.claudeMaxTokens;
-                elements.claudeTopKInput.value = state.settings.claudeTopK === null ? '' : state.settings.claudeTopK;
-                elements.claudeTopPInput.value = state.settings.claudeTopP === null ? '' : state.settings.claudeTopP;
-                elements.claudeStreamingOutputCheckbox.checked = state.settings.claudeStreamingOutput;
-                elements.claudeStreamingSpeedInput.value = state.settings.claudeStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
-                elements.claudeDummyUserInput.value = state.settings.claudeDummyUser || '';
-                elements.claudeEnableDummyUserCheckbox.checked = state.settings.claudeEnableDummyUser;
-                elements.claudeDummyModelInput.value = state.settings.claudeDummyModel || '';
-                elements.claudeEnableDummyModelCheckbox.checked = state.settings.claudeEnableDummyModel;
-                elements.claudeConcatDummyModelCheckbox.checked = state.settings.claudeConcatDummyModel;
-                elements.claudeIncludeThoughtsToggle.checked = state.settings.claudeIncludeThoughts;
-                elements.claudeExpandThoughtsByDefaultToggle.checked = state.settings.claudeExpandThoughtsByDefault;
-                elements.claudeThinkingBudgetInput.value = state.settings.claudeThinkingBudget === null ? '' : state.settings.claudeThinkingBudget;
-
-                elements.openaiSystemPromptDefaultTextarea.value = state.settings.openaiSystemPrompt || '';
-                elements.openaiEnableSystemPromptDefaultCheckbox.checked = state.settings.openaiEnableSystemPromptDefault;
-                elements.openaiTemperatureInput.value = state.settings.openaiTemperature === null ? '' : state.settings.openaiTemperature;
-                elements.openaiMaxTokensInput.value = state.settings.openaiMaxTokens === null ? '' : state.settings.openaiMaxTokens;
-                elements.openaiTopPInput.value = state.settings.openaiTopP === null ? '' : state.settings.openaiTopP;
-                elements.openaiPresencePenaltyInput.value = state.settings.openaiPresencePenalty === null ? '' : state.settings.openaiPresencePenalty;
-                elements.openaiFrequencyPenaltyInput.value = state.settings.openaiFrequencyPenalty === null ? '' : state.settings.openaiFrequencyPenalty;
-                elements.openaiStreamingOutputCheckbox.checked = state.settings.openaiStreamingOutput;
-                elements.openaiStreamingSpeedInput.value = state.settings.openaiStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
-                elements.openaiDummyUserInput.value = state.settings.openaiDummyUser || '';
-                elements.openaiEnableDummyUserCheckbox.checked = state.settings.openaiEnableDummyUser;
-                elements.openaiDummyModelInput.value = state.settings.openaiDummyModel || '';
-                elements.openaiEnableDummyModelCheckbox.checked = state.settings.openaiEnableDummyModel;
-                elements.openaiConcatDummyModelCheckbox.checked = state.settings.openaiConcatDummyModel;
-                
-                elements.xaiSystemPromptDefaultTextarea.value = state.settings.xaiSystemPrompt || '';
-                elements.xaiEnableSystemPromptDefaultCheckbox.checked = state.settings.xaiEnableSystemPromptDefault;
-                elements.xaiTemperatureInput.value = state.settings.xaiTemperature === null ? '' : state.settings.xaiTemperature;
-                elements.xaiMaxTokensInput.value = state.settings.xaiMaxTokens === null ? '' : state.settings.xaiMaxTokens;
-                elements.xaiTopPInput.value = state.settings.xaiTopP === null ? '' : state.settings.xaiTopP;
-                elements.xaiPresencePenaltyInput.value = state.settings.xaiPresencePenalty === null ? '' : state.settings.xaiPresencePenalty;
-                elements.xaiFrequencyPenaltyInput.value = state.settings.xaiFrequencyPenalty === null ? '' : state.settings.xaiFrequencyPenalty;
-                elements.xaiStreamingOutputCheckbox.checked = state.settings.xaiStreamingOutput;
-                elements.xaiStreamingSpeedInput.value = state.settings.xaiStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
-                elements.xaiDummyUserInput.value = state.settings.xaiDummyUser || '';
-                elements.xaiEnableDummyUserCheckbox.checked = state.settings.xaiEnableDummyUser;
-                elements.xaiDummyModelInput.value = state.settings.xaiDummyModel || '';
-                elements.xaiEnableDummyModelCheckbox.checked = state.settings.xaiEnableDummyModel;
-                elements.xaiConcatDummyModelCheckbox.checked = state.settings.xaiConcatDummyModel;
-                elements.xaiVisionEnableCheckbox.checked = state.settings.xaiVisionEnable;
-                elements.xaiIncludeThoughtsToggle.checked = state.settings.xaiIncludeThoughts;
-                elements.xaiExpandThoughtsByDefaultToggle.checked = state.settings.xaiExpandThoughtsByDefault;
-                elements.xaiReasoningEffortSelect.value = state.settings.xaiReasoningEffort;
-                
-                elements.llmAggregatorSystemPromptDefaultTextarea.value = state.settings.llmAggregatorSystemPrompt || '';
-                elements.llmAggregatorEnableSystemPromptDefaultCheckbox.checked = state.settings.llmAggregatorEnableSystemPromptDefault;
-                elements.llmAggregatorTemperatureInput.value = state.settings.llmAggregatorTemperature === null ? '' : state.settings.llmAggregatorTemperature;
-                elements.llmAggregatorMaxTokensInput.value = state.settings.llmAggregatorMaxTokens === null ? '' : state.settings.llmAggregatorMaxTokens;
-                elements.llmAggregatorTopPInput.value = state.settings.llmAggregatorTopP === null ? '' : state.settings.llmAggregatorTopP;
-                elements.llmAggregatorTopKInput.value = state.settings.llmAggregatorTopK === null ? '' : state.settings.llmAggregatorTopK;
-                elements.llmAggregatorPresencePenaltyInput.value = state.settings.llmAggregatorPresencePenalty === null ? '' : state.settings.llmAggregatorPresencePenalty;
-                elements.llmAggregatorFrequencyPenaltyInput.value = state.settings.llmAggregatorFrequencyPenalty === null ? '' : state.settings.llmAggregatorFrequencyPenalty;
-                elements.llmAggregatorIncludeThoughtsToggle.checked = state.settings.llmAggregatorIncludeThoughts;
-                elements.llmAggregatorExpandThoughtsByDefaultToggle.checked = state.settings.llmAggregatorExpandThoughtsByDefault;
-                elements.llmAggregatorStreamingOutputCheckbox.checked = state.settings.llmAggregatorStreamingOutput;
-                elements.llmAggregatorStreamingSpeedInput.value = state.settings.llmAggregatorStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
-                elements.llmAggregatorDummyUserInput.value = state.settings.llmAggregatorDummyUser || '';
-                elements.llmAggregatorEnableDummyUserCheckbox.checked = state.settings.llmAggregatorEnableDummyUser;
-                elements.llmAggregatorDummyModelInput.value = state.settings.llmAggregatorDummyModel || '';
-                elements.llmAggregatorEnableDummyModelCheckbox.checked = state.settings.llmAggregatorEnableDummyModel;
-                elements.llmAggregatorConcatDummyModelCheckbox.checked = state.settings.llmAggregatorConcatDummyModel;
-
-                 elements.enterToSendCheckbox.checked = state.settings.enterToSend;
-                 elements.autoScrollOnNewMessageCheckbox.checked = state.settings.autoScrollOnNewMessage;
-                 elements.autoScrollOnThoughtCheckbox.checked = state.settings.autoScrollOnThought;
-                 elements.historySortOrderSelect.value = state.settings.historySortOrder || 'updatedAt';
-                 if (elements.themeSelect) elements.themeSelect.value = state.settings.theme || 'light';
-                 elements.enableSessionLinkingCheckbox.checked = state.settings.enableSessionLinking;
-                 elements.fontFamilyInput.value = state.settings.fontFamily || '';
-                 elements.messageBodyFontSizeInput.value = state.settings.messageBodyFontSize ?? '';
-                 elements.codeBlockFontSizeInput.value = state.settings.codeBlockFontSize ?? '';
-                 elements.thoughtSummaryFontSizeInput.value = state.settings.thoughtSummaryFontSize ?? '';
-                 elements.swipeNavigationToggle.checked = state.settings.enableSwipeNavigation;
-                 elements.preventZoomToggle.checked = state.settings.preventZoom;
-                 elements.minimizeHeaderFooterToggle.checked = state.settings.minimizeHeaderFooter;
-                 elements.extendAiBubbleWidthToggle.checked = state.settings.extendAiBubbleWidth;
-                 elements.showSessionLinkingSettingsToggle.checked = state.settings.showSessionLinkingSettings;
-                 if (elements.sessionLinkingSettingsGroup) {
-                     elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !state.settings.showSessionLinkingSettings);
-                 }
-                elements.showTwinEngineSettingsToggle.checked = state.settings.showTwinEngineSettings;
+            elements.showTwinEngineSettingsToggle.addEventListener('change', (e) => {
+                state.settings.showTwinEngineSettings = e.target.checked;
+                const isVisible = e.target.checked;
                 const twinEngineSettingsGroup = document.getElementById('settings-group-twin-engine');
                 if (twinEngineSettingsGroup) {
-                    twinEngineSettingsGroup.classList.toggle('hidden', !state.settings.showTwinEngineSettings);
+                    twinEngineSettingsGroup.classList.toggle('hidden', !isVisible);
                 }
-                 elements.showChatTitleToggle.checked = state.settings.showChatTitle;
-                 elements.showNewChatButtonToggle.checked = state.settings.showNewChatButton;
-                 elements.showDeleteSessionButtonToggle.checked = state.settings.showDeleteSessionButton;
-                 elements.showCopySessionButtonToggle.checked = state.settings.showCopySessionButton;
-                 elements.showScrollToTopButtonToggle.checked = state.settings.showScrollToTopButton;
-                 elements.showScrollToBottomButtonToggle.checked = state.settings.showScrollToBottomButton;
-                 elements.showToggleAllContentButtonToggle.checked = state.settings.showToggleAllContentButton;
-                 elements.showBulkHistoryActionsToggle.checked = state.settings.showBulkHistoryActions;
-                 elements.showPasteButtonInFooterToggle.checked = state.settings.showPasteButtonInFooter;
-                 elements.showPasteButtonInEditToggle.checked = state.settings.showPasteButtonInEdit;
-                 elements.showDiceButtonToggle.checked = state.settings.showDiceButton;
-                 document.getElementById('dice-value-settings').classList.toggle('hidden', !state.settings.showDiceButton);
-                 elements.diceMinValueInput.value = state.settings.diceMinValue ?? '';
-                 elements.diceMaxValueInput.value = state.settings.diceMaxValue ?? '';
-                 elements.messageBubbleOpacityInput.value = state.settings.messageBubbleOpacity ?? DEFAULT_MESSAGE_BUBBLE_OPACITY;
-                 elements.chatOverlayOpacityInput.value = state.settings.chatOverlayOpacity ?? DEFAULT_CHAT_OVERLAY_OPACITY;
-                 elements.headerFooterOpacityInput.value = state.settings.headerFooterOpacity ?? DEFAULT_HEADER_FOOTER_OPACITY;
-                 elements.messageActionsBackgroundOpacityInput.value = state.settings.messageActionsBackgroundOpacity ?? DEFAULT_MESSAGE_ACTIONS_BACKGROUND_OPACITY;
-                 elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity ?? DEFAULT_THOUGHT_SUMMARY_OPACITY;
-                 elements.showApiProviderToggleHeaderCheckbox.checked = state.settings.showApiProviderToggleHeader;
-                 elements.showApiProviderToggleFooterCheckbox.checked = state.settings.showApiProviderToggleFooter;
-                 elements.apiProviderCycleGeminiCheckbox.checked = state.settings.apiProviderCycle.gemini;
-                 elements.apiProviderCycleDeepSeekCheckbox.checked = state.settings.apiProviderCycle.deepseek;
-                 elements.apiProviderCycleClaudeCheckbox.checked = state.settings.apiProviderCycle.claude;
-                 elements.apiProviderCycleOpenAICheckbox.checked = state.settings.apiProviderCycle.openai;
-                 elements.apiProviderCycleXaiCheckbox.checked = state.settings.apiProviderCycle.xai;
-                 elements.apiProviderCycleLlmAggregatorCheckbox.checked = state.settings.apiProviderCycle.llmaggregator;
-                 elements.apiProviderCycleDummyCheckbox.checked = state.settings.apiProviderCycle.dummy;
-                 elements.dummyDummyModelInput.value = state.settings.dummyDummyModel || '';
-                 elements.dummyEnableDummyModelCheckbox.checked = state.settings.dummyEnableDummyModel;
-                 elements.dummyTwinEngineDebugModeCheckbox.checked = state.settings.dummyTwinEngineDebugMode;
+                if (elements.twinEngineSummaryBtn) {
+                    const showButton = isVisible && state.settings.showTwinEngineSummaryButton;
+                    elements.twinEngineSummaryBtn.classList.toggle('hidden', !showButton);
+                }
+                uiUtils.updateChatScreenElementVisibility();
+                uiUtils.updateTwinEngineModeButton();
+            });
+            
+            elements.uploadBackgroundBtn.addEventListener('click', () => elements.backgroundImageInput.click());
+            elements.backgroundImageInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) this.handleBackgroundImageUpload(file);
+                event.target.value = null;
+            });
+            elements.deleteBackgroundBtn.addEventListener('click', () => this.confirmDeleteBackgroundImage());
 
-                elements.showMemoButtonToggle.checked = state.settings.showMemoButton;
-                elements.showTwinEngineSummaryButtonToggle.checked = state.settings.showTwinEngineSummaryButton;
-                elements.memoHeightInput.value = state.settings.memoHeight || '';
-                elements.showClipboardStackButtonToggle.checked = state.settings.showClipboardStackButton;
-                elements.showUserIconToggle.checked = state.settings.showUserIcon;
-                elements.showUserNameToggle.checked = state.settings.showUserName;
-                elements.userNameInput.value = state.settings.userName || '';
-                 elements.showAiIconToggle.checked = state.settings.showAiIcon;
-                 elements.showAiNameToggle.checked = state.settings.showAiName;
-                elements.aiNameInput.value = state.settings.aiName || '';
-                elements.iconNameFontSizeInput.value = state.settings.iconNameFontSize ?? DEFAULT_ICON_NAME_FONT_SIZE;
-                elements.iconNameOffsetYInput.value = state.settings.iconNameOffsetY !== null ? (state.settings.iconNameOffsetY * -1) : (DEFAULT_ICON_NAME_OFFSET_Y * -1);
-                elements.messageIconSizeInput.value = state.settings.messageIconSize ?? DEFAULT_MESSAGE_ICON_SIZE;
-                elements.messageIconOffsetYInput.value = state.settings.messageIconOffsetY !== null ? (state.settings.messageIconOffsetY * -1) : (DEFAULT_MESSAGE_ICON_OFFSET_Y * -1);
+            elements.showUserIconToggle.addEventListener('change', () => {
+                state.settings.showUserIcon = elements.showUserIconToggle.checked;
+                uiUtils.renderChatMessages(true);
+            });
+            elements.uploadUserIconBtn.addEventListener('click', () => elements.userIconInput.click());
+            elements.userIconInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) this.handleIconUpload('user', file);
+                event.target.value = null;
+            });
+            elements.deleteUserIconBtn.addEventListener('click', () => this.confirmDeleteIcon('user'));
+            elements.showUserNameToggle.addEventListener('change', () => {
+                state.settings.showUserName = elements.showUserNameToggle.checked;
+                uiUtils.renderChatMessages(true);
+            });
 
-                elements.userNameBubbleToggle.checked = state.settings.showUserNameBubble;
-                elements.userNameBubbleUseThemeColorToggle.checked = state.settings.userNameBubbleUseThemeColor;
-                elements.userNameBubbleColorInput.value = state.settings.userNameBubbleColor || DEFAULT_USER_NAME_BUBBLE_COLOR;
-                elements.userNameBubbleOpacityInput.value = state.settings.userNameBubbleOpacity ?? DEFAULT_USER_NAME_BUBBLE_OPACITY;
-                elements.aiNameBubbleToggle.checked = state.settings.showAiNameBubble;
-                elements.aiNameBubbleUseThemeColorToggle.checked = state.settings.aiNameBubbleUseThemeColor;
-                elements.aiNameBubbleColorInput.value = state.settings.aiNameBubbleColor || DEFAULT_AI_NAME_BUBBLE_COLOR;
-                elements.aiNameBubbleOpacityInput.value = state.settings.aiNameBubbleOpacity ?? DEFAULT_AI_NAME_BUBBLE_OPACITY;
+            elements.showAiIconToggle.addEventListener('change', () => {
+                state.settings.showAiIcon = elements.showAiIconToggle.checked;
+                uiUtils.renderChatMessages(true);
+            });
+            elements.uploadAiIconBtn.addEventListener('click', () => elements.aiIconInput.click());
+            elements.aiIconInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) this.handleIconUpload('ai', file);
+                event.target.value = null;
+            });
+            elements.deleteAiIconBtn.addEventListener('click', () => this.confirmDeleteIcon('ai'));
+            elements.showAiNameToggle.addEventListener('change', () => {
+                state.settings.showAiName = elements.showAiNameToggle.checked;
+                uiUtils.renderChatMessages(true);
+            });
+            elements.iconNameFontSizeInput.addEventListener('input', () => {
+                const newSize = parseInt(elements.iconNameFontSizeInput.value, 10);
+                if (newSize >= 6 && newSize <= 16) {
+                    document.documentElement.style.setProperty('--icon-name-font-size', `${newSize}px`);
+                } else if (elements.iconNameFontSizeInput.value === '') {
+                    document.documentElement.style.setProperty('--icon-name-font-size', `${DEFAULT_ICON_NAME_FONT_SIZE}px`);
+                }
+            });
+            elements.iconNameOffsetYInput.addEventListener('input', () => {
+                const uiOffsetY = parseInt(elements.iconNameOffsetYInput.value, 10);
+                const internalOffsetY = isNaN(uiOffsetY) ? DEFAULT_ICON_NAME_OFFSET_Y : (uiOffsetY * -1);
+                if (internalOffsetY >= -20 && internalOffsetY <= 20) {
+                    document.documentElement.style.setProperty('--icon-name-offset-y', `${internalOffsetY}px`);
+                } else if (elements.iconNameOffsetYInput.value === '') {
+                    document.documentElement.style.setProperty('--icon-name-offset-y', `${DEFAULT_ICON_NAME_OFFSET_Y}px`);
+                }
+            });
 
-                elements.disableRetryConfirmationToggle.checked = state.settings.disableRetryConfirmation;
-                elements.disableLoadChatConfirmationWhileSendingToggle.checked = state.settings.disableLoadChatConfirmationWhileSending;
-                elements.disableDeleteMessageConfirmationToggle.checked = state.settings.disableDeleteMessageConfirmation;
-                elements.disableAttachmentConfirmationToggle.checked = state.settings.disableAttachmentConfirmation;
-                elements.addPrefixOnImportToggle.checked = state.settings.addPrefixOnImport;
-                elements.showMultiApiKeysToggle.checked = state.settings.showMultiApiKeys;
-                elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
-                elements.autoSaveSettingsToggle.checked = state.settings.autoSaveSettings;
-                elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
-                elements.showBottomCollapseButtonToggle.checked = state.settings.showBottomCollapseButton;
-                elements.persistMessageCollapseStateCheckbox.checked = state.settings.persistMessageCollapseState;
+            elements.messageIconSizeInput.addEventListener('input', () => {
+                const newSize = parseInt(elements.messageIconSizeInput.value, 10);
+                if (newSize >= 16 && newSize <= 64) {
+                    document.documentElement.style.setProperty('--message-icon-size', `${newSize}px`);
+                } else if (elements.messageIconSizeInput.value === '') {
+                    document.documentElement.style.setProperty('--message-icon-size', `${DEFAULT_MESSAGE_ICON_SIZE}px`);
+                }
+            });
+            elements.messageIconOffsetYInput.addEventListener('input', () => {
+                const uiOffsetY = parseInt(elements.messageIconOffsetYInput.value, 10);
+                const internalOffsetY = isNaN(uiOffsetY) ? DEFAULT_MESSAGE_ICON_OFFSET_Y : (uiOffsetY * -1);
 
-                elements.toggleButtonTopWidthInput.value = state.settings.toggleButtonTopWidth ?? DEFAULT_TOGGLE_BUTTON_TOP_WIDTH;
-                elements.toggleButtonTopHeightInput.value = state.settings.toggleButtonTopHeight ?? DEFAULT_TOGGLE_BUTTON_TOP_HEIGHT;
-                elements.toggleButtonTopFontSizeInput.value = state.settings.toggleButtonTopFontSize ?? DEFAULT_TOGGLE_BUTTON_TOP_FONT_SIZE;
-                elements.toggleButtonTopOpacityInput.value = state.settings.toggleButtonTopOpacity ?? DEFAULT_TOGGLE_BUTTON_TOP_OPACITY;
-                elements.toggleButtonTopTextCollapseInput.value = state.settings.toggleButtonTopTextCollapse || DEFAULT_TOGGLE_BUTTON_TOP_TEXT_COLLAPSE;
-                elements.toggleButtonTopTextExpandInput.value = state.settings.toggleButtonTopTextExpand || DEFAULT_TOGGLE_BUTTON_TOP_TEXT_EXPAND;
-                elements.toggleButtonBottomFontSizeInput.value = state.settings.toggleButtonBottomFontSize ?? DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE;
-                elements.toggleButtonBottomTextCollapseInput.value = state.settings.toggleButtonBottomTextCollapse || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
-                elements.toggleButtonBottomTextExpandInput.value = state.settings.toggleButtonBottomTextExpand || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
-                elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity ?? DEFAULT_THOUGHT_SUMMARY_OPACITY;
-                elements.dummyErrorDebugModeCheckbox.checked = state.settings.dummyErrorDebugMode;
+                if (internalOffsetY >= -50 && internalOffsetY <= 50) {
+                    document.documentElement.style.setProperty('--message-icon-offset-y', `${internalOffsetY}px`);
+                } else if (elements.messageIconOffsetYInput.value === '') {
+                    document.documentElement.style.setProperty('--message-icon-offset-y', `${DEFAULT_MESSAGE_ICON_OFFSET_Y}px`);
+                }
+            });
+            elements.userNameBubbleToggle.addEventListener('change', () => {
+                state.settings.showUserNameBubble = elements.userNameBubbleToggle.checked;
+                uiUtils.applySidePanelSettingsToUI();
+                uiUtils.renderChatMessages(true);
+            });
+            elements.userNameBubbleUseThemeColorToggle.addEventListener('change', () => {
+                state.settings.userNameBubbleUseThemeColor = elements.userNameBubbleUseThemeColorToggle.checked;
+                uiUtils.applySidePanelSettingsToUI();
+                uiUtils.renderChatMessages(true);
+            });
+            elements.userNameBubbleColorInput.addEventListener('input', () => {
+                state.settings.userNameBubbleColor = elements.userNameBubbleColorInput.value.trim() || DEFAULT_USER_NAME_BUBBLE_COLOR;
+                uiUtils.applySidePanelSettingsToUI();
+                uiUtils.renderChatMessages(true);
+            });
+            elements.userNameBubbleOpacityInput.addEventListener('input', () => {
+                state.settings.userNameBubbleOpacity = elements.userNameBubbleOpacityInput.value === '' ? DEFAULT_USER_NAME_BUBBLE_OPACITY : parseFloat(elements.userNameBubbleOpacityInput.value);
+                uiUtils.applySidePanelSettingsToUI();
+                uiUtils.renderChatMessages(true);
+            });
+            elements.aiNameBubbleToggle.addEventListener('change', () => {
+                state.settings.showAiNameBubble = elements.aiNameBubbleToggle.checked;
+                uiUtils.applySidePanelSettingsToUI();
+                uiUtils.renderChatMessages(true);
+            });
+            elements.aiNameBubbleUseThemeColorToggle.addEventListener('change', () => {
+                state.settings.aiNameBubbleUseThemeColor = elements.aiNameBubbleUseThemeColorToggle.checked;
+                uiUtils.applySidePanelSettingsToUI();
+                uiUtils.renderChatMessages(true);
+            });
+            elements.aiNameBubbleColorInput.addEventListener('input', () => {
+                state.settings.aiNameBubbleColor = elements.aiNameBubbleColorInput.value.trim() || DEFAULT_AI_NAME_BUBBLE_COLOR;
+                uiUtils.applySidePanelSettingsToUI();
+                uiUtils.renderChatMessages(true);
+            });
+            elements.aiNameBubbleOpacityInput.addEventListener('input', () => {
+                state.settings.aiNameBubbleOpacity = elements.aiNameBubbleOpacityInput.value === '' ? DEFAULT_AI_NAME_BUBBLE_OPACITY : parseFloat(elements.aiNameBubbleOpacityInput.value);
+                uiUtils.applySidePanelSettingsToUI();
+                uiUtils.renderChatMessages(true);
+            });
 
-                document.documentElement.style.setProperty('--message-body-font-size', `${state.settings.messageBodyFontSize || DEFAULT_MESSAGE_BODY_FONT_SIZE}px`);
-                document.documentElement.style.setProperty('--code-block-font-size', `${state.settings.codeBlockFontSize || DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
-                document.documentElement.style.setProperty('--thought-summary-font-size', `${state.settings.thoughtSummaryFontSize || DEFAULT_THOUGHT_SUMMARY_FONT_SIZE}px`);
-                document.documentElement.style.setProperty('--message-toggle-button-top-width', `${state.settings.toggleButtonTopWidth || DEFAULT_TOGGLE_BUTTON_TOP_WIDTH}px`);
-                document.documentElement.style.setProperty('--message-toggle-button-top-height', `${state.settings.toggleButtonTopHeight || DEFAULT_TOGGLE_BUTTON_TOP_HEIGHT}px`);
-                document.documentElement.style.setProperty('--message-toggle-button-top-font-size', `${state.settings.toggleButtonTopFontSize || DEFAULT_TOGGLE_BUTTON_TOP_FONT_SIZE}px`);
-                document.documentElement.style.setProperty('--message-toggle-button-top-opacity', state.settings.toggleButtonTopOpacity);
-                document.documentElement.style.setProperty('--message-toggle-button-bottom-font-size', `${state.settings.toggleButtonBottomFontSize || DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE}px`);
-                document.documentElement.style.setProperty('--thought-summary-opacity', state.settings.thoughtSummaryOpacity || DEFAULT_THOUGHT_SUMMARY_OPACITY);
+            elements.enableCommonSystemPromptDefaultCheckbox.addEventListener('change', () => {
+                state.settings.enableCommonSystemPromptDefault = elements.enableCommonSystemPromptDefaultCheckbox.checked;
+            });
+            elements.showChatTitleToggle.addEventListener('change', () => {
+                state.settings.showChatTitle = elements.showChatTitleToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+            });
+            elements.showMemoButtonToggle.addEventListener('change', () => {
+                state.settings.showMemoButton = elements.showMemoButtonToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+                uiUtils.updateMemoStackHeightSettingsVisibility();
+            });
+            elements.showTwinEngineSummaryButtonToggle.addEventListener('change', () => {
+                state.settings.showTwinEngineSummaryButton = elements.showTwinEngineSummaryButtonToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+            });
+            elements.showClipboardStackButtonToggle.addEventListener('change', () => {
+                state.settings.showClipboardStackButton = elements.showClipboardStackButtonToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+                uiUtils.updateMemoStackHeightSettingsVisibility();
+            });
+            elements.showNewChatButtonToggle.addEventListener('change', () => {
+                state.settings.showNewChatButton = elements.showNewChatButtonToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+            });
+            elements.showDeleteSessionButtonToggle.addEventListener('change', () => {
+                state.settings.showDeleteSessionButton = elements.showDeleteSessionButtonToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+            });
+            elements.showCopySessionButtonToggle.addEventListener('change', () => {
+                state.settings.showCopySessionButton = elements.showCopySessionButtonToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+            });
+            elements.showScrollToTopButtonToggle.addEventListener('change', () => {
+                state.settings.showScrollToTopButton = elements.showScrollToTopButtonToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+            });
+            elements.showScrollToBottomButtonToggle.addEventListener('change', () => {
+                state.settings.showScrollToBottomButton = elements.showScrollToBottomButtonToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+            });
+            elements.showToggleAllContentButtonToggle.addEventListener('change', () => {
+                state.settings.showToggleAllContentButton = elements.showToggleAllContentButtonToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+            });
+            elements.showBulkHistoryActionsToggle.addEventListener('change', () => {
+                state.settings.showBulkHistoryActions = elements.showBulkHistoryActionsToggle.checked;
+                uiUtils.updateHistoryHeaderButtonVisibility();
+            });
+            elements.showPasteButtonInFooterToggle.addEventListener('change', () => {
+                state.settings.showPasteButtonInFooter = elements.showPasteButtonInFooterToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+            });
+            elements.showPasteButtonInEditToggle.addEventListener('change', () => {
+                state.settings.showPasteButtonInEdit = elements.showPasteButtonInEditToggle.checked;
+            });
+            elements.showDiceButtonToggle.addEventListener('change', () => {
+                state.settings.showDiceButton = elements.showDiceButtonToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+                document.getElementById('dice-value-settings').classList.toggle('hidden', !state.settings.showDiceButton);
+            });
+            elements.showFooterTwinEngineToggleButtonToggle.addEventListener('change', () => {
+                state.settings.showFooterTwinEngineToggleButton = elements.showFooterTwinEngineToggleButtonToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+            });
+            elements.preventZoomToggle.addEventListener('change', () => {
+                state.settings.preventZoom = elements.preventZoomToggle.checked;
+                uiUtils.applyZoomPreventionSetting();
+            });
+            document.getElementById('minimize-header-footer-toggle').addEventListener('change', (e) => {
+                state.settings.minimizeHeaderFooter = e.target.checked;
+                uiUtils.applyMinimizeUI();
+            });
+            elements.extendAiBubbleWidthToggle.addEventListener('change', (e) => {
+                state.settings.extendAiBubbleWidth = e.target.checked;
+                uiUtils.applyAiBubbleWidthSetting();
+            });
+            elements.showSessionLinkingSettingsToggle.addEventListener('change', (e) => {
+                if (elements.sessionLinkingSettingsGroup) {
+                    elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !e.target.checked);
+                }
+            });
+            elements.showTwinEngineSettingsToggle.addEventListener('change', (e) => {
+                const isVisible = e.target.checked;
+                const twinEngineSettingsGroup = document.getElementById('settings-group-twin-engine');
+                if (twinEngineSettingsGroup) {
+                    twinEngineSettingsGroup.classList.toggle('hidden', !isVisible);
+                }
+                if (elements.twinEngineSummaryBtn) {
+                    const showButton = isVisible && state.settings.showTwinEngineSummaryButton;
+                    elements.twinEngineSummaryBtn.classList.toggle('hidden', !showButton);
+                }
+            });
 
-                this.applySettingsUIDetailsOpenStates();
-                this.updateChatScreenElementVisibility();
-                this.updateHistoryHeaderButtonVisibility();
-                this.updateUserModelOptions();
-                this.updateDeepSeekUserModelOptions();
-                this.updateClaudeUserModelOptions();
-                this.updateOpenAIUserModelOptions();
-                this.updateXaiUserModelOptions();
-                this.updateLlmAggregatorUserModelOptions();
-                this.updateBackgroundSettingsUI();
-                this.updateIconSettingsUI();
-                this.applyTheme();
-                this.applyFontFamily();
-                this.applySidePanelSettingsToUI();
-                this.applyMinimizeUI();
-                this.applyAiBubbleWidthSetting();
-                this.updateSessionLinkingUI();
-                this.updateApiProviderSelectOptions();
-                this.toggleMultiApiKeysVisibility(state.settings.showMultiApiKeys);
-                elements.settingsScreen.classList.toggle('auto-save-mode', state.settings.autoSaveSettings);
-                this.updateMemoStackHeightSettingsVisibility();
-                this.updateTwinEngineModeButton();
-                this.updateTwinEngineApiKeyCycleButton();
-                webhookConfigUtils.renderList();
-                elements.enableWebhookNotificationToggle.checked = state.settings.enableWebhookNotification;
-                elements.webhookSettingsContainer.classList.toggle('hidden', !state.settings.enableWebhookNotification);
-            },
+            elements.memoHeightInput.addEventListener('input', () => {
+                const newHeight = elements.memoHeightInput.value.trim();
+                if (newHeight) {
+                    document.documentElement.style.setProperty('--memo-height', newHeight);
+                    document.documentElement.style.setProperty('--clipboard-stack-height', newHeight);
+                } else {
+                    document.documentElement.style.setProperty('--memo-height', DEFAULT_MEMO_HEIGHT);
+                    document.documentElement.style.setProperty('--clipboard-stack-height', DEFAULT_CLIPBOARD_STACK_HEIGHT);
+                }
+            });
+            elements.messageBodyFontSizeInput.addEventListener('input', () => {
+                const newSize = elements.messageBodyFontSizeInput.value.trim();
+                document.documentElement.style.setProperty('--message-body-font-size', newSize ? `${newSize}px` : `${DEFAULT_MESSAGE_BODY_FONT_SIZE}px`);
+            });
+            elements.codeBlockFontSizeInput.addEventListener('input', () => {
+                const newSize = elements.codeBlockFontSizeInput.value.trim();
+                document.documentElement.style.setProperty('--code-block-font-size', newSize ? `${newSize}px` : `${DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
+            });
+            elements.thoughtSummaryFontSizeInput.addEventListener('input', () => {
+                const newSize = elements.thoughtSummaryFontSizeInput.value.trim();
+                document.documentElement.style.setProperty('--thought-summary-font-size', newSize ? `${newSize}px` : `${DEFAULT_THOUGHT_SUMMARY_FONT_SIZE}px`);
+            });
+            elements.showToggleAllContentButtonToggle.addEventListener('change', () => {
+                state.settings.showToggleAllContentButton = elements.showToggleAllContentButtonToggle.checked;
+                uiUtils.updateChatScreenElementVisibility();
+            });
+            elements.showBulkHistoryActionsToggle.addEventListener('change', () => {
+                state.settings.showBulkHistoryActions = elements.showBulkHistoryActionsToggle.checked;
+                uiUtils.updateHistoryHeaderButtonVisibility();
+            });
+            elements.messageBubbleOpacityInput.addEventListener('input', () => {
+                const opacity = parseFloat(elements.messageBubbleOpacityInput.value);
+                if (!isNaN(opacity) && opacity >= 0 && opacity <= 1) {
+                    document.documentElement.style.setProperty('--message-bubble-opacity', opacity);
+                } else if (elements.messageBubbleOpacityInput.value === '') {
+                     document.documentElement.style.setProperty('--message-bubble-opacity', DEFAULT_MESSAGE_BUBBLE_OPACITY);
+                }
+            });
+             elements.chatOverlayOpacityInput.addEventListener('input', () => {
+                const opacity = parseFloat(elements.chatOverlayOpacityInput.value);
+                if (!isNaN(opacity) && opacity >= 0 && opacity <= 1) {
+                    document.documentElement.style.setProperty('--chat-overlay-alpha', opacity);
+                } else if (elements.chatOverlayOpacityInput.value === '') {
+                    document.documentElement.style.setProperty('--chat-overlay-alpha', DEFAULT_CHAT_OVERLAY_OPACITY);
+                }
+            });
+            elements.headerFooterOpacityInput.addEventListener('input', () => {
+                const opacity = parseFloat(elements.headerFooterOpacityInput.value);
+                if (!isNaN(opacity) && opacity >= 0 && opacity <= 1) {
+                    document.documentElement.style.setProperty('--header-footer-opacity', opacity);
+                } else if (elements.headerFooterOpacityInput.value === '') {
+                    document.documentElement.style.setProperty('--header-footer-opacity', DEFAULT_HEADER_FOOTER_OPACITY);
+                }
+            });
+            elements.messageActionsBackgroundOpacityInput.addEventListener('input', () => {
+                const opacity = parseFloat(elements.messageActionsBackgroundOpacityInput.value);
+                if (!isNaN(opacity) && opacity >= 0 && opacity <= 1) {
+                    document.documentElement.style.setProperty('--message-actions-bg-opacity', opacity);
+                } else if (elements.messageActionsBackgroundOpacityInput.value === '') {
+                    document.documentElement.style.setProperty('--message-actions-bg-opacity', DEFAULT_MESSAGE_ACTIONS_BACKGROUND_OPACITY);
+                }
+            });
+            elements.toggleButtonTopOpacityInput.addEventListener('input', () => {
+                const opacity = parseFloat(elements.toggleButtonTopOpacityInput.value);
+                if (!isNaN(opacity) && opacity >= 0 && opacity <= 1) {
+                    document.documentElement.style.setProperty('--message-toggle-button-top-opacity', opacity);
+                } else if (elements.toggleButtonTopOpacityInput.value === '') {
+                    document.documentElement.style.setProperty('--message-toggle-button-top-opacity', DEFAULT_TOGGLE_BUTTON_TOP_OPACITY);
+                }
+            });
+            elements.thoughtSummaryOpacityInput.addEventListener('input', () => {
+                const opacity = parseFloat(elements.thoughtSummaryOpacityInput.value);
+                if (!isNaN(opacity) && opacity >= 0 && opacity <= 1) {
+                    document.documentElement.style.setProperty('--thought-summary-opacity', opacity);
+                } else if (elements.thoughtSummaryOpacityInput.value === '') {
+                    document.documentElement.style.setProperty('--thought-summary-opacity', DEFAULT_THOUGHT_SUMMARY_OPACITY);
+                }
+            });
+            elements.showTopCollapseButtonToggle.addEventListener('change', () => {
+                state.settings.showTopCollapseButton = elements.showTopCollapseButtonToggle.checked;
+                uiUtils.renderChatMessages(true);
+            });
+            elements.showBottomCollapseButtonToggle.addEventListener('change', () => {
+                state.settings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
+                uiUtils.renderChatMessages(true);
+            });
+            elements.persistMessageCollapseStateCheckbox.addEventListener('change', () => {
+                state.settings.persistMessageCollapseState = elements.persistMessageCollapseStateCheckbox.checked;
+            });
+            elements.showMultiApiKeysToggle.addEventListener('change', (e) => {
+                state.settings.showMultiApiKeys = e.target.checked;
+                uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
+            });
 
+            const settingsScreenElement = document.getElementById('settings-screen');
+            let autoSaveTimer;
+            const handleSettingsChange = () => {
+                if (state.settings.autoSaveSettings) {
+                    clearTimeout(autoSaveTimer);
+                    autoSaveTimer = setTimeout(() => {
+                        this.saveSettings(false);
+                    }, 500);
+                }
+            };
+
+            settingsScreenElement.addEventListener('change', (event) => {
+                if (event.target.closest('.settings-group, .danger-zone')) {
+                    handleSettingsChange();
+                }
+            });
+
+            settingsScreenElement.addEventListener('input', (event) => {
+                if (event.target.matches('input[type="text"], input[type="password"], input[type="number"], textarea')) {
+                     handleSettingsChange();
+                }
+            });
+            
+            settingsScreenElement.addEventListener('toggle', (event) => {
+                if (event.target.tagName === 'DETAILS' && event.target.closest('#settings-screen')) {
+                    handleSettingsChange();
+                }
+            }, true);
+
+            elements.messageContainer.addEventListener('click', (event) => {
+                const clickedMessage = event.target.closest('.message');
+                if (event.target.closest('.message-actions button, .message-cascade-controls button, .message-toggle-button, .interactive-title-content, .code-copy-button, a[href="#"], .thought-summary-details summary, .attachment-actions button, .add-more-attachments-btn')) {
+                    return;
+                }
+                if (clickedMessage) {
+                    const currentlyShown = elements.messageContainer.querySelector('.message.show-actions');
+                    if (currentlyShown && currentlyShown !== clickedMessage) {
+                                            currentlyShown.classList.remove('show-actions');
+                    }
+                    if (!clickedMessage.classList.contains('editing')) {
+                        clickedMessage.classList.toggle('show-actions');
+                    }
+                } else {
+                    const currentlyShown = elements.messageContainer.querySelector('.message.show-actions');
+                    if (currentlyShown) {
+                        currentlyShown.classList.remove('show-actions');
+                    }
+                }
+            }, true);
+            document.body.addEventListener('click', (event) => {
+                    if (!elements.messageContainer.contains(event.target) &&
+                    !elements.memoArea.contains(event.target) &&
+                    !elements.clipboardStackArea.contains(event.target) &&
+                    !event.target.closest('.custom-dialog')) {
+                    const currentlyShown = elements.messageContainer.querySelector('.message.show-actions');
+                    if (currentlyShown) {
+                        currentlyShown.classList.remove('show-actions');
+                    }
+                }
+            }, true);
+
+            elements.chatScreen.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
+            elements.chatScreen.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
+            elements.chatScreen.addEventListener('touchend', this.handleTouchEnd.bind(this));
+
+            if ('visualViewport' in window) {
+                window.visualViewport.addEventListener('resize', this.updateZoomState.bind(this));
+                window.visualViewport.addEventListener('scroll', this.updateZoomState.bind(this));
+            }
+
+            window.addEventListener('popstate', this.handlePopState.bind(this));
+
+            elements.attachFileBtn.addEventListener('click', () => uiUtils.showFileUploadDialog());
+            elements.selectFilesBtn.addEventListener('click', () => elements.fileInput.click());
+            elements.fileInput.addEventListener('change', (event) => {
+                this.handleFileSelection(event.target.files);
+                event.target.value = null;
+            });
+            elements.confirmAttachBtn.addEventListener('click', () => this.confirmAttachment());
+            elements.cancelAttachBtn.addEventListener('click', () => this.cancelAttachment());
+            elements.fileUploadDialog.addEventListener('close', () => {
+                if (elements.fileUploadDialog.returnValue !== 'ok') {
+                    this.cancelAttachment();
+                }
+            });
+            elements.messageContainer.addEventListener('click', (event) => {
+                const targetButton = event.target.closest('.message-toggle-button');
+                if (targetButton && targetButton.dataset.action === 'toggle-collapse') {
+                    const index = parseInt(targetButton.dataset.index, 10);
+                    this.toggleMessageCollapse(index);
+                }
+            });
+
+            document.querySelectorAll('#settings-screen details[id]').forEach(details => {
+                details.addEventListener('toggle', (event) => {
+                    if (details.id) {
+                        state.settings.settingsUIDetailsOpenStates[details.id] = details.open;
+                    }
+                });
+            });
+            window.addEventListener('resize', uiUtils.adjustHeaderLayout);
+            uiUtils.adjustHeaderLayout();
+            
+            elements.apiProviderCycleGeminiCheckbox.addEventListener('change', () => {
+                state.settings.apiProviderCycle.gemini = elements.apiProviderCycleGeminiCheckbox.checked;
+                uiUtils.updateApiProviderSelectOptions();
+            });
+            elements.apiProviderCycleDeepSeekCheckbox.addEventListener('change', () => {
+                state.settings.apiProviderCycle.deepseek = elements.apiProviderCycleDeepSeekCheckbox.checked;
+                uiUtils.updateApiProviderSelectOptions();
+            });
+            elements.apiProviderCycleClaudeCheckbox.addEventListener('change', () => {
+                state.settings.apiProviderCycle.claude = elements.apiProviderCycleClaudeCheckbox.checked;
+                uiUtils.updateApiProviderSelectOptions();
+            });
+            elements.apiProviderCycleOpenAICheckbox.addEventListener('change', () => {
+                state.settings.apiProviderCycle.openai = elements.apiProviderCycleOpenAICheckbox.checked;
+                uiUtils.updateApiProviderSelectOptions();
+            });
+            elements.apiProviderCycleXaiCheckbox.addEventListener('change', () => {
+                state.settings.apiProviderCycle.xai = elements.apiProviderCycleXaiCheckbox.checked;
+                uiUtils.updateApiProviderSelectOptions();
+            });
+             elements.apiProviderCycleLlmAggregatorCheckbox.addEventListener('change', () => {
+                state.settings.apiProviderCycle.llmaggregator = elements.apiProviderCycleLlmAggregatorCheckbox.checked;
+                uiUtils.updateApiProviderSelectOptions();
+            });
+             elements.apiProviderCycleDummyCheckbox.addEventListener('change', () => {
+                state.settings.apiProviderCycle.dummy = elements.apiProviderCycleDummyCheckbox.checked;
+                uiUtils.updateApiProviderSelectOptions();
+            });
+            
+            const llmUrlInput = elements.llmAggregatorApiBackendInput;
+            const llmUrlError = elements.llmAggregatorUrlError;
+            
+            const validateLlmUrl = () => {
+                const url = llmUrlInput.value;
+                const saveButtons = document.querySelectorAll('.js-save-settings-btn');
+                if (url && !isAllowedAggregatorDomain(url)) {
+                    llmUrlError.textContent = 'このドメインは許可されていません。';
+                    saveButtons.forEach(btn => btn.disabled = true);
+                } else {
+                    llmUrlError.textContent = '';
+                    saveButtons.forEach(btn => btn.disabled = false);
+                }
+            };
+
+            llmUrlInput.addEventListener('input', validateLlmUrl);
+            llmUrlInput.addEventListener('blur', validateLlmUrl);
+
+            multiApiKeyUtils.initializeMultiApiKeys();
+            elements.geminiApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('gemini'));
+            elements.deepSeekApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('deepseek'));
+            elements.claudeApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('claude'));
+            elements.openaiApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('openai'));
+            elements.xaiApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('xai'));
+            elements.llmAggregatorApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('llmaggregator'));
+            elements.showMultiApiKeysToggle.addEventListener('change', (e) => {
+                uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
+            });
+            twinEngineApiConfigUtils.initialize();
+            elements.enableWebhookNotificationToggle.addEventListener('change', (e) => {
+                elements.webhookSettingsContainer.classList.toggle('hidden', !e.target.checked);
+            });
+        },
         handlePopState(event) {
             const targetScreen = event.state?.screen || 'chat';
             uiUtils.showScreen(targetScreen, true);
@@ -12509,20 +12821,20 @@
              newSettings.dummyTwinEngineDebugMode = elements.dummyTwinEngineDebugModeCheckbox.checked;
              newSettings.dummyDummyModel = elements.dummyDummyModelInput.value.trim();
              newSettings.dummyEnableDummyModel = elements.dummyEnableDummyModelCheckbox.checked;
-             newSettings.enableWebhookNotification = elements.enableWebhookNotificationToggle.checked;
-             newSettings.webhookConfigs = [];
-             const configItems = document.querySelectorAll('#webhook-configs-list .webhook-config-item');
-             configItems.forEach(item => {
-                 const id = item.dataset.configId;
-                 const enabled = item.querySelector('input[type="checkbox"]').checked;
-                 const label = item.querySelector('.api-key-item-label').value;
-                 const url = item.querySelector('.api-key-item-input').value;
-                 const format = item.querySelector('input[type="radio"]:checked').value;
-                 
-                 if (url) {
-                     newSettings.webhookConfigs.push({ id, enabled, label, url, format });
-                 }
-             });
+newSettings.webhooks = state.settings.webhooks.map(webhook => {
+    const itemElement = elements.webhooksList.querySelector(`[data-webhook-id="${webhook.id}"]`);
+    if (itemElement) {
+        return {
+            ...webhook,
+            enabled: itemElement.querySelector('input[type="checkbox"]').checked,
+            label: itemElement.querySelector('.api-key-item-label').value.trim(),
+            url: itemElement.querySelector('.api-key-item-input').value.trim(),
+            format: itemElement.querySelector('select').value
+        };
+    }
+    return webhook;
+});
+newSettings.enableWebhookNotification = elements.enableWebhookNotificationToggle.checked;
 
             const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
                 let num = isInteger ? parseInt(value, 10) : parseFloat(value);
@@ -14280,150 +14592,118 @@
             dialog.showModal();
         },
     };
-    const webhookConfigUtils = {
-        MAX_CONFIGS: 20,
-    
-        initialize() {
-            if (elements.addWebhookConfigBtn) {
-                elements.addWebhookConfigBtn.addEventListener('click', () => this.addConfig());
-            }
-            this.renderList();
-        },
-    
-        addConfig() {
-            const configs = state.settings.webhookConfigs;
-            if (configs.length >= this.MAX_CONFIGS) {
-                uiUtils.showCustomAlert(`最大${this.MAX_CONFIGS}個までWebhook URLを登録できます。`);
-                return;
-            }
-            const newConfig = {
-                id: Date.now().toString(),
-                enabled: true,
-                label: `Webhook ${configs.length + 1}`,
-                url: '',
-                format: 'json'
-            };
-            configs.push(newConfig);
-            this.renderList();
-        },
-    
-        deleteConfig(configId) {
-            const configs = state.settings.webhookConfigs;
-            const index = configs.findIndex(c => c.id === configId);
-            if (index > -1) {
-                configs.splice(index, 1);
-                this.renderList();
-            }
-        },
-    
-        updateConfigValue(configId, key, value) {
-            const config = state.settings.webhookConfigs.find(c => c.id === configId);
-            if (config) {
-                config[key] = value;
-            }
-        },
-    
-        renderList() {
-            const configs = state.settings.webhookConfigs;
-            const container = document.getElementById('webhook-configs-list');
-            if (!container) return;
-            
-            container.innerHTML = '';
-    
-            if (configs.length === 0) {
-                const emptyMsg = document.createElement('p');
-                emptyMsg.textContent = 'Webhook URLが設定されていません。';
-                emptyMsg.style.cssText = 'color: var(--text-secondary); font-size: 13px; text-align: center; margin: 10px 0;';
-                container.appendChild(emptyMsg);
-            } else {
-                configs.forEach(config => {
-                    const item = this.createConfigItem(config);
-                    container.appendChild(item);
-                });
-            }
-            if (elements.addWebhookConfigBtn) {
-                elements.addWebhookConfigBtn.disabled = configs.length >= this.MAX_CONFIGS;
-            }
-        },
-    
-        createConfigItem(config) {
-            const item = document.createElement('div');
-            item.className = 'api-key-item webhook-config-item';
-            item.dataset.configId = config.id;
-    
-            const row1 = document.createElement('div');
-            row1.style.display = 'flex';
-            row1.style.alignItems = 'center';
-            row1.style.gap = '10px';
-            row1.style.marginBottom = '8px';
-    
-            const enabledCheckbox = document.createElement('input');
-            enabledCheckbox.type = 'checkbox';
-            enabledCheckbox.checked = config.enabled;
-            enabledCheckbox.style.flexShrink = '0';
-            enabledCheckbox.title = 'このWebhookへの通知を有効/無効にする';
-            enabledCheckbox.addEventListener('change', (e) => this.updateConfigValue(config.id, 'enabled', e.target.checked));
-    
-            const labelInput = document.createElement('input');
-            labelInput.type = 'text';
-            labelInput.className = 'api-key-item-label';
-            labelInput.value = config.label;
-            labelInput.placeholder = 'ラベル (例: Slack通知)';
-            labelInput.style.flexGrow = '1';
-            labelInput.addEventListener('change', (e) => this.updateConfigValue(config.id, 'label', e.target.value.trim()));
-    
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'api-key-delete-btn';
-            deleteBtn.textContent = '削';
-            deleteBtn.title = 'このWebhook設定を削除';
-            deleteBtn.addEventListener('click', () => this.deleteConfig(config.id));
-    
-            row1.appendChild(enabledCheckbox);
-            row1.appendChild(labelInput);
-            row1.appendChild(deleteBtn);
-    
-            const urlInput = document.createElement('input');
-            urlInput.type = 'text';
-            urlInput.className = 'api-key-item-input';
-            urlInput.value = config.url;
-            urlInput.placeholder = 'Webhook URLを入力...';
-            urlInput.style.marginBottom = '8px';
-            urlInput.addEventListener('change', (e) => this.updateConfigValue(config.id, 'url', e.target.value.trim()));
-    
-            const row3 = document.createElement('div');
-            row3.style.display = 'flex';
-            row3.style.gap = '15px';
-            row3.style.fontSize = '13px';
-    
-            const formatLabel = document.createElement('span');
-            formatLabel.textContent = '形式:';
-            formatLabel.style.color = 'var(--text-secondary)';
-    
-            const createRadio = (format) => {
-                const label = document.createElement('label');
-                label.className = 'checkbox-label';
-                const radio = document.createElement('input');
-                radio.type = 'radio';
-                radio.name = `webhook-format-${config.id}`;
-                radio.value = format;
-                radio.checked = config.format === format;
-                radio.addEventListener('change', (e) => this.updateConfigValue(config.id, 'format', e.target.value));
-                label.appendChild(radio);
-                label.appendChild(document.createTextNode(` ${format.toUpperCase()}`));
-                return label;
-            };
-    
-            row3.appendChild(formatLabel);
-            row3.appendChild(createRadio('json'));
-            row3.appendChild(createRadio('text'));
-    
-            item.appendChild(row1);
-            item.appendChild(urlInput);
-            item.appendChild(row3);
-    
-            return item;
+const webhookUtils = {
+    MAX_WEBHOOKS: 10,
+
+    initialize() {
+        elements.addWebhookBtn.addEventListener('click', () => this.addWebhook());
+        this.renderList();
+    },
+
+    addWebhook() {
+        if (state.settings.webhooks.length >= this.MAX_WEBHOOKS) {
+            uiUtils.showCustomAlert(`最大${this.MAX_WEBHOOKS}個までのWebhook URLを登録できます。`);
+            return;
         }
-    };
+        const newWebhook = {
+            id: Date.now().toString(),
+            label: `Webhook ${state.settings.webhooks.length + 1}`,
+            url: '',
+            enabled: true,
+            format: 'json'
+        };
+        state.settings.webhooks.push(newWebhook);
+        this.renderList();
+    },
+
+    async deleteWebhook(webhookId) {
+        const webhook = state.settings.webhooks.find(w => w.id === webhookId);
+        if (!webhook) return;
+
+        const confirmed = await uiUtils.showCustomConfirm(`Webhook「${webhook.label}」を削除しますか？`);
+        if (confirmed) {
+            state.settings.webhooks = state.settings.webhooks.filter(w => w.id !== webhookId);
+            this.renderList();
+        }
+    },
+
+    updateWebhookValue(webhookId, key, value) {
+        const webhook = state.settings.webhooks.find(w => w.id === webhookId);
+        if (webhook) {
+            webhook[key] = value;
+        }
+    },
+
+    renderList() {
+        const container = elements.webhooksList;
+        container.innerHTML = '';
+        state.settings.webhooks.forEach(webhook => {
+            container.appendChild(this.createWebhookItem(webhook));
+        });
+        elements.addWebhookBtn.disabled = state.settings.webhooks.length >= this.MAX_WEBHOOKS;
+    },
+
+    createWebhookItem(webhook) {
+        const item = document.createElement('div');
+        item.className = 'api-key-item';
+        item.style.flexDirection = 'column';
+        item.dataset.webhookId = webhook.id;
+
+        const row1 = document.createElement('div');
+        row1.style.display = 'flex';
+        row1.style.gap = '8px';
+        row1.style.alignItems = 'center';
+
+        const enabledCheckbox = document.createElement('input');
+        enabledCheckbox.type = 'checkbox';
+        enabledCheckbox.checked = webhook.enabled;
+        enabledCheckbox.title = 'このWebhookを有効/無効にする';
+        enabledCheckbox.addEventListener('change', (e) => this.updateWebhookValue(webhook.id, 'enabled', e.target.checked));
+        
+        const labelInput = document.createElement('input');
+        labelInput.type = 'text';
+        labelInput.value = webhook.label;
+        labelInput.placeholder = 'ラベル (例: Slack通知)';
+        labelInput.className = 'api-key-item-label';
+        labelInput.addEventListener('change', (e) => this.updateWebhookValue(webhook.id, 'label', e.target.value));
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '削';
+        deleteBtn.className = 'api-key-delete-btn';
+        deleteBtn.addEventListener('click', () => this.deleteWebhook(webhook.id));
+
+        row1.appendChild(enabledCheckbox);
+        row1.appendChild(labelInput);
+        row1.appendChild(deleteBtn);
+
+        const row2 = document.createElement('div');
+        row2.style.display = 'flex';
+        row2.style.gap = '8px';
+        row2.style.marginTop = '5px';
+        
+        const urlInput = document.createElement('input');
+        urlInput.type = 'text';
+        urlInput.value = webhook.url;
+        urlInput.placeholder = 'https://...';
+        urlInput.className = 'api-key-item-input';
+        urlInput.style.flexGrow = '1';
+        urlInput.addEventListener('change', (e) => this.updateWebhookValue(webhook.id, 'url', e.target.value));
+
+        const formatSelect = document.createElement('select');
+        formatSelect.innerHTML = `<option value="json">JSON</option><option value="text">Text</option>`;
+        formatSelect.value = webhook.format;
+        formatSelect.style.width = '80px';
+        formatSelect.className = 'api-key-item-input';
+        formatSelect.addEventListener('change', (e) => this.updateWebhookValue(webhook.id, 'format', e.target.value));
+
+        row2.appendChild(urlInput);
+        row2.appendChild(formatSelect);
+        
+        item.appendChild(row1);
+        item.appendChild(row2);
+        return item;
+    }
+};
     const apiUtils = {
         async callGeminiApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding) {
             if (!apiKey) {
@@ -15848,7 +16128,9 @@
                 ? `最大${this.MAX_CONFIGS}個まで` 
                 : '新しいAPI設定を追加';
             uiUtils.updateTwinEngineApiKeyCycleButton();
-
+            elements.enableWebhookNotificationToggle.checked = state.settings.enableWebhookNotification;
+elements.webhookSettingsContainer.classList.toggle('hidden', !state.settings.enableWebhookNotification);
+webhookUtils.renderList();
         },
     
         createConfigItem(config) {
