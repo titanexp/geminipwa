@@ -9147,6 +9147,7 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
 
     const appLogic = {
 
+
 async sendWebhookNotification(responseMessage) {
     if (!state.settings.enableWebhookNotification || !state.settings.webhooks || state.settings.webhooks.length === 0) {
         return;
@@ -9187,14 +9188,20 @@ async sendWebhookNotification(responseMessage) {
                 headers = { 'Content-Type': 'application/json' };
             }
 
+            const fetchOptions = {
+                method: 'POST',
+                headers: headers,
+                body: body,
+                mode: 'cors'
+            };
+
+            if (format === 'json') {
+                fetchOptions.mode = 'no-cors';
+            }
+
             try {
-                const response = await fetch(webhook.url, {
-                    method: 'POST',
-                    headers: headers,
-                    body: body,
-                    mode: 'cors'
-                });
-                if (!response.ok) {
+                const response = await fetch(webhook.url, fetchOptions);
+                if (fetchOptions.mode === 'cors' && !response.ok) {
                     console.error(`Webhook送信失敗 (${webhook.label}): サーバーがエラーステータス ${response.status} を返しました`);
                 }
             } catch (error) {
