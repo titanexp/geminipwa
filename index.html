@@ -153,6 +153,7 @@
 
             --thought-summary-opacity: 0.85;
             --thought-summary-font-size: 13px;
+            --message-margin-y: 35px;
         }
 
         body.dark-mode {
@@ -1434,8 +1435,8 @@
             min-height: 40px;
             position: relative;
             word-wrap: break-word;
-            margin-top: 35px;
-            margin-bottom: 35px;
+            margin-top: var(--message-margin-y);
+            margin-bottom: var(--message-margin-y);
             color: var(--text-primary);
             transition: background-color 0.3s ease, color 0.3s ease, opacity 0.3s ease;
             z-index: 1;
@@ -3326,6 +3327,9 @@
         #footer-resummarize-btn:hover:not(:disabled) {
             background-color: var(--bg-button-hover);
         }
+        body.compact-message-layout {
+            --message-margin-y: 8px;
+        }
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
@@ -4612,6 +4616,13 @@
                 <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                     ※ AIの応答メッセージの最大幅を広げ、画面をより広く使います。
                 </p>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="compact-message-layout-toggle">
+                    メッセージ間の縦の空白を詰める
+                </label>
+                <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                    ※ チャットの表示密度を高めます。
+                </p>
             </div>
         </details>
 
@@ -5259,6 +5270,9 @@
             'ogg': 'audio/ogg', 'flac': 'audio/flac',
         };
 
+
+        };
+
         const elements = {
             appContainer: document.querySelector('.app-container'),
             chatScreen: document.getElementById('chat-screen'),
@@ -5448,6 +5462,7 @@
             preventZoomToggle: document.getElementById('prevent-zoom-toggle'),
             minimizeHeaderFooterToggle: document.getElementById('minimize-header-footer-toggle'),
             extendAiBubbleWidthToggle: document.getElementById('extend-ai-bubble-width-toggle'),
+            compactMessageLayoutToggle: document.getElementById('compact-message-layout-toggle'),
             showSessionLinkingSettingsToggle: document.getElementById('show-session-linking-settings-toggle'),
             sessionLinkingSettingsGroup: document.getElementById('settings-group-session-linking'),
             showTwinEngineSettingsToggle: document.getElementById('show-twin-engine-settings-toggle'),
@@ -5789,6 +5804,7 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
                 preventZoom: true,
                 minimizeHeaderFooter: false,
                 extendAiBubbleWidth: false,
+                compactMessageLayout: false,
                 showSessionLinkingSettings: false,
                 showTwinEngineSettings: false,
                 showChatTitle: true,
@@ -5930,7 +5946,6 @@ webhooks: [],
             aiToAiProcessingMessage: "AI間会話処理中...",
             isSummarizingForRetry: false,
         };
-
         const sanitizeText = (text, maxLength = 255) => {
             if (typeof text !== 'string') return '';
             return text.replace(/[<>'"&]/g, '').substring(0, maxLength);
@@ -8070,6 +8085,7 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                  elements.preventZoomToggle.checked = state.settings.preventZoom;
                  elements.minimizeHeaderFooterToggle.checked = state.settings.minimizeHeaderFooter;
                  elements.extendAiBubbleWidthToggle.checked = state.settings.extendAiBubbleWidth;
+                 elements.compactMessageLayoutToggle.checked = state.settings.compactMessageLayout;
                  elements.showSessionLinkingSettingsToggle.checked = state.settings.showSessionLinkingSettings;
                  if (elements.sessionLinkingSettingsGroup) {
                      elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !state.settings.showSessionLinkingSettings);
@@ -8198,6 +8214,9 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
             },
             applyAiBubbleWidthSetting() {
                 document.body.classList.toggle('ai-bubble-extended', state.settings.extendAiBubbleWidth);
+            },
+            applyCompactMessageLayout() {
+                document.body.classList.toggle('compact-message-layout', state.settings.compactMessageLayout);
             },
             applySettingsUIDetailsOpenStates() {
                 const detailsElements = document.querySelectorAll('#settings-screen details[id]');
@@ -9719,6 +9738,10 @@ this.setupEventListeners();
             elements.extendAiBubbleWidthToggle.addEventListener('change', (e) => {
                 state.settings.extendAiBubbleWidth = e.target.checked;
                 uiUtils.applyAiBubbleWidthSetting();
+            });
+            elements.compactMessageLayoutToggle.addEventListener('change', (e) => {
+                state.settings.compactMessageLayout = e.target.checked;
+                uiUtils.applyCompactMessageLayout();
             });
             elements.showSessionLinkingSettingsToggle.addEventListener('change', (e) => {
                 if (elements.sessionLinkingSettingsGroup) {
@@ -12753,6 +12776,7 @@ this.setupEventListeners();
              newSettings.preventZoom = elements.preventZoomToggle.checked;
              newSettings.minimizeHeaderFooter = document.getElementById('minimize-header-footer-toggle').checked;
              newSettings.extendAiBubbleWidth = elements.extendAiBubbleWidthToggle.checked;
+             newSettings.compactMessageLayout = elements.compactMessageLayoutToggle.checked;
              newSettings.showSessionLinkingSettings = elements.showSessionLinkingSettingsToggle.checked;
              newSettings.showTwinEngineSettings = elements.showTwinEngineSettingsToggle.checked;
              newSettings.showChatTitle = elements.showChatTitleToggle.checked;
