@@ -153,7 +153,6 @@
 
             --thought-summary-opacity: 0.85;
             --thought-summary-font-size: 13px;
-            --message-margin-y: 35px;
         }
 
         body.dark-mode {
@@ -1435,12 +1434,16 @@
             min-height: 40px;
             position: relative;
             word-wrap: break-word;
-            margin-top: var(--message-margin-y);
-            margin-bottom: var(--message-margin-y);
+            margin-top: 35px;
+            margin-bottom: 35px;
             color: var(--text-primary);
             transition: background-color 0.3s ease, color 0.3s ease, opacity 0.3s ease;
             z-index: 1;
             box-shadow: 0 1px 2px var(--shadow-primary);
+        }
+        body.trim-message-space-mode .message {
+            margin-top: 10px;
+            margin-bottom: 10px;
         }
         .message-icon {
             width: var(--message-icon-size);
@@ -3327,9 +3330,6 @@
         #footer-resummarize-btn:hover:not(:disabled) {
             background-color: var(--bg-button-hover);
         }
-        body.compact-message-layout {
-            --message-margin-y: 8px;
-        }
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
@@ -4603,6 +4603,13 @@
             <summary style="font-size: 13px; color: var(--text-secondary); cursor: pointer; font-weight: bold; margin-top: 15px; list-style: revert;">ファクター: 様式の変更</summary>
             <div style="padding-left: 15px; margin-top: 10px; border-left: 1px solid var(--border-secondary); padding-top: 5px;">
                 <label class="checkbox-label">
+                    <input type="checkbox" id="minimize-header-footer-toggle">
+                    ヘッダー/フッターの縦幅を最小化する
+                </label>
+                <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                    ※ 表示領域を最大化します。画面が小型の端末向け。
+                </p>
+                <label class="checkbox-label">
                     <input type="checkbox" id="extend-ai-bubble-width-toggle">
                     AI応答バブルの横幅を拡張する
                 </label>
@@ -4610,7 +4617,7 @@
                     ※ AIの応答メッセージの最大幅を広げ、画面をより広く使います。
                 </p>
                 <label class="checkbox-label">
-                    <input type="checkbox" id="compact-message-layout-toggle">
+                    <input type="checkbox" id="trim-message-vertical-space-toggle">
                     メッセージ間の縦の空白を詰める
                 </label>
                 <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
@@ -5449,12 +5456,14 @@
             thoughtSummaryFontSizeInput: document.getElementById('thought-summary-font-size'),
             enableSessionLinkingCheckbox: document.getElementById('enable-session-linking'),
             swipeNavigationToggle: document.getElementById('swipe-navigation-toggle'),
+            
             preventZoomToggle: document.getElementById('prevent-zoom-toggle'),
             minimizeHeaderFooterToggle: document.getElementById('minimize-header-footer-toggle'),
             extendAiBubbleWidthToggle: document.getElementById('extend-ai-bubble-width-toggle'),
-            compactMessageLayoutToggle: document.getElementById('compact-message-layout-toggle'),
+            trimMessageVerticalSpaceToggle: document.getElementById('trim-message-vertical-space-toggle'),
             showSessionLinkingSettingsToggle: document.getElementById('show-session-linking-settings-toggle'),
             sessionLinkingSettingsGroup: document.getElementById('settings-group-session-linking'),
+            
             showTwinEngineSettingsToggle: document.getElementById('show-twin-engine-settings-toggle'),
             showChatTitleToggle: document.getElementById('show-chat-title-toggle'),
             showNewChatButtonToggle: document.getElementById('show-new-chat-button-toggle'),
@@ -5655,6 +5664,7 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
             db: null,
             currentChatId: null,
             currentMessages: [],
+
             settings: {
                 apiKey: '',
                 modelName: DEFAULT_MODEL,
@@ -5794,7 +5804,7 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
                 preventZoom: true,
                 minimizeHeaderFooter: false,
                 extendAiBubbleWidth: false,
-                compactMessageLayout: false,
+                trimMessageVerticalSpace: false,
                 showSessionLinkingSettings: false,
                 showTwinEngineSettings: false,
                 showChatTitle: true,
@@ -5859,9 +5869,6 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
                 toggleButtonBottomFontSize: DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE,
                 toggleButtonBottomTextCollapse: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE,
                 toggleButtonBottomTextExpand: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND,
-                apiProvider: 'gemini',
-                twinEngineApiConfigs: [],
-                twinEngineActiveConfigId: null,
                 thoughtSummaryOpacity: DEFAULT_THOUGHT_SUMMARY_OPACITY,
                 settingsUIDetailsOpenStates: {},
                 showApiProviderToggleHeader: false,
@@ -5897,6 +5904,8 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
                 twinEngineSummarizeAfterTurns: DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS,
                 twinEngineInitialTurnsToInclude: 1,
                 twinEngineSummaryPrompt: '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。',
+                twinEngineApiConfigs: [],
+                twinEngineActiveConfigId: null,
                 twinEngineDummyUser: '',
                 twinEngineEnableDummyUser: false,
                 twinEngineDummyModel: '',
@@ -5904,6 +5913,7 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
                 twinEngineConcatDummyModel: false,
 enableWebhookNotification: false,
 webhooks: [],
+            },
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -6516,9 +6526,6 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
         };
 
         const uiUtils = {
-            applyCompactMessageLayout() {
-                document.body.classList.toggle('compact-message-layout', state.settings.compactMessageLayout);
-            },
             _sanitizeAndParseMarkdown(content) {
                 if (typeof DOMPurify === 'undefined') {
                     const div = document.createElement('div');
@@ -8076,12 +8083,14 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                  elements.codeBlockFontSizeInput.value = state.settings.codeBlockFontSize ?? '';
                  elements.thoughtSummaryFontSizeInput.value = state.settings.thoughtSummaryFontSize ?? '';
                  elements.swipeNavigationToggle.checked = state.settings.enableSwipeNavigation;
+                 
                  elements.preventZoomToggle.checked = state.settings.preventZoom;
                  elements.minimizeHeaderFooterToggle.checked = state.settings.minimizeHeaderFooter;
                  elements.extendAiBubbleWidthToggle.checked = state.settings.extendAiBubbleWidth;
-                 elements.compactMessageLayoutToggle.checked = state.settings.compactMessageLayout;
+                 elements.trimMessageVerticalSpaceToggle.checked = state.settings.trimMessageVerticalSpace;
                  elements.showSessionLinkingSettingsToggle.checked = state.settings.showSessionLinkingSettings;
                  if (elements.sessionLinkingSettingsGroup) {
+                 
                      elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !state.settings.showSessionLinkingSettings);
                  }
                 elements.showTwinEngineSettingsToggle.checked = state.settings.showTwinEngineSettings;
@@ -8195,13 +8204,11 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                 this.applySidePanelSettingsToUI();
                 this.applyMinimizeUI();
                 this.applyAiBubbleWidthSetting();
-                this.applyCompactMessageLayout();
                 this.updateSessionLinkingUI();
                 this.updateApiProviderSelectOptions();
                 this.toggleMultiApiKeysVisibility(state.settings.showMultiApiKeys);
                 elements.settingsScreen.classList.toggle('auto-save-mode', state.settings.autoSaveSettings);
                 this.updateMemoStackHeightSettingsVisibility();
-                
                 this.updateTwinEngineModeButton();
                 this.updateTwinEngineApiKeyCycleButton();
             },
@@ -8210,6 +8217,9 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
             },
             applyAiBubbleWidthSetting() {
                 document.body.classList.toggle('ai-bubble-extended', state.settings.extendAiBubbleWidth);
+            },
+            applyTrimMessageSpaceSetting() {
+                document.body.classList.toggle('trim-message-space-mode', state.settings.trimMessageVerticalSpace);
             },
             applySettingsUIDetailsOpenStates() {
                 const detailsElements = document.querySelectorAll('#settings-screen details[id]');
@@ -9263,7 +9273,7 @@ async sendWebhookNotification(responseMessage) {
                 uiUtils.applyTheme();
                 uiUtils.applyFontFamily();
                 uiUtils.applySidePanelSettingsToUI();
-
+                uiUtils.applyTrimMessageSpaceSetting();
                 if (state.settings.backgroundImageBlob instanceof Blob) {
                     uiUtils.revokeExistingObjectUrl();
                     try {
@@ -9724,6 +9734,7 @@ this.setupEventListeners();
                 state.settings.preventZoom = elements.preventZoomToggle.checked;
                 uiUtils.applyZoomPreventionSetting();
             });
+            
             document.getElementById('minimize-header-footer-toggle').addEventListener('change', (e) => {
                 state.settings.minimizeHeaderFooter = e.target.checked;
                 uiUtils.applyMinimizeUI();
@@ -9732,12 +9743,13 @@ this.setupEventListeners();
                 state.settings.extendAiBubbleWidth = e.target.checked;
                 uiUtils.applyAiBubbleWidthSetting();
             });
-            elements.compactMessageLayoutToggle.addEventListener('change', (e) => {
-                state.settings.compactMessageLayout = e.target.checked;
-                uiUtils.applyCompactMessageLayout();
+            elements.trimMessageVerticalSpaceToggle.addEventListener('change', (e) => {
+                state.settings.trimMessageVerticalSpace = e.target.checked;
+                uiUtils.applyTrimMessageSpaceSetting();
             });
             elements.showSessionLinkingSettingsToggle.addEventListener('change', (e) => {
                 if (elements.sessionLinkingSettingsGroup) {
+
                     elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !e.target.checked);
                 }
             });
@@ -12766,12 +12778,14 @@ this.setupEventListeners();
              newSettings.codeBlockFontSize = elements.codeBlockFontSizeInput.value === '' ? null : parseInt(elements.codeBlockFontSizeInput.value, 10);
              newSettings.thoughtSummaryFontSize = elements.thoughtSummaryFontSizeInput.value === '' ? null : parseInt(elements.thoughtSummaryFontSizeInput.value, 10);
              newSettings.enableSwipeNavigation = elements.swipeNavigationToggle.checked;
+             
              newSettings.preventZoom = elements.preventZoomToggle.checked;
              newSettings.minimizeHeaderFooter = document.getElementById('minimize-header-footer-toggle').checked;
              newSettings.extendAiBubbleWidth = elements.extendAiBubbleWidthToggle.checked;
-             newSettings.compactMessageLayout = elements.compactMessageLayoutToggle.checked;
+             newSettings.trimMessageVerticalSpace = elements.trimMessageVerticalSpaceToggle.checked;
              newSettings.showSessionLinkingSettings = elements.showSessionLinkingSettingsToggle.checked;
              newSettings.showTwinEngineSettings = elements.showTwinEngineSettingsToggle.checked;
+             
              newSettings.showChatTitle = elements.showChatTitleToggle.checked;
              newSettings.showNewChatButton = elements.showNewChatButtonToggle.checked;
              newSettings.showDeleteSessionButton = elements.showDeleteSessionButtonToggle.checked;
@@ -12980,6 +12994,9 @@ newSettings.enableWebhookNotification = elements.enableWebhookNotificationToggle
                  uiUtils.updateChatScreenElementVisibility();
                  uiUtils.applyMinimizeUI();
                  uiUtils.applyAiBubbleWidthSetting();
+                 uiUtils.applyTrimMessageSpaceSetting();
+                 uiUtils.updateSessionLinkingUI();
+                 uiUtils.updateApiProviderSelectOptions();
                  elements.settingsScreen.classList.toggle('auto-save-mode', state.settings.autoSaveSettings);
 
                  if (showNotice && !state.settings.disableSaveSettingsConfirmation) {
@@ -13093,12 +13110,15 @@ newSettings.enableWebhookNotification = elements.enableWebhookNotificationToggle
                     defaultSettingsCopy.enableSessionLinking = false;
                     defaultSettingsCopy.showSessionLinkingSettings = false;
                     defaultSettingsCopy.showTwinEngineSettings = false;
+                    
                     defaultSettingsCopy.enableSwipeNavigation = true;
                     defaultSettingsCopy.preventZoom = true;
                     defaultSettingsCopy.minimizeHeaderFooter = false;
                     defaultSettingsCopy.extendAiBubbleWidth = false;
+                    defaultSettingsCopy.trimMessageVerticalSpace = false;
                     defaultSettingsCopy.showChatTitle = true;
                     defaultSettingsCopy.showNewChatButton = true;
+                    
                     defaultSettingsCopy.showDeleteSessionButton = false;
                     defaultSettingsCopy.showCopySessionButton = false;
                     defaultSettingsCopy.showScrollToTopButton = true;
