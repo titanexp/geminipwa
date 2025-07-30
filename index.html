@@ -9245,65 +9245,47 @@ async sendWebhookNotification(responseMessage) {
 
     await Promise.allSettled(promises);
 },
-
         async initializeApp() {
             try {
                 if (typeof marked !== 'undefined') {
-                    marked.setOptions({
-                        breaks: true,
-                        gfm: true,
-                        sanitize: false,
-                        smartypants: false
-                    });
+                    marked.setOptions({ breaks: true, gfm: true, sanitize: false, smartypants: false });
                 }
                 if (typeof mermaid !== 'undefined') {
-                    mermaid.initialize({
-                        startOnLoad: false,
-                        theme: 'default',
-                        securityLevel: 'loose',
-                        fontFamily: 'var(--font-family)',
-                        flowchart: { useMaxWidth: true, htmlLabels: true },
-                        sequence: { useMaxWidth: true },
-                        gantt: { useMaxWidth: true },
-                        journey: { useMaxWidth: true },
-                        pie: { useMaxWidth: true }
-                    });
+                    mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose', fontFamily: 'var(--font-family)', flowchart: { useMaxWidth: true, htmlLabels: true }, sequence: { useMaxWidth: true }, gantt: { useMaxWidth: true }, journey: { useMaxWidth: true }, pie: { useMaxWidth: true } });
                 }
-
                 elements.appVersionSpan.textContent = APP_VERSION;
-
-                window.addEventListener('beforeinstallprompt', (event) => {
-                    event.preventDefault();
-                });
-
+                window.addEventListener('beforeinstallprompt', (event) => { event.preventDefault(); });
                 registerServiceWorker();
+
                 await dbUtils.openDB();
                 await dbUtils.loadSettings();
 
-                uiUtils.showScreen('chat');
-                
                 uiUtils.applyTheme();
                 uiUtils.applyFontFamily();
                 uiUtils.applySidePanelSettingsToUI();
-
+                uiUtils.applyMinimizeUI();
+                uiUtils.applyAiBubbleWidthSetting();
+                uiUtils.applyUserBubbleWidthSetting();
+                uiUtils.applyMessageSpacingSetting();
+                
                 if (state.settings.backgroundImageBlob instanceof Blob) {
                     uiUtils.revokeExistingObjectUrl();
                     try {
-                         state.backgroundImageUrl = URL.createObjectURL(state.settings.backgroundImageBlob);
-                         document.documentElement.style.setProperty('--chat-background-image', `url(${state.backgroundImageUrl})`);
+                        state.backgroundImageUrl = URL.createObjectURL(state.settings.backgroundImageBlob);
+                        document.documentElement.style.setProperty('--chat-background-image', `url(${state.backgroundImageUrl})`);
                     } catch (e) {
-                         document.documentElement.style.setProperty('--chat-background-image', 'none');
+                        document.documentElement.style.setProperty('--chat-background-image', 'none');
                     }
                 } else {
                     document.documentElement.style.setProperty('--chat-background-image', 'none');
                 }
                 if (state.settings.userIconBlob instanceof Blob) {
-                    try { state.userIconUrl = URL.createObjectURL(state.settings.userIconBlob); } catch (e) { }
+                    try { state.userIconUrl = URL.createObjectURL(state.settings.userIconBlob); } catch (e) {}
                 }
                 if (state.settings.aiIconBlob instanceof Blob) {
-                    try { state.aiIconUrl = URL.createObjectURL(state.settings.aiIconBlob); } catch (e) { }
+                    try { state.aiIconUrl = URL.createObjectURL(state.settings.aiIconBlob); } catch (e) {}
                 }
-
+                
                 uiUtils.applySettingsToUI();
 
                 const chats = await dbUtils.getAllChats(state.settings.historySortOrder);
@@ -9313,6 +9295,7 @@ async sendWebhookNotification(responseMessage) {
                     this.startNewChat();
                 }
                 
+                uiUtils.showScreen('chat');
                 history.replaceState({ screen: 'chat' }, '', '#chat');
                 state.currentScreen = 'chat';
                 
