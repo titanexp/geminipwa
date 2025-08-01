@@ -5958,6 +5958,8 @@ webhooks: [],
             isAiToAiChatProcessing: false,
             aiToAiProcessingMessage: "AI間会話処理中...",
             isSummarizingForRetry: false,
+            webhookQueue: [],
+            isProcessingWebhookQueue: false,
         };
 
         const sanitizeText = (text, maxLength = 255) => {
@@ -9183,6 +9185,53 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
         };
 
     const appLogic = {
+        async processWebhookQueue() {
+            if (state.isProcessingWebhookQueue || state.webhookQueue.length === 0) {
+                return;
+            }
+            state.isProcessingWebhookQueue = true;
+
+            const webhookTask = state.webhookQueue.shift(); 
+
+            try {
+                const { webhook, responseMessage } = webhookTask;
+                const format = webhook.format || 'json';
+                let body;
+                let headers;
+
+                if (format === 'text') {
+                    body = responseMessage.content;
+                    headers = { 'Content-Type': 'text/plain' };
+                } else {
+                    const payload = {
+                        type: "ai_response",
+                        timestamp: new Date().toISOString(),
+                        sessionId: state.currentChatId,
+                        sessionTitle: elements.chatTitle.textContent.replace(/^: /, ''),
+                        content: responseMessage.content,
+                        provider: responseMessage.generatedByApiProvider,
+                        webhookLabel: webhook.label
+                    };
+                    body = JSON.stringify(payload);
+                    headers = { 'Content-Type': 'application/json' };
+                }
+                
+                const fetchOptions = {
+                    method: 'POST',
+                    headers: headers,
+                    body: body,
+                    mode: 'cors'
+                };
+
+                await fetch(webhook.url, fetchOptions);
+
+            } catch (error) {
+                console.error(`Webhook送信中にエラー (${webhookTask.webhook.label}):`, error);
+            } finally {
+                state.isProcessingWebhookQueue = false;
+                this.processWebhookQueue();
+            }
+        },
 
 
 async sendWebhookNotification(responseMessage) {
@@ -9195,59 +9244,16 @@ async sendWebhookNotification(responseMessage) {
         return;
     }
 
-    const promises = enabledWebhooks.map(webhook => {
-        return (async () => {
-            try {
-                new URL(webhook.url);
-            } catch (e) {
-                console.error(`Webhook送信失敗 (無効なURL: ${webhook.label}):`, webhook.url);
-                return;
-            }
-
-            const format = webhook.format || 'json';
-            let body;
-            let headers;
-
-            if (format === 'text') {
-                body = responseMessage.content;
-                headers = { 'Content-Type': 'text/plain' };
-            } else {
-                const payload = {
-                    type: "ai_response",
-                    timestamp: new Date().toISOString(),
-                    sessionId: state.currentChatId,
-                    sessionTitle: elements.chatTitle.textContent.replace(/^: /, ''),
-                    content: responseMessage.content,
-                    provider: responseMessage.generatedByApiProvider,
-                    webhookLabel: webhook.label
-                };
-                body = JSON.stringify(payload);
-                headers = { 'Content-Type': 'application/json' };
-            }
-
-            const fetchOptions = {
-                method: 'POST',
-                headers: headers,
-                body: body,
-                mode: 'cors'
-            };
-
-            if (format === 'json') {
-                fetchOptions.mode = 'no-cors';
-            }
-
-            try {
-                const response = await fetch(webhook.url, fetchOptions);
-                if (fetchOptions.mode === 'cors' && !response.ok) {
-                    console.error(`Webhook送信失敗 (${webhook.label}): サーバーがエラーステータス ${response.status} を返しました`);
-                }
-            } catch (error) {
-                console.error(`Webhook送信中にネットワークエラー (${webhook.label}):`, error);
-            }
-        })();
+    enabledWebhooks.forEach(webhook => {
+        try {
+            new URL(webhook.url);
+            state.webhookQueue.push({ webhook, responseMessage });
+        } catch (e) {
+            console.error(`Webhookタスク追加失敗 (無効なURL: ${webhook.label}):`, webhook.url);
+        }
     });
 
-    await Promise.allSettled(promises);
+    this.processWebhookQueue();
 },
         async initializeApp() {
             try {
