@@ -4681,6 +4681,30 @@
                     <input type="checkbox" id="show-multi-api-keys-toggle">
                     複数APIキー管理機能を使用する
                 </label>
+                
+<hr style="margin: 10px 0; border-top: 1px solid var(--border-tertiary);">
+<label class="checkbox-label">
+    <input type="checkbox" id="enable-proofreading">
+    生成後に別のモデルで文章を校正する
+</label>
+<div id="proofreading-options" class="hidden">
+    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+        ※チェック時、最初の応答生成に成功した後、下記設定で校正処理が実行されます。<br>
+        ※校正処理にもAPIコストが発生します。
+    </p>
+    <label for="proofreading-model-name">校正用モデル名:</label>
+    <select id="proofreading-model-name" aria-label="校正用モデル名">
+        <optgroup label="推奨">
+            <option value="gemini-1.5-flash-latest">gemini-1.5-flash-latest</option>
+        </optgroup>
+        <optgroup label="その他">
+            <option value="gemini-1.5-pro-latest">gemini-1.5-pro-latest</option>
+            <option value="gemini-1.0-pro">gemini-1.0-pro</option>
+        </optgroup>
+    </select>
+    <label for="proofreading-system-instruction">校正用システムプロンプト:</label>
+    <textarea id="proofreading-system-instruction" placeholder="例: あなたはプロの編集者です。受け取った文章をより自然で分かりやすく校正してください。" aria-label="校正用システムプロンプト"></textarea>
+</div>
                 <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                     ※ 複数のAPIキーを使い分けたい場合に使用。
                 </p>
@@ -5671,6 +5695,10 @@
             webhookFormatTextRadio: document.getElementById('webhook-format-text'),
             webhooksList: document.getElementById('webhooks-list'),
 addWebhookBtn: document.getElementById('add-webhook-btn'),
+            enableProofreadingCheckbox: document.getElementById('enable-proofreading'),
+            proofreadingOptionsDiv: document.getElementById('proofreading-options'),
+            proofreadingModelNameSelect: document.getElementById('proofreading-model-name'),
+            proofreadingSystemInstructionTextarea: document.getElementById('proofreading-system-instruction'),
         };
 
         const state = {
@@ -5882,9 +5910,6 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
                 toggleButtonBottomFontSize: DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE,
                 toggleButtonBottomTextCollapse: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE,
                 toggleButtonBottomTextExpand: DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND,
-                apiProvider: 'gemini',
-                twinEngineApiConfigs: [],
-                twinEngineActiveConfigId: null,
                 thoughtSummaryOpacity: DEFAULT_THOUGHT_SUMMARY_OPACITY,
                 settingsUIDetailsOpenStates: {},
                 showApiProviderToggleHeader: false,
@@ -5927,12 +5952,16 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
                 twinEngineConcatDummyModel: false,
 enableWebhookNotification: false,
 webhooks: [],
+                enableProofreading: false,
+                proofreadingModelName: 'gemini-1.5-flash-latest',
+                proofreadingSystemInstruction: 'あなたはプロの編集者です。受け取った文章の過剰な読点を抑制し、日本語として違和感のない読点の使用量に校正してください。承知しました等の応答は行わず、校正後の文章のみ出力して下さい。読点以外の文章には絶対に手を付けないで下さい。',
             },
             backgroundImageUrl: null,
             userIconUrl: null,
             aiIconUrl: null,
             isSending: false,
             isSummarizing: false,
+            isProofreading: false,
             abortController: null,
             partialStreamContent: '',
             partialThoughtStreamContent: '',
@@ -5992,6 +6021,28 @@ webhooks: [],
         });
 
         const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+        
+function interruptibleSleep(ms, signal) {
+    return new Promise((resolve, reject) => {
+        if (signal.aborted) {
+            const error = new Error("Sleep aborted");
+            error.name = "AbortError";
+            return reject(error);
+        }
+        let timeoutId;
+        const onAbort = () => {
+            clearTimeout(timeoutId);
+            const error = new Error("Sleep aborted");
+            error.name = "AbortError";
+            reject(error);
+        };
+        timeoutId = setTimeout(() => {
+            signal.removeEventListener('abort', onAbort);
+            resolve();
+        }, ms);
+        signal.addEventListener('abort', onAbort, { once: true });
+    });
+}
 
         function formatFileSize(bytes) {
             if (bytes === 0) return '0 Bytes';
@@ -8223,6 +8274,10 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                 this.updateMemoStackHeightSettingsVisibility();
                 this.updateTwinEngineModeButton();
                 this.updateTwinEngineApiKeyCycleButton();
+            elements.enableProofreadingCheckbox.checked = state.settings.enableProofreading;
+            elements.proofreadingModelNameSelect.value = state.settings.proofreadingModelName || 'gemini-1.5-flash-latest';
+            elements.proofreadingSystemInstructionTextarea.value = state.settings.proofreadingSystemInstruction || '';
+            elements.proofreadingOptionsDiv.classList.toggle('hidden', !state.settings.enableProofreading);
             },
             applyMinimizeUI() {
                 elements.appContainer.classList.toggle('minimized-ui', state.settings.minimizeHeaderFooter);
@@ -8768,28 +8823,32 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                 }
                 this.updateLoadingIndicator();
             },
-            updateLoadingIndicator() {
-                if (state.isSending) {
-                    elements.loadingIndicator.textContent = '応答中';
-                    elements.loadingIndicator.classList.remove('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
-                } else if (state.isSummarizingForRetry) {
-                    elements.loadingIndicator.textContent = 'リトライ前の履歴を要約中...';
-                    elements.loadingIndicator.classList.remove('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
-                } else if (state.isAiToAiChatProcessing) {
-                    elements.loadingIndicator.textContent = state.aiToAiProcessingMessage;
-                    elements.loadingIndicator.classList.remove('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'assertive');
-                } else if (state.isSummarizing) {
-                    elements.loadingIndicator.textContent = '要約中...';
-                    elements.loadingIndicator.classList.remove('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
-                } else {
-                    elements.loadingIndicator.classList.add('hidden');
-                    elements.loadingIndicator.removeAttribute('aria-live');
-                }
-            },
+updateLoadingIndicator() {
+    if (state.isSending) {
+        elements.loadingIndicator.textContent = '応答中';
+        elements.loadingIndicator.classList.remove('hidden');
+        elements.loadingIndicator.setAttribute('aria-live', 'polite');
+    } else if (state.isProofreading) {
+        elements.loadingIndicator.textContent = '校正中...';
+        elements.loadingIndicator.classList.remove('hidden');
+        elements.loadingIndicator.setAttribute('aria-live', 'polite');
+    } else if (state.isSummarizingForRetry) {
+        elements.loadingIndicator.textContent = 'リトライ前の履歴を要約中...';
+        elements.loadingIndicator.classList.remove('hidden');
+        elements.loadingIndicator.setAttribute('aria-live', 'polite');
+    } else if (state.isAiToAiChatProcessing) {
+        elements.loadingIndicator.textContent = state.aiToAiProcessingMessage;
+        elements.loadingIndicator.classList.remove('hidden');
+        elements.loadingIndicator.setAttribute('aria-live', 'assertive');
+    } else if (state.isSummarizing) {
+        elements.loadingIndicator.textContent = '要約中...';
+        elements.loadingIndicator.classList.remove('hidden');
+        elements.loadingIndicator.setAttribute('aria-live', 'polite');
+    } else {
+        elements.loadingIndicator.classList.add('hidden');
+        elements.loadingIndicator.removeAttribute('aria-live');
+    }
+},
             adjustTextareaHeight(textarea = elements.userInput, maxHeight = TEXTAREA_MAX_HEIGHT) {
                 if (!textarea) return;
                 textarea.style.height = 'auto';
@@ -9181,7 +9240,88 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                 });
             },
         };
-
+        async proofreadText(textToProofread) {
+            console.log("--- 校正処理開始 ---");
+            const {
+                proofreadingModelName,
+                proofreadingSystemInstruction,
+                apiKey,
+                geminiTemperature: temperature,
+                geminiMaxTokens: maxTokens,
+                geminiTopK: topK,
+                geminiTopP: topP
+            } = state.settings;
+        
+            if (!proofreadingModelName) {
+                throw new Error("校正用モデルが設定されていません。");
+            }
+        
+            const endpoint = `${GEMINI_API_BASE_URL}${proofreadingModelName}:generateContent?key=${apiKey}`;
+            const systemInstruction = proofreadingSystemInstruction?.trim() ? { parts: [{ text: proofreadingSystemInstruction.trim() }] } : null;
+        
+            const generationConfig = {};
+            if (temperature !== null) generationConfig.temperature = temperature;
+            if (maxTokens !== null) generationConfig.maxOutputTokens = maxTokens;
+            if (topK !== null) generationConfig.topK = topK;
+            if (topP !== null) generationConfig.topP = topP;
+        
+            const requestBody = {
+                contents: [{ role: 'user', parts: [{ text: textToProofread }] }],
+                ...(Object.keys(generationConfig).length > 0 && { generationConfig }),
+                ...(systemInstruction && { systemInstruction }),
+                safetySettings: [
+                    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+                    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+                    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+                ]
+            };
+        
+            console.log("校正APIへの送信データ:", JSON.stringify(requestBody, null, 2));
+        
+            try {
+                if (state.abortController?.signal.aborted) {
+                    throw new Error("リクエストがキャンセルされました。");
+                }
+        
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody),
+                    signal: state.abortController?.signal
+                });
+        
+                if (!response.ok) {
+                    let errorMsg = `校正APIエラー (${response.status}): ${response.statusText}`;
+                    try {
+                        const errorData = await response.json();
+                        if (errorData.error?.message) {
+                            errorMsg = `校正APIエラー (${response.status}): ${errorData.error.message}`;
+                        }
+                    } catch (e) {}
+                    throw new Error(errorMsg);
+                }
+        
+                const responseData = await response.json();
+                if (responseData.candidates?.[0]?.content?.parts) {
+                    const proofreadContent = responseData.candidates[0].content.parts.map(p => p.text).join('');
+                    console.log("--- 校正処理成功 ---");
+                    return proofreadContent;
+                } else if (responseData.promptFeedback) {
+                    const blockReason = responseData.promptFeedback.blockReason || 'SAFETY';
+                    throw new Error(`校正モデルに応答がブロックされました (理由: ${blockReason})`);
+                } else {
+                    throw new Error("校正APIの応答に有効なコンテンツが含まれていません。");
+                }
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    throw error;
+                }
+                console.error("校正API呼び出しでエラー:", error);
+                throw error;
+            }
+        },
+        
     const appLogic = {
 
 
@@ -10023,6 +10163,9 @@ async sendWebhookNotification(responseMessage) {
             twinEngineApiConfigUtils.initialize();
             elements.enableWebhookNotificationToggle.addEventListener('change', (e) => {
                 elements.webhookSettingsContainer.classList.toggle('hidden', !e.target.checked);
+            });
+            elements.enableProofreadingCheckbox.addEventListener('change', (e) => {
+                elements.proofreadingOptionsDiv.classList.toggle('hidden', !e.target.checked);
             });
         },
         handlePopState(event) {
@@ -12017,11 +12160,33 @@ async sendWebhookNotification(responseMessage) {
                 }
 
                 if (modelResponseRawContent || modelThoughtSummaryContent || modelResponseMetadata.finishReason) {
+                    
+                    let finalContent = modelResponseRawContent;
+                    const finishReason = modelResponseMetadata.finishReason;
+                    const isError = ['ERROR', 'SAFETY', 'RECITATION', 'OTHER', 'PROHIBITED_CONTENT'].includes(finishReason);
+
+                    if (state.settings.enableProofreading && finalContent && !isError) {
+                        try {
+                            state.isProofreading = true;
+                            uiUtils.updateLoadingIndicator();
+
+                            const proofreadContent = await this.proofreadText(finalContent);
+                            finalContent = proofreadContent;
+
+                        } catch (proofreadError) {
+                            console.error("校正処理中にエラーが発生しました:", proofreadError);
+                            finalContent += `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
+                        } finally {
+                            state.isProofreading = false;
+                            uiUtils.updateLoadingIndicator();
+                        }
+                    }
+
                     if (useStreamingForThisCall && modelMessageObjectForStream) {
                         const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
                         if (finalModelMessageIndex !== -1) {
                             const msgToUpdate = state.currentMessages[finalModelMessageIndex];
-                            msgToUpdate.content = modelResponseRawContent;
+                            msgToUpdate.content = finalContent;
                             msgToUpdate.timestamp = Date.now();
                             msgToUpdate.finishReason = modelResponseMetadata.finishReason;
                             msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
@@ -12041,7 +12206,7 @@ async sendWebhookNotification(responseMessage) {
                         }
                     } else {
                          const newModelMessage = {
-                             role: 'model', content: modelResponseRawContent,
+                             role: 'model', content: finalContent,
                              timestamp: Date.now(),
                              ...modelResponseMetadata,
                              usageMetadata: finalUsageMetadataFromStream,
@@ -12097,7 +12262,7 @@ async sendWebhookNotification(responseMessage) {
                         if(tempPlaceholderIndex !== -1) state.currentMessages.splice(tempPlaceholderIndex, 1);
                     }
                 }
-
+                
                 if (!isBackgroundProcess) {
                    const currentUserTurnCountAfterSend = state.currentMessages.filter(msg => msg.role === 'user').length;
                  const currentSummarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
@@ -12873,7 +13038,9 @@ newSettings.webhooks = state.settings.webhooks.map(webhook => {
     return webhook;
 });
 newSettings.enableWebhookNotification = elements.enableWebhookNotificationToggle.checked;
-
+            newSettings.enableProofreading = elements.enableProofreadingCheckbox.checked;
+            newSettings.proofreadingModelName = elements.proofreadingModelNameSelect.value;
+            newSettings.proofreadingSystemInstruction = elements.proofreadingSystemInstructionTextarea.value.trim();
             const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
                 let num = isInteger ? parseInt(value, 10) : parseFloat(value);
                 if (value === '' || value === null) return null;
