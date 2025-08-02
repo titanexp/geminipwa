@@ -4695,17 +4695,8 @@
         ※校正処理にもAPIコストが発生します。
     </p>
 
-    <label for="proofreading-model-name">校正用モデル名:</label>
-    <select id="proofreading-model-name" aria-label="校正用モデル名">
-        <optgroup label="推奨">
-            <option value="gemini-1.5-flash-latest">gemini-1.5-flash-latest</option>
-        </optgroup>
-         <optgroup label="その他">
-            <option value="gemini-1.5-pro-latest">gemini-1.5-pro-latest</option>
-            <option value="gemini-1.0-pro">gemini-1.0-pro</option>
-         </optgroup>
-    </select>
-
+<select id="proofreading-model-name" aria-label="校正用モデル名">
+</select>
     <label for="proofreading-system-instruction">校正用システムプロンプト:</label>
     <textarea id="proofreading-system-instruction" placeholder="例: あなたはプロの編集者です。受け取った文章をより自然で分かりやすく校正してください。" aria-label="校正用システムプロンプト"></textarea>
 </div>
@@ -8262,7 +8253,8 @@ elements.autoRetryOptionsDiv.classList.toggle('hidden', !state.settings.enableAu
                 this.applySettingsUIDetailsOpenStates();
                 this.updateChatScreenElementVisibility();
                 this.updateHistoryHeaderButtonVisibility();
-                this.updateUserModelOptions();
+                 this.updateUserModelOptions();
+                 this.updateProofreadingModelOptions();
                 this.updateDeepSeekUserModelOptions();
                 this.updateClaudeUserModelOptions();
                 this.updateOpenAIUserModelOptions();
@@ -8533,10 +8525,11 @@ elements.autoRetryOptionsDiv.classList.toggle('hidden', !state.settings.enableAu
                     elements.importAllSessionsBtn.classList.toggle('hidden', !showBulkActions);
                 }
             },
-            updateUserModelOptions() {
+            updateUserModelOptions(additionalModelsValue) {
+                const modelsString = additionalModelsValue !== undefined ? additionalModelsValue : state.settings.additionalModels;
                 const group = elements.geminiUserDefinedModelsGroup;
                 group.innerHTML = '';
-                const models = (state.settings.additionalModels || '')
+                const models = (modelsString || '')
                     .split(',')
                     .map(m => m.trim())
                     .filter(m => m !== '');
@@ -8554,6 +8547,28 @@ elements.autoRetryOptionsDiv.classList.toggle('hidden', !state.settings.enableAu
                     }
                 } else {
                     group.disabled = true;
+                }
+            },
+
+            updateProofreadingModelOptions() {
+                const geminiModelSelect = elements.geminiModelNameSelect;
+                const proofreadingModelSelect = elements.proofreadingModelNameSelect;
+                if (!geminiModelSelect || !proofreadingModelSelect) return;
+            
+                const currentProofreadingModel = state.settings.proofreadingModelName;
+            
+                proofreadingModelSelect.innerHTML = '';
+            
+                geminiModelSelect.querySelectorAll('optgroup, option').forEach(node => {
+                    proofreadingModelSelect.appendChild(node.cloneNode(true));
+                });
+                
+                if (Array.from(proofreadingModelSelect.options).some(opt => opt.value === currentProofreadingModel)) {
+                    proofreadingModelSelect.value = currentProofreadingModel;
+                } else if (state.settings.proofreadingModelName && Array.from(proofreadingModelSelect.options).some(opt => opt.value === state.settings.proofreadingModelName)) {
+                    proofreadingModelSelect.value = state.settings.proofreadingModelName;
+                } else if (proofreadingModelSelect.options.length > 0) {
+                    proofreadingModelSelect.selectedIndex = 0;
                 }
             },
             updateDeepSeekUserModelOptions() {
@@ -9379,7 +9394,14 @@ async sendWebhookNotification(responseMessage) {
                 state.currentScreen = 'chat';
                 
                 updateMessageMaxWidthVar();
-                webhookUtils.initialize();
+            webhookUtils.initialize();
+
+            elements.geminiAdditionalModelsTextarea.addEventListener('input', () => {
+                this.updateUserModelOptions(elements.geminiAdditionalModelsTextarea.value);
+                this.updateProofreadingModelOptions();
+            });
+
+            this.setupEventListeners();
                 this.setupEventListeners();
                 this.updateZoomState();
                 uiUtils.adjustTextareaHeight();
