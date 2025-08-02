@@ -954,6 +954,13 @@
         .history-action-button.gold:hover:not(:disabled) {
             background-color: var(--bg-button-gold-hover);
         }
+        .custom-dialog .history-action-button.gold {
+            background-color: var(--bg-button-gold);
+            color: var(--text-button-gold);
+        }
+        .custom-dialog .history-action-button.gold:hover:not(:disabled) {
+            background-color: var(--bg-button-gold-hover);
+        }
         .history-action-button.purple {
             background-color: var(--bg-button-purple);
             color: var(--text-button-purple);
@@ -5168,7 +5175,13 @@
             <button value="ok" class="dialog-ok-btn">閉じる</button>
         </div>
     </dialog>
-
+    <dialog id="initFailureDialog" class="custom-dialog">
+        <p id="initFailureMessage" class="dialog-message"></p>
+        <div class="dialog-actions">
+            <button id="initFailureExportBtn" value="export" class="history-action-button gold">全出力</button>
+            <button id="initFailureOkBtn" value="ok" class="dialog-ok-btn">OK</button>
+        </div>
+    </dialog>
     <script>
         const DB_NAME = 'GeminiPWA_DB';
         const DB_VERSION = 8;
@@ -7070,41 +7083,7 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
 
                     if (messageData.groundingMetadata.groundingChunks && messageData.groundingMetadata.groundingChunks.length > 0) {
                         const citationList = document.createElement('ul');
-                        citationList.classList.add('citation-list');
-                        const citationMap = new Map();
-                        let displayIndexCounter = 1;
 
-                        if (messageData.groundingMetadata.groundingSupports) {
-                            messageData.groundingMetadata.groundingSupports.forEach(support => {
-                                if (support.groundingChunkIndices) {
-                                    support.groundingChunkIndices.forEach(chunkIndex => {
-                                        if (!citationMap.has(chunkIndex) && chunkIndex >= 0 && chunkIndex < messageData.groundingMetadata.groundingChunks.length) {
-                                            const chunk = messageData.groundingMetadata.groundingChunks[chunkIndex];
-                                            if (chunk?.web?.uri) {
-                                                citationMap.set(chunkIndex, {
-                                                    uri: chunk.web.uri,
-                                                    title: chunk.web.title || 'タイトル不明',
-                                                    displayIndex: displayIndexCounter++
-                                                });
-                                            }
-                                        }
-                                    });
-                                }
-                            });
-                        }
-                        const sortedCitations = Array.from(citationMap.entries()).sort(([, a], [, b]) => a.displayIndex - b.displayIndex);
-                        sortedCitations.forEach(([chunkIndex, citationInfo]) => {
-                            const listItem = document.createElement('li');
-                            const link = document.createElement('a');
-                            link.href = citationInfo.uri;
-                            link.textContent = `[${citationInfo.displayIndex}] ${citationInfo.title}`;
-                            link.title = citationInfo.title;
-                            link.target = '_blank';
-                            link.rel = 'noopener noreferrer';
-                            listItem.appendChild(link);
-                            citationList.appendChild(listItem);
-                        });
-                        if (sortedCitations.length === 0) {
                              messageData.groundingMetadata.groundingChunks.forEach((chunk, idx) => {
                                  if (chunk?.web?.uri) {
                                      const listItem = document.createElement('li');
@@ -7630,6 +7609,18 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
             formatDate(timestamp) {
                 if (!timestamp) return '';
                 try {
+                    return new Intl.DateTimeFormat('ja-JP', { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(timestamp));
+                } catch (e) {
+                    const d = new Date(timestamp);
+                    return `${String(d.getFullYear()).slice(-2)}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                }
+            },
+            async renderHistoryList() {
+                try {
+                    const chats = await dbUtils.getAllChats(state.settings.historySortOrder);
+                    elements.historyList.querySelectorAll('.history-item:not(.js-history-item-template)').forEach(item => item.remove());
+                    this.updateHistoryHeaderButtonVisibility();
+                    const sessionLinkingEnabled = state.settings.enableSessionLinking;
 
                     if (chats && chats.length > 0) {
                         elements.noHistoryMessage.classList.add('hidden');
@@ -8981,6 +8972,24 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                 const result = await this.showCustomDialog(elements.promptDialog, elements.promptInput);
                 return result;
             },
+            async showInitializationFailureDialog(message) {
+                const dialog = document.getElementById('initFailureDialog');
+                const dialogMessage = document.getElementById('initFailureMessage');
+                const exportBtn = document.getElementById('initFailureExportBtn');
+                const okBtn = document.getElementById('initFailureOkBtn');
+
+                dialogMessage.textContent = message;
+
+                const newExportBtn = exportBtn.cloneNode(true);
+                exportBtn.parentNode.replaceChild(newExportBtn, exportBtn);
+                const newOkBtn = okBtn.cloneNode(true);
+                okBtn.parentNode.replaceChild(newOkBtn, okBtn);
+
+                newExportBtn.onclick = () => dialog.close('export');
+                newOkBtn.onclick = () => dialog.close('ok');
+                
+                return this.showCustomDialog(dialog, newOkBtn);
+            },
             updateAttachmentBadgeVisibility() {
                 const hasAttachments = state.pendingAttachments.length > 0;
                 elements.attachFileBtn.classList.toggle('has-attachments', hasAttachments);
@@ -9443,7 +9452,10 @@ async sendWebhookNotification(responseMessage) {
                     window.initializationSuccess();
                 }
             } catch (error) {
-                await uiUtils.showCustomAlert(`アプリの初期化に失敗しました: ${error}`);
+                const userChoice = await uiUtils.showInitializationFailureDialog(`アプリの初期化に失敗しました: ${error.message}`);
+                if (userChoice === 'export') {
+                    await this.safeExportAllSessions();
+                }
                 await this._showFatalErrorScreen(error);
             } 
         },
@@ -16256,32 +16268,19 @@ const webhookUtils = {
         },
 
         async showRecoveryNotification(reason, errorType) {
-            const mainMessage = `アプリで${reason}が発生しました。\n` +
-                                `安定性を保つため、キャッシュをクリアして再起動する必要があります。\n\n` +
-                                `エラータイプ: ${errorType}`;
-            const exportQuestion = `\n\n再起動する前に、全チャット履歴の出力を試みますか？`;
-
-            try {
-                if (typeof uiUtils !== 'undefined' && uiUtils.showCustomConfirm && typeof appLogic !== 'undefined') {
-                    const exportConfirmed = await uiUtils.showCustomConfirm(mainMessage + exportQuestion);
-                    
-                    if (exportConfirmed) {
-                        await appLogic.safeExportAllSessions();
-                        await uiUtils.showCustomAlert('出力処理が完了しました。OKを押すとアプリを再起動します。');
-                    }
-                } else {
-                    const exportConfirmed = confirm(mainMessage + exportQuestion);
-                    if (exportConfirmed) {
-                        if (typeof appLogic !== 'undefined') {
-                            await appLogic.safeExportAllSessions();
-                            alert('出力処理が完了しました。OKを押すとアプリを再起動します。');
-                        } else {
-                            alert('エクスポート機能の呼び出しに失敗しました。そのまま再起動します。');
-                        }
-                    }
+            if (typeof uiUtils !== 'undefined' && uiUtils.showCustomAlert) {
+                try {
+                    await uiUtils.showCustomAlert(
+                        `アプリで${reason}が発生しました。\n` +
+                        `安定性を保つため、キャッシュをクリアして再起動します。\n\n` +
+                        `エラータイプ: ${errorType}\n` +
+                        `この操作は自動で実行されます。`
+                    );
+                } catch (e) {
+                    alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
                 }
-            } catch (e) {
-                alert(mainMessage + '\n\n通知処理中にエラーが発生したため、直ちに再起動します。');
+            } else {
+                alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
             }
         },
 
