@@ -3347,94 +3347,96 @@
 </head>
 <body>
 <script>
-    (function() {
-        const TIMEOUT = 10000;
-        const RECOVERY_ATTEMPT_KEY = 'GeminiPWA_RecoveryAttempt';
-        let recoveryAttempt = parseInt(sessionStorage.getItem(RECOVERY_ATTEMPT_KEY) || '0', 10);
+(function() {
+    const TIMEOUT = 10000;
+    const RECOVERY_ATTEMPT_KEY = 'GeminiPWA_RecoveryAttempt';
+    let recoveryAttempt = parseInt(sessionStorage.getItem(RECOVERY_ATTEMPT_KEY) || '0', 10);
 
-        const watchdogTimer = setTimeout(() => {
-            handleInitializationFailure();
-        }, TIMEOUT);
+    const watchdogTimer = setTimeout(() => {
+        handleInitializationFailure();
+    }, TIMEOUT);
 
-        window.initializationSuccess = function() {
-            clearTimeout(watchdogTimer);
-            sessionStorage.removeItem(RECOVERY_ATTEMPT_KEY);
-        };
+    window.initializationSuccess = function() {
+        clearTimeout(watchdogTimer);
+        sessionStorage.removeItem(RECOVERY_ATTEMPT_KEY);
+    };
 
-        async function handleInitializationFailure() {
-            recoveryAttempt++;
-            sessionStorage.setItem(RECOVERY_ATTEMPT_KEY, recoveryAttempt);
+    async function handleInitializationFailure() {
+        recoveryAttempt++;
+        sessionStorage.setItem(RECOVERY_ATTEMPT_KEY, recoveryAttempt);
 
-            if (recoveryAttempt === 1) {
-                alert('アプリの起動に時間がかかっています。キャッシュをクリアして再起動します。(ステップ1/4)');
-                await clearCachesAndReload();
-            } else if (recoveryAttempt === 2) {
-                alert('再起動に失敗しました。より強力なキャッシュクリアを試みます。(ステップ2/4)');
-                await clearAllCachesAndReload();
-            } else if (recoveryAttempt === 3) {
-                // ステップ3: 意図的に初期化を失敗させるためのフラグを立ててリロード
-                alert('複数回の再起動に失敗しました。手動での復旧オプション画面を表示します。(ステップ3/4)');
-                sessionStorage.setItem('FORCE_INIT_FAILURE', 'true');
-                window.location.reload();
-            } else { // 4回目以降の失敗
-                const confirmed = confirm(
-                    '複数回の再起動に失敗しました。アプリのデータが破損している可能性があります。\n\n' +
-                    'すべてのデータ（設定とチャット履歴）を消去してアプリをリセットしますか？\n' +
-                    'この操作は元に戻せません。「キャンセル」を押すと、現状のままリロードします。(ステップ4/4)'
-                );
-                if (confirmed) {
-                    await clearAllSiteDataAndReload();
-                } else {
-                    sessionStorage.removeItem(RECOVERY_ATTEMPT_KEY);
-                    window.location.reload(true);
-                }
-            }
-        }
-        async function clearCachesAndReload() {
-            try {
-                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                    await new Promise(resolve => {
-                        navigator.serviceWorker.addEventListener('message', function handler(event) {
-                            if (event.data && event.data.action === 'cacheCleared') {
-                                navigator.serviceWorker.removeEventListener('message', handler);
-                                resolve();
-                            }
-                        });
-                        navigator.serviceWorker.controller.postMessage({ action: 'clearCache' });
-                    });
-                }
-            } catch(e) { }
-            window.location.reload(true);
-        }
-
-        async function clearAllCachesAndReload() {
-            try {
-                if ('caches' in window) {
-                    const cacheNames = await caches.keys();
-                    await Promise.all(cacheNames.map(name => caches.delete(name)));
-                }
-            } catch(e) { }
+        if (recoveryAttempt === 1) {
+            alert('アプリの起動に時間がかかっています。キャッシュをクリアして再起動します。(ステップ1/4)');
             await clearCachesAndReload();
-        }
-
-        async function clearAllSiteDataAndReload() {
-            try {
-                await new Promise((resolve, reject) => {
-                    const deleteRequest = indexedDB.deleteDatabase('GeminiPWA_DB');
-                    deleteRequest.onsuccess = () => resolve();
-                    deleteRequest.onerror = () => reject();
-                    deleteRequest.onblocked = () => window.location.reload();
-                });
-            } catch (e) { }
-            
-            try {
-                localStorage.clear();
-                sessionStorage.clear();
-            } catch(e) { }
-            
+        } else if (recoveryAttempt === 2) {
+            alert('再起動に失敗しました。より強力なキャッシュクリアを試みます。(ステップ2/4)');
             await clearAllCachesAndReload();
+        } else if (recoveryAttempt === 3) {
+            const errorMessage = '複数回の再起動に失敗しました。手動での復旧が必要です。(ステップ3/4)';
+            alert(errorMessage);
+            throw new Error(errorMessage);
+        } else if (recoveryAttempt === 4) {
+            const confirmed = confirm(
+                '複数回の再起動に失敗しました。アプリのデータが破損している可能性があります。\n\n' +
+                'すべてのデータ（設定とチャット履歴）を消去してアプリをリセットしますか？\n' +
+                'この操作は元に戻せません。「キャンセル」を押すと、現状のままリロードします。(ステップ4/4)'
+            );
+            if (confirmed) {
+                await clearAllSiteDataAndReload();
+            } else {
+                sessionStorage.removeItem(RECOVERY_ATTEMPT_KEY);
+                window.location.reload(true);
+            }
+        } else {
+            throw new Error('復旧処理に繰り返し失敗しています。');
         }
-    })();
+    }
+
+    async function clearCachesAndReload() {
+        try {
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                await new Promise(resolve => {
+                    navigator.serviceWorker.addEventListener('message', function handler(event) {
+                        if (event.data && event.data.action === 'cacheCleared') {
+                            navigator.serviceWorker.removeEventListener('message', handler);
+                            resolve();
+                        }
+                    });
+                    navigator.serviceWorker.controller.postMessage({ action: 'clearCache' });
+                });
+            }
+        } catch(e) { }
+        window.location.reload(true);
+    }
+
+    async function clearAllCachesAndReload() {
+        try {
+            if ('caches' in window) {
+                const cacheNames = await caches.keys();
+                await Promise.all(cacheNames.map(name => caches.delete(name)));
+            }
+        } catch(e) { }
+        await clearCachesAndReload();
+    }
+
+    async function clearAllSiteDataAndReload() {
+        try {
+            await new Promise((resolve, reject) => {
+                const deleteRequest = indexedDB.deleteDatabase('GeminiPWA_DB');
+                deleteRequest.onsuccess = () => resolve();
+                deleteRequest.onerror = () => reject();
+                deleteRequest.onblocked = () => window.location.reload();
+            });
+        } catch (e) { }
+        
+        try {
+            localStorage.clear();
+            sessionStorage.clear();
+        } catch(e) { }
+        
+        await clearAllCachesAndReload();
+    }
+})();
 </script>
     <div class="app-container">
 
@@ -9421,10 +9423,6 @@ async sendWebhookNotification(responseMessage) {
     await Promise.allSettled(promises);
 },
         async initializeApp() {
-            if (sessionStorage.getItem('FORCE_INIT_FAILURE') === 'true') {
-                sessionStorage.removeItem('FORCE_INIT_FAILURE');
-                throw new Error("Watchdogのタイムアウトにより、手動復旧モードで起動しました。");
-            }
             try {
             throw new Error("これはテスト用の強制的な初期化エラーです");
                 if (typeof marked !== 'undefined') {
