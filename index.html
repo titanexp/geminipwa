@@ -3372,9 +3372,11 @@
                 alert('再起動に失敗しました。より強力なキャッシュクリアを試みます。(ステップ2/4)');
                 await clearAllCachesAndReload();
             } else if (recoveryAttempt === 3) {
-                alert('複数回の再起動に失敗しました。手動での復旧オプションを表示します。(ステップ3/4)');
-                await showRecoveryScreen('複数回の再起動に失敗しました。');
-            } else if (recoveryAttempt === 4) {
+                // ステップ3: 意図的に初期化を失敗させるためのフラグを立ててリロード
+                alert('複数回の再起動に失敗しました。手動での復旧オプション画面を表示します。(ステップ3/4)');
+                sessionStorage.setItem('FORCE_INIT_FAILURE', 'true');
+                window.location.reload();
+            } else { // 4回目以降の失敗
                 const confirmed = confirm(
                     '複数回の再起動に失敗しました。アプリのデータが破損している可能性があります。\n\n' +
                     'すべてのデータ（設定とチャット履歴）を消去してアプリをリセットしますか？\n' +
@@ -3386,66 +3388,8 @@
                     sessionStorage.removeItem(RECOVERY_ATTEMPT_KEY);
                     window.location.reload(true);
                 }
-            } else {
-                await showRecoveryScreen('復旧処理に繰り返し失敗しています。');
             }
         }
-
-        async function showRecoveryScreen(message) {
-            if (!document.body) {
-                document.documentElement.innerHTML = '<body></body>';
-            }
-            
-            document.body.innerHTML = `
-                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 20px; text-align: center; color: #333; background-color: #f0f2f5; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; justify-content: center; box-sizing: border-box;">
-                    <div>
-                        <h2 style="color: #c62828; margin-bottom: 15px;">アプリの起動に失敗しました</h2>
-                        <p style="font-size: 14px; margin-bottom: 25px; line-height: 1.6;">${message}<br>以下のオプションから手動で復旧を試みることができます。</p>
-                        <div style="display: flex; flex-direction: column; gap: 20px; max-width: 450px; margin: 0 auto; text-align: left;">
-                            <div>
-                                <button id="recovery-update-app-btn" style="width: 100%; padding: 10px; background-color: #1976d2; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">アプリを更新 (キャッシュクリア)</button>
-                                <p style="font-size: 12px; color: #777; margin-top: 5px;">
-                                    アプリのファイルのみを更新します。データは保持されます。（ステップ1と同等）
-                                </p>
-                            </div>
-                            <div>
-                                <button id="recovery-force-reload-btn" style="width: 100%; padding: 10px; background-color: #ff9800; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">🔄 強制復旧 (強力なキャッシュクリア)</button>
-                                <p style="font-size: 12px; color: #777; margin-top: 5px;">
-                                    より強力なキャッシュクリアを行います。データは保持されます。（ステップ2と同等）
-                                </p>
-                            </div>
-                            <div>
-                                <button id="recovery-clear-data-btn" style="width: 100%; padding: 10px; background-color: #e53935; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">⚠️ 全データクリア (最終手段)</button>
-                                <p style="font-size: 12px; color: #777; margin-top: 5px;">
-                                    すべてのチャット履歴と設定を削除して、アプリを初期状態にリセットします。この操作は元に戻せません。
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-
-            document.getElementById('recovery-update-app-btn').addEventListener('click', async () => {
-                alert('アプリを更新します...');
-                await clearCachesAndReload();
-            });
-
-            document.getElementById('recovery-force-reload-btn').addEventListener('click', async () => {
-                alert('強制復旧（強力なキャッシュクリア）を実行します...');
-                await clearAllCachesAndReload();
-            });
-            
-            document.getElementById('recovery-clear-data-btn').addEventListener('click', async () => {
-                const confirmed = confirm(
-                    '本当にすべてのデータ（設定とチャット履歴）を削除しますか？\nこの操作は元に戻せません。'
-                );
-                if (confirmed) {
-                    alert('全データをクリアしてリセットします...');
-                    await clearAllSiteDataAndReload();
-                }
-            });
-        }
-
         async function clearCachesAndReload() {
             try {
                 if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
@@ -9477,7 +9421,12 @@ async sendWebhookNotification(responseMessage) {
     await Promise.allSettled(promises);
 },
         async initializeApp() {
+            if (sessionStorage.getItem('FORCE_INIT_FAILURE') === 'true') {
+                sessionStorage.removeItem('FORCE_INIT_FAILURE');
+                throw new Error("Watchdogのタイムアウトにより、手動復旧モードで起動しました。");
+            }
             try {
+            throw new Error("これはテスト用の強制的な初期化エラーです");
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({ breaks: true, gfm: true, sanitize: false, smartypants: false });
                 }
@@ -9515,7 +9464,14 @@ async sendWebhookNotification(responseMessage) {
                 }
                 if (state.settings.aiIconBlob instanceof Blob) {
                     try { state.aiIconUrl = URL.createObjectURL(state.settings.aiIconBlob); } catch (e) {}
-              
+                }
+                
+                uiUtils.applySettingsToUI();
+
+                const chats = await dbUtils.getAllChats(state.settings.historySortOrder);
+                if (chats && chats.length > 0) {
+                    await this.loadChat(chats[0].id);
+                } else {
                     this.startNewChat();
                 }
                 
