@@ -4695,16 +4695,10 @@
         ※校正処理にもAPIコストが発生します。
     </p>
 
-    <label for="proofreading-model-name">校正用モデル名:</label>
-    <select id="proofreading-model-name" aria-label="校正用モデル名">
-        <optgroup label="推奨">
-            <option value="gemini-1.5-flash-latest">gemini-1.5-flash-latest</option>
-        </optgroup>
-         <optgroup label="その他">
-            <option value="gemini-1.5-pro-latest">gemini-1.5-pro-latest</option>
-            <option value="gemini-1.0-pro">gemini-1.0-pro</option>
-         </optgroup>
-    </select>
+<label for="proofreading-model-name">校正用モデル名:</label>
+<select id="proofreading-model-name" aria-label="校正用モデル名">
+
+</select>
 
     <label for="proofreading-system-instruction">校正用システムプロンプト:</label>
     <textarea id="proofreading-system-instruction" placeholder="例: あなたはプロの編集者です。受け取った文章をより自然で分かりやすく校正してください。" aria-label="校正用システムプロンプト"></textarea>
@@ -8268,6 +8262,8 @@ elements.autoRetryOptionsDiv.classList.toggle('hidden', !state.settings.enableAu
                 this.updateOpenAIUserModelOptions();
                 this.updateXaiUserModelOptions();
                 this.updateLlmAggregatorUserModelOptions();
+                this.updateProofreadingModelOptions();
+
                 this.updateBackgroundSettingsUI();
                 this.updateIconSettingsUI();
                 this.applyTheme();
@@ -8555,6 +8551,7 @@ elements.autoRetryOptionsDiv.classList.toggle('hidden', !state.settings.enableAu
                 } else {
                     group.disabled = true;
                 }
+                this.updateProofreadingModelOptions();
             },
             updateDeepSeekUserModelOptions() {
                 const select = elements.deepSeekModelNameSelect;
@@ -8675,6 +8672,32 @@ elements.autoRetryOptionsDiv.classList.toggle('hidden', !state.settings.enableAu
                 if (userDefinedOptgroup) {
                     userDefinedOptgroup.remove();
                 }
+
+            updateProofreadingModelOptions() {
+                const mainModelSelect = elements.geminiModelNameSelect;
+                const proofreadingModelSelect = elements.proofreadingModelNameSelect;
+            
+                if (!mainModelSelect || !proofreadingModelSelect) return;
+            
+                const currentProofreadingModel = proofreadingModelSelect.value || state.settings.proofreadingModelName;
+            
+                proofreadingModelSelect.innerHTML = '';
+            
+                mainModelSelect.querySelectorAll('optgroup, option').forEach(node => {
+                    proofreadingModelSelect.appendChild(node.cloneNode(true));
+                });
+            
+                if (Array.from(proofreadingModelSelect.options).some(opt => opt.value === currentProofreadingModel)) {
+                    proofreadingModelSelect.value = currentProofreadingModel;
+                } else if (proofreadingModelSelect.options.length > 0) {
+                    const recommendedModel = 'gemini-1.5-flash-latest';
+                    if (Array.from(proofreadingModelSelect.options).some(opt => opt.value === recommendedModel)) {
+                        proofreadingModelSelect.value = recommendedModel;
+                    } else {
+                        proofreadingModelSelect.selectedIndex = 0;
+                    }
+                }
+            },
 
                 const defaultOptgroup = select.querySelector('optgroup[label="デフォルト"]') || select;
                 defaultOptgroup.innerHTML = '';
