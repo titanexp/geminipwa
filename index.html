@@ -7547,6 +7547,34 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                     this.scrollToBottom();
                 }
             },
+            updateFinalizedMessageContent(index, newContent) {
+                const messageDiv = elements.messageContainer.querySelector(`.message[data-index="${index}"]`);
+                if (!messageDiv) return;
+
+                const contentDiv = messageDiv.querySelector('.message-content');
+                if (!contentDiv) return;
+
+                try {
+                    if (typeof marked !== 'undefined') {
+                        const safeHtml = this._sanitizeAndParseMarkdown(newContent || '');
+                        contentDiv.innerHTML = safeHtml;
+                        this.processInteractivePlaceholders(contentDiv);
+                        this.processInteractiveTitles(contentDiv);
+                        this.addCopyButtonsToCodeBlocks(contentDiv, false);
+                        this.addImageClickListeners(contentDiv);
+                    } else {
+                        const pre = document.createElement('pre');
+                        pre.textContent = newContent;
+                        contentDiv.innerHTML = '';
+                        contentDiv.appendChild(pre);
+                    }
+                } catch (e) {
+                    const pre = document.createElement('pre');
+                    pre.textContent = newContent;
+                    contentDiv.innerHTML = '';
+                    contentDiv.appendChild(pre);
+                }
+            },
             displayError(message, isApiError = false) {
                 const errorIndex = state.currentMessages.length;
                 this.appendMessage('error', `エラー: ${message}`, errorIndex);
@@ -12056,15 +12084,23 @@ async sendWebhookNotification(responseMessage) {
                     const isRetryableFinishReason = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(finishReason);
 
                     if (!isBackgroundProcess && state.settings.enableProofreading && finalContent && !isRetryableFinishReason && finishReason !== 'ERROR' && finishReason !== 'ABORTED') {
+                        if (useStreamingForThisCall && modelMessageObjectForStream) {
+                            const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+                            if (finalModelMessageIndex !== -1) {
+                                uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
+                            }
+                        }
                         try {
-                            uiUtils.setLoadingIndicatorText('校正中...');
+                            state.isProofreading = true;
+                            uiUtils.updateLoadingIndicator();
                             const proofreadContent = await this.proofreadText(finalContent);
                             finalContent = proofreadContent;
                         } catch (proofreadError) {
                             console.error("校正処理中にエラーが発生しました:", proofreadError);
                             finalContent += `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
                         } finally {
-                            uiUtils.setLoadingIndicatorText('応答中'); 
+                            state.isProofreading = false;
+                            uiUtils.updateLoadingIndicator();
                         }
                     }
 
@@ -12079,7 +12115,9 @@ async sendWebhookNotification(responseMessage) {
                                 msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
                                 msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
                                 if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
-                                    msgToUpdate.thoughtSummary = modelThoughtSummaryContent || null;
+                                    if (modelThoughtSummaryContent) {
+                                        msgToUpdate.thoughtSummary = modelThoughtSummaryContent;
+                                    }
                                     msgToUpdate.groundingMetadata = currentGroundingMetadata;
                                 } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
@@ -12088,7 +12126,13 @@ async sendWebhookNotification(responseMessage) {
                                 } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.xaiThoughtSummary = modelThoughtSummaryContent || null;
                                 }
-                                uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
+
+                                if (state.settings.enableProofreading) {
+                                    uiUtils.updateFinalizedMessageContent(finalModelMessageIndex, finalContent);
+                                } else {
+                                    uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
+                                }
+
                                 await dbUtils.saveChat();
                             }
                         } else {
