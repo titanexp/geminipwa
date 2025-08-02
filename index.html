@@ -5183,7 +5183,7 @@
         </div>
     </dialog>
     <script>
-        const DB_NAME = 'GeminiPWA_DB';
+        const DB_NAME = '';
         const DB_VERSION = 8;
         const SETTINGS_STORE = 'settings';
         const CHATS_STORE = 'chats';
@@ -7083,7 +7083,41 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
 
                     if (messageData.groundingMetadata.groundingChunks && messageData.groundingMetadata.groundingChunks.length > 0) {
                         const citationList = document.createElement('ul');
+                        citationList.classList.add('citation-list');
+                        const citationMap = new Map();
+                        let displayIndexCounter = 1;
 
+                        if (messageData.groundingMetadata.groundingSupports) {
+                            messageData.groundingMetadata.groundingSupports.forEach(support => {
+                                if (support.groundingChunkIndices) {
+                                    support.groundingChunkIndices.forEach(chunkIndex => {
+                                        if (!citationMap.has(chunkIndex) && chunkIndex >= 0 && chunkIndex < messageData.groundingMetadata.groundingChunks.length) {
+                                            const chunk = messageData.groundingMetadata.groundingChunks[chunkIndex];
+                                            if (chunk?.web?.uri) {
+                                                citationMap.set(chunkIndex, {
+                                                    uri: chunk.web.uri,
+                                                    title: chunk.web.title || 'タイトル不明',
+                                                    displayIndex: displayIndexCounter++
+                                                });
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                        const sortedCitations = Array.from(citationMap.entries()).sort(([, a], [, b]) => a.displayIndex - b.displayIndex);
+                        sortedCitations.forEach(([chunkIndex, citationInfo]) => {
+                            const listItem = document.createElement('li');
+                            const link = document.createElement('a');
+                            link.href = citationInfo.uri;
+                            link.textContent = `[${citationInfo.displayIndex}] ${citationInfo.title}`;
+                            link.title = citationInfo.title;
+                            link.target = '_blank';
+                            link.rel = 'noopener noreferrer';
+                            listItem.appendChild(link);
+                            citationList.appendChild(listItem);
+                        });
+                        if (sortedCitations.length === 0) {
                              messageData.groundingMetadata.groundingChunks.forEach((chunk, idx) => {
                                  if (chunk?.web?.uri) {
                                      const listItem = document.createElement('li');
