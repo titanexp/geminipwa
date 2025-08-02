@@ -11105,25 +11105,30 @@ async sendWebhookNotification(responseMessage) {
                 }
             }
         },
-            async proofreadText(textToProofread) {
+
+            async proofreadText(textToProofread, activeApiKey) {
                 console.log("--- 校正処理開始 ---");
                 const { 
                     proofreadingModelName, 
                     proofreadingSystemInstruction, 
-                    apiKey, 
-                    temperature, 
-                    maxTokens, 
-                    topK, 
-                    topP,
+                    geminiTemperature: temperature,
+                    geminiMaxTokens: maxTokens,
+                    geminiTopK: topK,
+                    geminiTopP: topP,
                     enableAutoRetry,
                     maxRetries
                 } = state.settings;
+
+                const apiKeyForProofreading = activeApiKey;
+                if (!apiKeyForProofreading) {
+                    throw new Error("校正用のGemini APIキーがありません。");
+                }
 
                 if (!proofreadingModelName) {
                     throw new Error("校正用モデルが設定されていません。");
                 }
 
-                const endpoint = `${GEMINI_API_BASE_URL}${proofreadingModelName}:generateContent?key=${apiKey}`;
+                const endpoint = `${GEMINI_API_BASE_URL}${proofreadingModelName}:generateContent?key=${apiKeyForProofreading}`;
                 const systemInstruction = proofreadingSystemInstruction?.trim() ? { parts: [{ text: proofreadingSystemInstruction.trim() }] } : null;
                 const generationConfig = {};
                 if (temperature !== null) generationConfig.temperature = temperature;
@@ -11152,7 +11157,7 @@ async sendWebhookNotification(responseMessage) {
                             throw new Error("リクエストがキャンセルされました。");
                         }
                         if (attempt > 0) {
-                            const delay = 100 * Math.pow(2, attempt - 1); // INITIAL_RETRY_DELAY
+                            const delay = 100 * Math.pow(2, attempt - 1);
                             console.log(`校正APIリトライ ${attempt}: ${delay}ms待機...`);
                             await interruptibleSleep(delay, state.abortController.signal);
                         }
@@ -12066,18 +12071,15 @@ async sendWebhookNotification(responseMessage) {
                     const finishReason = modelResponseMetadata.finishReason;
                     const isRetryableFinishReason = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(finishReason);
 
-
                     if (state.settings.enableProofreading && finalContent && !isRetryableFinishReason && finishReason !== 'ERROR' && finishReason !== 'ABORTED') {
                         try {
                             uiUtils.setLoadingIndicatorText('校正中...');
-                            const proofreadContent = await this.proofreadText(finalContent);
-                            finalContent = proofreadContent; 
+                            const proofreadContent = await this.proofreadText(finalContent, apiKeyToUse);
+                            finalContent = proofreadContent;
                         } catch (proofreadError) {
                             console.error("校正処理中にエラーが発生しました:", proofreadError);
-                            // 元の文章にエラーメッセージを追記してフォールバック
                             finalContent += `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
                         } finally {
-                            // 校正が終わったらローディング表示を元に戻す
                             uiUtils.setLoadingIndicatorText('応答中'); 
                         }
                     }
