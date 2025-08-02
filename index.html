@@ -13754,24 +13754,7 @@ newSettings.enableWebhookNotification = elements.enableWebhookNotificationToggle
                                 pasteButton.title = originalTitle;
                             }, 1500);
                         }
-                    } catch (err) {
-                         if (err.name === 'NotAllowedError' || err.message.includes('Read permission denied')) {
-                            pasteButton.textContent = "!";
-                            pasteButton.title = "クリップボードの許可なし";
-                         } else {
-                            pasteButton.textContent = "X";
-                            pasteButton.title = "貼り付け失敗";
-                         }
-                         pasteButton.disabled = true;
-                         setTimeout(() => {
-                            pasteButton.textContent = originalText;
-                            pasteButton.title = originalTitle;
-                            pasteButton.disabled = false;
-                         }, 2000);
-                    }
-                };
-                actionsDiv.appendChild(pasteButton);
-             }
+
 
              const saveButton = document.createElement('button');
              saveButton.textContent = '保存';
@@ -13889,7 +13872,14 @@ newSettings.enableWebhookNotification = elements.enableWebhookNotificationToggle
 
             } else if (originalMessage.role === 'model') {
                 if (contentDiv && typeof marked !== 'undefined') {
- 
+                    try {
+                        const safeHtml = uiUtils._sanitizeAndParseMarkdown(newRawContent || '');
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = safeHtml;
+                        uiUtils.processInteractivePlaceholders(tempDiv);
+                        uiUtils.processInteractiveTitles(tempDiv);
+                        contentDiv.innerHTML = tempDiv.innerHTML;
+                        uiUtils.addCopyButtonsToCodeBlocks(contentDiv, false);
                         uiUtils.addImageClickListeners(contentDiv);
                     } catch (e) {
                         contentDiv.textContent = newRawContent;
