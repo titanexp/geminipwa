@@ -13208,8 +13208,25 @@ async sendWebhookNotification(responseMessage) {
             newSettings.enableAutoRetry = elements.enableAutoRetryCheckbox.checked;
             newSettings.maxRetries = parseInt(elements.maxRetriesInput.value, 10) || 0;
             newSettings.enableProofreading = elements.enableProofreadingCheckbox.checked;
-            newSettings.proofreadingApiConfigs = state.settings.proofreadingApiConfigs;
             newSettings.activeProofreadingConfigId = state.settings.activeProofreadingConfigId;
+            newSettings.proofreadingApiConfigs = (state.settings.proofreadingApiConfigs || []).map(config => {
+                const itemElement = elements.proofreadingApiConfigsList.querySelector(`[data-config-id="${config.id}"]`);
+                if (!itemElement) return config;
+
+                const newConfig = { ...config };
+
+                itemElement.querySelectorAll('[data-property]').forEach(input => {
+                    const prop = input.dataset.property;
+                    if (input.type === 'number') {
+                        const value = input.value.trim();
+                        newConfig[prop] = value === '' ? null : parseFloat(value);
+                    } else {
+                        newConfig[prop] = input.value;
+                    }
+                });
+                return newConfig;
+            });
+
 newSettings.webhooks = state.settings.webhooks.map(webhook => {
     const itemElement = elements.webhooksList.querySelector(`[data-webhook-id="${webhook.id}"]`);
     if (itemElement) {
@@ -16023,6 +16040,7 @@ const webhookUtils = {
             labelInput.type = 'text';
             labelInput.className = 'api-key-item-label';
             labelInput.value = config.label;
+            labelInput.dataset.property = 'label';
             labelInput.addEventListener('change', (e) => this.updateConfigValue(config.id, 'label', e.target.value));
 
             const keyInput = document.createElement('input');
@@ -16030,6 +16048,7 @@ const webhookUtils = {
             keyInput.className = 'api-key-item-input';
             keyInput.value = config.apiKey;
             keyInput.placeholder = 'APIキー...';
+            keyInput.dataset.property = 'apiKey';
             keyInput.addEventListener('input', (e) => this.updateConfigValue(config.id, 'apiKey', e.target.value));
 
             const providerSelect = document.createElement('select');
@@ -16043,12 +16062,14 @@ const webhookUtils = {
                 }
             });
             providerSelect.value = config.provider;
+            providerSelect.dataset.property = 'provider';
             providerSelect.addEventListener('change', (e) => this.updateConfigValue(config.id, 'provider', e.target.value));
 
             const modelSelect = document.createElement('select');
             modelSelect.className = 'twin-engine-config-model';
             this.populateModelOptions(modelSelect, config.provider);
             modelSelect.value = config.modelName;
+            modelSelect.dataset.property = 'modelName';
             modelSelect.addEventListener('change', (e) => this.updateConfigValue(config.id, 'modelName', e.target.value));
             
             const systemPromptTextarea = document.createElement('textarea');
@@ -16057,6 +16078,7 @@ const webhookUtils = {
             systemPromptTextarea.placeholder = '校正用のシステムプロンプト...';
             systemPromptTextarea.style.marginTop = '5px';
             systemPromptTextarea.rows = 2;
+            systemPromptTextarea.dataset.property = 'systemPrompt';
             systemPromptTextarea.addEventListener('change', (e) => this.updateConfigValue(config.id, 'systemPrompt', e.target.value));
 
             const actions = document.createElement('div');
@@ -16081,710 +16103,6 @@ const webhookUtils = {
     
             const row2 = document.createElement('div');
             row2.style.cssText = 'display: flex; gap: 5px;';
-            row2.appendChild(providerSelect);
-            row2.appendChild(modelSelect);
-            
-            item.appendChild(row1);
-            item.appendChild(row2);
-            item.appendChild(systemPromptTextarea);
-            return item;
-        },
-    
-        populateModelOptions(selectElement, provider) {
-            selectElement.innerHTML = '';
-            let sourceSelect;
-            switch (provider) {
-                case 'gemini': sourceSelect = elements.geminiModelNameSelect; break;
-                case 'deepseek': sourceSelect = elements.deepSeekModelNameSelect; break;
-                case 'claude': sourceSelect = elements.claudeModelNameSelect; break;
-                case 'openai': sourceSelect = elements.openaiModelNameSelect; break;
-                case 'xai': sourceSelect = elements.xaiModelNameSelect; break;
-                case 'llmaggregator': sourceSelect = elements.llmAggregatorModelNameSelect; break;
-                default: return;
-            }
-            if (sourceSelect) {
-                sourceSelect.querySelectorAll('optgroup, option').forEach(el => {
-                    selectElement.add(el.cloneNode(true));
-                });
-            }
-        },
-    
-        getDefaultModelForProvider(provider) {
-            switch (provider) {
-                case 'gemini': return DEFAULT_MODEL;
-                case 'deepseek': return DEFAULT_DEEPSEEK_MODEL;
-                case 'claude': return DEFAULT_CLAUDE_MODEL;
-                case 'openai': return DEFAULT_OPENAI_MODEL;
-                case 'xai': return DEFAULT_XAI_MODEL;
-                case 'llmaggregator': return DEFAULT_LLMAGGREGATOR_MODEL;
-                default: return '';
-            }
-        },
-    };
-    const errorRecovery = {
-        errorCount: 0,
-        errorTimeWindow: 60000,
-        maxErrors: 3,
-        lastErrorTime: 0,
-        isRecovering: false,
-        errorLog: [],
-        maxLogSize: 20,
-
-        logError(type, errorInfo) {
-            const now = new Date();
-            const logEntry = {
-                timestamp: now.toISOString(),
-                type: type,
-                info: this.serializeErrorInfo(errorInfo)
-            };
-            this.errorLog.unshift(logEntry);
-            if (this.errorLog.length > this.maxLogSize) {
-                this.errorLog.pop();
-            }
-        },
-
-        serializeErrorInfo(errorInfo) {
-            try {
-                const cache = new Set();
-                return JSON.stringify(errorInfo, (key, value) => {
-                    if (typeof value === 'object' && value !== null) {
-                        if (value instanceof Window) return '[Window Object]';
-                        if (cache.has(value)) {
-                            return '[Circular Reference]';
-                        }
-                        cache.add(value);
-                    }
-                    return value;
-                }, 2);
-            } catch (e) {
-                if (errorInfo instanceof Error) {
-                    return JSON.stringify({ message: errorInfo.message, stack: errorInfo.stack, name: errorInfo.name }, null, 2);
-                }
-                return `Failed to serialize error: ${e.message}`;
-            }
-        },
-
-        getErrorLogAsString() {
-            if (this.errorLog.length === 0) {
-                return "これまでに記録されたエラーはありません。";
-            }
-            return this.errorLog.map(log => 
-                `Timestamp: ${log.timestamp}\nType: ${log.type}\nInfo:\n${log.info}`
-            ).join('\n\n====================\n\n');
-        },
-        
-        init() {
-            window.addEventListener('error', (event) => {
-                this.handleError('JavaScript Error', {
-                    message: event.message,
-                    filename: event.filename,
-                    lineno: event.lineno,
-                    colno: event.colno,
-                    error: event.error
-                });
-            });
-
-            window.addEventListener('unhandledrejection', (event) => {
-                this.handleError('Unhandled Promise Rejection', {
-                    reason: event.reason,
-                    promise: event.promise
-                });
-            });
-
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.addEventListener('error', (event) => {
-                    this.handleError('Service Worker Error', event);
-                });
-            }
-        },
-
-        handleError(type, errorInfo) {
-            if (this.isRecovering) return;
-
-            const now = Date.now();
-                            if (now - this.lastErrorTime > this.errorTimeWindow) {
-                this.errorCount = 0;
-            }
-            
-            this.errorCount++;
-            this.lastErrorTime = now;
-            
-            this.logError(type, errorInfo);
-            
-            const isCriticalError = this.isCriticalError(errorInfo);
-            
-            if (this.errorCount >= this.maxErrors || isCriticalError) {
-                this.triggerForceReload(type, errorInfo, isCritical);
-            }
-        },
-
-        isCriticalError(errorInfo) {
-            const criticalPatterns = [
-                /Cannot read prop/i,
-                /Cannot access before initialization/i,
-                /is not defined/i,
-                /IndexedDB/i,
-                /QuotaExceededError/i,
-                /localStorage/i,
-                /sessionStorage/i,
-                /Service Worker/i,
-                /Failed to fetch/i,
-                /NetworkError/i
-            ];
-                        const errorMessage = JSON.stringify(errorInfo).toLowerCase();
-            return criticalPatterns.some(pattern => pattern.test(errorMessage));
-        },
-
-        async triggerForceReload(errorType, errorInfo, isCritical) {
-            if (this.isRecovering) return;
-            this.isRecovering = true;
-
-            const reason = isCritical ? '致命的なエラー' : `連続エラー(${this.errorCount}回)`;
-            
-            try {
-                await this.showRecoveryNotification(reason, errorType);
-                
-                await this.clearCacheAndReload();
-                
-            } catch (recoveryError) {
-                window.location.reload(true);
-            }
-        },
-
-        async showRecoveryNotification(reason, errorType) {
-            if (typeof uiUtils !== 'undefined' && uiUtils.showCustomAlert) {
-                try {
-                    await uiUtils.showCustomAlert(
-                        `アプリで${reason}が発生しました。\n` +
-                        `安定性を保つため、キャッシュをクリアして再起動します。\n\n` +
-                        `エラータイプ: ${errorType}\n` +
-                        `この操作は自動で実行されます。`
-                    );
-                } catch (e) {
-                    alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
-                }
-            } else {
-                alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
-            }
-        },
-
-        async clearCacheAndReload() {
-            try {
-                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                    await new Promise((resolve, reject) => {
-                        const timeoutId = setTimeout(() => reject(new Error('Service Worker timeout')), 5000);
-                        
-                        const messageHandler = (event) => {
-                            if (event.data && event.data.action === 'cacheCleared') {
-                                clearTimeout(timeoutId);
-                                navigator.serviceWorker.removeEventListener('message', messageHandler);
-                                resolve();
-                            }
-                        };
-                        
-                        navigator.serviceWorker.addEventListener('message', messageHandler);
-                        navigator.serviceWorker.controller.postMessage({ action: 'clearCache' });
-                    });
-                }
-                
-                if ('caches' in window) {
-                    const cacheNames = await caches.keys();
-                    await Promise.all(cacheNames.map(name => caches.delete(name)));
-                }
-                
-                this.clearStorageSelectively();
-                
-                window.location.reload(true);
-                
-            } catch (error) {
-                window.location.href = window.location.href + '?recovery=' + Date.now();
-            }
-                        },
-
-        clearStorageSelectively() {
-            try {
-                const protectedKeys = [
-                    'GeminiPWA_DB',
-                ];
-                
-                if (typeof Storage !== 'undefined' && sessionStorage) {
-                    sessionStorage.clear();
-                }
-                
-                if (typeof Storage !== 'undefined' && localStorage) {
-                    const keysToRemove = [];
-                    for (let i = 0; i < localStorage.length; i++) {
-                        const key = localStorage.key(i);
-                        if (key && !protectedKeys.some(protected => key.includes(protected))) {
-                            keysToRemove.push(key);
-                        }
-                    }
-                    keysToRemove.forEach(key => localStorage.removeItem(key));
-                }
-            } catch (error) {
-            }
-        },
-
-        manualRecovery() {
-            this.triggerForceReload('Manual Recovery', { reason: 'User triggered' }, true);
-        }
-    };
-            const multiApiKeyUtils = {
-        MAX_API_KEYS: 10,
-
-        initializeMultiApiKeys() {
-            elements.addGeminiApiKeyBtn.addEventListener('click', () => this.addApiKey('gemini'));
-            elements.addDeepseekApiKeyBtn.addEventListener('click', () => this.addApiKey('deepseek'));
-            elements.addClaudeApiKeyBtn.addEventListener('click', () => this.addApiKey('claude'));
-            elements.addOpenaiApiKeyBtn.addEventListener('click', () => this.addApiKey('openai'));
-            elements.addXaiApiKeyBtn.addEventListener('click', () => this.addApiKey('xai'));
-            elements.addLlmaggregatorApiKeyBtn.addEventListener('click', () => this.addApiKey('llmaggregator'));
-
-            this.renderAllApiKeyLists();
-        },
-
-        addApiKey(provider) {
-            const keys = this.getApiKeysArray(provider);
-            if (keys.length >= this.MAX_API_KEYS) {
-                uiUtils.showCustomAlert(`最大${this.MAX_API_KEYS}個までのAPIキーを設定できます。`);
-                return;
-            }
-
-            const newKey = {
-                id: Date.now().toString(),
-                label: `キー ${keys.length + 1}`,
-                value: '',
-                isActive: keys.length === 0
-            };
-
-            keys.push(newKey);
-            
-            if (newKey.isActive) {
-                this.setActiveApiKeyIndex(provider, keys.length - 1);
-            }
-
-            this.renderApiKeyList(provider);
-            this.updateMainApiKeyInput(provider);
-        },
-
-        async deleteApiKey(provider, keyId) {
-            const keys = this.getApiKeysArray(provider);
-            const keyIndex = keys.findIndex(key => key.id === keyId);
-            if (keyIndex === -1) return;
-
-            const keyToDelete = keys[keyIndex];
-            const confirmed = await uiUtils.showCustomConfirm(
-                `APIキー「${keyToDelete.label}」を削除しますか？`
-            );
-            
-            if (!confirmed) return;
-
-            const wasActive = keyToDelete.isActive;
-            keys.splice(keyIndex, 1);
-
-            if (wasActive && keys.length > 0) {
-                const newActiveIndex = Math.min(keyIndex, keys.length - 1);
-                keys[newActiveIndex].isActive = true;
-                this.setActiveApiKeyIndex(provider, newActiveIndex);
-            } else if (keys.length === 0) {
-                this.setActiveApiKeyIndex(provider, -1);
-            }
-
-            this.renderApiKeyList(provider);
-            this.updateMainApiKeyInput(provider);
-        },
-
-        selectApiKey(provider, keyId) {
-            const keys = this.getApiKeysArray(provider);
-            const selectedIndex = keys.findIndex(key => key.id === keyId);
-            if (selectedIndex === -1) return;
-
-            keys.forEach((key, index) => {
-                key.isActive = index === selectedIndex;
-            });
-
-            this.setActiveApiKeyIndex(provider, selectedIndex);
-            this.renderApiKeyList(provider);
-            this.updateMainApiKeyInput(provider);
-        },
-
-        updateApiKeyValue(provider, keyId, newValue) {
-            const keys = this.getApiKeysArray(provider);
-            const key = keys.find(k => k.id === keyId);
-                        if (key) {
-                key.value = newValue.trim();
-                if (key.isActive) {
-                    this.updateMainApiKeyInput(provider);
-                }
-            }
-        },
-
-        updateApiKeyLabel(provider, keyId, newLabel) {
-            const keys = this.getApiKeysArray(provider);
-            const key = keys.find(k => k.id === keyId);
-            if (key) {
-                key.label = newLabel.trim() || `キー ${keys.indexOf(key) + 1}`;
-            }
-        },
-
-        getApiKeysArray(provider) {
-            switch (provider) {
-                case 'gemini': return state.settings.geminiApiKeys;
-                case 'deepseek': return state.settings.deepseekApiKeys;
-                case 'claude': return state.settings.claudeApiKeys;
-                case 'openai': return state.settings.openaiApiKeys;
-                case 'xai': return state.settings.xaiApiKeys;
-                case 'llmaggregator': return state.settings.llmaggregatorApiKeys;
-                default: return [];
-            }
-        },
-
-        setActiveApiKeyIndex(provider, index) {
-            switch (provider) {
-                case 'gemini': state.settings.geminiActiveApiKeyIndex = index; break;
-                case 'deepseek': state.settings.deepseekActiveApiKeyIndex = index; break;
-                case 'claude': state.settings.claudeActiveApiKeyIndex = index; break;
-                case 'openai': state.settings.openaiActiveApiKeyIndex = index; break;
-                case 'xai': state.settings.xaiActiveApiKeyIndex = index; break;
-                case 'llmaggregator': state.settings.llmaggregatorActiveApiKeyIndex = index; break;
-            }
-        },
-
-        getActiveApiKey(provider) {
-            const keys = this.getApiKeysArray(provider);
-            const activeKey = keys.find(key => key.isActive);
-            return activeKey ? activeKey.value : '';
-        },
-
-        updateMainApiKeyInput(provider) {
-            if (!state.settings.showMultiApiKeys) {
-                return;
-            }
-            const activeKey = this.getActiveApiKey(provider);
-            switch (provider) {
-                case 'gemini':
-                    elements.geminiApiKeyInput.value = activeKey;
-                    break;
-                case 'deepseek':
-                    elements.deepSeekApiKeyInput.value = activeKey;
-                    break;
-                case 'claude':
-                    elements.claudeApiKeyInput.value = activeKey;
-                    break;
-                                    case 'openai':
-                    elements.openaiApiKeyInput.value = activeKey;
-                    break;
-                case 'xai':
-                    elements.xaiApiKeyInput.value = activeKey;
-                    break;
-                case 'llmaggregator':
-                    elements.llmAggregatorApiKeyInput.value = activeKey;
-                    break;
-            }
-        },
-
-        renderApiKeyList(provider) {
-            const keys = this.getApiKeysArray(provider);
-            const container = this.getListContainer(provider);
-                            const addButton = this.getAddButton(provider);
-
-            container.innerHTML = '';
-
-            if (keys.length === 0) {
-                const emptyMsg = document.createElement('p');
-                emptyMsg.textContent = 'APIキーが設定されていません。';
-                emptyMsg.style.color = 'var(--text-secondary)';
-                emptyMsg.style.fontSize = '13px';
-                emptyMsg.style.textAlign = 'center';
-                emptyMsg.style.margin = '10px 0';
-                container.appendChild(emptyMsg);
-            } else {
-                keys.forEach((key, index) => {
-                    const item = this.createApiKeyItem(provider, key, index);
-                    container.appendChild(item);
-                });
-            }
-
-            addButton.disabled = keys.length >= this.MAX_API_KEYS;
-            addButton.textContent = keys.length >= this.MAX_API_KEYS 
-                ? `最大${this.MAX_API_KEYS}個まで` 
-                : '新しいAPIキーを追加';
-        },
-
-        createApiKeyItem(provider, key, index) {
-            const item = document.createElement('div');
-            item.className = `api-key-item ${key.isActive ? 'active' : ''}`;
-
-            const row1 = document.createElement('div');
-            row1.style.display = 'flex';
-            row1.style.gap = '5px';
-
-            const labelInput = document.createElement('input');
-            labelInput.type = 'text';
-            labelInput.className = 'api-key-item-label';
-            labelInput.value = key.label;
-            labelInput.placeholder = `キー ${index + 1}`;
-            labelInput.addEventListener('change', (e) => {
-                                this.updateApiKeyLabel(provider, key.id, e.target.value);
-            });
-
-            const keyInput = document.createElement('input');
-            keyInput.type = 'password';
-            keyInput.className = 'api-key-item-input';
-            keyInput.value = key.value;
-            keyInput.placeholder = 'APIキーを入力...';
-            keyInput.addEventListener('input', (e) => {
-                this.updateApiKeyValue(provider, key.id, e.target.value);
-            });
-
-            const actions = document.createElement('div');
-            actions.className = 'api-key-item-actions';
-
-            const selectBtn = document.createElement('button');
-            selectBtn.className = `api-key-select-btn ${key.isActive ? 'active' : ''}`;
-            selectBtn.textContent = key.isActive ? '使用中' : '未選択';
-            selectBtn.disabled = key.isActive;
-            selectBtn.addEventListener('click', () => {
-                this.selectApiKey(provider, key.id);
-            });
-
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'api-key-delete-btn';
-            deleteBtn.textContent = '削';
-            deleteBtn.addEventListener('click', () => {
-                this.deleteApiKey(provider, key.id);
-            });
-
-            actions.appendChild(selectBtn);
-            actions.appendChild(deleteBtn);
-
-            row1.appendChild(labelInput);
-            row1.appendChild(keyInput);
-            row1.appendChild(actions);
-
-            item.appendChild(row1);
-            return item;
-        },
-
-        getListContainer(provider) {
-            switch (provider) {
-                case 'gemini': return elements.geminiApiKeysList;
-                case 'deepseek': return elements.deepseekApiKeysList;
-                case 'claude': return elements.claudeApiKeysList;
-                case 'openai': return elements.openaiApiKeysList;
-                case 'xai': return elements.xaiApiKeysList;
-                case 'llmaggregator': return elements.llmaggregatorApiKeysList;
-                default: return null;
-            }
-        },
-
-        getAddButton(provider) {
-            switch (provider) {
-                case 'gemini': return elements.addGeminiApiKeyBtn;
-                case 'deepseek': return elements.addDeepseekApiKeyBtn;
-                case 'claude': return elements.addClaudeApiKeyBtn;
-                case 'openai': return elements.addOpenaiApiKeyBtn;
-                case 'xai': return elements.addXaiApiKeyBtn;
-                case 'llmaggregator': return elements.addLlmaggregatorApiKeyBtn;
-                default: return null;
-            }
-        },
-
-        renderAllApiKeyLists() {
-            this.renderApiKeyList('gemini');
-            this.renderApiKeyList('deepseek');
-            this.renderApiKeyList('claude');
-            this.renderApiKeyList('openai');
-            this.renderApiKeyList('xai');
-                        this.renderApiKeyList('llmaggregator');
-        },
-
-        syncMainApiKeyInput(provider) {
-            if (!state.settings.showMultiApiKeys) {
-                return;
-            }
-            let mainValue = '';
-            switch (provider) {
-                case 'gemini': mainValue = elements.geminiApiKeyInput.value.trim(); break;
-                case 'deepseek': mainValue = elements.deepSeekApiKeyInput.value.trim(); break;
-                case 'claude': mainValue = elements.claudeApiKeyInput.value.trim(); break;
-                case 'openai': mainValue = elements.openaiApiKeyInput.value.trim(); break;
-                case 'xai': mainValue = elements.xaiApiKeyInput.value.trim(); break;
-                case 'llmaggregator': mainValue = elements.llmAggregatorApiKeyInput.value.trim(); break;
-            }
-
-            const keys = this.getApiKeysArray(provider);
-            const activeKey = keys.find(key => key.isActive);
-            
-            if (activeKey && activeKey.value !== mainValue) {
-                activeKey.value = mainValue;
-                this.renderApiKeyList(provider);
-            }
-        }
-    };
-
-     const twinEngineApiConfigUtils = {
-        MAX_CONFIGS: 1000,
-    
-        initialize() {
-            elements.addTwinEngineApiConfigBtn.addEventListener('click', () => this.addConfig());
-            this.renderList();
-        },
-    
-        generateNextConfigLabel() {
-            const index = state.settings.twinEngineApiConfigs.length;
-            const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-            const char = alphabet[index % 26];
-            const numberSuffix = Math.floor(index / 26);
-            
-            return `${char}${numberSuffix > 0 ? numberSuffix + 1 : ''}設定`;
-        },
-
-        addConfig() {
-            const configs = state.settings.twinEngineApiConfigs;
-            if (configs.length >= this.MAX_CONFIGS) {
-                uiUtils.showCustomAlert(`最大${this.MAX_CONFIGS}個までのAPI設定を作成できます。`);
-                return;
-            }
-            const newConfig = {
-                id: Date.now().toString(),
-                label: this.generateNextConfigLabel(),
-                provider: 'gemini',
-                apiKey: '',
-                modelName: DEFAULT_MODEL,
-                temperature: null,
-                maxTokens: null,
-                topK: null,
-                topP: null,
-                presencePenalty: null,
-                frequencyPenalty: null,
-                thinkingBudget: null
-            };
-            configs.push(newConfig);
-            if (configs.length === 1) {
-                state.settings.twinEngineActiveConfigId = newConfig.id;
-            }
-            this.renderList();
-        },
-    
-        deleteConfig(configId) {
-            const configs = state.settings.twinEngineApiConfigs;
-            const index = configs.findIndex(c => c.id === configId);
-            if (index === -1) return;
-            
-            configs.splice(index, 1);
-            if (state.settings.twinEngineActiveConfigId === configId) {
-                state.settings.twinEngineActiveConfigId = configs.length > 0 ? configs[0].id : null;
-            }
-            this.renderList();
-        },
-    
-        selectConfig(configId) {
-            state.settings.twinEngineActiveConfigId = configId;
-            this.renderList();
-        },
-    
-        updateConfigValue(configId, key, value) {
-            const config = state.settings.twinEngineApiConfigs.find(c => c.id === configId);
-            if (config) {
-                config[key] = value;
-                if (key === 'provider') {
-                    config.modelName = this.getDefaultModelForProvider(value);
-                    this.renderList();
-                }
-            }
-        },
-    
-        renderList() {
-            const configs = state.settings.twinEngineApiConfigs;
-            const container = elements.twinEngineApiConfigsList;
-            container.innerHTML = '';
-    
-            if (configs.length === 0) {
-                const emptyMsg = document.createElement('p');
-                emptyMsg.textContent = 'Twin-engine用のAPI設定がありません。';
-                emptyMsg.style.cssText = 'color: var(--text-secondary); font-size: 13px; text-align: center; margin: 10px 0;';
-                container.appendChild(emptyMsg);
-            } else {
-                configs.forEach(config => {
-                    const item = this.createConfigItem(config);
-                    container.appendChild(item);
-                });
-            }
-            elements.addTwinEngineApiConfigBtn.disabled = configs.length >= this.MAX_CONFIGS;
-            elements.addTwinEngineApiConfigBtn.textContent = configs.length >= this.MAX_CONFIGS 
-                ? `最大${this.MAX_CONFIGS}個まで` 
-                : '新しいAPI設定を追加';
-            uiUtils.updateTwinEngineApiKeyCycleButton();
-            elements.enableWebhookNotificationToggle.checked = state.settings.enableWebhookNotification;
-elements.webhookSettingsContainer.classList.toggle('hidden', !state.settings.enableWebhookNotification);
-webhookUtils.renderList();
-        },
-    
-        createConfigItem(config) {
-            const item = document.createElement('div');
-            item.className = 'api-key-item twin-engine-api-config-item';
-            item.dataset.configId = config.id;
-            const isActive = state.settings.twinEngineActiveConfigId === config.id;
-            if (isActive) item.classList.add('active');
-
-            const labelInput = document.createElement('input');
-            labelInput.type = 'text';
-            labelInput.className = 'api-key-item-label twin-engine-config-label';
-            labelInput.value = config.label;
-            labelInput.addEventListener('change', (e) => this.updateConfigValue(config.id, 'label', e.target.value));
-
-            const keyInput = document.createElement('input');
-            keyInput.type = 'password';
-            keyInput.className = 'api-key-item-input twin-engine-config-apikey';
-            keyInput.value = config.apiKey;
-            keyInput.placeholder = 'APIキーを入力...';
-            keyInput.addEventListener('input', (e) => this.updateConfigValue(config.id, 'apiKey', e.target.value));
-
-            const providerSelect = document.createElement('select');
-            providerSelect.className = 'twin-engine-config-provider';
-            API_PROVIDERS.forEach(providerInfo => {
-                if (providerInfo.value !== 'dummy') {
-                    const option = document.createElement('option');
-                    option.value = providerInfo.value;
-                    option.textContent = providerInfo.text;
-                    providerSelect.add(option);
-                }
-            });
-            providerSelect.value = config.provider;
-            providerSelect.addEventListener('change', (e) => this.updateConfigValue(config.id, 'provider', e.target.value));
-
-            const modelSelect = document.createElement('select');
-            modelSelect.className = 'twin-engine-config-model';
-            this.populateModelOptions(modelSelect, config.provider);
-            modelSelect.value = config.modelName;
-            modelSelect.addEventListener('change', (e) => this.updateConfigValue(config.id, 'modelName', e.target.value));
-
-            const actions = document.createElement('div');
-            actions.className = 'api-key-item-actions';
-            const selectBtn = document.createElement('button');
-            selectBtn.className = `api-key-select-btn ${isActive ? 'active' : ''}`;
-            selectBtn.textContent = isActive ? '使用中' : '選択';
-            selectBtn.disabled = isActive;
-            selectBtn.addEventListener('click', () => this.selectConfig(config.id));
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'api-key-delete-btn';
-            deleteBtn.textContent = '削';
-            deleteBtn.addEventListener('click', () => this.deleteConfig(config.id));
-            actions.appendChild(selectBtn);
-            actions.appendChild(deleteBtn);
-    
-            const row1 = document.createElement('div');
-            row1.style.display = 'flex';
-            row1.style.gap = '5px';
-            row1.style.marginBottom = '5px';
-            row1.appendChild(labelInput);
-            row1.appendChild(keyInput);
-            row1.appendChild(actions);
-    
-            const row2 = document.createElement('div');
-            row2.style.display = 'flex';
-            row2.style.gap = '5px';
             row2.appendChild(providerSelect);
             row2.appendChild(modelSelect);
             
@@ -16815,6 +16133,7 @@ webhookUtils.renderList();
                 input.value = config[property] ?? '';
                 input.style.fontSize = '12px';
                 input.style.padding = '4px 6px';
+                input.dataset.property = property;
                 input.addEventListener('change', (e) => {
                     const value = e.target.value;
                     const parsedValue = value === '' ? null : (type === 'number' ? parseFloat(value) : value);
@@ -16877,7 +16196,6 @@ thinkingBudgetDiv.appendChild(buttonContainer);
             item.appendChild(details);
             return item;
         },
-    
         populateModelOptions(selectElement, provider) {
             selectElement.innerHTML = '';
             let sourceSelect;
