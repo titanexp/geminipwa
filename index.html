@@ -6011,6 +6011,7 @@ webhooks: [],
             isAiToAiChatProcessing: false,
             aiToAiProcessingMessage: "AI間会話処理中...",
             isSummarizingForRetry: false,
+            isProofreading: false,
         };
 
         const sanitizeText = (text, maxLength = 255) => {
@@ -8847,6 +8848,10 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                     elements.loadingIndicator.textContent = '応答中';
                     elements.loadingIndicator.classList.remove('hidden');
                     elements.loadingIndicator.setAttribute('aria-live', 'polite');
+                } else if (state.isProofreading) {
+                    elements.loadingIndicator.textContent = '校正中...';
+                    elements.loadingIndicator.classList.remove('hidden');
+                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
                 } else if (state.isSummarizingForRetry) {
                     elements.loadingIndicator.textContent = 'リトライ前の履歴を要約中...';
                     elements.loadingIndicator.classList.remove('hidden');
@@ -11123,6 +11128,8 @@ async sendWebhookNotification(responseMessage) {
         },
 
         async proofreadText(textToProofread) {
+            state.isProofreading = true;
+            uiUtils.updateLoadingIndicator();
             console.log("--- 校正処理開始 ---");
 
             const activeConfigId = state.settings.activeProofreadingConfigId;
@@ -11140,7 +11147,10 @@ async sendWebhookNotification(responseMessage) {
                 temperature,
                 maxTokens,
                 topK,
-                topP
+                topP,
+                presencePenalty,
+                frequencyPenalty,
+                thinkingBudget
             } = activeConfig;
 
             if (provider !== 'dummy' && !apiKeyForProofreading) {
@@ -11157,6 +11167,7 @@ async sendWebhookNotification(responseMessage) {
                 _apiKeyOverride: apiKeyForProofreading,
                 _modelNameOverride: modelName,
                 temperature, maxTokens, topK, topP,
+                presencePenalty, frequencyPenalty, thinkingBudget,
             };
 
             try {
@@ -11171,6 +11182,9 @@ async sendWebhookNotification(responseMessage) {
             } catch (error) {
                 console.error("校正処理中にエラーが発生:", error);
                 throw error;
+            } finally {
+                state.isProofreading = false;
+                uiUtils.updateLoadingIndicator();
             }
         },
         async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
@@ -11401,6 +11415,7 @@ async sendWebhookNotification(responseMessage) {
                     contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.geminiPresencePenalty;
                     contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.geminiFrequencyPenalty;
                     contextGeminiThinkingBudget = sourceSessionContext.thinkingBudget ?? state.settings.geminiThinkingBudget;
+                    
                     contextGeminiIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.geminiIncludeThoughts;
                     contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.geminiStreamingOutput;
                     contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.geminiStreamingSpeed;
@@ -12251,6 +12266,19 @@ async sendWebhookNotification(responseMessage) {
                             rawContentFromApi = "(応答が空です)";
                         }
                         modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
+                    }
+
+                    const finishReasonForProofreading = modelResponseMetadata.finishReason;
+                    const isRetryableForProofreading = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(finishReasonForProofreading);
+
+                    if (!isBackgroundProcess && state.settings.enableProofreading && modelResponseRawContent && !isRetryableForProofreading && finishReasonForProofreading !== 'ERROR' && finishReasonForProofreading !== 'ABORTED') {
+                        try {
+                            const proofreadContent = await this.proofreadText(modelResponseRawContent);
+                            modelResponseRawContent = proofreadContent;
+                        } catch (proofreadError) {
+                            console.error("校正処理中にエラーが発生しました:", proofreadError);
+                            modelResponseRawContent += `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
+                        }
                     }
                 }
 
@@ -15869,6 +15897,9 @@ const webhookUtils = {
                 maxTokens: null,
                 topK: null,
                 topP: null,
+                presencePenalty: null,
+                frequencyPenalty: null,
+                thinkingBudget: null
             };
             configs.push(newConfig);
             if (configs.length === 1) {
