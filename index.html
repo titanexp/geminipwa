@@ -9471,6 +9471,13 @@ async sendWebhookNotification(responseMessage) {
                         <div style="display: flex; flex-direction: column; gap: 20px; max-width: 450px; margin: 0 auto; text-align: left;">
                             
                             <div>
+                                <button id="recovery-export-all-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-gold); color: var(--text-button-gold); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">全出力 (全セッションをJSON出力)</button>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    ※ アプリが起動できなくても、履歴データが無事な場合に全チャット履歴をファイルとして出力します。
+                                </p>
+                            </div>
+
+                            <div>
                                 <button id="recovery-update-app-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-update); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">アプリを更新 (キャッシュクリア)</button>
                                 <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
                                     ※ サーバー側のhtmlファイルなどはブラウザにキャッシュされるため、このボタンで明示的にサーバーから再取得しない限り更新されない。
@@ -9511,6 +9518,7 @@ async sendWebhookNotification(responseMessage) {
                 errorDetailsEl.textContent = error.message || String(error);
             }
 
+            document.getElementById('recovery-export-all-btn').addEventListener('click', () => this.safeExportAllSessions());
             document.getElementById('recovery-update-app-btn').addEventListener('click', () => this.updateApp());
             document.getElementById('recovery-force-reload-btn').addEventListener('click', () => {
                  if (typeof errorRecovery !== 'undefined') {
@@ -9521,7 +9529,6 @@ async sendWebhookNotification(responseMessage) {
             });
             document.getElementById('recovery-clear-history-btn').addEventListener('click', () => this.confirmClearAllHistory());
             document.getElementById('recovery-clear-data-btn').addEventListener('click', () => this.confirmClearAllData());
-
             const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
             document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mode', 'pastel-blue-mode', 'pastel-yellow-mode', 'pastel-purple-mode', 'pastel-rainbow-mode');
             document.body.classList.add(prefersDark ? 'dark-mode' : 'light-mode-forced');
@@ -12688,6 +12695,14 @@ async sendWebhookNotification(responseMessage) {
             }
             return { messages };
         },
+        async safeExportAllSessions() {
+            try {
+                await this.exportAllSessions();
+            } catch (error) {
+                alert(`エクスポートに失敗しました。データベースにアクセスできない可能性があります。\n\nエラー詳細: ${error.message}`);
+            }
+        },
+
         async exportAllSessions() {
             const confirmed = await uiUtils.showCustomConfirm("全てのセッションを1つのJSONファイルとしてエクスポートしますか？");
             if (!confirmed) return;
