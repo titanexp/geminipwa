@@ -4924,33 +4924,33 @@
                         </p>
                     </div>
                 </div>
-                <div class="settings-group" id="settings-group-proofreading">
-                    <h3>校正機能 (Gemini)</h3>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="enable-proofreading">
-                        生成後に別のモデルで文章を校正する
-                    </label>
-                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                        ※チェック時、最初の応答生成に成功した後、下記設定で校正処理が実行されます。<br>
-                        ※校正処理にもAPIコストが発生します。
-                    </p>
-                
-                    <div id="proofreading-options" class="hidden">
-                        <label for="proofreading-model-name">校正用モデル名:</label>
-                        <select id="proofreading-model-name" aria-label="校正用モデル名">
-                            <optgroup label="推奨 (Flash)">
-                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
-                                <option value="gemini-2.0-pro">gemini-1.0-pro (旧モデル)</option>
-                            </optgroup>
-                             <optgroup label="高性能 (Pro)">
-                                <option value="gemini-1.5-pro-latest">gemini-1.5-pro-latest</option>
-                             </optgroup>
-                        </select>
-                
-                        <label for="proofreading-system-instruction">校正用システムプロンプト:</label>
-                        <textarea id="proofreading-system-instruction" placeholder="例: あなたはプロの編集者です。受け取った文章をより自然で分かりやすく校正してください。" aria-label="校正用システムプロンプト"></textarea>
+                <details class="settings-group" id="settings-group-proofreading">
+                    <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">校正機能</summary>
+                    <div style="margin-top:10px;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="enable-proofreading">
+                            生成後に別のモデルで文章を校正する
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                            ※チェック時、最初の応答生成に成功した後、下記で選択された設定で校正処理が実行されます。<br>
+                            ※校正処理にもAPIコストが発生します。
+                        </p>
+                        <div id="proofreading-options" class="hidden" style="margin-top: 15px;">
+                            <details open>
+                                <summary style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor:pointer; font-weight: normal;">校正用 API設定</summary>
+                                <div style="padding-left: 15px; margin-top: 10px;">
+                                    <div id="proofreading-api-configs-list" class="api-keys-list" style="margin-top:10px; margin-bottom: 15px;">
+                                    </div>
+                                    <button type="button" id="add-proofreading-api-config-btn" class="add-api-key-btn">新しい校正設定を追加</button>
+                                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: 15px;">
+                                        ※ 応答生成後に、ここで「使用中」となっている設定を用いて文章の校正を行います。<br>
+                                        ※ 各設定の詳細パラメータ（温度設定など）も校正時に適用されます。
+                                    </p>
+                                </div>
+                            </details>
+                        </div>
                     </div>
-                </div>
+                </details>
                 <details class="settings-group" id="settings-group-twin-engine">
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">Twin-engine (experimental)</summary>
                     <div style="margin-top:10px;">
@@ -5575,8 +5575,8 @@
             promptCancelBtn: document.getElementById('promptDialog').querySelector('.dialog-cancel-btn'),
             enableProofreadingCheckbox: document.getElementById('enable-proofreading'),
             proofreadingOptionsDiv: document.getElementById('proofreading-options'),
-            proofreadingModelNameSelect: document.getElementById('proofreading-model-name'),
-            proofreadingSystemInstructionTextarea: document.getElementById('proofreading-system-instruction'),
+            proofreadingApiConfigsList: document.getElementById('proofreading-api-configs-list'),
+            addProofreadingApiConfigBtn: document.getElementById('add-proofreading-api-config-btn'),
             enableAutoRetryCheckbox: document.getElementById('enable-auto-retry'),
             maxRetriesInput: document.getElementById('max-retries'),
             autoRetryOptionsDiv: document.getElementById('auto-retry-options'),
@@ -5864,8 +5864,8 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
                 enableAutoRetry: true,
                 maxRetries: 30, 
                 enableProofreading: false,
-                proofreadingModelName: 'gemini-2.0-flash',
-                proofreadingSystemInstruction: 'あなたはプロの編集者です。受け取った文章の過剰な読点を抑制し、日本語として違和感のない読点の使用量に校正してください。承知しました等の応答は行わず、校正後の文章のみ出力して下さい。読点の抑制以外の文章には絶対に手を付けないで下さい。',
+                proofreadingApiConfigs: [],
+                activeProofreadingConfigId: null,
                 preventZoom: true,
                 minimizeHeaderFooter: false,
                 extendAiBubbleWidth: false,
@@ -6395,6 +6395,24 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                         } else if (loadedSettings.twinEngineApiConfigs) {
                             state.settings.twinEngineApiConfigs = loadedSettings.twinEngineApiConfigs;
                             state.settings.twinEngineActiveConfigId = loadedSettings.twinEngineActiveConfigId;
+                        }
+                        
+                        if (loadedSettings.hasOwnProperty('proofreadingModelName')) {
+                            if (!state.settings.proofreadingApiConfigs || state.settings.proofreadingApiConfigs.length === 0) {
+                                const oldConfig = {
+                                    id: `migrated-proofreading-${Date.now()}`,
+                                    label: '（移行された設定）',
+                                    provider: 'gemini',
+                                    apiKey: state.settings.apiKey || '',
+                                    modelName: loadedSettings.proofreadingModelName,
+                                    systemPrompt: loadedSettings.proofreadingSystemInstruction || '',
+                                    temperature: null, maxTokens: null, topK: null, topP: null
+                                };
+                                state.settings.proofreadingApiConfigs = [oldConfig];
+                                state.settings.activeProofreadingConfigId = oldConfig.id;
+                            }
+                            delete state.settings.proofreadingModelName;
+                            delete state.settings.proofreadingSystemInstruction;
                         }
 
                         resolve(state.settings);
@@ -9385,6 +9403,7 @@ async sendWebhookNotification(responseMessage) {
                 
                 updateMessageMaxWidthVar();
                 webhookUtils.initialize();
+                proofreadingApiConfigUtils.initialize();
                 this.setupEventListeners();
                 this.updateZoomState();
                 uiUtils.adjustTextareaHeight();
@@ -10101,13 +10120,14 @@ async sendWebhookNotification(responseMessage) {
                 uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
             });
             twinEngineApiConfigUtils.initialize();
+            
             elements.enableWebhookNotificationToggle.addEventListener('change', (e) => {
                 elements.webhookSettingsContainer.classList.toggle('hidden', !e.target.checked);
             });
-                elements.enableProofreadingCheckbox.addEventListener('change', () => {
-                    elements.proofreadingOptionsDiv.classList.toggle('hidden', !elements.enableProofreadingCheckbox.checked);
-                });
-                elements.enableAutoRetryCheckbox.addEventListener('change', () => {
+            elements.enableProofreadingCheckbox.addEventListener('change', () => {
+                elements.proofreadingOptionsDiv.classList.toggle('hidden', !elements.enableProofreadingCheckbox.checked);
+            });
+            elements.enableAutoRetryCheckbox.addEventListener('change', () => {
                     elements.autoRetryOptionsDiv.classList.toggle('hidden', !elements.enableAutoRetryCheckbox.checked);
                 });
         },
@@ -11106,104 +11126,57 @@ async sendWebhookNotification(responseMessage) {
             }
         },
 
-            async proofreadText(textToProofread, activeApiKey) {
-                console.log("--- 校正処理開始 ---");
-                const { 
-                    proofreadingModelName, 
-                    proofreadingSystemInstruction, 
-                    geminiTemperature: temperature,
-                    geminiMaxTokens: maxTokens,
-                    geminiTopK: topK,
-                    geminiTopP: topP,
-                    enableAutoRetry,
-                    maxRetries
-                } = state.settings;
+        async proofreadText(textToProofread) {
+            console.log("--- 校正処理開始 ---");
 
-                const apiKeyForProofreading = activeApiKey;
-                if (!apiKeyForProofreading) {
-                    throw new Error("校正用のGemini APIキーがありません。");
+            const activeConfigId = state.settings.activeProofreadingConfigId;
+            const activeConfig = state.settings.proofreadingApiConfigs.find(c => c.id === activeConfigId);
+
+            if (!activeConfig) {
+                throw new Error("アクティブな校正設定が見つかりません。");
+            }
+
+            const {
+                provider,
+                apiKey: apiKeyForProofreading,
+                modelName,
+                systemPrompt,
+                temperature,
+                maxTokens,
+                topK,
+                topP
+            } = activeConfig;
+
+            if (provider !== 'dummy' && !apiKeyForProofreading) {
+                throw new Error(`校正用の${provider} APIキーが設定されていません。`);
+            }
+
+            const contextForProofreading = {
+                sessionId: null,
+                messages: [],
+                systemPrompt: systemPrompt || '校正してください。',
+                inputText: textToProofread,
+                attachments: [],
+                apiProvider: provider,
+                _apiKeyOverride: apiKeyForProofreading,
+                _modelNameOverride: modelName,
+                temperature, maxTokens, topK, topP,
+            };
+
+            try {
+                const response = await this.handleSend(false, -1, contextForProofreading);
+
+                if (response && response.content) {
+                    console.log("--- 校正処理成功 ---");
+                    return response.content;
+                } else {
+                    throw new Error("校正APIから有効なコンテンツが返されませんでした。");
                 }
-
-                if (!proofreadingModelName) {
-                    throw new Error("校正用モデルが設定されていません。");
-                }
-
-                const endpoint = `${GEMINI_API_BASE_URL}${proofreadingModelName}:generateContent?key=${apiKeyForProofreading}`;
-                const systemInstruction = proofreadingSystemInstruction?.trim() ? { parts: [{ text: proofreadingSystemInstruction.trim() }] } : null;
-                const generationConfig = {};
-                if (temperature !== null) generationConfig.temperature = temperature;
-                if (maxTokens !== null) generationConfig.maxOutputTokens = maxTokens;
-                if (topK !== null) generationConfig.topK = topK;
-                if (topP !== null) generationConfig.topP = topP;
-
-                const requestBody = {
-                    contents: [{ role: 'user', parts: [{ text: textToProofread }] }],
-                    ...(Object.keys(generationConfig).length > 0 && { generationConfig }),
-                    ...(systemInstruction && { systemInstruction }),
-                    safetySettings: [
-                        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-                        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-                        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-                        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
-                    ]
-                };
-
-                let lastError = null;
-                const maxProofreadRetries = enableAutoRetry ? maxRetries : 0;
-
-                for (let attempt = 0; attempt <= maxProofreadRetries; attempt++) {
-                    try {
-                        if (state.abortController?.signal.aborted) {
-                            throw new Error("リクエストがキャンセルされました。");
-                        }
-                        if (attempt > 0) {
-                            const delay = 100 * Math.pow(2, attempt - 1);
-                            console.log(`校正APIリトライ ${attempt}: ${delay}ms待機...`);
-                            await interruptibleSleep(delay, state.abortController.signal);
-                        }
-
-                        const response = await fetch(endpoint, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(requestBody),
-                            signal: state.abortController?.signal
-                        });
-
-                        if (!response.ok) {
-                            let errorMsg = `校正APIエラー (${response.status}): ${response.statusText}`;
-                            try {
-                                const errorData = await response.json();
-                                if (errorData.error?.message) {
-                                    errorMsg = `校正APIエラー (${response.status}): ${errorData.error.message}`;
-                                }
-                            } catch (e) {}
-                            const error = new Error(errorMsg);
-                            error.status = response.status;
-                            throw error;
-                        }
-
-                        const responseData = await response.json();
-                        if (responseData.candidates?.[0]?.content?.parts) {
-                            const proofreadContent = responseData.candidates[0].content.parts.map(p => p.text).join('');
-                            console.log("--- 校正処理成功 ---");
-                            return proofreadContent;
-                        } else if (responseData.promptFeedback) {
-                            const blockReason = responseData.promptFeedback.blockReason || 'SAFETY';
-                            throw new Error(`校正モデルに応答がブロックされました (理由: ${blockReason})`);
-                        } else {
-                            throw new Error("校正APIの応答に有効なコンテンツが含まれていません。");
-                        }
-
-                    } catch (error) {
-                        lastError = error;
-                        if (error.name === 'AbortError') throw error;
-                        if (error.status && error.status >= 400 && error.status < 500) {
-                            throw error;
-                        }
-                    }
-                }
-                throw lastError;
-            },
+            } catch (error) {
+                console.error("校正処理中にエラーが発生:", error);
+                throw error;
+            }
+        },
         async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
             const isBackgroundProcess = !!sourceSessionContext;
             
@@ -12071,10 +12044,10 @@ async sendWebhookNotification(responseMessage) {
                     const finishReason = modelResponseMetadata.finishReason;
                     const isRetryableFinishReason = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(finishReason);
 
-                    if (state.settings.enableProofreading && finalContent && !isRetryableFinishReason && finishReason !== 'ERROR' && finishReason !== 'ABORTED') {
+                    if (!isBackgroundProcess && state.settings.enableProofreading && finalContent && !isRetryableFinishReason && finishReason !== 'ERROR' && finishReason !== 'ABORTED') {
                         try {
                             uiUtils.setLoadingIndicatorText('校正中...');
-                            const proofreadContent = await this.proofreadText(finalContent, apiKeyToUse);
+                            const proofreadContent = await this.proofreadText(finalContent);
                             finalContent = proofreadContent;
                         } catch (proofreadError) {
                             console.error("校正処理中にエラーが発生しました:", proofreadError);
@@ -13152,8 +13125,8 @@ async sendWebhookNotification(responseMessage) {
              newSettings.dummyDummyModel = elements.dummyDummyModelInput.value.trim();
              newSettings.dummyEnableDummyModel = elements.dummyEnableDummyModelCheckbox.checked;
             newSettings.enableProofreading = elements.enableProofreadingCheckbox.checked;
-            newSettings.proofreadingModelName = elements.proofreadingModelNameSelect.value;
-            newSettings.proofreadingSystemInstruction = elements.proofreadingSystemInstructionTextarea.value.trim();
+            newSettings.proofreadingApiConfigs = state.settings.proofreadingApiConfigs;
+            newSettings.activeProofreadingConfigId = state.settings.activeProofreadingConfigId;
             newSettings.enableAutoRetry = elements.enableAutoRetryCheckbox.checked;
             newSettings.maxRetries = parseInt(elements.maxRetriesInput.value, 10) || 0;
 newSettings.webhooks = state.settings.webhooks.map(webhook => {
@@ -15870,7 +15843,200 @@ const webhookUtils = {
             return response;
         },
     };
+    const proofreadingApiConfigUtils = {
+        MAX_CONFIGS: 10,
+    
+        initialize() {
+            elements.addProofreadingApiConfigBtn.addEventListener('click', () => this.addConfig());
+            this.renderList();
+        },
+    
+        generateNextConfigLabel() {
+            const index = state.settings.proofreadingApiConfigs.length;
+            return `校正設定 ${index + 1}`;
+        },
 
+        addConfig() {
+            const configs = state.settings.proofreadingApiConfigs;
+            if (configs.length >= this.MAX_CONFIGS) {
+                uiUtils.showCustomAlert(`最大${this.MAX_CONFIGS}個までの校正設定を作成できます。`);
+                return;
+            }
+            const newConfig = {
+                id: Date.now().toString(),
+                label: this.generateNextConfigLabel(),
+                provider: 'gemini',
+                apiKey: '',
+                modelName: DEFAULT_MODEL,
+                systemPrompt: 'あなたはプロの編集者です。受け取った文章をより自然で分かりやすく校正してください。元の文章の意図やニュアンスは変えないでください。校正後の文章のみを出力してください。',
+                temperature: 0.2,
+                maxTokens: null,
+                topK: null,
+                topP: null,
+            };
+            configs.push(newConfig);
+            if (configs.length === 1) {
+                state.settings.activeProofreadingConfigId = newConfig.id;
+            }
+            this.renderList();
+        },
+    
+        deleteConfig(configId) {
+            const configs = state.settings.proofreadingApiConfigs;
+            const index = configs.findIndex(c => c.id === configId);
+            if (index === -1) return;
+            
+            configs.splice(index, 1);
+            if (state.settings.activeProofreadingConfigId === configId) {
+                state.settings.activeProofreadingConfigId = configs.length > 0 ? configs[0].id : null;
+            }
+            this.renderList();
+        },
+    
+        selectConfig(configId) {
+            state.settings.activeProofreadingConfigId = configId;
+            this.renderList();
+        },
+    
+        updateConfigValue(configId, key, value) {
+            const config = state.settings.proofreadingApiConfigs.find(c => c.id === configId);
+            if (config) {
+                config[key] = value;
+                if (key === 'provider') {
+                    config.modelName = this.getDefaultModelForProvider(value);
+                    this.renderList();
+                }
+            }
+        },
+    
+        renderList() {
+            const configs = state.settings.proofreadingApiConfigs;
+            const container = elements.proofreadingApiConfigsList;
+            container.innerHTML = '';
+    
+            if (configs.length === 0) {
+                const emptyMsg = document.createElement('p');
+                emptyMsg.textContent = '校正用のAPI設定がありません。';
+                emptyMsg.style.cssText = 'color: var(--text-secondary); font-size: 13px; text-align: center; margin: 10px 0;';
+                container.appendChild(emptyMsg);
+            } else {
+                configs.forEach(config => {
+                    const item = this.createConfigItem(config);
+                    container.appendChild(item);
+                });
+            }
+            elements.addProofreadingApiConfigBtn.disabled = configs.length >= this.MAX_CONFIGS;
+        },
+    
+        createConfigItem(config) {
+            const item = document.createElement('div');
+            item.className = 'api-key-item proofreading-api-config-item';
+            item.dataset.configId = config.id;
+            const isActive = state.settings.activeProofreadingConfigId === config.id;
+            if (isActive) item.classList.add('active');
+
+            const labelInput = document.createElement('input');
+            labelInput.type = 'text';
+            labelInput.className = 'api-key-item-label';
+            labelInput.value = config.label;
+            labelInput.addEventListener('change', (e) => this.updateConfigValue(config.id, 'label', e.target.value));
+
+            const keyInput = document.createElement('input');
+            keyInput.type = 'password';
+            keyInput.className = 'api-key-item-input';
+            keyInput.value = config.apiKey;
+            keyInput.placeholder = 'APIキー...';
+            keyInput.addEventListener('input', (e) => this.updateConfigValue(config.id, 'apiKey', e.target.value));
+
+            const providerSelect = document.createElement('select');
+            providerSelect.className = 'twin-engine-config-provider';
+            API_PROVIDERS.forEach(providerInfo => {
+                if (providerInfo.value !== 'dummy') {
+                    const option = document.createElement('option');
+                    option.value = providerInfo.value;
+                    option.textContent = providerInfo.text.split(' ')[0];
+                    providerSelect.add(option);
+                }
+            });
+            providerSelect.value = config.provider;
+            providerSelect.addEventListener('change', (e) => this.updateConfigValue(config.id, 'provider', e.target.value));
+
+            const modelSelect = document.createElement('select');
+            modelSelect.className = 'twin-engine-config-model';
+            this.populateModelOptions(modelSelect, config.provider);
+            modelSelect.value = config.modelName;
+            modelSelect.addEventListener('change', (e) => this.updateConfigValue(config.id, 'modelName', e.target.value));
+            
+            const systemPromptTextarea = document.createElement('textarea');
+            systemPromptTextarea.className = 'api-key-item-input';
+            systemPromptTextarea.value = config.systemPrompt || '';
+            systemPromptTextarea.placeholder = '校正用のシステムプロンプト...';
+            systemPromptTextarea.style.marginTop = '5px';
+            systemPromptTextarea.rows = 2;
+            systemPromptTextarea.addEventListener('change', (e) => this.updateConfigValue(config.id, 'systemPrompt', e.target.value));
+
+            const actions = document.createElement('div');
+            actions.className = 'api-key-item-actions';
+            const selectBtn = document.createElement('button');
+            selectBtn.className = `api-key-select-btn ${isActive ? 'active' : ''}`;
+            selectBtn.textContent = isActive ? '使用中' : '選択';
+            selectBtn.disabled = isActive;
+            selectBtn.addEventListener('click', () => this.selectConfig(config.id));
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'api-key-delete-btn';
+            deleteBtn.textContent = '削';
+            deleteBtn.addEventListener('click', () => this.deleteConfig(config.id));
+            actions.appendChild(selectBtn);
+            actions.appendChild(deleteBtn);
+    
+            const row1 = document.createElement('div');
+            row1.style.cssText = 'display: flex; gap: 5px; margin-bottom: 5px;';
+            row1.appendChild(labelInput);
+            row1.appendChild(keyInput);
+            row1.appendChild(actions);
+    
+            const row2 = document.createElement('div');
+            row2.style.cssText = 'display: flex; gap: 5px;';
+            row2.appendChild(providerSelect);
+            row2.appendChild(modelSelect);
+            
+            item.appendChild(row1);
+            item.appendChild(row2);
+            item.appendChild(systemPromptTextarea);
+            return item;
+        },
+    
+        populateModelOptions(selectElement, provider) {
+            selectElement.innerHTML = '';
+            let sourceSelect;
+            switch (provider) {
+                case 'gemini': sourceSelect = elements.geminiModelNameSelect; break;
+                case 'deepseek': sourceSelect = elements.deepSeekModelNameSelect; break;
+                case 'claude': sourceSelect = elements.claudeModelNameSelect; break;
+                case 'openai': sourceSelect = elements.openaiModelNameSelect; break;
+                case 'xai': sourceSelect = elements.xaiModelNameSelect; break;
+                case 'llmaggregator': sourceSelect = elements.llmAggregatorModelNameSelect; break;
+                default: return;
+            }
+            if (sourceSelect) {
+                sourceSelect.querySelectorAll('optgroup, option').forEach(el => {
+                    selectElement.add(el.cloneNode(true));
+                });
+            }
+        },
+    
+        getDefaultModelForProvider(provider) {
+            switch (provider) {
+                case 'gemini': return DEFAULT_MODEL;
+                case 'deepseek': return DEFAULT_DEEPSEEK_MODEL;
+                case 'claude': return DEFAULT_CLAUDE_MODEL;
+                case 'openai': return DEFAULT_OPENAI_MODEL;
+                case 'xai': return DEFAULT_XAI_MODEL;
+                case 'llmaggregator': return DEFAULT_LLMAGGREGATOR_MODEL;
+                default: return '';
+            }
+        },
+    };
     const errorRecovery = {
         errorCount: 0,
         errorTimeWindow: 60000,
