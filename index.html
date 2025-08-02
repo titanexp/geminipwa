@@ -16268,19 +16268,32 @@ const webhookUtils = {
         },
 
         async showRecoveryNotification(reason, errorType) {
-            if (typeof uiUtils !== 'undefined' && uiUtils.showCustomAlert) {
-                try {
-                    await uiUtils.showCustomAlert(
-                        `アプリで${reason}が発生しました。\n` +
-                        `安定性を保つため、キャッシュをクリアして再起動します。\n\n` +
-                        `エラータイプ: ${errorType}\n` +
-                        `この操作は自動で実行されます。`
-                    );
-                } catch (e) {
-                    alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
+            const mainMessage = `アプリで${reason}が発生しました。\n` +
+                                `安定性を保つため、キャッシュをクリアして再起動する必要があります。\n\n` +
+                                `エラータイプ: ${errorType}`;
+            const exportQuestion = `\n\n再起動する前に、全チャット履歴の出力を試みますか？`;
+
+            try {
+                if (typeof uiUtils !== 'undefined' && uiUtils.showCustomConfirm && typeof appLogic !== 'undefined') {
+                    const exportConfirmed = await uiUtils.showCustomConfirm(mainMessage + exportQuestion);
+                    
+                    if (exportConfirmed) {
+                        await appLogic.safeExportAllSessions();
+                        await uiUtils.showCustomAlert('出力処理が完了しました。OKを押すとアプリを再起動します。');
+                    }
+                } else {
+                    const exportConfirmed = confirm(mainMessage + exportQuestion);
+                    if (exportConfirmed) {
+                        if (typeof appLogic !== 'undefined') {
+                            await appLogic.safeExportAllSessions();
+                            alert('出力処理が完了しました。OKを押すとアプリを再起動します。');
+                        } else {
+                            alert('エクスポート機能の呼び出しに失敗しました。そのまま再起動します。');
+                        }
+                    }
                 }
-            } else {
-                alert(`アプリで${reason}が発生しました。キャッシュをクリアして再起動します。`);
+            } catch (e) {
+                alert(mainMessage + '\n\n通知処理中にエラーが発生したため、直ちに再起動します。');
             }
         },
 
