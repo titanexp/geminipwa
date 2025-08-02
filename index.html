@@ -3361,6 +3361,104 @@
             sessionStorage.removeItem(RECOVERY_ATTEMPT_KEY);
         };
 
+        async function showFatalErrorScreenForWatchdog(error) {
+            clearTimeout(watchdogTimer); 
+            
+            const errorHtml = `
+                <div style="padding: 20px; text-align: center; color: var(--text-primary); height: 100%; overflow-y: auto; display: flex; flex-direction: column; justify-content: center;">
+                    <div>
+                        <h2 style="color: var(--text-error); margin-bottom: 15px;">アプリの起動に失敗しました。</h2>
+                        <p style="font-size: 14px; margin-bottom: 25px;">
+                            IndexedDBへの書き込みや読み込みが正常に機能しない、あるいはデータが破損している可能性があります。<br>
+                            以下のボタンで問題を解決できる場合があります。
+                        </p>
+                        <div style="display: flex; flex-direction: column; gap: 20px; max-width: 450px; margin: 0 auto; text-align: left;">
+                            
+                            <div>
+                                <button id="recovery-export-all-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-gold); color: var(--text-button-gold); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">全出力 (全セッションをJSON出力)</button>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    ※ アプリが起動できなくても、履歴データが無事な場合に全チャット履歴をファイルとして出力します。
+                                </p>
+                            </div>
+
+                            <div>
+                                <button id="recovery-force-reload-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-edit); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">🔄 強制復旧 (キャッシュクリア&リロード)</button>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    ※ 全キャッシュをクリアして強制的に再起動します。ユーザーデータ（チャット履歴・設定）は保持されます。
+                                </p>
+                            </div>
+
+                            <div>
+                                <button id="recovery-clear-data-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-delete); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">⚠⚠⚠全データクリア (履歴と設定)⚠⚠⚠</button>
+                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
+                                    ※ ブラウザに保存されている設定や履歴を全て削除します。この操作は元に戻せません。
+                                </p>
+                            </div>
+                            
+                        </div>
+                        <p style="font-size: 12px; margin-top: 30px; color: var(--text-secondary); max-width: 600px; margin-left: auto; margin-right: auto; word-wrap: break-word;">エラー詳細: <span id="recovery-error-details">${error.message || String(error)}</span></p>
+                    </div>
+                </div>
+            `;
+
+            const appContainer = document.querySelector('.app-container');
+            if (appContainer) {
+                appContainer.innerHTML = errorHtml;
+            } else {
+                document.body.innerHTML = errorHtml;
+            }
+            
+
+            document.getElementById('recovery-export-all-btn').addEventListener('click', () => safeExportForWatchdog());
+            document.getElementById('recovery-force-reload-btn').addEventListener('click', () => clearAllCachesAndReload());
+            document.getElementById('recovery-clear-data-btn').addEventListener('click', async () => {
+                 if (confirm("本当にすべてのデータ（チャット履歴と設定）を削除しますか？\nこの操作は元に戻せません。")) {
+                    await clearAllSiteDataAndReload();
+                 }
+            });
+
+            const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+            document.body.classList.remove('dark-mode', 'light-mode-forced');
+            document.body.classList.add(prefersDark ? 'dark-mode' : 'light-mode-forced');
+        }
+
+        async function safeExportForWatchdog() {
+            try {
+                const db = await new Promise((resolve, reject) => {
+                    const request = indexedDB.open('GeminiPWA_DB');
+                    request.onsuccess = e => resolve(e.target.result);
+                    request.onerror = e => reject(e.target.error);
+                });
+                
+                const chats = await new Promise((resolve, reject) => {
+                    const transaction = db.transaction(['chats'], 'readonly');
+                    const store = transaction.objectStore('chats');
+                    const request = store.getAll();
+                    request.onsuccess = e => resolve(e.target.result);
+                    request.onerror = e => reject(e.target.error);
+                });
+
+                if (!chats || chats.length === 0) {
+                    alert("エクスポートするセッションがありません。");
+                    return;
+                }
+
+                const jsonString = JSON.stringify(chats, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `gemini_pwa_all_sessions_recovery_export.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                alert(`${chats.length}件のセッションをエクスポートしました。`);
+
+            } catch (error) {
+                alert(`エクスポートに失敗しました。データベースにアクセスできない可能性があります。\nエラー: ${error.message}`);
+            }
+        }
+
+
         async function handleInitializationFailure() {
             recoveryAttempt++;
             sessionStorage.setItem(RECOVERY_ATTEMPT_KEY, recoveryAttempt);
@@ -3372,10 +3470,10 @@
                 alert('再起動に失敗しました。より強力なキャッシュクリアを試みます。(ステップ2/4)');
                 await clearAllCachesAndReload();
             } else if (recoveryAttempt === 3) {
-                const errorMessage = '複数回の再起動に失敗しました。手動での復旧が必要です。(ステップ3/4)';
-                alert(errorMessage);
-                throw new Error(errorMessage);
-            } else if (recoveryAttempt === 4) {
+
+                await showFatalErrorScreenForWatchdog(new Error("アプリの初期化に複数回失敗しました。"));
+            } else { 
+
                 const confirmed = confirm(
                     '複数回の再起動に失敗しました。アプリのデータが破損している可能性があります。\n\n' +
                     'すべてのデータ（設定とチャット履歴）を消去してアプリをリセットしますか？\n' +
@@ -3387,8 +3485,6 @@
                     sessionStorage.removeItem(RECOVERY_ATTEMPT_KEY);
                     window.location.reload(true);
                 }
-            } else {
-                throw new Error('復旧処理に繰り返し失敗しています。');
             }
         }
 
@@ -9424,7 +9520,7 @@ async sendWebhookNotification(responseMessage) {
 },
         async initializeApp() {
             try {
-               throw new Error("これはテスト用の強制的な初期化エラーです");
+                throw new Error("これはテスト用の強制的な初期化エラーです");
                 if (typeof marked !== 'undefined') {
                     marked.setOptions({ breaks: true, gfm: true, sanitize: false, smartypants: false });
                 }
