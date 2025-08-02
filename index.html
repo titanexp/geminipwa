@@ -8897,6 +8897,11 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                     elements.loadingIndicator.removeAttribute('aria-live');
                 }
             },
+            setLoadingIndicatorText(text) {
+                elements.loadingIndicator.textContent = text;
+                elements.loadingIndicator.classList.remove('hidden');
+                elements.loadingIndicator.setAttribute('aria-live', 'polite');
+            },
             adjustTextareaHeight(textarea = elements.userInput, maxHeight = TEXTAREA_MAX_HEIGHT) {
                 if (!textarea) return;
                 textarea.style.height = 'auto';
@@ -11156,8 +11161,6 @@ async sendWebhookNotification(responseMessage) {
         },
 
         async proofreadText(textToProofread) {
-            state.isProofreading = true;
-            uiUtils.updateLoadingIndicator();
             console.log("--- 校正処理開始 ---");
 
             const activeConfigId = state.settings.activeProofreadingConfigId;
@@ -11210,9 +11213,6 @@ async sendWebhookNotification(responseMessage) {
             } catch (error) {
                 console.error("校正処理中にエラーが発生:", error);
                 throw error;
-            } finally {
-                state.isProofreading = false;
-                uiUtils.updateLoadingIndicator();
             }
         },
         async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
@@ -12092,7 +12092,7 @@ async sendWebhookNotification(responseMessage) {
                         }
                         try {
                             state.isProofreading = true;
-                            uiUtils.updateLoadingIndicator();
+                            uiUtils.setLoadingIndicatorText('校正中...');
                             const proofreadContent = await this.proofreadText(finalContent);
                             finalContent = proofreadContent;
                         } catch (proofreadError) {
@@ -12100,10 +12100,8 @@ async sendWebhookNotification(responseMessage) {
                             finalContent += `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
                         } finally {
                             state.isProofreading = false;
-                            uiUtils.updateLoadingIndicator();
                         }
                     }
-
                     if (finalContent || modelThoughtSummaryContent || modelResponseMetadata.finishReason) {
                         if (useStreamingForThisCall && modelMessageObjectForStream) {
                             const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
