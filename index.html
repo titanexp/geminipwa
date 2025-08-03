@@ -4750,11 +4750,11 @@
                     ※ 複数のAPIキーを使い分けたい場合に使用。
                 </p>
                 <label class="checkbox-label">
-                    <input type="checkbox" id="show-session-linking-settings-toggle">
-                    AI間会話モード（セッション間リンク）設定を表示する
+                    <input type="checkbox" id="show-proofreading-settings-toggle">
+                    校正機能を使用する
                 </label>
                 <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
-                    ※ 履歴画面から2つのチャットを連携させ、AI同士を会話させることができます。
+                    ※ 応答生成後に別のモデルで文章を校正する機能に関する設定項目を表示します。
                 </p>
                 <label class="checkbox-label">
                     <input type="checkbox" id="show-twin-engine-settings-toggle">
@@ -4762,6 +4762,13 @@
                 </label>
                 <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                     ※ 会話履歴の自動要約機能に関する設定項目を表示します。
+                </p
+                <label class="checkbox-label">
+                    <input type="checkbox" id="show-session-linking-settings-toggle">
+                    AI間会話モード（セッション間リンク）設定を表示する
+                </label>
+                <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                    ※ 履歴画面から2つのチャットを連携させ、AI同士を会話させることができます。
                 </p>
             </div>
         </details>
@@ -5676,6 +5683,8 @@
             disableAttachmentConfirmationToggle: document.getElementById('disable-attachment-confirmation-toggle'),
             addPrefixOnImportToggle: document.getElementById('add-prefix-on-import-toggle'),
             showMultiApiKeysToggle: document.getElementById('show-multi-api-keys-toggle'),
+            showProofreadingSettingsToggle: document.getElementById('show-proofreading-settings-toggle'),
+            proofreadingSettingsGroup: document.getElementById('settings-group-proofreading'),
             showTopCollapseButtonToggle: document.getElementById('show-top-collapse-button-toggle'),
             showBottomCollapseButtonToggle: document.getElementById('show-bottom-collapse-button-toggle'),
             persistMessageCollapseStateCheckbox: document.getElementById('persist-message-collapse-state'),
@@ -5988,6 +5997,7 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
                 disableAttachmentConfirmation: false,
                 addPrefixOnImport: true,
                 showMultiApiKeys: false,
+                showProofreadingSettings: false,
                 disableSaveSettingsConfirmation: false,
                 autoSaveSettings: false,
                 showTopCollapseButton: true,
@@ -10095,7 +10105,10 @@ async sendWebhookNotification(responseMessage) {
                 state.settings.showMultiApiKeys = e.target.checked;
                 uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
             });
-
+            elements.showProofreadingSettingsToggle.addEventListener('change', (e) => {
+                state.settings.showProofreadingSettings = e.target.checked;
+                elements.proofreadingSettingsGroup.classList.toggle('hidden', !e.target.checked);
+            });
             const settingsScreenElement = document.getElementById('settings-screen');
             let autoSaveTimer;
             const handleSettingsChange = () => {
@@ -12187,7 +12200,7 @@ async sendWebhookNotification(responseMessage) {
                     const isRetryableFinishReason = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(finishReason);
 
                     let wasProofread = false;
-                    if (!isBackgroundProcess && state.settings.enableProofreading && finalContent && !isRetryableFinishReason && finishReason !== 'ERROR' && finishReason !== 'ABORTED') {
+if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.settings.enableProofreading && finalContent && !isRetryableFinishReason && finishReason !== 'ERROR' && finishReason !== 'ABORTED') {
                         wasProofread = true;
                         
                         if (useStreamingForThisCall && modelMessageObjectForStream) {
@@ -13069,6 +13082,7 @@ async sendWebhookNotification(responseMessage) {
         async saveSettings(showNotice = true) {
             const newSettings = { ...state.settings };
             newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
+            newSettings.showProofreadingSettings = elements.showProofreadingSettingsToggle.checked;
             newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
             newSettings.autoSaveSettings = elements.autoSaveSettingsToggle.checked;
 
