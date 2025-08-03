@@ -4749,6 +4749,14 @@
                 <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                     ※ 複数のAPIキーを使い分けたい場合に使用。
                 </p>
+<hr style="margin: 10px 0; border-top: 1px solid var(--border-tertiary);">
+<label class="checkbox-label">
+    <input type="checkbox" id="show-auto-retry-settings-toggle">
+    自動リトライと校正機能を使用する
+</label>
+<p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+    ※ APIエラー時の自動リトライと、応答生成後の文章校正に関する設定項目を表示します。
+</p>
                 <label class="checkbox-label">
                     <input type="checkbox" id="show-proofreading-settings-toggle">
                     校正機能を使用する
@@ -4982,7 +4990,7 @@
                         </div>
                    </details>
                 </div>
-                <div class="settings-group">
+                <div class="settings-group" id="settings-group-auto-retry">
                     <h3>自動リトライ</h3>
                     <label class="checkbox-label">
                         <input type="checkbox" id="enable-auto-retry">
@@ -5655,6 +5663,7 @@
             proofreadingOptionsDiv: document.getElementById('proofreading-options'),
             proofreadingApiConfigsList: document.getElementById('proofreading-api-configs-list'),
             addProofreadingApiConfigBtn: document.getElementById('add-proofreading-api-config-btn'),
+            autoRetrySettingsGroup: document.getElementById('settings-group-auto-retry'),
             enableAutoRetryCheckbox: document.getElementById('enable-auto-retry'),
             maxRetriesInput: document.getElementById('max-retries'),
             autoRetryOptionsDiv: document.getElementById('auto-retry-options'),
@@ -5683,6 +5692,7 @@
             disableAttachmentConfirmationToggle: document.getElementById('disable-attachment-confirmation-toggle'),
             addPrefixOnImportToggle: document.getElementById('add-prefix-on-import-toggle'),
             showMultiApiKeysToggle: document.getElementById('show-multi-api-keys-toggle'),
+            showAutoRetrySettingsToggle: document.getElementById('show-auto-retry-settings-toggle'), /
             showProofreadingSettingsToggle: document.getElementById('show-proofreading-settings-toggle'),
             proofreadingSettingsGroup: document.getElementById('settings-group-proofreading'),
             showTopCollapseButtonToggle: document.getElementById('show-top-collapse-button-toggle'),
@@ -5997,6 +6007,7 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
                 disableAttachmentConfirmation: false,
                 addPrefixOnImport: true,
                 showMultiApiKeys: false,
+                showAutoRetrySettings: false,
                 showProofreadingSettings: false,
                 disableSaveSettingsConfirmation: false,
                 autoSaveSettings: false,
@@ -8362,6 +8373,10 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                 elements.showMultiApiKeysToggle.checked = state.settings.showMultiApiKeys;
 elements.showProofreadingSettingsToggle.checked = state.settings.showProofreadingSettings;
             elements.proofreadingSettingsGroup.classList.toggle('hidden', !state.settings.showProofreadingSettings);
+            elements.showAutoRetrySettingsToggle.checked = state.settings.showAutoRetrySettings;
+const showAutoRetryAndProofreading = state.settings.showAutoRetrySettings;
+elements.autoRetrySettingsGroup.classList.toggle('hidden', !showAutoRetryAndProofreading);
+elements.proofreadingSettingsGroup.classList.toggle('hidden', !showAutoRetryAndProofreading);
                 elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
                 elements.autoSaveSettingsToggle.checked = state.settings.autoSaveSettings;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
@@ -10106,6 +10121,11 @@ async sendWebhookNotification(responseMessage) {
             elements.showMultiApiKeysToggle.addEventListener('change', (e) => {
                 state.settings.showMultiApiKeys = e.target.checked;
                 uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
+            });
+            elements.showAutoRetrySettingsToggle.addEventListener('change', (e) => {
+                const isVisible = e.target.checked;
+                elements.autoRetrySettingsGroup.classList.toggle('hidden', !isVisible);
+                elements.proofreadingSettingsGroup.classList.toggle('hidden', !isVisible);
             });
             elements.showProofreadingSettingsToggle.addEventListener('change', (e) => {
                 state.settings.showProofreadingSettings = e.target.checked;
@@ -13084,6 +13104,7 @@ if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.set
         async saveSettings(showNotice = true) {
             const newSettings = { ...state.settings };
             newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
+            newSettings.showAutoRetrySettings = elements.showAutoRetrySettingsToggle.checked;
             newSettings.showProofreadingSettings = elements.showProofreadingSettingsToggle.checked;
             newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
             newSettings.autoSaveSettings = elements.autoSaveSettingsToggle.checked;
