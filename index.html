@@ -4757,12 +4757,20 @@
                     ※ 応答生成後に別のモデルで文章を校正する機能に関する設定項目を表示します。
                 </p>
                 <label class="checkbox-label">
+                    <input type="checkbox" id="show-auto-retry-settings-toggle">
+                    自動リトライ機能を使用する
+                </label>
+                <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                    ※ APIエラー時に自動で再送信する機能に関する設定項目を表示します。
+                </p>
+
+                <label class="checkbox-label">
                     <input type="checkbox" id="show-twin-engine-settings-toggle">
                     Twin-engine（自動要約）を使用する
                 </label>
                 <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                     ※ 会話履歴の自動要約機能に関する設定項目を表示します。
-                </p
+                </p>
                 <label class="checkbox-label">
                     <input type="checkbox" id="show-session-linking-settings-toggle">
                     AI間会話モード（セッション間リンク）設定を表示する
@@ -4982,7 +4990,7 @@
                         </div>
                    </details>
                 </div>
-                <div class="settings-group">
+                <div class="settings-group" id="settings-group-auto-retry">
                     <h3>自動リトライ</h3>
                     <label class="checkbox-label">
                         <input type="checkbox" id="enable-auto-retry">
@@ -5685,6 +5693,8 @@
             showMultiApiKeysToggle: document.getElementById('show-multi-api-keys-toggle'),
             showProofreadingSettingsToggle: document.getElementById('show-proofreading-settings-toggle'),
             proofreadingSettingsGroup: document.getElementById('settings-group-proofreading'),
+            showAutoRetrySettingsToggle: document.getElementById('show-auto-retry-settings-toggle'),
+            autoRetrySettingsGroup: document.getElementById('settings-group-auto-retry'),
             showTopCollapseButtonToggle: document.getElementById('show-top-collapse-button-toggle'),
             showBottomCollapseButtonToggle: document.getElementById('show-bottom-collapse-button-toggle'),
             persistMessageCollapseStateCheckbox: document.getElementById('persist-message-collapse-state'),
@@ -5998,6 +6008,7 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
                 addPrefixOnImport: true,
                 showMultiApiKeys: false,
                 showProofreadingSettings: false,
+                showAutoRetrySettings: false,
                 disableSaveSettingsConfirmation: false,
                 autoSaveSettings: false,
                 showTopCollapseButton: true,
@@ -8362,6 +8373,8 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                 elements.showMultiApiKeysToggle.checked = state.settings.showMultiApiKeys;
 elements.showProofreadingSettingsToggle.checked = state.settings.showProofreadingSettings;
             elements.proofreadingSettingsGroup.classList.toggle('hidden', !state.settings.showProofreadingSettings);
+            elements.showAutoRetrySettingsToggle.checked = state.settings.showAutoRetrySettings;
+            elements.autoRetrySettingsGroup.classList.toggle('hidden', !state.settings.showAutoRetrySettings);
                 elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
                 elements.autoSaveSettingsToggle.checked = state.settings.autoSaveSettings;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
@@ -8373,7 +8386,8 @@ elements.showProofreadingSettingsToggle.checked = state.settings.showProofreadin
                 elements.toggleButtonTopFontSizeInput.value = state.settings.toggleButtonTopFontSize ?? DEFAULT_TOGGLE_BUTTON_TOP_FONT_SIZE;
                 elements.toggleButtonTopOpacityInput.value = state.settings.toggleButtonTopOpacity ?? DEFAULT_TOGGLE_BUTTON_TOP_OPACITY;
                 elements.toggleButtonTopTextCollapseInput.value = state.settings.toggleButtonTopTextCollapse || DEFAULT_TOGGLE_BUTTON_TOP_TEXT_COLLAPSE;
-                elements.toggleButtonTopTextExpandInput.value = state.settings.toggleButtonTopTextExpand || DEFAULT_TOGGLE_BUTTON_TOP_TEXT_EXPAND;
+                elements.toggleButtonTopTextExpandInput.value = state.settings.toggleButettings.showProofreadingSettings = elements.showProofreadingSettingsToggle.checked
+                tonTopTextExpand || DEFAULT_TOGGLE_BUTTON_TOP_TEXT_EXPAND;
                 elements.toggleButtonBottomFontSizeInput.value = state.settings.toggleButtonBottomFontSize ?? DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE;
                 elements.toggleButtonBottomTextCollapseInput.value = state.settings.toggleButtonBottomTextCollapse || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 elements.toggleButtonBottomTextExpandInput.value = state.settings.toggleButtonBottomTextExpand || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
@@ -10110,6 +10124,10 @@ async sendWebhookNotification(responseMessage) {
             elements.showProofreadingSettingsToggle.addEventListener('change', (e) => {
                 state.settings.showProofreadingSettings = e.target.checked;
                 elements.proofreadingSettingsGroup.classList.toggle('hidden', !e.target.checked);
+            });
+            elements.showAutoRetrySettingsToggle.addEventListener('change', (e) => {
+                state.settings.showAutoRetrySettings = e.target.checked;
+                elements.autoRetrySettingsGroup.classList.toggle('hidden', !e.target.checked);
             });
             const settingsScreenElement = document.getElementById('settings-screen');
             let autoSaveTimer;
@@ -12578,6 +12596,27 @@ if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.set
                      throw error;
                 }
 
+                const finishReasonFromMeta = modelResponseMetadata.finishReason || (error.cause ? error.cause.finishReason : null);
+                const isRetryableApiError = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(finishReasonFromMeta);
+                
+                if (state.settings.showAutoRetrySettings && state.settings.enableAutoRetry && isRetryableApiError && !isAbort) {
+                    const maxRetries = state.settings.maxRetries || 3;
+                    
+                    console.log(`リトライ可能なエラー(${finishReasonFromMeta})を検出。自動リトライを試みます...`);
+                    uiUtils.setLoadingIndicatorText(`エラー(${finishReasonFromMeta}) 自動リトライ中...`);
+
+                    if (useStreamingForThisCall && modelMessageObjectForStream) {
+                        const tempPlaceholderIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+                        const placeholderElement = document.getElementById(`streaming-message-${tempPlaceholderIndex}`);
+                        if (placeholderElement) placeholderElement.remove();
+                        if(tempPlaceholderIndex !== -1) state.currentMessages.splice(tempPlaceholderIndex, 1);
+                    }
+                    
+                    await sleep(1000 + Math.random() * 1000); 
+                    await this.handleSend(isRetry, retryUserMessageIndex, sourceSessionContext); 
+                    return;
+                }
+
                 if ((partialContentOnError || partialContentOnError) && useStreamingForThisCall && modelMessageObjectForStream) {
                      const finalPartialContent = partialContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
                      let finalPartialThoughtValue = null;
@@ -13085,6 +13124,7 @@ if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.set
             const newSettings = { ...state.settings };
             newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
             newSettings.showProofreadingSettings = elements.showProofreadingSettingsToggle.checked;
+            newSettings.showAutoRetrySettings = elements.showAutoRetrySettingsToggle.checked;
             newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
             newSettings.autoSaveSettings = elements.autoSaveSettingsToggle.checked;
 
