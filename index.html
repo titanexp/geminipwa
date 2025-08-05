@@ -11320,7 +11320,7 @@ async sendWebhookNotification(responseMessage) {
             };
 
             try {
-                const response = await this.handleSend(false, -1, contextForProofreading);
+                const response = await this.handleSend(false, -1, contextForProofreading, false);
 
                 if (response && response.content) {
                     console.log("--- 校正処理成功 ---");
@@ -11333,7 +11333,7 @@ async sendWebhookNotification(responseMessage) {
                 throw error;
             }
         },
-        async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
+        async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null, isTopLevelCall = true, retryCount = 0) {
             const isBackgroundProcess = !!sourceSessionContext;
             
             let apiKeyToUse, modelNameToUse, selectedApiProvider;
@@ -11757,7 +11757,9 @@ async sendWebhookNotification(responseMessage) {
                 }
             }
 
-            if (!isBackgroundProcess) uiUtils.setSendingState(true);
+            if (!isBackgroundProcess && isTopLevelCall) {
+    uiUtils.setSendingState(true);
+}
             state.partialStreamContent = '';
             state.partialThoughtStreamContent = '';
 
@@ -12566,83 +12568,93 @@ if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.set
                   setTimeout(() => this.triggerTwinEngineSummaryInBackground(), 0);
                     }
                }
-            } catch (error) {
-                const isAbort = error.message === "リクエストがキャンセルされました。" || modelResponseMetadata.finishReason === 'ABORTED';
-                const displayErrorMessage = isAbort ? error.message : (error.message || "不明なエラーが発生しました");
+            } 
 
-                let partialThoughtContentOnError, partialContentOnError;
-                partialThoughtContentOnError = state.partialThoughtStreamContent;
-                partialContentOnError = state.partialStreamContent;
+catch (error) {
+    const isAbort = error.message === "リクエストがキャンセルされました。" || modelResponseMetadata.finishReason === 'ABORTED';
 
-                if (isBackgroundProcess) {
-                     throw error;
-                }
+    if (!isAbort && !isBackgroundProcess && state.settings.enableAutoRetry && retryCount < state.settings.maxRetries && this.isRetryableError(error)) {
+        console.warn(`API error occurred. Retrying... (Attempt ${retryCount + 1}/${state.settings.maxRetries})`, error);
+        await sleep(1000 * (retryCount + 1)); 
+        return this.handleSend(isRetry, retryUserMessageIndex, sourceSessionContext, isTopLevelCall, retryCount + 1);
+    }
 
-                if ((partialContentOnError || partialContentOnError) && useStreamingForThisCall && modelMessageObjectForStream) {
-                     const finalPartialContent = partialContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
-                     let finalPartialThoughtValue = null;
-                     if (selectedApiProvider === 'gemini' && partialThoughtContentOnError && contextGeminiIncludeThoughts) {
-                         finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
-                     } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && partialThoughtContentOnError && contextDeepSeekIncludeThoughts) {
-                         finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
-                     } else if (selectedApiProvider === 'claude' && partialThoughtContentOnError && contextClaudeIncludeThoughts) {
-                         finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
-                     } else if (selectedApiProvider === 'xai' && partialThoughtContentOnError && contextXaiIncludeThoughts) {
-                         finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
-                     }
+    const displayErrorMessage = isAbort ? error.message : (error.message || "不明なエラーが発生しました");
 
-                    const streamingMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
-                    if (streamingMessageIndex !== -1) {
-                        const msgToUpdate = state.currentMessages[streamingMessageIndex];
-                        msgToUpdate.content = finalPartialContent;
-                        msgToUpdate.timestamp = Date.now();
-                        msgToUpdate.error = true;
-                        msgToUpdate.finishReason = isAbort ? 'ABORTED' : (modelResponseMetadata.finishReason || 'ERROR');
-                        msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
-                        msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
-                        msgToUpdate.generatedByApiProvider = selectedApiProvider;
+    let partialThoughtContentOnError, partialContentOnError;
+    partialThoughtContentOnError = state.partialThoughtStreamContent;
+    partialContentOnError = state.partialStreamContent;
 
-                        if (selectedApiProvider === 'gemini') {
-                            msgToUpdate.thoughtSummary = finalPartialThoughtValue;
-                            msgToUpdate.groundingMetadata = currentGroundingMetadata;
-                        } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
-                            msgToUpdate.deepSeekThoughtSummary = finalPartialThoughtValue;
-                        } else if (selectedApiProvider === 'claude') {
-                            msgToUpdate.thoughtSummary = finalPartialThoughtValue;
-                        } else if (selectedApiProvider === 'xai') {
-                            msgToUpdate.xaiThoughtSummary = finalPartialThoughtValue;
-                        }
+    if (isBackgroundProcess) {
+         throw error;
+    }
 
-                         try {
-                            uiUtils.finalizeStreamingMessage(streamingMessageIndex);
-                            await dbUtils.saveChat();
-                         } catch (saveError) {
-                             uiUtils.displayError(displayErrorMessage, !isAbort);
-                         }
-                    } else {
-                         uiUtils.displayError(displayErrorMessage, !isAbort);
-                    }
-                } else {
-                    if (useStreamingForThisCall && !isAbort && modelMessageObjectForStream) {
-                        const tempPlaceholderIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
-                        const placeholderElement = document.getElementById(`streaming-message-${tempPlaceholderIndex}`);
-                        if (placeholderElement) placeholderElement.remove();
-                        if(tempPlaceholderIndex !== -1) state.currentMessages.splice(tempPlaceholderIndex, 1);
-                    }
-                    uiUtils.displayError(displayErrorMessage, !isAbort);
-                }
-            } finally {
-                if (!isBackgroundProcess) {
-                    uiUtils.setSendingState(false);
-                    state.abortController = null;
-                    state.partialStreamContent = '';
-                    state.partialThoughtStreamContent = '';
-                    if (state.settings.autoScrollOnNewMessage) {
-                        uiUtils.scrollToBottom();
-                    }
-                    uiUtils.updateAttachmentBadgeVisibility();
-                }
+    if ((partialContentOnError || partialContentOnError) && useStreamingForThisCall && modelMessageObjectForStream) {
+         const finalPartialContent = partialContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
+         let finalPartialThoughtValue = null;
+         if (selectedApiProvider === 'gemini' && partialThoughtContentOnError && contextGeminiIncludeThoughts) {
+             finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
+         } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && partialThoughtContentOnError && contextDeepSeekIncludeThoughts) {
+             finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
+         } else if (selectedApiProvider === 'claude' && partialThoughtContentOnError && contextClaudeIncludeThoughts) {
+             finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
+         } else if (selectedApiProvider === 'xai' && partialThoughtContentOnError && contextXaiIncludeThoughts) {
+             finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
+         }
+
+        const streamingMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+        if (streamingMessageIndex !== -1) {
+            const msgToUpdate = state.currentMessages[streamingMessageIndex];
+            msgToUpdate.content = finalPartialContent;
+            msgToUpdate.timestamp = Date.now();
+            msgToUpdate.error = true;
+            msgToUpdate.finishReason = isAbort ? 'ABORTED' : (modelResponseMetadata.finishReason || 'ERROR');
+            msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
+            msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
+            msgToUpdate.generatedByApiProvider = selectedApiProvider;
+
+            if (selectedApiProvider === 'gemini') {
+                msgToUpdate.thoughtSummary = finalPartialThoughtValue;
+                msgToUpdate.groundingMetadata = currentGroundingMetadata;
+            } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
+                msgToUpdate.deepSeekThoughtSummary = finalPartialThoughtValue;
+            } else if (selectedApiProvider === 'claude') {
+                msgToUpdate.thoughtSummary = finalPartialThoughtValue;
+            } else if (selectedApiProvider === 'xai') {
+                msgToUpdate.xaiThoughtSummary = finalPartialThoughtValue;
             }
+
+             try {
+                uiUtils.finalizeStreamingMessage(streamingMessageIndex);
+                await dbUtils.saveChat();
+             } catch (saveError) {
+                 uiUtils.displayError(displayErrorMessage, !isAbort);
+             }
+        } else {
+             uiUtils.displayError(displayErrorMessage, !isAbort);
+        }
+    } else {
+        if (useStreamingForThisCall && !isAbort && modelMessageObjectForStream) {
+            const tempPlaceholderIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+            const placeholderElement = document.getElementById(`streaming-message-${tempPlaceholderIndex}`);
+            if (placeholderElement) placeholderElement.remove();
+            if(tempPlaceholderIndex !== -1) state.currentMessages.splice(tempPlaceholderIndex, 1);
+        }
+        uiUtils.displayError(displayErrorMessage, !isAbort);
+    }
+}
+finally {
+    if (!isBackgroundProcess && isTopLevelCall) {
+        uiUtils.setSendingState(false);
+        state.abortController = null;
+        state.partialStreamContent = '';
+        state.partialThoughtStreamContent = '';
+        if (state.settings.autoScrollOnNewMessage) {
+            uiUtils.scrollToBottom();
+        }
+        uiUtils.updateAttachmentBadgeVisibility();
+    }
+}
             if (isBackgroundProcess) return null;
         },
         async toggleApiProvider() {
@@ -15106,6 +15118,22 @@ newSettings.enableWebhookNotification = elements.enableWebhookNotificationToggle
             okBtn.onclick = () => dialog.close();
             
             dialog.showModal();
+        },
+        isRetryableError(error) {
+            if (!error || !error.message) return false;
+            const errorMessage = error.message.toLowerCase();
+            
+            const retryablePatterns = [
+                'apiエラー (5',
+                'service unavailable',
+                'internal server error',
+                'rate limit',
+                'timeout',
+                'safety',
+                'recitation',
+            ];
+            
+            return retryablePatterns.some(pattern => errorMessage.includes(pattern));
         },
     };
 const webhookUtils = {
