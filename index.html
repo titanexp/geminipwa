@@ -10133,6 +10133,7 @@ async sendWebhookNotification(responseMessage) {
                      handleSettingsChange();
                 }
             });
+            settingsScreenElement.addEventListener('settings-change', handleSettingsChange);
             
             settingsScreenElement.addEventListener('toggle', (event) => {
                 if (event.target.tagName === 'DETAILS' && event.target.closest('#settings-screen')) {
@@ -16096,7 +16097,10 @@ const webhookUtils = {
     };
     const proofreadingApiConfigUtils = {
         MAX_CONFIGS: 10,
-    
+        _dispatchSettingsChangeEvent() {
+        const event = new CustomEvent('settings-change', { bubbles: true, composed: true });
+        elements.proofreadingApiConfigsList.dispatchEvent(event);
+    },
         initialize() {
             elements.addProofreadingApiConfigBtn.addEventListener('click', () => this.addConfig());
             this.renderList();
@@ -16133,23 +16137,31 @@ const webhookUtils = {
                 state.settings.activeProofreadingConfigId = newConfig.id;
             }
             this.renderList();
+            this._dispatchSettingsChangeEvent();
         },
     
-        deleteConfig(configId) {
+        async deleteConfig(configId) {
             const configs = state.settings.proofreadingApiConfigs;
             const index = configs.findIndex(c => c.id === configId);
             if (index === -1) return;
+
+            const keyToDelete = configs[index];
+            const confirmed = await uiUtils.showCustomConfirm(`校正設定「${keyToDelete.label}」を削除しますか？`);
+            if (!confirmed) return;
             
+            const wasActive = state.settings.activeProofreadingConfigId === configId;
             configs.splice(index, 1);
-            if (state.settings.activeProofreadingConfigId === configId) {
+            if (wasActive) {
                 state.settings.activeProofreadingConfigId = configs.length > 0 ? configs[0].id : null;
             }
             this.renderList();
+            this._dispatchSettingsChangeEvent();
         },
     
         selectConfig(configId) {
             state.settings.activeProofreadingConfigId = configId;
             this.renderList();
+            this._dispatchSettingsChangeEvent();
         },
     
         updateConfigValue(configId, key, value) {
