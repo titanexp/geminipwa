@@ -12202,37 +12202,55 @@ async sendWebhookNotification(responseMessage) {
                     let finalContent = modelResponseRawContent;
                     const finishReason = modelResponseMetadata.finishReason;
                     const isRetryableFinishReason = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(finishReason);
-
-                    let wasProofread = false;
 if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.settings.enableProofreading && finalContent && !isRetryableFinishReason && finishReason !== 'ERROR' && finishReason !== 'ABORTED') {
-                        wasProofread = true;
-                        
-                        if (useStreamingForThisCall && modelMessageObjectForStream) {
-                            const tempMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
-                            if (tempMessageIndex !== -1) {
-                                const msgToUpdate = state.currentMessages[tempMessageIndex];
-                                msgToUpdate.content = finalContent;
-                                msgToUpdate.timestamp = Date.now();
-                                msgToUpdate.finishReason = modelResponseMetadata.finishReason;
-                                msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
-                                msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
-                                uiUtils.finalizeStreamingMessage(tempMessageIndex);
-                                await dbUtils.saveChat();
-                            }
-                        }
+    if (useStreamingForThisCall && modelMessageObjectForStream) {
+        const tempMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+        if (tempMessageIndex !== -1) {
 
-                        try {
-                            state.isProofreading = true;
-                            uiUtils.setLoadingIndicatorText('校正中...');
-                            const proofreadContent = await this.proofreadText(finalContent);
-                            finalContent = proofreadContent;
-                        } catch (proofreadError) {
-                            console.error("校正処理中にエラーが発生しました:", proofreadError);
-                            finalContent += `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
-                        } finally {
-                            state.isProofreading = false;
-                        }
-                    }
+            const msgToUpdate = state.currentMessages[tempMessageIndex];
+            msgToUpdate.content = finalContent;
+            msgToUpdate.timestamp = Date.now();
+            msgToUpdate.finishReason = modelResponseMetadata.finishReason;
+            msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
+            msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
+            uiUtils.finalizeStreamingMessage(tempMessageIndex);
+            await dbUtils.saveChat();
+        }
+    }
+
+    try {
+        state.isProofreading = true;
+        uiUtils.updateLoadingIndicator();
+        const proofreadContent = await this.proofreadText(finalContent);
+        finalContent = proofreadContent; // finalContentを校正済みのものに更新
+
+
+        if (modelMessageObjectForStream) {
+            const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+            if (finalModelMessageIndex !== -1) {
+                state.currentMessages[finalModelMessageIndex].content = finalContent;
+                uiUtils.updateFinalizedMessageContent(finalModelMessageIndex, finalContent);
+                await dbUtils.saveChat(); // DBも更新
+            }
+        }
+    } catch (proofreadError) {
+        console.error("校正処理中にエラーが発生しました:", proofreadError);
+        const errorMessage = `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
+        finalContent += errorMessage;
+
+        if (modelMessageObjectForStream) {
+             const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+            if (finalModelMessageIndex !== -1) {
+                state.currentMessages[finalModelMessageIndex].content = finalContent;
+                uiUtils.updateFinalizedMessageContent(finalModelMessageIndex, finalContent);
+                await dbUtils.saveChat();
+            }
+        }
+    } finally {
+        state.isProofreading = false;
+        uiUtils.updateLoadingIndicator();
+    }
+}
                     
                     if (finalContent || modelThoughtSummaryContent || modelResponseMetadata.finishReason) {
                         if (useStreamingForThisCall && modelMessageObjectForStream) {
@@ -12445,15 +12463,20 @@ if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.set
                     const finishReasonForProofreading = modelResponseMetadata.finishReason;
                     const isRetryableForProofreading = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(finishReasonForProofreading);
 
-                    if (!isBackgroundProcess && state.settings.enableProofreading && modelResponseRawContent && !isRetryableForProofreading && finishReasonForProofreading !== 'ERROR' && finishReasonForProofreading !== 'ABORTED') {
-                        try {
-                            const proofreadContent = await this.proofreadText(modelResponseRawContent);
-                            modelResponseRawContent = proofreadContent;
-                        } catch (proofreadError) {
-                            console.error("校正処理中にエラーが発生しました:", proofreadError);
-                            modelResponseRawContent += `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
-                        }
-                    }
+if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.settings.enableProofreading && modelResponseRawContent && !isRetryableForProofreading && finishReasonForProofreading !== 'ERROR' && finishReasonForProofreading !== 'ABORTED') {
+    try {
+        state.isProofreading = true;
+        uiUtils.updateLoadingIndicator();
+        const proofreadContent = await this.proofreadText(modelResponseRawContent);
+        modelResponseRawContent = proofreadContent; // modelResponseRawContentを校正済みのものに更新
+    } catch (proofreadError) {
+        console.error("校正処理中にエラーが発生しました:", proofreadError);
+        modelResponseRawContent += `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
+    } finally {
+        state.isProofreading = false;
+        uiUtils.updateLoadingIndicator();
+    }
+}
                 }
 
                 if (isBackgroundProcess) {
