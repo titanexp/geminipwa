@@ -10113,8 +10113,6 @@ async sendWebhookNotification(responseMessage) {
             });
             const settingsScreenElement = document.getElementById('settings-screen');
             let autoSaveTimer;
-
-            
             const handleSettingsChange = () => {
                 if (state.settings.autoSaveSettings) {
                     clearTimeout(autoSaveTimer);
@@ -10135,8 +10133,6 @@ async sendWebhookNotification(responseMessage) {
                      handleSettingsChange();
                 }
             });
-            
-            settingsScreenElement.addEventListener('settings-change', handleSettingsChange);
             
             settingsScreenElement.addEventListener('toggle', (event) => {
                 if (event.target.tagName === 'DETAILS' && event.target.closest('#settings-screen')) {
@@ -16098,77 +16094,77 @@ const webhookUtils = {
             return response;
         },
     };
-const proofreadingApiConfigUtils = {
-    MAX_CONFIGS: 10,
+    const proofreadingApiConfigUtils = {
+        MAX_CONFIGS: 10,
+    
+        initialize() {
+            elements.addProofreadingApiConfigBtn.addEventListener('click', () => this.addConfig());
+            this.renderList();
+        },
+    
+        generateNextConfigLabel() {
+            const index = state.settings.proofreadingApiConfigs.length;
+            return `校正設定 ${index + 1}`;
+        },
+        addConfig() {
+            const configs = state.settings.proofreadingApiConfigs;
+            if (configs.length >= this.MAX_CONFIGS) {
+                uiUtils.showCustomAlert(`最大${this.MAX_CONFIGS}個までの校正設定を作成できます。`);
+                return;
+            }
+            const newConfig = {
+                id: Date.now().toString(),
+                label: this.generateNextConfigLabel(),
+                provider: 'gemini',
+                apiKey: '',
+                modelName: DEFAULT_MODEL,
+                systemPrompt: 'あなたはプロの編集者です。受け取った文章をより自然で分かりやすく校正してください。元の文章の意図やニュアンスは変えないでください。校正後の文章のみを出力してください。',
+                temperature: 0.2,
+                maxTokens: null,
+                topK: null,
+                topP: null,
+                presencePenalty: null,
+                frequencyPenalty: null,
+                thinkingBudget: null
+            };
+            configs.push(newConfig);
+            if (configs.length === 1) {
+                state.settings.activeProofreadingConfigId = newConfig.id;
+            }
+            this.renderList();
+            const settingsScreen = document.getElementById('settings-screen');
+            if (settingsScreen) {
+                settingsScreen.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        },
+            async deleteConfig(configId) {
+            const configs = state.settings.proofreadingApiConfigs;
+            const index = configs.findIndex(c => c.id === configId);
+            if (index === -1) return;
 
-    _dispatchSettingsChangeEvent() {
-        const event = new CustomEvent('settings-change', { bubbles: true, composed: true });
-        elements.proofreadingApiConfigsList.dispatchEvent(event);
-    },
-
-    initialize() {
-        elements.addProofreadingApiConfigBtn.addEventListener('click', () => this.addConfig());
-        this.renderList();
-    },
-
-    generateNextConfigLabel() {
-        const index = state.settings.proofreadingApiConfigs.length;
-        return `校正設定 ${index + 1}`;
-    },
-
-    addConfig() {
-        const configs = state.settings.proofreadingApiConfigs;
-        if (configs.length >= this.MAX_CONFIGS) {
-            uiUtils.showCustomAlert(`最大${this.MAX_CONFIGS}個までの校正設定を作成できます。`);
-            return;
-        }
-        const newConfig = {
-            id: Date.now().toString(),
-            label: this.generateNextConfigLabel(),
-            provider: 'gemini',
-            apiKey: '',
-            modelName: DEFAULT_MODEL,
-            systemPrompt: 'あなたはプロの編集者です。受け取った文章をより自然で分かりやすく校正してください。元の文章の意図やニュアンスは変えないでください。校正後の文章のみを出力してください。',
-            temperature: 0.2,
-            maxTokens: null,
-            topK: null,
-            topP: null,
-            presencePenalty: null,
-            frequencyPenalty: null,
-            thinkingBudget: null
-        };
-        configs.push(newConfig);
-        if (configs.length === 1) {
-            state.settings.activeProofreadingConfigId = newConfig.id;
-        }
-        this.renderList();
-        this._dispatchSettingsChangeEvent();
-    },
-
-    async deleteConfig(configId) {
-        const configs = state.settings.proofreadingApiConfigs;
-        const index = configs.findIndex(c => c.id === configId);
-        if (index === -1) return;
-        
-        const keyToDelete = configs[index];
-        const confirmed = await uiUtils.showCustomConfirm(`校正設定「${keyToDelete.label}」を削除しますか？`);
-        if (!confirmed) return;
-
-        const wasActive = state.settings.activeProofreadingConfigId === configId;
-        
-        configs.splice(index, 1);
-        if (wasActive) {
-            state.settings.activeProofreadingConfigId = configs.length > 0 ? configs[0].id : null;
-        }
-        this.renderList();
-        this._dispatchSettingsChangeEvent();
-    },
-
-    selectConfig(configId) {
-        state.settings.activeProofreadingConfigId = configId;
-        this.renderList();
-        this._dispatchSettingsChangeEvent();
-    },
+            const configToDelete = configs[index];
+            const confirmed = await uiUtils.showCustomConfirm(`校正設定「${configToDelete.label}」を削除しますか？`);
+            if (!confirmed) return;
+            
+            configs.splice(index, 1);
+            if (state.settings.activeProofreadingConfigId === configId) {
+                state.settings.activeProofreadingConfigId = configs.length > 0 ? configs[0].id : null;
+            }
+            this.renderList();
+            const settingsScreen = document.getElementById('settings-screen');
+            if (settingsScreen) {
+                settingsScreen.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        },
+    
+        selectConfig(configId) {
+            state.settings.activeProofreadingConfigId = configId;
+            this.renderList();
+            const settingsScreen = document.getElementById('settings-screen');
+            if (settingsScreen) {
+                settingsScreen.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        },
     
         updateConfigValue(configId, key, value) {
             const config = state.settings.proofreadingApiConfigs.find(c => c.id === configId);
