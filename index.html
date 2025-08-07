@@ -12194,78 +12194,52 @@ async sendWebhookNotification(responseMessage) {
                         }
                     }
 
+// for await ループの直後から...
+
+                    // isBackgroundProcessでなければ、ストリーミング結果を確定させる
                     if (!isBackgroundProcess) {
                         modelThoughtSummaryContent = state.partialThoughtStreamContent;
                         modelResponseRawContent = state.partialStreamContent;
                     }
 
-                    let finalContent = modelResponseRawContent;
+                    let finalProcessedContent = modelResponseRawContent;
                     const finishReason = modelResponseMetadata.finishReason;
                     const isRetryableFinishReason = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(finishReason);
-if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.settings.enableProofreading && finalContent && !isRetryableFinishReason && finishReason !== 'ERROR' && finishReason !== 'ABORTED') {
-    if (useStreamingForThisCall && modelMessageObjectForStream) {
-        const tempMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
-        if (tempMessageIndex !== -1) {
 
-            const msgToUpdate = state.currentMessages[tempMessageIndex];
-            msgToUpdate.content = finalContent;
-            msgToUpdate.timestamp = Date.now();
-            msgToUpdate.finishReason = modelResponseMetadata.finishReason;
-            msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
-            msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
-            uiUtils.finalizeStreamingMessage(tempMessageIndex);
-            await dbUtils.saveChat();
-        }
-    }
-
-    try {
-        state.isProofreading = true;
-        uiUtils.updateLoadingIndicator();
-        const proofreadContent = await this.proofreadText(finalContent);
-        finalContent = proofreadContent;
-
-
-        if (modelMessageObjectForStream) {
-            const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
-            if (finalModelMessageIndex !== -1) {
-                state.currentMessages[finalModelMessageIndex].content = finalContent;
-                uiUtils.updateFinalizedMessageContent(finalModelMessageIndex, finalContent);
-                await dbUtils.saveChat();
-            }
-        }
-    } catch (proofreadError) {
-        console.error("校正処理中にエラーが発生しました:", proofreadError);
-        const errorMessage = `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
-        finalContent += errorMessage;
-
-        if (modelMessageObjectForStream) {
-             const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
-            if (finalModelMessageIndex !== -1) {
-                state.currentMessages[finalModelMessageIndex].content = finalContent;
-                uiUtils.updateFinalizedMessageContent(finalModelMessageIndex, finalContent);
-                await dbUtils.saveChat();
-            }
-        }
-    } finally {
-        state.isProofreading = false;
-        uiUtils.updateLoadingIndicator();
-    }
-}
+                    // --- 校正処理 ---
+                    // バックグラウンド処理でなく、校正が有効で、コンテンツがあり、リトライすべきエラーでない場合
+                    if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.settings.enableProofreading && finalProcessedContent && !isRetryableFinishReason && finishReason !== 'ERROR' && finishReason !== 'ABORTED') {
+                        try {
+                            state.isProofreading = true;
+                            uiUtils.updateLoadingIndicator();
+                            const proofreadContent = await this.proofreadText(finalProcessedContent);
+                            finalProcessedContent = proofreadContent; // 最終的なコンテンツを校正済みのものに更新
+                        } catch (proofreadError) {
+                            console.error("校正処理中にエラーが発生しました:", proofreadError);
+                            const errorMessage = `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
+                            finalProcessedContent += errorMessage; // 元のテキストにエラーメッセージを追記
+                        } finally {
+                            state.isProofreading = false;
+                            uiUtils.updateLoadingIndicator();
+                        }
+                    }
                     
-                    if (finalContent || modelThoughtSummaryContent || modelResponseMetadata.finishReason) {
+                    // --- 最終的なコンテンツが確定した後の処理 ---
+                    if (finalProcessedContent || modelThoughtSummaryContent || modelResponseMetadata.finishReason) {
                         if (useStreamingForThisCall && modelMessageObjectForStream) {
                             const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
                             if (finalModelMessageIndex !== -1) {
+                                // 1. stateを最終版のコンテンツで更新
                                 const msgToUpdate = state.currentMessages[finalModelMessageIndex];
-                                msgToUpdate.content = finalContent;
+                                msgToUpdate.content = finalProcessedContent; // 校正後/前の最終テキスト
                                 msgToUpdate.timestamp = Date.now();
                                 msgToUpdate.finishReason = modelResponseMetadata.finishReason;
                                 msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
                                 msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
+
+                                // 思考プロセスなどのメタデータも更新
                                 if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
-                                    if (modelThoughtSummaryContent) {
-                                        msgToUpdate.thoughtSummary = modelThoughtSummaryContent;
-                                    }
+                                    if (modelThoughtSummaryContent) msgToUpdate.thoughtSummary = modelThoughtSummaryContent;
                                     msgToUpdate.groundingMetadata = currentGroundingMetadata;
                                 } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
@@ -12274,61 +12248,22 @@ if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.set
                                 } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && modelThoughtSummaryContent) {
                                     msgToUpdate.xaiThoughtSummary = modelThoughtSummaryContent || null;
                                 }
-
+                                
+                                // 2. UIを更新
                                 uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
+                                
+                                // 3. データベースに一度だけ保存
                                 await dbUtils.saveChat();
                             }
-                        } else {
-                             const newModelMessage = {
-                                 role: 'model', content: finalContent,
-                                 timestamp: Date.now(),
-                                 ...modelResponseMetadata,
-                                 usageMetadata: finalUsageMetadataFromStream,
-                                 generatedByApiProvider: selectedApiProvider
-                             };
-                            if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
-                                 newModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
-                                 newModelMessage.groundingMetadata = currentGroundingMetadata;
-                            } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
-                                 newModelMessage.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
-                            } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && modelThoughtSummaryContent) {
-                                 newModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
-                            } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && modelThoughtSummaryContent) {
-                                 newModelMessage.xaiThoughtSummary = modelThoughtSummaryContent || null;
-                            }
-                            newModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
-                                                                 (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                                                 (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
-                                                                 (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
-                                                                 (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault);
-
-                             const targetUserIndexForCascade = userMessageIndex;
-                             if (targetUserIndexForCascade !== -1 && !isBackgroundProcess) {
-                                 if (siblingGroupIdToUse === null) {
-                                     siblingGroupIdToUse = `gid-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-                                 }
-                                 newModelMessage.isCascaded = true;
-                                 newModelMessage.isSelected = true;
-                                 newModelMessage.siblingGroupId = siblingGroupIdToUse;
-
-                                 if (isRetry && firstResponseIndexForRetry !== -1 && state.currentMessages[firstResponseIndexForRetry] && !state.currentMessages[firstResponseIndexForRetry].isCascaded) {
-                                     state.currentMessages[firstResponseIndexForRetry].isCascaded = true;
-                                     state.currentMessages[firstResponseIndexForRetry].siblingGroupId = siblingGroupIdToUse;
-                                 }
-                             }
-
-                             const newModelIndex = state.currentMessages.length;
-                             state.currentMessages.push(newModelMessage);
-                             state.messageCollapsedStates.set(newModelIndex, false);
-                             state.thoughtSummaryOpenStates.set(newModelIndex, newModelMessage.thoughtSummaryOpen);
-                             uiUtils.renderChatMessages();
-                             await dbUtils.saveChat();
                         }
+                        
+                        // Webhook通知
                         const lastMessage = state.currentMessages[state.currentMessages.length - 1];
                         if (lastMessage && lastMessage.role === 'model') {
                             this.sendWebhookNotification(lastMessage).catch(console.error);
                         }
-                    } else {
+
+                    } else { // 応答が全くない場合のクリーンアップ
                          if (useStreamingForThisCall && !isBackgroundProcess && modelMessageObjectForStream) {
                             const tempPlaceholderIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
                             const placeholderElement = document.getElementById(`streaming-message-${tempPlaceholderIndex}`);
@@ -12337,14 +12272,16 @@ if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.set
                         }
                     }
 
+                    // バックグラウンドのTwin-engine要約をトリガー
                     if (!isBackgroundProcess) {
                        const currentUserTurnCountAfterSend = state.currentMessages.filter(msg => msg.role === 'user').length;
-                     const currentSummarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
-                      if (state.settings.showTwinEngineSettings && state.settings.twinEngineEnableFullAuto && currentUserTurnCountAfterSend > currentSummarizeAfterTurns) {
-                      setTimeout(() => this.triggerTwinEngineSummaryInBackground(), 0);
-                        }
+                       const currentSummarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
+                       if (state.settings.showTwinEngineSettings && state.settings.twinEngineEnableFullAuto && currentUserTurnCountAfterSend > currentSummarizeAfterTurns) {
+                           setTimeout(() => this.triggerTwinEngineSummaryInBackground(), 0);
+                       }
                    }
 
+                    // 中断された場合のエラー送出
                     if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
                         throw new Error("リクエストがキャンセルされました。");
                     }
