@@ -13111,9 +13111,43 @@ finally {
                  await uiUtils.showCustomAlert(`${type === 'user' ? 'ユーザー' : 'AI'}アイコンの削除エラー: ${error}`);
              }
         },
-        async saveSettings(showNotice = true) {
-            const newSettings = { ...state.settings };
-            newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
+async saveSettings(showNotice = true) {
+    const newSettings = { ...state.settings };
+
+    newSettings.proofreadingApiConfigs = state.settings.proofreadingApiConfigs;
+    newSettings.activeProofreadingConfigId = state.settings.activeProofreadingConfigId;
+
+    newSettings.twinEngineApiConfigs = state.settings.twinEngineApiConfigs;
+    newSettings.twinEngineActiveConfigId = state.settings.twinEngineActiveConfigId;
+
+    newSettings.geminiApiKeys = state.settings.geminiApiKeys;
+    newSettings.geminiActiveApiKeyIndex = state.settings.geminiActiveApiKeyIndex;
+    newSettings.deepseekApiKeys = state.settings.deepseekApiKeys;
+    newSettings.deepseekActiveApiKeyIndex = state.settings.deepseekActiveApiKeyIndex;
+    newSettings.claudeApiKeys = state.settings.claudeApiKeys;
+    newSettings.claudeActiveApiKeyIndex = state.settings.claudeActiveApiKeyIndex;
+    newSettings.openaiApiKeys = state.settings.openaiApiKeys;
+    newSettings.openaiActiveApiKeyIndex = state.settings.openaiActiveApiKeyIndex;
+    newSettings.xaiApiKeys = state.settings.xaiApiKeys;
+    newSettings.xaiActiveApiKeyIndex = state.settings.xaiActiveApiKeyIndex;
+    newSettings.llmaggregatorApiKeys = state.settings.llmaggregatorApiKeys;
+    newSettings.llmaggregatorActiveApiKeyIndex = state.settings.llmaggregatorActiveApiKeyIndex;
+    
+    newSettings.webhooks = state.settings.webhooks.map(webhook => {
+        const itemElement = elements.webhooksList.querySelector(`[data-webhook-id="${webhook.id}"]`);
+        if (itemElement) {
+            return {
+                ...webhook,
+                enabled: itemElement.querySelector('input[type="checkbox"]').checked,
+                label: itemElement.querySelector('.api-key-item-label').value.trim(),
+                url: itemElement.querySelector('.api-key-item-input').value.trim(),
+                format: itemElement.querySelector('select').value
+            };
+        }
+        return webhook;
+    });
+
+    newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
             newSettings.showProofreadingSettings = elements.showProofreadingSettingsToggle.checked;
             newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
             newSettings.autoSaveSettings = elements.autoSaveSettingsToggle.checked;
@@ -16106,65 +16140,60 @@ const webhookUtils = {
             const index = state.settings.proofreadingApiConfigs.length;
             return `校正設定 ${index + 1}`;
         },
-        addConfig() {
-            const configs = state.settings.proofreadingApiConfigs;
-            if (configs.length >= this.MAX_CONFIGS) {
-                uiUtils.showCustomAlert(`最大${this.MAX_CONFIGS}個までの校正設定を作成できます。`);
-                return;
-            }
-            const newConfig = {
-                id: Date.now().toString(),
-                label: this.generateNextConfigLabel(),
-                provider: 'gemini',
-                apiKey: '',
-                modelName: DEFAULT_MODEL,
-                systemPrompt: 'あなたはプロの編集者です。受け取った文章をより自然で分かりやすく校正してください。元の文章の意図やニュアンスは変えないでください。校正後の文章のみを出力してください。',
-                temperature: 0.2,
-                maxTokens: null,
-                topK: null,
-                topP: null,
-                presencePenalty: null,
-                frequencyPenalty: null,
-                thinkingBudget: null
-            };
-            configs.push(newConfig);
-            if (configs.length === 1) {
-                state.settings.activeProofreadingConfigId = newConfig.id;
-            }
-            this.renderList();
-            const settingsScreen = document.getElementById('settings-screen');
-            if (settingsScreen) {
-                settingsScreen.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-        },
-            async deleteConfig(configId) {
-            const configs = state.settings.proofreadingApiConfigs;
-            const index = configs.findIndex(c => c.id === configId);
-            if (index === -1) return;
-
-            const configToDelete = configs[index];
-            const confirmed = await uiUtils.showCustomConfirm(`校正設定「${configToDelete.label}」を削除しますか？`);
-            if (!confirmed) return;
-            
-            configs.splice(index, 1);
-            if (state.settings.activeProofreadingConfigId === configId) {
-                state.settings.activeProofreadingConfigId = configs.length > 0 ? configs[0].id : null;
-            }
-            this.renderList();
-            const settingsScreen = document.getElementById('settings-screen');
-            if (settingsScreen) {
-                settingsScreen.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-        },
+addConfig() {
+    const configs = state.settings.proofreadingApiConfigs;
+    if (configs.length >= this.MAX_CONFIGS) {
+        uiUtils.showCustomAlert(`最大${this.MAX_CONFIGS}個までの校正設定を作成できます。`);
+        return;
+    }
+    const newConfig = {
+        id: Date.now().toString(),
+        label: this.generateNextConfigLabel(),
+        provider: 'gemini',
+        apiKey: '',
+        modelName: DEFAULT_MODEL,
+        systemPrompt: 'あなたはプロの編集者です。受け取った文章をより自然で分かりやすく校正してください。元の文章の意図やニュアンスは変えないでください。校正後の文章のみを出力してください。',
+        temperature: 0.2,
+        maxTokens: null,
+        topK: null,
+        topP: null,
+        presencePenalty: null,
+        frequencyPenalty: null,
+        thinkingBudget: null
+    };
+    configs.push(newConfig);
+    if (configs.length === 1) {
+        state.settings.activeProofreadingConfigId = newConfig.id;
+    }
+    this.renderList();
+    const settingsGroup = document.getElementById('settings-group-proofreading');
+    if (settingsGroup) settingsGroup.dispatchEvent(new Event('change', { bubbles: true }));
+},
     
-        selectConfig(configId) {
-            state.settings.activeProofreadingConfigId = configId;
-            this.renderList();
-            const settingsScreen = document.getElementById('settings-screen');
-            if (settingsScreen) {
-                settingsScreen.dispatchEvent(new Event('change', { bubbles: true }));
-            }
-        },
+async deleteConfig(configId) {
+    const configs = state.settings.proofreadingApiConfigs;
+    const index = configs.findIndex(c => c.id === configId);
+    if (index === -1) return;
+    
+    const configToDelete = configs[index];
+    const confirmed = await uiUtils.showCustomConfirm(`校正設定「${configToDelete.label}」を削除しますか？`);
+    if (!confirmed) return;
+
+    configs.splice(index, 1);
+    if (state.settings.activeProofreadingConfigId === configId) {
+        state.settings.activeProofreadingConfigId = configs.length > 0 ? configs[0].id : null;
+    }
+    this.renderList();
+    const settingsGroup = document.getElementById('settings-group-proofreading');
+    if (settingsGroup) settingsGroup.dispatchEvent(new Event('change', { bubbles: true }));
+},
+    
+selectConfig(configId) {
+    state.settings.activeProofreadingConfigId = configId;
+    this.renderList();
+    const settingsGroup = document.getElementById('settings-group-proofreading');
+    if (settingsGroup) settingsGroup.dispatchEvent(new Event('change', { bubbles: true }));
+},
     
         updateConfigValue(configId, key, value) {
             const config = state.settings.proofreadingApiConfigs.find(c => c.id === configId);
@@ -16252,7 +16281,7 @@ const webhookUtils = {
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'api-key-delete-btn';
             deleteBtn.textContent = '削';
-            deleteBtn.addEventListener('click', () => this.deleteConfig(config.id));
+            deleteBtn.addEventListener('click', async () => await this.deleteConfig(config.id));
             actions.appendChild(selectBtn);
             actions.appendChild(deleteBtn);
     
@@ -16525,71 +16554,74 @@ const webhookUtils = {
 
             this.renderAllApiKeyLists();
         },
+addApiKey(provider) {
+    const keys = this.getApiKeysArray(provider);
+    if (keys.length >= this.MAX_API_KEYS) {
+        uiUtils.showCustomAlert(`最大${this.MAX_API_KEYS}個までのAPIキーを設定できます。`);
+        return;
+    }
 
-        addApiKey(provider) {
-            const keys = this.getApiKeysArray(provider);
-            if (keys.length >= this.MAX_API_KEYS) {
-                uiUtils.showCustomAlert(`最大${this.MAX_API_KEYS}個までのAPIキーを設定できます。`);
-                return;
-            }
+    const newKey = {
+        id: Date.now().toString(),
+        label: `キー ${keys.length + 1}`,
+        value: '',
+        isActive: keys.length === 0
+    };
 
-            const newKey = {
-                id: Date.now().toString(),
-                label: `キー ${keys.length + 1}`,
-                value: '',
-                isActive: keys.length === 0
-            };
+    keys.push(newKey);
+    
+    if (newKey.isActive) {
+        this.setActiveApiKeyIndex(provider, keys.length - 1);
+    }
 
-            keys.push(newKey);
-            
-            if (newKey.isActive) {
-                this.setActiveApiKeyIndex(provider, keys.length - 1);
-            }
+    this.renderApiKeyList(provider);
+    this.updateMainApiKeyInput(provider);
+    const settingsGroup = document.getElementById(`${provider}-settings-group`);
+    if (settingsGroup) settingsGroup.dispatchEvent(new Event('change', { bubbles: true }));
+},
+async deleteApiKey(provider, keyId) {
+    const keys = this.getApiKeysArray(provider);
+    const keyIndex = keys.findIndex(key => key.id === keyId);
+    if (keyIndex === -1) return;
 
-            this.renderApiKeyList(provider);
-            this.updateMainApiKeyInput(provider);
-        },
+    const keyToDelete = keys[keyIndex];
+    const confirmed = await uiUtils.showCustomConfirm(
+        `APIキー「${keyToDelete.label}」を削除しますか？`
+    );
+    
+    if (!confirmed) return;
 
-        async deleteApiKey(provider, keyId) {
-            const keys = this.getApiKeysArray(provider);
-            const keyIndex = keys.findIndex(key => key.id === keyId);
-            if (keyIndex === -1) return;
+    const wasActive = keyToDelete.isActive;
+    keys.splice(keyIndex, 1);
 
-            const keyToDelete = keys[keyIndex];
-            const confirmed = await uiUtils.showCustomConfirm(
-                `APIキー「${keyToDelete.label}」を削除しますか？`
-            );
-            
-            if (!confirmed) return;
+    if (wasActive && keys.length > 0) {
+        const newActiveIndex = Math.min(keyIndex, keys.length - 1);
+        keys[newActiveIndex].isActive = true;
+        this.setActiveApiKeyIndex(provider, newActiveIndex);
+    } else if (keys.length === 0) {
+        this.setActiveApiKeyIndex(provider, -1);
+    }
 
-            const wasActive = keyToDelete.isActive;
-            keys.splice(keyIndex, 1);
+    this.renderApiKeyList(provider);
+    this.updateMainApiKeyInput(provider);
+    const settingsGroup = document.getElementById(`${provider}-settings-group`);
+    if (settingsGroup) settingsGroup.dispatchEvent(new Event('change', { bubbles: true }));
+},
+selectApiKey(provider, keyId) {
+    const keys = this.getApiKeysArray(provider);
+    const selectedIndex = keys.findIndex(key => key.id === keyId);
+    if (selectedIndex === -1) return;
 
-            if (wasActive && keys.length > 0) {
-                const newActiveIndex = Math.min(keyIndex, keys.length - 1);
-                keys[newActiveIndex].isActive = true;
-                this.setActiveApiKeyIndex(provider, newActiveIndex);
-            } else if (keys.length === 0) {
-                this.setActiveApiKeyIndex(provider, -1);
-            }
+    keys.forEach((key, index) => {
+        key.isActive = index === selectedIndex;
+    });
 
-            this.renderApiKeyList(provider);
-            this.updateMainApiKeyInput(provider);
-        },
-
-        selectApiKey(provider, keyId) {
-            const keys = this.getApiKeysArray(provider);
-            const selectedIndex = keys.findIndex(key => key.id === keyId);
-            if (selectedIndex === -1) return;
-
-            keys.forEach((key, index) => {
-                key.isActive = index === selectedIndex;
-            });
-
-            this.setActiveApiKeyIndex(provider, selectedIndex);
-            this.renderApiKeyList(provider);
-            this.updateMainApiKeyInput(provider);
-        },
+    this.setActiveApiKeyIndex(provider, selectedIndex);
+    this.renderApiKeyList(provider);
+    this.updateMainApiKeyInput(provider);
+    const settingsGroup = document.getElementById(`${provider}-settings-group`);
+    if (settingsGroup) settingsGroup.dispatchEvent(new Event('change', { bubbles: true }));
+},
 
         updateApiKeyValue(provider, keyId, newValue) {
             const keys = this.getApiKeysArray(provider);
@@ -16822,50 +16854,58 @@ const webhookUtils = {
             
             return `${char}${numberSuffix > 0 ? numberSuffix + 1 : ''}設定`;
         },
+addConfig() {
+    const configs = state.settings.twinEngineApiConfigs;
+    if (configs.length >= this.MAX_CONFIGS) {
+        uiUtils.showCustomAlert(`最大${this.MAX_CONFIGS}個までのAPI設定を作成できます。`);
+        return;
+    }
+    const newConfig = {
+        id: Date.now().toString(),
+        label: this.generateNextConfigLabel(),
+        provider: 'gemini',
+        apiKey: '',
+        modelName: DEFAULT_MODEL,
+        temperature: null,
+        maxTokens: null,
+        topK: null,
+        topP: null,
+        presencePenalty: null,
+        frequencyPenalty: null,
+        thinkingBudget: null
+    };
+    configs.push(newConfig);
+    if (configs.length === 1) {
+        state.settings.twinEngineActiveConfigId = newConfig.id;
+    }
+    this.renderList();
+    const settingsGroup = document.getElementById('settings-group-twin-engine');
+    if (settingsGroup) settingsGroup.dispatchEvent(new Event('change', { bubbles: true }));
+},
+    async deleteConfig(configId) {
+    const configs = state.settings.twinEngineApiConfigs;
+    const index = configs.findIndex(c => c.id === configId);
+    if (index === -1) return;
 
-        addConfig() {
-            const configs = state.settings.twinEngineApiConfigs;
-            if (configs.length >= this.MAX_CONFIGS) {
-                uiUtils.showCustomAlert(`最大${this.MAX_CONFIGS}個までのAPI設定を作成できます。`);
-                return;
-            }
-            const newConfig = {
-                id: Date.now().toString(),
-                label: this.generateNextConfigLabel(),
-                provider: 'gemini',
-                apiKey: '',
-                modelName: DEFAULT_MODEL,
-                temperature: null,
-                maxTokens: null,
-                topK: null,
-                topP: null,
-                presencePenalty: null,
-                frequencyPenalty: null,
-                thinkingBudget: null
-            };
-            configs.push(newConfig);
-            if (configs.length === 1) {
-                state.settings.twinEngineActiveConfigId = newConfig.id;
-            }
-            this.renderList();
-        },
+    const configToDelete = configs[index];
+    const confirmed = await uiUtils.showCustomConfirm(`Twin-engine設定「${configToDelete.label}」を削除しますか？`);
+    if (!confirmed) return;
     
-        deleteConfig(configId) {
-            const configs = state.settings.twinEngineApiConfigs;
-            const index = configs.findIndex(c => c.id === configId);
-            if (index === -1) return;
-            
-            configs.splice(index, 1);
-            if (state.settings.twinEngineActiveConfigId === configId) {
-                state.settings.twinEngineActiveConfigId = configs.length > 0 ? configs[0].id : null;
-            }
-            this.renderList();
-        },
+    configs.splice(index, 1);
+    if (state.settings.twinEngineActiveConfigId === configId) {
+        state.settings.twinEngineActiveConfigId = configs.length > 0 ? configs[0].id : null;
+    }
+    this.renderList();
+    const settingsGroup = document.getElementById('settings-group-twin-engine');
+    if (settingsGroup) settingsGroup.dispatchEvent(new Event('change', { bubbles: true }));
+},
     
-        selectConfig(configId) {
-            state.settings.twinEngineActiveConfigId = configId;
-            this.renderList();
-        },
+selectConfig(configId) {
+    state.settings.twinEngineActiveConfigId = configId;
+    this.renderList();
+    const settingsGroup = document.getElementById('settings-group-twin-engine');
+    if (settingsGroup) settingsGroup.dispatchEvent(new Event('change', { bubbles: true }));
+},
     
         updateConfigValue(configId, key, value) {
             const config = state.settings.twinEngineApiConfigs.find(c => c.id === configId);
@@ -16953,7 +16993,7 @@ webhookUtils.renderList();
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'api-key-delete-btn';
             deleteBtn.textContent = '削';
-            deleteBtn.addEventListener('click', () => this.deleteConfig(config.id));
+            deleteBtn.addEventListener('click', async () => await this.deleteConfig(config.id));
             actions.appendChild(selectBtn);
             actions.appendChild(deleteBtn);
     
