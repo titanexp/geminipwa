@@ -4982,20 +4982,6 @@
                         </div>
                    </details>
                 </div>
-                <div class="settings-group">
-                    <h3>自動リトライ</h3>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="enable-auto-retry">
-                        APIエラー/ブロック時に自動でリトライする
-                    </label>
-                    <div id="auto-retry-options" class="hidden">
-                        <label for="max-retries">リトライ上限回数:</label>
-                        <input type="number" id="max-retries" step="1" min="0" placeholder="例: 5">
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                            ※ 0に設定するとリトライしません。サーバーエラー(5xx)や一部のブロック理由でのみ機能します。
-                        </p>
-                    </div>
-                </div>
                 <details class="settings-group" id="settings-group-proofreading">
                     <summary style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">校正機能</summary>
                     <div style="margin-top:10px;">
@@ -5655,9 +5641,6 @@
             proofreadingOptionsDiv: document.getElementById('proofreading-options'),
             proofreadingApiConfigsList: document.getElementById('proofreading-api-configs-list'),
             addProofreadingApiConfigBtn: document.getElementById('add-proofreading-api-config-btn'),
-            enableAutoRetryCheckbox: document.getElementById('enable-auto-retry'),
-            maxRetriesInput: document.getElementById('max-retries'),
-            autoRetryOptionsDiv: document.getElementById('auto-retry-options'),
             rollDiceBtn: document.getElementById('roll-dice-btn'),
             attachFileBtn: document.getElementById('attach-file-btn'),
             aiToAiChatBtn: document.getElementById('ai-to-ai-chat-btn'),
@@ -5941,8 +5924,6 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
                 thoughtSummaryFontSize: DEFAULT_THOUGHT_SUMMARY_FONT_SIZE,
                 enableSessionLinking: false,
                 enableSwipeNavigation: true,
-                enableAutoRetry: true,
-                maxRetries: 30, 
                 enableProofreading: false,
                 proofreadingApiConfigs: [],
                 activeProofreadingConfigId: null,
@@ -8326,9 +8307,6 @@ if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                  elements.dummyDummyModelInput.value = state.settings.dummyDummyModel || '';
                  elements.dummyEnableDummyModelCheckbox.checked = state.settings.dummyEnableDummyModel;
                  elements.dummyTwinEngineDebugModeCheckbox.checked = state.settings.dummyTwinEngineDebugMode;
-                elements.enableAutoRetryCheckbox.checked = state.settings.enableAutoRetry;
-                elements.autoRetryOptionsDiv.classList.toggle('hidden', !state.settings.enableAutoRetry);
-                elements.maxRetriesInput.value = state.settings.maxRetries;
 
                 elements.enableProofreadingCheckbox.checked = state.settings.enableProofreading;
                 elements.proofreadingOptionsDiv.classList.toggle('hidden', !elements.enableProofreadingCheckbox.checked);
@@ -10283,9 +10261,6 @@ async sendWebhookNotification(responseMessage) {
             elements.enableProofreadingCheckbox.addEventListener('change', () => {
                 elements.proofreadingOptionsDiv.classList.toggle('hidden', !elements.enableProofreadingCheckbox.checked);
             });
-            elements.enableAutoRetryCheckbox.addEventListener('change', () => {
-                    elements.autoRetryOptionsDiv.classList.toggle('hidden', !elements.enableAutoRetryCheckbox.checked);
-                });
         },
         handlePopState(event) {
             const targetScreen = event.state?.screen || 'chat';
@@ -12529,12 +12504,6 @@ if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.set
 catch (error) {
     const isAbort = error.message === "リクエストがキャンセルされました。" || modelResponseMetadata.finishReason === 'ABORTED';
 
-    if (!isAbort && !isBackgroundProcess && state.settings.enableAutoRetry && retryCount < state.settings.maxRetries && this.isRetryableError(error)) {
-        console.warn(`API error occurred. Retrying... (Attempt ${retryCount + 1}/${state.settings.maxRetries})`, error);
-        await sleep(1000 * (retryCount + 1)); 
-        return this.handleSend(isRetry, retryUserMessageIndex, sourceSessionContext, isTopLevelCall, retryCount + 1);
-    }
-
     const displayErrorMessage = isAbort ? error.message : (error.message || "不明なエラーが発生しました");
 
     let partialThoughtContentOnError, partialContentOnError;
@@ -13302,8 +13271,6 @@ finally {
             newSettings.enableProofreading = elements.enableProofreadingCheckbox.checked;
             newSettings.proofreadingApiConfigs = state.settings.proofreadingApiConfigs;
             newSettings.activeProofreadingConfigId = state.settings.activeProofreadingConfigId;
-            newSettings.enableAutoRetry = elements.enableAutoRetryCheckbox.checked;
-            newSettings.maxRetries = parseInt(elements.maxRetriesInput.value, 10) || 0;
 newSettings.webhooks = state.settings.webhooks.map(webhook => {
     const itemElement = elements.webhooksList.querySelector(`[data-webhook-id="${webhook.id}"]`);
     if (itemElement) {
@@ -15076,22 +15043,6 @@ newSettings.enableWebhookNotification = elements.enableWebhookNotificationToggle
             okBtn.onclick = () => dialog.close();
             
             dialog.showModal();
-        },
-        isRetryableError(error) {
-            if (!error || !error.message) return false;
-            const errorMessage = error.message.toLowerCase();
-            
-            const retryablePatterns = [
-                'apiエラー (5',
-                'service unavailable',
-                'internal server error',
-                'rate limit',
-                'timeout',
-                'safety',
-                'recitation',
-            ];
-            
-            return retryablePatterns.some(pattern => errorMessage.includes(pattern));
         },
     };
 const webhookUtils = {
