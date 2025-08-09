@@ -12042,19 +12042,30 @@ async sendWebhookNotification(responseMessage) {
 
             try {
                 let apiResponseObject;
+
+                const systemPromptTextToUseForApi = currentContextSystemPrompt?.trim() ? currentContextSystemPrompt.trim() : null;
+                let systemInstructionForProvider = null;
+                if (systemPromptTextToUseForApi) {
+                    if (selectedApiProvider === 'gemini') {
+                        systemInstructionForProvider = { role: "system", parts: [{ text: systemPromptTextToUseForApi }] };
+                    } else if (['deepseek', 'claude', 'openai', 'xai', 'llmaggregator'].includes(selectedApiProvider)) {
+                        systemInstructionForProvider = { content: systemPromptTextToUseForApi, parts: [{ text: systemPromptTextToUseForApi }] };
+                    }
+                }
+
                 if (selectedApiProvider === 'gemini') {
-                    apiResponseObject = await apiUtils.callGeminiApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, usePseudoForThisCall, contextGeminiEnableGrounding);
+                    apiResponseObject = await apiUtils.callGeminiApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, usePseudoForThisCall, contextGeminiEnableGrounding);
                 } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
-                    apiResponseObject = await apiUtils.callDeepSeekApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, selectedApiProvider);
+                    apiResponseObject = await apiUtils.callDeepSeekApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, selectedApiProvider);
                 } else if (selectedApiProvider === 'claude') {
-                    apiResponseObject = await apiUtils.callClaudeApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall);
+                    apiResponseObject = await apiUtils.callClaudeApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                 } else if (selectedApiProvider === 'openai') {
                     const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
-                    apiResponseObject = await apiUtils.callOpenAICompatibleApi(apiKeyToUse, modelNameToUse, 'openai', apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, hasImage);
+                    apiResponseObject = await apiUtils.callOpenAICompatibleApi(apiKeyToUse, modelNameToUse, 'openai', apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, hasImage);
                 } else if (selectedApiProvider === 'xai') {
                     const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
                     const enableVisionForThisCall = contextXaiVisionEnable || hasImage;
-                    apiResponseObject = await apiUtils.callXaiApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, enableVisionForThisCall);
+                    apiResponseObject = await apiUtils.callXaiApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, enableVisionForThisCall);
                 } else {
                     throw new Error("不明なAPIプロバイダーが選択されています。");
                 }
