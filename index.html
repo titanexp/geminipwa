@@ -12194,257 +12194,161 @@ async sendWebhookNotification(responseMessage) {
                         }
                     }
 
-// let apiResponseObject; の直後から...
-                let apiResponseObject;
-                if (selectedApiProvider === 'gemini') {
-                    apiResponseObject = await apiUtils.callGeminiApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, usePseudoForThisCall, contextGeminiEnableGrounding);
-                } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
-                    apiResponseObject = await apiUtils.callDeepSeekApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, selectedApiProvider);
-                } else if (selectedApiProvider === 'claude') {
-                    apiResponseObject = await apiUtils.callClaudeApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall);
-                } else if (selectedApiProvider === 'openai') {
-                    const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
-                    apiResponseObject = await apiUtils.callOpenAICompatibleApi(apiKeyToUse, modelNameToUse, 'openai', apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, hasImage);
-                } else if (selectedApiProvider === 'xai') {
-                    const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
-                    const enableVisionForThisCall = contextXaiVisionEnable || hasImage;
-                    apiResponseObject = await apiUtils.callXaiApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, enableVisionForThisCall);
-                } else {
-                    throw new Error("不明なAPIプロバイダーが選択されています。");
-                }
-
-                // --- (ここからが新しいロジック) ---
-                
-                const dummyModelPrefix = (contextConcatDummyModel && dummyModelTextToUse) ? dummyModelTextToUse : '';
-
-                if (useStreamingForThisCall) {
-                    // ストリーミングの場合の処理
-                    state.partialStreamContent = dummyModelPrefix;
-                    state.partialThoughtStreamContent = '';
-
-                    const tempPlaceholderIndex = state.currentMessages.length;
-                    modelMessageObjectForStream = {
-                        role: 'model', content: '', thoughtSummary: null, deepSeekThoughtSummary: null, xaiThoughtSummary: null,
-                        timestamp: Date.now(), generatedByApiProvider: selectedApiProvider,
-                        thoughtSummaryOpen: (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts && state.settings.geminiExpandThoughtsByDefault) ||
-                                            (selectedApiProvider === 'deepseek' && contextDeepSeekIncludeThoughts && state.settings.deepSeekExpandThoughtsByDefault) ||
-                                            (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && state.settings.claudeExpandThoughtsByDefault) ||
-                                            (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && state.settings.xaiExpandThoughtsByDefault) ||
-                                            (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorIncludeThoughts && state.settings.llmAggregatorExpandThoughtsByDefault),
-                    };
-
-                    if (isRetry && firstResponseIndexForRetry !== -1) {
-                         if (siblingGroupIdToUse === null) siblingGroupIdToUse = `gid-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-                         modelMessageObjectForStream.isCascaded = true;
-                         modelMessageObjectForStream.siblingGroupId = siblingGroupIdToUse;
-                         modelMessageObjectForStream.isSelected = true;
-                         if (state.currentMessages[firstResponseIndexForRetry] && !state.currentMessages[firstResponseIndexForRetry].isCascaded) {
-                             state.currentMessages[firstResponseIndexForRetry].isCascaded = true;
-                             state.currentMessages[firstResponseIndexForRetry].siblingGroupId = siblingGroupIdToUse;
-                             state.currentMessages[firstResponseIndexForRetry].isSelected = false;
-                         }
+                    if (!isBackgroundProcess) {
+                        modelThoughtSummaryContent = state.partialThoughtStreamContent;
+                        modelResponseRawContent = state.partialStreamContent;
                     }
 
-                    state.currentMessages.push(modelMessageObjectForStream);
-                    state.messageCollapsedStates.set(tempPlaceholderIndex, false);
-                    uiUtils.appendMessage('model', modelMessageObjectForStream.content, tempPlaceholderIndex, true);
+                    let finalContent = modelResponseRawContent;
+                    const finishReason = modelResponseMetadata.finishReason;
+                    const isRetryableFinishReason = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(finishReason);
+if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.settings.enableProofreading && finalContent && !isRetryableFinishReason && finishReason !== 'ERROR' && finishReason !== 'ABORTED') {
+    if (useStreamingForThisCall && modelMessageObjectForStream) {
+        const tempMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+        if (tempMessageIndex !== -1) {
 
-                    // API応答のイテレータを取得
-                    let responseStreamIterator;
-                    if (selectedApiProvider === 'gemini') responseStreamIterator = apiUtils.handleGeminiStreamingResponse(apiResponseObject);
-                    else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') responseStreamIterator = apiUtils.handleDeepSeekStreamingResponse(apiResponseObject);
-                    else if (selectedApiProvider === 'claude') responseStreamIterator = apiUtils.handleClaudeStreamingResponse(apiResponseObject);
-                    else if (selectedApiProvider === 'openai') responseStreamIterator = apiUtils.handleOpenAICompatibleStreamingResponse(apiResponseObject, 'openai');
-                    else if (selectedApiProvider === 'xai') responseStreamIterator = apiUtils.handleOpenAICompatibleStreamingResponse(apiResponseObject, 'xai');
+            const msgToUpdate = state.currentMessages[tempMessageIndex];
+            msgToUpdate.content = finalContent;
+            msgToUpdate.timestamp = Date.now();
+            msgToUpdate.finishReason = modelResponseMetadata.finishReason;
+            msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
+            msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
+            uiUtils.finalizeStreamingMessage(tempMessageIndex);
+            await dbUtils.saveChat();
+        }
+    }
 
-                    const currentContextStreamSpeed = selectedApiProvider === 'gemini' ? contextStreamingSpeed :
-                                                      selectedApiProvider === 'deepseek' ? state.settings.deepSeekStreamingSpeed :
-                                                      selectedApiProvider === 'claude' ? state.settings.claudeStreamingSpeed :
-                                                      selectedApiProvider === 'xai' ? state.settings.xaiStreamingSpeed :
-                                                      selectedApiProvider === 'llmaggregator' ? state.settings.llmAggregatorStreamingSpeed :
-                                                      state.settings.openaiStreamingSpeed;
-                    
-                    const messageIndexForDisplay = isBackgroundProcess ? -1 : state.currentMessages.indexOf(modelMessageObjectForStream);
+    try {
+        state.isProofreading = true;
+        uiUtils.updateLoadingIndicator();
+        const proofreadContent = await this.proofreadText(finalContent);
+        finalContent = proofreadContent; // finalContentを校正済みのものに更新
 
-                    // ストリームを処理してコンテンツを組み立てる
-                    for await (const streamData of responseStreamIterator) {
-                        if (state.abortController?.signal.aborted) {
-                            modelResponseMetadata.finishReason = 'ABORTED';
-                            throw new Error("リクエストがキャンセルされました。");
-                        }
-                        // (ストリーム処理の中身は変更なし)
-                        if (streamData.type === 'chunk') {
-                            if (streamData.thoughtText) {
-                                state.partialThoughtStreamContent += streamData.thoughtText;
-                                if (!isBackgroundProcess) uiUtils.updateStreamingMessage(messageIndexForDisplay, streamData.thoughtText, true);
-                            }
-                            if (streamData.contentText) {
-                                state.partialStreamContent += streamData.contentText;
-                                if (!isBackgroundProcess) uiUtils.updateStreamingMessage(messageIndexForDisplay, streamData.contentText, false);
-                            }
-                            if (streamData.groundingMetadata && selectedApiProvider === 'gemini') {
-                                currentGroundingMetadata = streamData.groundingMetadata;
-                                if (!isBackgroundProcess && state.currentMessages[messageIndexForDisplay]) {
-                                    state.currentMessages[messageIndexForDisplay].groundingMetadata = currentGroundingMetadata;
-                                }
-                            }
-                            if (streamData.usageMetadata) finalUsageMetadataFromStream = streamData.usageMetadata;
-                        } else if (streamData.type === 'metadata') {
-                            modelResponseMetadata = { ...streamData };
-                            break;
-                        } else if (streamData.type === 'error') {
-                            modelResponseMetadata.finishReason = 'ERROR';
-                            modelResponseMetadata.error = streamData.error;
-                            throw new Error(streamData.message || "ストリーム内でエラーが発生しました。");
-                        }
-                    }
-                    modelResponseRawContent = state.partialStreamContent;
-                    modelThoughtSummaryContent = state.partialThoughtStreamContent;
 
-                } else { // 非ストリーミングの場合の処理
-                    const data = await apiResponseObject.json();
+        if (modelMessageObjectForStream) {
+            const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+            if (finalModelMessageIndex !== -1) {
+                state.currentMessages[finalModelMessageIndex].content = finalContent;
+                uiUtils.updateFinalizedMessageContent(finalModelMessageIndex, finalContent);
+                await dbUtils.saveChat(); // DBも更新
+            }
+        }
+    } catch (proofreadError) {
+        console.error("校正処理中にエラーが発生しました:", proofreadError);
+        const errorMessage = `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
+        finalContent += errorMessage;
 
-                    if (selectedApiProvider === 'gemini') {
-                        const candidate = data.candidates?.[0];
-                        if (candidate) {
-                            modelResponseMetadata = { finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings };
-                            candidate.content?.parts?.forEach(part => {
-                                if (part.thought === true && contextGeminiIncludeThoughts) modelThoughtSummaryContent += (part.text || "") + "\n\n";
-                                else if (part.thought !== true) modelResponseRawContent += (part.text || "") + "\n\n";
-                            });
-                            currentGroundingMetadata = candidate.groundingMetadata || null;
-                            finalUsageMetadataFromStream = data.usageMetadata || null;
-                            if (candidate.finishReason && !['STOP', 'MAX_TOKENS'].includes(candidate.finishReason)) modelResponseRawContent += `\n\n(理由: ${candidate.finishReason})`;
-                        } else {
-                            modelResponseRawContent = "応答候補がありません";
-                            if(data.promptFeedback) {
-                                modelResponseRawContent += ` (理由: ${data.promptFeedback.blockReason || '不明'})`;
-                                modelResponseMetadata.promptFeedback = data.promptFeedback;
-                                modelResponseMetadata.finishReason = data.promptFeedback.blockReason || 'ERROR';
-                            } else { modelResponseMetadata.finishReason = 'ERROR'; }
-                        }
-                    } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
-                        const choice = data.choices?.[0];
-                        if (choice) {
-                            modelResponseRawContent = choice.message?.content || "";
-                            modelResponseMetadata = { finish_reason: choice.finish_reason };
-                            if (data.usage) finalUsageMetadataFromStream = { candidatesTokenCount: data.usage.completion_tokens, totalTokenCount: data.usage.total_tokens };
-                            if (contextDeepSeekIncludeThoughts && data.parsedReasoningContent) modelThoughtSummaryContent = data.parsedReasoningContent;
-                        } else {
-                            modelResponseRawContent = `${selectedApiProvider.toUpperCase()}からの応答がありません。`;
-                            if (data.error) modelResponseRawContent += ` (エラー: ${data.error.message})`;
-                            modelResponseMetadata = { finish_reason: 'ERROR' };
-                        }
-                    } else if (selectedApiProvider === 'claude') {
-                        if (data.content?.length > 0) {
-                            data.content.forEach(block => {
-                                if (block.type === 'text') modelResponseRawContent += block.text;
-                                else if (block.type === 'thinking' && contextClaudeIncludeThoughts) modelThoughtSummaryContent += (block.thinking || "") + "\n\n";
-                            });
-                        }
-                        modelResponseMetadata = { finishReason: data.stop_reason || 'stop' };
-                        if (data.usage) finalUsageMetadataFromStream = { candidatesTokenCount: data.usage.output_tokens, totalTokenCount: data.usage.input_tokens + data.usage.output_tokens };
-                    } else if (selectedApiProvider === 'openai' || selectedApiProvider === 'xai') {
-                        const choice = data.choices?.[0];
-                        if (choice) {
-                            modelResponseRawContent = choice.message?.content || "";
-                            modelResponseMetadata = { finishReason: choice.finish_reason };
-                            if(selectedApiProvider === 'xai' && choice.message.reasoning_content) modelThoughtSummaryContent = choice.message.reasoning_content;
-                        }
-                        if (data.usage) {
-                            let reasoningTokens = provider === 'xai' && data.usage.completion_tokens_details?.reasoning_tokens ? data.usage.completion_tokens_details.reasoning_tokens : 0;
-                            finalUsageMetadataFromStream = { candidatesTokenCount: data.usage.completion_tokens + reasoningTokens, totalTokenCount: data.usage.prompt_tokens + data.usage.completion_tokens + reasoningTokens };
-                        }
-                    }
-                    modelResponseRawContent = dummyModelPrefix + modelResponseRawContent.trim();
-                    modelThoughtSummaryContent = modelThoughtSummaryContent.trim();
-                }
-
-                // --- 共通の最終処理 ---
-                let finalProcessedContent = modelResponseRawContent;
-
-                const finishReason = modelResponseMetadata.finishReason || modelResponseMetadata.finish_reason;
-                const isRetryableFinishReason = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(finishReason);
-
-                if (!isBackgroundProcess && state.settings.enableProofreading && finalProcessedContent && !isRetryableFinishReason && finishReason !== 'ERROR' && finishReason !== 'ABORTED') {
-                    try {
-                        state.isProofreading = true;
-                        uiUtils.updateLoadingIndicator();
-                        const proofreadContent = await this.proofreadText(finalProcessedContent);
-                        finalProcessedContent = proofreadContent;
-                    } catch (proofreadError) {
-                        finalProcessedContent += `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
-                    } finally {
-                        state.isProofreading = false;
-                        uiUtils.updateLoadingIndicator();
-                    }
-                }
-
-                if (isBackgroundProcess) {
-                    if (finalProcessedContent || modelThoughtSummaryContent || finishReason) {
-                        const result = {
-                             content: finalProcessedContent, metadata: modelResponseMetadata, usageMetadata: finalUsageMetadataFromStream,
-                             generatedByApiProvider: selectedApiProvider
-                         };
-                         if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) { result.thoughtSummary = modelThoughtSummaryContent || null; result.groundingMetadata = currentGroundingMetadata; }
-                         else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts) { result.deepSeekThoughtSummary = modelThoughtSummaryContent || null; }
-                         else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts) { result.thoughtSummary = modelThoughtSummaryContent || null; }
-                         else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts) { result.xaiThoughtSummary = modelThoughtSummaryContent || null; }
-                         return result;
-                    }
-                    return null;
-                }
-
-                // UIとDBの更新
-                let finalModelMessageObject;
-                if (useStreamingForThisCall && modelMessageObjectForStream) {
-                    const finalIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
-                    if (finalIndex !== -1) finalModelMessageObject = state.currentMessages[finalIndex];
-                }
-
-                if (!finalModelMessageObject) {
-                    finalModelMessageObject = { role: 'model', timestamp: Date.now(), generatedByApiProvider: selectedApiProvider };
-                    if (isRetry && firstResponseIndexForRetry !== -1) {
-                         if (siblingGroupIdToUse === null) siblingGroupIdToUse = `gid-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-                         finalModelMessageObject.isCascaded = true;
-                         finalModelMessageObject.siblingGroupId = siblingGroupIdToUse;
-                         finalModelMessageObject.isSelected = true;
-                         if (state.currentMessages[firstResponseIndexForRetry] && !state.currentMessages[firstResponseIndexForRetry].isCascaded) {
-                             state.currentMessages[firstResponseIndexForRetry].isCascaded = true;
-                             state.currentMessages[firstResponseIndexForRetry].siblingGroupId = siblingGroupIdToUse;
-                         }
-                    }
-                    state.currentMessages.push(finalModelMessageObject);
-                }
-
-                finalModelMessageObject.content = finalProcessedContent;
-                finalModelMessageObject.finishReason = finishReason;
-                finalModelMessageObject.safetyRatings = modelResponseMetadata.safetyRatings;
-                finalModelMessageObject.usageMetadata = finalUsageMetadataFromStream;
-                if (selectedApiProvider === 'gemini') { finalModelMessageObject.thoughtSummary = modelThoughtSummaryContent || null; finalModelMessageObject.groundingMetadata = currentGroundingMetadata; }
-                else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') { finalModelMessageObject.deepSeekThoughtSummary = modelThoughtSummaryContent || null; }
-                else if (selectedApiProvider === 'claude') { finalModelMessageObject.thoughtSummary = modelThoughtSummaryContent || null; }
-                else if (selectedApiProvider === 'xai') { finalModelMessageObject.xaiThoughtSummary = modelThoughtSummaryContent || null; }
-
-                if (useStreamingForThisCall) {
-                    uiUtils.finalizeStreamingMessage(state.currentMessages.indexOf(finalModelMessageObject));
-                } else {
-                    uiUtils.renderChatMessages(true);
-                }
-
+        if (modelMessageObjectForStream) {
+             const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+            if (finalModelMessageIndex !== -1) {
+                state.currentMessages[finalModelMessageIndex].content = finalContent;
+                uiUtils.updateFinalizedMessageContent(finalModelMessageIndex, finalContent);
                 await dbUtils.saveChat();
-                
-                const lastMessage = state.currentMessages[state.currentMessages.length - 1];
-                if (lastMessage && lastMessage.role === 'model') this.sendWebhookNotification(lastMessage).catch(console.error);
-                
-                if (state.settings.showTwinEngineSettings && state.settings.twinEngineEnableFullAuto) {
-                    const userTurnCount = state.currentMessages.filter(msg => msg.role === 'user').length;
-                    if (userTurnCount > (state.settings.twinEngineSummarizeAfterTurns || 0)) {
-                        setTimeout(() => this.triggerTwinEngineSummaryInBackground(), 0);
+            }
+        }
+    } finally {
+        state.isProofreading = false;
+        uiUtils.updateLoadingIndicator();
+    }
+}
+                    
+                    if (finalContent || modelThoughtSummaryContent || modelResponseMetadata.finishReason) {
+                        if (useStreamingForThisCall && modelMessageObjectForStream) {
+                            const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+                            if (finalModelMessageIndex !== -1) {
+                                const msgToUpdate = state.currentMessages[finalModelMessageIndex];
+                                msgToUpdate.content = finalContent;
+                                msgToUpdate.timestamp = Date.now();
+                                msgToUpdate.finishReason = modelResponseMetadata.finishReason;
+                                msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
+                                msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
+                                if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
+                                    if (modelThoughtSummaryContent) {
+                                        msgToUpdate.thoughtSummary = modelThoughtSummaryContent;
+                                    }
+                                    msgToUpdate.groundingMetadata = currentGroundingMetadata;
+                                } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
+                                    msgToUpdate.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
+                                } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && modelThoughtSummaryContent) {
+                                    msgToUpdate.thoughtSummary = modelThoughtSummaryContent || null;
+                                } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && modelThoughtSummaryContent) {
+                                    msgToUpdate.xaiThoughtSummary = modelThoughtSummaryContent || null;
+                                }
+
+                                uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
+                                await dbUtils.saveChat();
+                            }
+                        } else {
+                             const newModelMessage = {
+                                 role: 'model', content: finalContent,
+                                 timestamp: Date.now(),
+                                 ...modelResponseMetadata,
+                                 usageMetadata: finalUsageMetadataFromStream,
+                                 generatedByApiProvider: selectedApiProvider
+                             };
+                            if (selectedApiProvider === 'gemini' && contextGeminiIncludeThoughts) {
+                                 newModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
+                                 newModelMessage.groundingMetadata = currentGroundingMetadata;
+                            } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts && modelThoughtSummaryContent) {
+                                 newModelMessage.deepSeekThoughtSummary = modelThoughtSummaryContent || null;
+                            } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts && modelThoughtSummaryContent) {
+                                 newModelMessage.thoughtSummary = modelThoughtSummaryContent || null;
+                            } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts && modelThoughtSummaryContent) {
+                                 newModelMessage.xaiThoughtSummary = modelThoughtSummaryContent || null;
+                            }
+                            newModelMessage.thoughtSummaryOpen = (selectedApiProvider === 'gemini' && state.settings.geminiExpandThoughtsByDefault) || 
+                                                                 (selectedApiProvider === 'deepseek' && state.settings.deepSeekExpandThoughtsByDefault) ||
+                                                                 (selectedApiProvider === 'claude' && state.settings.claudeExpandThoughtsByDefault) ||
+                                                                 (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
+                                                                 (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault);
+
+                             const targetUserIndexForCascade = userMessageIndex;
+                             if (targetUserIndexForCascade !== -1 && !isBackgroundProcess) {
+                                 if (siblingGroupIdToUse === null) {
+                                     siblingGroupIdToUse = `gid-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+                                 }
+                                 newModelMessage.isCascaded = true;
+                                 newModelMessage.isSelected = true;
+                                 newModelMessage.siblingGroupId = siblingGroupIdToUse;
+
+                                 if (isRetry && firstResponseIndexForRetry !== -1 && state.currentMessages[firstResponseIndexForRetry] && !state.currentMessages[firstResponseIndexForRetry].isCascaded) {
+                                     state.currentMessages[firstResponseIndexForRetry].isCascaded = true;
+                                     state.currentMessages[firstResponseIndexForRetry].siblingGroupId = siblingGroupIdToUse;
+                                 }
+                             }
+
+                             const newModelIndex = state.currentMessages.length;
+                             state.currentMessages.push(newModelMessage);
+                             state.messageCollapsedStates.set(newModelIndex, false);
+                             state.thoughtSummaryOpenStates.set(newModelIndex, newModelMessage.thoughtSummaryOpen);
+                             uiUtils.renderChatMessages();
+                             await dbUtils.saveChat();
+                        }
+                        const lastMessage = state.currentMessages[state.currentMessages.length - 1];
+                        if (lastMessage && lastMessage.role === 'model') {
+                            this.sendWebhookNotification(lastMessage).catch(console.error);
+                        }
+                    } else {
+                         if (useStreamingForThisCall && !isBackgroundProcess && modelMessageObjectForStream) {
+                            const tempPlaceholderIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
+                            const placeholderElement = document.getElementById(`streaming-message-${tempPlaceholderIndex}`);
+                            if (placeholderElement) placeholderElement.remove();
+                            if(tempPlaceholderIndex !== -1) state.currentMessages.splice(tempPlaceholderIndex, 1);
+                        }
                     }
-                }
-                
-                if (finishReason === 'ABORTED') throw new Error("リクエストがキャンセルされました。");
+
+                    if (!isBackgroundProcess) {
+                       const currentUserTurnCountAfterSend = state.currentMessages.filter(msg => msg.role === 'user').length;
+                     const currentSummarizeAfterTurns = state.settings.twinEngineSummarizeAfterTurns || 0;
+                      if (state.settings.showTwinEngineSettings && state.settings.twinEngineEnableFullAuto && currentUserTurnCountAfterSend > currentSummarizeAfterTurns) {
+                      setTimeout(() => this.triggerTwinEngineSummaryInBackground(), 0);
+                        }
+                   }
+
+                    if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
+                        throw new Error("リクエストがキャンセルされました。");
+                    }
+
                 } else {
                     const data = await apiResponseObject.json();
                     if (selectedApiProvider === 'gemini') {
