@@ -12326,39 +12326,35 @@ if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.set
                 if (!useStreamingForThisCall) {
                     const data = await apiResponseObject.json();
                     let rawContentFromApi = "";
-                    if (selectedApiProvider === 'gemini') {
-const candidate = data.candidates?.[0];
-if (candidate) {
-    finalMetadata = { finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings };
-    
-    candidate.content?.parts?.forEach(part => {
-        if (typeof part.text === 'string') {
-            if (part.thought === true) {
-                if (contextGeminiIncludeThoughts) {
-                    finalThoughtSummary += part.text;
-                }
-            } else {
-                rawContentFromApi += part.text;
-            }
-        }
-    });
-    finalThoughtSummary = finalThoughtSummary.trim();
-    rawContentFromApi = rawContentFromApi.trim();
-
-    finalGrounding = candidate.groundingMetadata || null;
-    finalUsage = data.usageMetadata || null;
-    if (candidate.finishReason && candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") rawContentFromApi += `\n\n(理由: ${candidate.finishReason})`;
-    if (!rawContentFromApi && candidate.finishReason === "STOP" && !finalThoughtSummary) rawContentFromApi = "(応答が空です)";
-} else {
-    rawContentFromApi = "応答候補がありません";
-    if (data.promptFeedback) {
-        rawContentFromApi += ` (理由: ${data.promptFeedback.blockReason || '不明'})`;
-        finalMetadata = { promptFeedback: data.promptFeedback, finishReason: data.promptFeedback.blockReason || 'ERROR' };
-    } else {
-        finalMetadata.finishReason = 'ERROR';
-    }
-    finalUsage = data.usageMetadata || null;
-}
+if (selectedApiProvider === 'gemini') {
+                        const candidate = data.candidates?.[0];
+                        if (candidate) {
+                            finalMetadata = { finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings };
+                            candidate.content?.parts?.forEach(part => {
+                                if (part.thought === true && contextGeminiIncludeThoughts) {
+                                    finalThoughtSummary += (part.text || "");
+                                } else if (part.thought !== true) {
+                                    rawContentFromApi += (part.text || "");
+                                }
+                            });
+                            finalGrounding = candidate.groundingMetadata || null;
+                            finalUsage = data.usageMetadata || null;
+                            if (candidate.finishReason && candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") {
+                                rawContentFromApi += `\n\n(理由: ${candidate.finishReason})`;
+                            }
+                            if (!rawContentFromApi && candidate.finishReason === "STOP" && !finalThoughtSummary) {
+                                rawContentFromApi = "(応答が空です)";
+                            }
+                        } else {
+                            rawContentFromApi = "応答候補がありません";
+                            if (data.promptFeedback) {
+                                rawContentFromApi += ` (理由: ${data.promptFeedback.blockReason || '不明'})`;
+                                finalMetadata = { promptFeedback: data.promptFeedback, finishReason: data.promptFeedback.blockReason || 'ERROR' };
+                            } else {
+                                finalMetadata.finishReason = 'ERROR';
+                            }
+                            finalUsage = data.usageMetadata || null;
+                        }
                     } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
                         const choice = data.choices?.[0];
                         if (choice) {
