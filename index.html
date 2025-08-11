@@ -12424,15 +12424,22 @@ if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.set
                         finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
                     } else {
                         const newModelMessage = { role: 'model', content: '', timestamp: Date.now(), ...finalMetadata, usageMetadata: finalUsage, generatedByApiProvider: selectedApiProvider };
-                        const targetUserIndexForCascade = userMessageIndex;
-                        if (targetUserIndexForCascade !== -1 && !isBackgroundProcess) {
-                            if (siblingGroupIdToUse === null) siblingGroupIdToUse = `gid-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-                            newModelMessage.isCascaded = true;
-                            newModelMessage.isSelected = true;
-                            newModelMessage.siblingGroupId = siblingGroupIdToUse;
-                            if (isRetry && firstResponseIndexForRetry !== -1 && state.currentMessages[firstResponseIndexForRetry] && !state.currentMessages[firstResponseIndexForRetry].isCascaded) {
-                                state.currentMessages[firstResponseIndexForRetry].isCascaded = true;
-                                state.currentMessages[firstResponseIndexForRetry].siblingGroupId = siblingGroupIdToUse;
+                        if (isRetry) {
+                            const targetUserIndexForCascade = userMessageIndex;
+
+                            if (targetUserIndexForCascade !== -1 && !isBackgroundProcess && firstResponseIndexForRetry !== -1) {
+                                if (siblingGroupIdToUse === null) {
+                                    siblingGroupIdToUse = `gid-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+                                    const firstResponse = state.currentMessages[firstResponseIndexForRetry];
+                                    if (firstResponse && !firstResponse.isCascaded) {
+                                        firstResponse.isCascaded = true;
+                                        firstResponse.siblingGroupId = siblingGroupIdToUse;
+                                    }
+                                }
+                                newModelMessage.isCascaded = true;
+                                newModelMessage.isSelected = true;
+                                newModelMessage.siblingGroupId = siblingGroupIdToUse;
                             }
                         }
                         finalModelMessageIndex = state.currentMessages.length;
@@ -16123,22 +16130,16 @@ const webhookUtils = {
             actions.appendChild(selectBtn);
             actions.appendChild(deleteBtn);
     
-// 修正後
-
-const row1 = document.createElement('div');
-// highlight-start
-row1.style.cssText = 'display: flex; gap: 5px; margin-bottom: 5px; flex-wrap: wrap;';
-// highlight-end
-row1.appendChild(labelInput);
-row1.appendChild(keyInput);
-row1.appendChild(actions);
-
-const row2 = document.createElement('div');
-// highlight-start
-row2.style.cssText = 'display: flex; gap: 5px; flex-wrap: wrap;';
-// highlight-end
-row2.appendChild(providerSelect);
-row2.appendChild(modelSelect);
+            const row1 = document.createElement('div');
+            row1.style.cssText = 'display: flex; gap: 5px; margin-bottom: 5px;';
+            row1.appendChild(labelInput);
+            row1.appendChild(keyInput);
+            row1.appendChild(actions);
+    
+            const row2 = document.createElement('div');
+            row2.style.cssText = 'display: flex; gap: 5px;';
+            row2.appendChild(providerSelect);
+            row2.appendChild(modelSelect);
             
             item.appendChild(row1);
             item.appendChild(row2);
