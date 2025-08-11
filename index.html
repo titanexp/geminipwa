@@ -11852,27 +11852,80 @@ async sendWebhookNotification(responseMessage) {
                     : [...currentContextMessages];
             }
             
+
             if (!isBackgroundProcess) {
                 try {
                     let titleToSave = null;
-                    if (!state.currentChatId) {
+                    let isNewChatForDBSave = !currentContextSessionId;
+                    let existingChatForDBSave = null;
+
+                    if (currentContextSessionId) {
+                        existingChatForDBSave = await dbUtils.getChat(currentContextSessionId);
+                        if (existingChatForDBSave) {
+                            titleToSave = existingChatForDBSave.title;
+                            isNewChatForDBSave = false;
+                        } else {
+                            isNewChatForDBSave = true;
+                            currentContextSessionId = null;
+                            state.currentChatId = null;
+                        }
+                    }
+
+                    if (isNewChatForDBSave || !titleToSave) {
                         const firstUserMsg = currentContextMessages.find(m => m.role === 'user');
                         titleToSave = firstUserMsg ? firstUserMsg.content.substring(0, 50) : "無題のチャット";
                     }
-                    const savedId = await dbUtils.saveChat(titleToSave);
+
+                    const chatToSave = {
+                        messages: currentContextMessages.map(msg => ({
+                            role: msg.role, content: msg.content, timestamp: msg.timestamp,
+                            thoughtSummary: msg.thoughtSummary || null,
+                            deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
+                            xaiThoughtSummary: msg.xaiThoughtSummary || null,
+                            generatedByApiProvider: msg.generatedByApiProvider || null,
+                            ...(msg.finishReason && { finishReason: msg.finishReason }),
+                            ...(msg.safetyRatings && { safetyRatings: msg.safetyRatings }),
+                            ...(msg.error && { error: msg.error }),
+                            ...(msg.isCascaded !== undefined && { isCascaded: msg.isCascaded }),
+                            ...(msg.isSelected !== undefined && { isSelected: msg.isSelected }),
+                            ...(msg.siblingGroupId !== undefined && { siblingGroupId: msg.siblingGroupId }),
+                            ...(msg.groundingMetadata && { groundingMetadata: msg.groundingMetadata }),
+                            ...(msg.attachments && msg.attachments.length > 0 && { attachments: msg.attachments.map(att => ({ name: att.name, mimeType: att.mimeType, textData: att.textData })) }),
+                            ...(msg.usageMetadata && { usageMetadata: msg.usageMetadata }),
+                            ...(msg.thoughtSummaryOpen !== undefined && { thoughtSummaryOpen: msg.thoughtSummaryOpen }),
+                        })),
+                        updatedAt: Date.now(),
+                        title: titleToSave
+                    };
+
+                    if (isNewChatForDBSave) {
+                        chatToSave.createdAt = Date.now();
+                    } else if (existingChatForDBSave) {
+                        chatToSave.id = currentContextSessionId;
+                        chatToSave.createdAt = existingChatForDBSave.createdAt;
+                    }
+
+                    if (state.settings.persistMessageCollapseState) {
+                        chatToSave.collapsedStates = Object.fromEntries(state.messageCollapsedStates);
+                    }
+
+                    const savedId = await new Promise((resolve, reject) => {
+                        const store = dbUtils._getStore(CHATS_STORE, 'readwrite');
+                        const request = chatToSave.id ? store.put(chatToSave) : store.add(chatToSave);
+                        request.onsuccess = (event) => resolve(event.target.result || chatToSave.id);
+                        request.onerror = (event) => reject(`チャット保存エラー: ${event.target.error.name} - ${event.target.error.message}`);
+                    });
+
                     if (!state.currentChatId && savedId) {
                         state.currentChatId = savedId;
-                    }
-                    if (titleToSave) {
-                        uiUtils.updateChatTitle(titleToSave);
+                        uiUtils.updateChatTitle(chatToSave.title);
                     }
                 } catch (error) {
-                    if(state.currentChatId){
+                    if(currentContextSessionId){
                          uiUtils.displayError("チャットの保存に失敗しましたが、送信を試みます。", false);
                     }
                 }
             }
-
             const apiMessages = messagesToProcess
                 .filter(msg => {
                     if (msg.role === 'user') return true;
@@ -12221,23 +12274,20 @@ if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.set
                                                                  (selectedApiProvider === 'xai' && state.settings.xaiExpandThoughtsByDefault) ||
                                                                  (selectedApiProvider === 'llmaggregator' && state.settings.llmAggregatorExpandThoughtsByDefault);
 
-                                                     if (isRetry) {
-                            const targetUserIndexForCascade = userMessageIndex;
-                            if (targetUserIndexForCascade !== -1 && !isBackgroundProcess && firstResponseIndexForRetry !== -1) {
-                                if (siblingGroupIdToUse === null) {
-                                    siblingGroupIdToUse = `gid-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-                                    
-                                    const firstResponse = state.currentMessages[firstResponseIndexForRetry];
-                                    if (firstResponse && !firstResponse.isCascaded) {
-                                        firstResponse.isCascaded = true;
-                                        firstResponse.siblingGroupId = siblingGroupIdToUse;
-                                    }
-                                }
-                                newModelMessage.isCascaded = true;
-                                newModelMessage.isSelected = true;
-                                newModelMessage.siblingGroupId = siblingGroupIdToUse;
-                            }
-                        }
+                             const targetUserIndexForCascade = userMessageIndex;
+                             if (targetUserIndexForCascade !== -1 && !isBackgroundProcess) {
+                                 if (siblingGroupIdToUse === null) {
+                                     siblingGroupIdToUse = `gid-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+                                 }
+                                 newModelMessage.isCascaded = true;
+                                 newModelMessage.isSelected = true;
+                                 newModelMessage.siblingGroupId = siblingGroupIdToUse;
+
+                                 if (isRetry && firstResponseIndexForRetry !== -1 && state.currentMessages[firstResponseIndexForRetry] && !state.currentMessages[firstResponseIndexForRetry].isCascaded) {
+                                     state.currentMessages[firstResponseIndexForRetry].isCascaded = true;
+                                     state.currentMessages[firstResponseIndexForRetry].siblingGroupId = siblingGroupIdToUse;
+                                 }
+                             }
 
                              const newModelIndex = state.currentMessages.length;
                              state.currentMessages.push(newModelMessage);
@@ -12277,29 +12327,38 @@ if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.set
                     const data = await apiResponseObject.json();
                     let rawContentFromApi = "";
                     if (selectedApiProvider === 'gemini') {
-                        const candidate = data.candidates?.[0];
-                        if (candidate) {
-                            finalMetadata = { finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings };
-                            candidate.content?.parts?.forEach(part => {
-                                if (part.thought === true && contextGeminiIncludeThoughts) finalThoughtSummary += (part.text || "") + "\n\n";
-                                else if (part.thought !== true) rawContentFromApi += (part.text || "") + "\n\n";
-                            });
-                            finalThoughtSummary = finalThoughtSummary.trim();
-                            rawContentFromApi = rawContentFromApi.trim();
-                            finalGrounding = candidate.groundingMetadata || null;
-                            finalUsage = data.usageMetadata || null;
-                            if (candidate.finishReason && candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") rawContentFromApi += `\n\n(理由: ${candidate.finishReason})`;
-                            if (!rawContentFromApi && candidate.finishReason === "STOP" && !finalThoughtSummary) rawContentFromApi = "(応答が空です)";
-                        } else {
-                            rawContentFromApi = "応答候補がありません";
-                            if (data.promptFeedback) {
-                                rawContentFromApi += ` (理由: ${data.promptFeedback.blockReason || '不明'})`;
-                                finalMetadata = { promptFeedback: data.promptFeedback, finishReason: data.promptFeedback.blockReason || 'ERROR' };
-                            } else {
-                                finalMetadata.finishReason = 'ERROR';
-                            }
-                            finalUsage = data.usageMetadata || null;
-                        }
+const candidate = data.candidates?.[0];
+if (candidate) {
+    finalMetadata = { finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings };
+    
+    candidate.content?.parts?.forEach(part => {
+        if (typeof part.text === 'string') {
+            if (part.thought === true) {
+                if (contextGeminiIncludeThoughts) {
+                    finalThoughtSummary += part.text;
+                }
+            } else {
+                rawContentFromApi += part.text;
+            }
+        }
+    });
+    finalThoughtSummary = finalThoughtSummary.trim();
+    rawContentFromApi = rawContentFromApi.trim();
+
+    finalGrounding = candidate.groundingMetadata || null;
+    finalUsage = data.usageMetadata || null;
+    if (candidate.finishReason && candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") rawContentFromApi += `\n\n(理由: ${candidate.finishReason})`;
+    if (!rawContentFromApi && candidate.finishReason === "STOP" && !finalThoughtSummary) rawContentFromApi = "(応答が空です)";
+} else {
+    rawContentFromApi = "応答候補がありません";
+    if (data.promptFeedback) {
+        rawContentFromApi += ` (理由: ${data.promptFeedback.blockReason || '不明'})`;
+        finalMetadata = { promptFeedback: data.promptFeedback, finishReason: data.promptFeedback.blockReason || 'ERROR' };
+    } else {
+        finalMetadata.finishReason = 'ERROR';
+    }
+    finalUsage = data.usageMetadata || null;
+}
                     } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
                         const choice = data.choices?.[0];
                         if (choice) {
