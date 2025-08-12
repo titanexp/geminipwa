@@ -5545,10 +5545,6 @@
             promptInput: document.getElementById('promptDialog').querySelector('.dialog-input'),
             promptOkBtn: document.getElementById('promptDialog').querySelector('.dialog-ok-btn'),
             promptCancelBtn: document.getElementById('promptDialog').querySelector('.dialog-cancel-btn'),
-            enableProofreadingCheckbox: document.getElementById('enable-proofreading'),
-            proofreadingOptionsDiv: document.getElementById('proofreading-options'),
-            proofreadingApiConfigsList: document.getElementById('proofreading-api-configs-list'),
-            addProofreadingApiConfigBtn: document.getElementById('add-proofreading-api-config-btn'),
             rollDiceBtn: document.getElementById('roll-dice-btn'),
             attachFileBtn: document.getElementById('attach-file-btn'),
             aiToAiChatBtn: document.getElementById('ai-to-ai-chat-btn'),
@@ -5574,8 +5570,6 @@
             disableAttachmentConfirmationToggle: document.getElementById('disable-attachment-confirmation-toggle'),
             addPrefixOnImportToggle: document.getElementById('add-prefix-on-import-toggle'),
             showMultiApiKeysToggle: document.getElementById('show-multi-api-keys-toggle'),
-                proofreadingSettingsGroup: document.getElementById('settings-group-proofreading'),
-                showProofreadingSettingsToggle: document.getElementById('show-proofreading-settings-toggle'),
             showTopCollapseButtonToggle: document.getElementById('show-top-collapse-button-toggle'),
             showBottomCollapseButtonToggle: document.getElementById('show-bottom-collapse-button-toggle'),
             persistMessageCollapseStateCheckbox: document.getElementById('persist-message-collapse-state'),
@@ -5823,11 +5817,12 @@
                 messageBodyFontSize: DEFAULT_MESSAGE_BODY_FONT_SIZE,
                 codeBlockFontSize: DEFAULT_CODE_BLOCK_FONT_SIZE,
                 thoughtSummaryFontSize: DEFAULT_THOUGHT_SUMMARY_FONT_SIZE,
-                 enableProofreading: false,
-                 proofreadingApiConfigs: [],
-                 activeProofreadingConfigId: null,
-                enableSessionLinking: false,
-                enableSwipeNavigation: true,
+            enableSessionLinking: false,
+            enableProofreading: false,
+            proofreadingApiConfigs: [],
+            activeProofreadingConfigId: null,
+            showProofreadingSettings: false,
+            enableSwipeNavigation: true,
                 preventZoom: true,
                 minimizeHeaderFooter: false,
                 extendAiBubbleWidth: false,
@@ -5877,7 +5872,6 @@
                 disableAttachmentConfirmation: false,
                 addPrefixOnImport: true,
                 showMultiApiKeys: false,
-                showProofreadingSettings: false,
                 disableSaveSettingsConfirmation: false,
                 autoSaveSettings: false,
                 showTopCollapseButton: true,
@@ -6286,7 +6280,25 @@
                             };
                         }
                         
-                        if ((!loadedSettings.twinEngineApiConfigs || loadedSettings.twinEngineApiConfigs.length === 0) && loadedSettings.twinEngineProvider) {
+                    if (loadedSettings.hasOwnProperty('proofreadingModelName')) {
+                        if (!state.settings.proofreadingApiConfigs || state.settings.proofreadingApiConfigs.length === 0) {
+                            const oldConfig = {
+                                id: `migrated-proofreading-${Date.now()}`,
+                                label: '（移行された設定）',
+                                provider: 'gemini',
+                                apiKey: state.settings.apiKey || '',
+                                modelName: loadedSettings.proofreadingModelName,
+                                systemPrompt: loadedSettings.proofreadingSystemInstruction || '',
+                                temperature: null, maxTokens: null, topK: null, topP: null
+                            };
+                            state.settings.proofreadingApiConfigs = [oldConfig];
+                            state.settings.activeProofreadingConfigId = oldConfig.id;
+                        }
+                        delete state.settings.proofreadingModelName;
+                        delete state.settings.proofreadingSystemInstruction;
+                    }
+
+                    if ((!loadedSettings.twinEngineApiConfigs || loadedSettings.twinEngineApiConfigs.length === 0) && loadedSettings.twinEngineProvider) {
                             const provider = loadedSettings.twinEngineProvider;
                             let apiKey = '';
                             let modelName = '';
@@ -8160,11 +8172,6 @@
                 elements.disableAttachmentConfirmationToggle.checked = state.settings.disableAttachmentConfirmation;
                 elements.addPrefixOnImportToggle.checked = state.settings.addPrefixOnImport;
                 elements.showMultiApiKeysToggle.checked = state.settings.showMultiApiKeys;
-            elements.showProofreadingSettingsToggle.checked = state.settings.showProofreadingSettings;
-            elements.proofreadingSettingsGroup.classList.toggle('hidden', !state.settings.showProofreadingSettings);
-            elements.enableProofreadingCheckbox.checked = state.settings.enableProofreading;
-            elements.proofreadingOptionsDiv.classList.toggle('hidden', !elements.enableProofreadingCheckbox.checked);
-            proofreadingApiConfigUtils.renderList();
                 elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
                 elements.autoSaveSettingsToggle.checked = state.settings.autoSaveSettings;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
@@ -8181,7 +8188,11 @@
                 elements.toggleButtonBottomTextCollapseInput.value = state.settings.toggleButtonBottomTextCollapse || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 elements.toggleButtonBottomTextExpandInput.value = state.settings.toggleButtonBottomTextExpand || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
                 elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity ?? DEFAULT_THOUGHT_SUMMARY_OPACITY;
-                elements.dummyErrorDebugModeCheckbox.checked = state.settings.dummyErrorDebugMode;
+             elements.dummyErrorDebugModeCheckbox.checked = state.settings.dummyErrorDebugMode;
+
+            elements.enableProofreadingCheckbox.checked = state.settings.enableProofreading;
+            elements.proofreadingOptionsDiv.classList.toggle('hidden', !elements.enableProofreadingCheckbox.checked);
+            proofreadingApiConfigUtils.renderList();
 
                 document.documentElement.style.setProperty('--message-body-font-size', `${state.settings.messageBodyFontSize || DEFAULT_MESSAGE_BODY_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--code-block-font-size', `${state.settings.codeBlockFontSize || DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
@@ -8760,18 +8771,18 @@
                     elements.loadingIndicator.textContent = '応答中';
                     elements.loadingIndicator.classList.remove('hidden');
                     elements.loadingIndicator.setAttribute('aria-live', 'polite');
-                } else if (state.isSummarizingForRetry) {
-                    elements.loadingIndicator.textContent = 'リトライ前の履歴を要約中...';
-                    elements.loadingIndicator.classList.remove('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
-                } else if (state.isAiToAiChatProcessing) {
+            } else if (state.isSummarizingForRetry) {
+                elements.loadingIndicator.textContent = 'リトライ前の履歴を要約中...';
+                elements.loadingIndicator.classList.remove('hidden');
+                elements.loadingIndicator.setAttribute('aria-live', 'polite');
+            } else if (state.isProofreading) {
+                elements.loadingIndicator.textContent = '校正中...';
+                elements.loadingIndicator.classList.remove('hidden');
+                elements.loadingIndicator.setAttribute('aria-live', 'polite');
+            } else if (state.isAiToAiChatProcessing) {
                     elements.loadingIndicator.textContent = state.aiToAiProcessingMessage;
                     elements.loadingIndicator.classList.remove('hidden');
                     elements.loadingIndicator.setAttribute('aria-live', 'assertive');
-                } else if (state.isProofreading) {
-                    elements.loadingIndicator.textContent = '校正中...';
-                    elements.loadingIndicator.classList.remove('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
                 } else if (state.isSummarizing) {
                     elements.loadingIndicator.textContent = '要約中...';
                     elements.loadingIndicator.classList.remove('hidden');
@@ -9245,6 +9256,7 @@
                 state.currentScreen = 'chat';
                 
                 updateMessageMaxWidthVar();
+            proofreadingApiConfigUtils.initialize();
                 this.setupEventListeners();
                 this.updateZoomState();
                 uiUtils.adjustTextareaHeight();
@@ -9952,16 +9964,11 @@
             elements.showMultiApiKeysToggle.addEventListener('change', (e) => {
                 uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
             });
-            elements.showProofreadingSettingsToggle.addEventListener('change', (e) => {
-                state.settings.showProofreadingSettings = e.target.checked;
-                elements.proofreadingSettingsGroup.classList.toggle('hidden', !e.target.checked);
-            });
-            elements.enableProofreadingCheckbox.addEventListener('change', () => {
-                elements.proofreadingOptionsDiv.classList.toggle('hidden', !elements.enableProofreadingCheckbox.checked);
-            });
-            twinEngineApiConfigUtils.initialize();
-            proofreadingApiConfigUtils.initialize();
-        },
+        twinEngineApiConfigUtils.initialize();
+        elements.enableProofreadingCheckbox.addEventListener('change', () => {
+            elements.proofreadingOptionsDiv.classList.toggle('hidden', !elements.enableProofreadingCheckbox.checked);
+        });
+    },
         handlePopState(event) {
             const targetScreen = event.state?.screen || 'chat';
             uiUtils.showScreen(targetScreen, true);
@@ -10953,65 +10960,66 @@
                     }
                 } catch (error) {
                     await uiUtils.showCustomAlert(`タイトル更新エラー: ${error}`);
-                }
+                            }
+        }
+    },
+
+    async proofreadText(textToProofread) {
+        console.log("--- 校正処理開始 ---");
+
+        const activeConfigId = state.settings.activeProofreadingConfigId;
+        const activeConfig = state.settings.proofreadingApiConfigs.find(c => c.id === activeConfigId);
+
+        if (!activeConfig) {
+            throw new Error("アクティブな校正設定が見つかりません。");
+        }
+
+        const {
+            provider,
+            apiKey: apiKeyForProofreading,
+            modelName,
+            systemPrompt,
+            temperature,
+            maxTokens,
+            topK,
+            topP,
+            presencePenalty,
+            frequencyPenalty,
+            thinkingBudget
+        } = activeConfig;
+
+        if (provider !== 'dummy' && !apiKeyForProofreading) {
+            throw new Error(`校正用の${provider} APIキーが設定されていません。`);
+        }
+
+        const contextForProofreading = {
+            sessionId: null,
+            messages: [],
+            systemPrompt: systemPrompt || '校正してください。',
+            inputText: textToProofread,
+            attachments: [],
+            apiProvider: provider,
+            _apiKeyOverride: apiKeyForProofreading,
+            _modelNameOverride: modelName,
+            temperature, maxTokens, topK, topP,
+            presencePenalty, frequencyPenalty, thinkingBudget,
+        };
+
+        try {
+            const response = await this.handleSend(false, -1, contextForProofreading, false);
+
+            if (response && response.content) {
+                console.log("--- 校正処理成功 ---");
+                return response.content;
+            } else {
+                throw new Error("校正APIから有効なコンテンツが返されませんでした。");
             }
-        },
-        async proofreadText(textToProofread) {
-            console.log("--- 校正処理開始 ---");
-
-            const activeConfigId = state.settings.activeProofreadingConfigId;
-            const activeConfig = state.settings.proofreadingApiConfigs.find(c => c.id === activeConfigId);
-
-            if (!activeConfig) {
-                throw new Error("アクティブな校正設定が見つかりません。");
-            }
-
-            const {
-                provider,
-                apiKey: apiKeyForProofreading,
-                modelName,
-                systemPrompt,
-                temperature,
-                maxTokens,
-                topK,
-                topP,
-                presencePenalty,
-                frequencyPenalty,
-                thinkingBudget
-            } = activeConfig;
-
-            if (provider !== 'dummy' && !apiKeyForProofreading) {
-                throw new Error(`校正用の${provider} APIキーが設定されていません。`);
-            }
-
-            const contextForProofreading = {
-                sessionId: null,
-                messages: [],
-                systemPrompt: systemPrompt || '校正してください。',
-                inputText: textToProofread,
-                attachments: [],
-                apiProvider: provider,
-                _apiKeyOverride: apiKeyForProofreading,
-                _modelNameOverride: modelName,
-                temperature, maxTokens, topK, topP,
-                presencePenalty, frequencyPenalty, thinkingBudget,
-            };
-
-            try {
-                const response = await this.handleSend(false, -1, contextForProofreading, false);
-
-                if (response && response.content) {
-                    console.log("--- 校正処理成功 ---");
-                    return response.content;
-                } else {
-                    throw new Error("校正APIから有効なコンテンツが返されませんでした。");
-                }
-            } catch (error) {
-                console.error("校正処理中にエラーが発生:", error);
-                throw error;
-            }
-        },
-        async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null) {
+        } catch (error) {
+            console.error("校正処理中にエラーが発生しました:", error);
+            throw error;
+        }
+    },
+        async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null, isTopLevelCall = true) {
             const isBackgroundProcess = !!sourceSessionContext;
             
             let apiKeyToUse, modelNameToUse, selectedApiProvider;
@@ -11873,170 +11881,78 @@
                         modelThoughtSummaryContent = state.partialThoughtStreamContent;
                         modelResponseRawContent = state.partialStreamContent;
                     }
-                    let finalContent = modelResponseRawContent;
-                    const finishReason = modelResponseMetadata.finishReason;
-                    const isRetryableFinishReason = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(finishReason);
-                    if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.settings.enableProofreading && finalContent && !isRetryableFinishReason && finishReason !== 'ERROR' && finishReason !== 'ABORTED') {
-                        if (useStreamingForThisCall && modelMessageObjectForStream) {
-                            const tempMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
-                            if (tempMessageIndex !== -1) {
 
-                                const msgToUpdate = state.currentMessages[tempMessageIndex];
-                                msgToUpdate.content = finalContent;
-                                msgToUpdate.timestamp = Date.now();
-                                msgToUpdate.finishReason = modelResponseMetadata.finishReason;
-                                msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
-                                msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
-                                uiUtils.finalizeStreamingMessage(tempMessageIndex);
-                                await dbUtils.saveChat();
-                            }
-                        }
-
-                        try {
-                            state.isProofreading = true;
-                            uiUtils.updateLoadingIndicator();
-                            const proofreadContent = await this.proofreadText(finalContent);
-                            finalContent = proofreadContent; 
-
-
-                            if (modelMessageObjectForStream) {
-                                const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
-                                if (finalModelMessageIndex !== -1) {
-                                    state.currentMessages[finalModelMessageIndex].content = finalContent;
-                                    uiUtils.updateFinalizedMessageContent(finalModelMessageIndex, finalContent);
-                                    await dbUtils.saveChat(); // DBも更新
-                                }
-                            }
-                        } catch (proofreadError) {
-                            console.error("校正処理中にエラーが発生しました:", proofreadError);
-                            const errorMessage = `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
-                            finalContent += errorMessage;
-
-                            if (modelMessageObjectForStream) {
-                                 const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
-                                if (finalModelMessageIndex !== -1) {
-                                    state.currentMessages[finalModelMessageIndex].content = finalContent;
-                                    uiUtils.updateFinalizedMessageContent(finalModelMessageIndex, finalContent);
-                                    await dbUtils.saveChat();
-                                }
-                            }
-                        } finally {
-                            state.isProofreading = false;
-                            uiUtils.updateLoadingIndicator();
-                        }
-                    }
                     if (modelResponseMetadata.finishReason === 'ABORTED' || state.abortController?.signal.aborted) {
                         throw new Error("リクエストがキャンセルされました。");
                     }
 
-                } else {
-                    const data = await apiResponseObject.json();
-                    if (selectedApiProvider === 'gemini') {
-                        const candidate = data.candidates?.[0];
-                        let rawContentFromApi = "";
-                        if (candidate) {
-                            modelResponseMetadata = { finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings };
-                            candidate.content?.parts?.forEach(part => {
-                                if (part.thought === true && contextGeminiIncludeThoughts) {
-                                    modelThoughtSummaryContent += (part.text || "") + "\n\n";
-                                } else if (part.thought !== true){
-                                    rawContentFromApi += (part.text || "") + "\n\n";
-                                }
-                            });
-                            modelThoughtSummaryContent = modelThoughtSummaryContent.trim();
-                            rawContentFromApi = rawContentFromApi.trim();
-
-                            currentGroundingMetadata = candidate.groundingMetadata || null;
-                            finalUsageMetadataFromStream = data.usageMetadata || null;
-                            if (candidate.finishReason && candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") {
-                                rawContentFromApi += `\n\n(理由: ${candidate.finishReason})`;
-                            }
-                            if (!rawContentFromApi && candidate.finishReason === "STOP" && !modelThoughtSummaryContent) {
-                                rawContentFromApi = "(応答が空です)";
-                            }
+            } else {
+                const data = await apiResponseObject.json();
+                let rawContentFromApi = "";
+                if (selectedApiProvider === 'gemini') {
+                    const candidate = data.candidates?.[0];
+                    if (candidate) {
+                        finalMetadata = { finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings };
+                        candidate.content?.parts?.forEach(part => {
+                            if (part.thought === true && contextGeminiIncludeThoughts) finalThoughtSummary += (part.text || "") + "\n\n";
+                            else if (part.thought !== true) rawContentFromApi += (part.text || "") + "\n\n";
+                        });
+                        finalThoughtSummary = finalThoughtSummary.trim();
+                        rawContentFromApi = rawContentFromApi.trim();
+                        finalGrounding = candidate.groundingMetadata || null;
+                        finalUsage = data.usageMetadata || null;
+                        if (candidate.finishReason && candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") rawContentFromApi += `\n\n(理由: ${candidate.finishReason})`;
+                        if (!rawContentFromApi && candidate.finishReason === "STOP" && !finalThoughtSummary) rawContentFromApi = "(応答が空です)";
+                    } else {
+                        rawContentFromApi = "応答候補がありません";
+                        if (data.promptFeedback) {
+                            rawContentFromApi += ` (理由: ${data.promptFeedback.blockReason || '不明'})`;
+                            finalMetadata = { promptFeedback: data.promptFeedback, finishReason: data.promptFeedback.blockReason || 'ERROR' };
                         } else {
-                            rawContentFromApi = "応答候補がありません";
-                            if(data.promptFeedback) {
-                                rawContentFromApi += ` (理由: ${data.promptFeedback.blockReason || '不明'})`;
-                                modelResponseMetadata.promptFeedback = data.promptFeedback;
-                                modelResponseMetadata.finishReason = data.promptFeedback.blockReason || 'ERROR';
-                            } else {
-                                modelResponseMetadata.finishReason = 'ERROR';
-                            }
-                            finalUsageMetadataFromStream = data.usageMetadata || null;
+                            finalMetadata.finishReason = 'ERROR';
                         }
-                         modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
-                    } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
-                        const choice = data.choices?.[0];
-                        let rawContentFromApi = "";
-                        if (choice) {
-                            rawContentFromApi = choice.message?.content || "";
-                            modelResponseMetadata = { finish_reason: choice.finish_reason };
-                            if (data.usage) {
-                               finalUsageMetadataFromStream = {
-                                    candidatesTokenCount: data.usage.completion_tokens,
-                                    totalTokenCount: data.usage.total_tokens,
-                                };
-                            }
-                            if (contextDeepSeekIncludeThoughts && data.parsedReasoningContent) {
-                                modelThoughtSummaryContent = data.parsedReasoningContent;
-                            }
-                        } else {
-                            rawContentFromApi = `${selectedApiProvider.toUpperCase()}からの応答がありません。`;
-                            modelResponseMetadata = { finish_reason: 'ERROR' };
-                            if (data.error) rawContentFromApi += ` (エラー: ${data.error.message})`;
-                        }
-                        modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
-                    } else if (selectedApiProvider === 'claude') {
-                        let rawContentFromApi = "";
-                        if (data.content && data.content.length > 0) {
-                            data.content.forEach(block => {
-                                if (block.type === 'text') {
-                                    rawContentFromApi += block.text;
-                                } else if (block.type === 'thinking' && contextClaudeIncludeThoughts) {
-                                    modelThoughtSummaryContent += (block.thinking || "") + "\n\n";
-                                }
-                            });
-                            modelThoughtSummaryContent = modelThoughtSummaryContent.trim();
-                        }
-                        modelResponseMetadata = { finishReason: data.stop_reason || 'stop' };
-                        if (data.usage) {
-                            finalUsageMetadataFromStream = {
-                                candidatesTokenCount: data.usage.output_tokens,
-                                totalTokenCount: data.usage.input_tokens + data.usage.output_tokens,
-                            };
-                        }
-                        if (!rawContentFromApi && data.stop_reason === 'end_turn') {
-                            rawContentFromApi = "(応答が空です)";
-                        }
-                        modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
-                    } else if (selectedApiProvider === 'openai' || selectedApiProvider === 'xai') {
-                        let rawContentFromApi = "";
-                        if (data.choices && data.choices.length > 0) {
-                            rawContentFromApi = data.choices[0].message?.content || "";
-                            modelResponseMetadata = { finishReason: data.choices[0].finish_reason };
-                            if(selectedApiProvider === 'xai' && data.choices[0].message.reasoning_content) {
-                                modelThoughtSummaryContent = data.choices[0].message.reasoning_content;
-                            }
-                        }
-                        if (data.usage) {
-                            let reasoningTokens = 0;
-                            if (selectedApiProvider === 'xai' && data.usage.completion_tokens_details?.reasoning_tokens) {
-                                reasoningTokens = data.usage.completion_tokens_details.reasoning_tokens;
-                            }
-                            finalUsageMetadataFromStream = {
-                                candidatesTokenCount: data.usage.completion_tokens + reasoningTokens,
-                                totalTokenCount: data.usage.prompt_tokens + data.usage.completion_tokens + reasoningTokens
-                            };
-                        }
-                        if (!rawContentFromApi && modelResponseMetadata.finishReason === 'stop') {
-                            rawContentFromApi = "(応答が空です)";
-                        }
-                        modelResponseRawContent = dummyModelPrefix + rawContentFromApi;
+                        finalUsage = data.usageMetadata || null;
                     }
+                } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
+                    const choice = data.choices?.[0];
+                    if (choice) {
+                        rawContentFromApi = choice.message?.content || "";
+                        finalMetadata = { finishReason: choice.finish_reason };
+                        if (data.usage) finalUsage = { candidatesTokenCount: data.usage.completion_tokens, totalTokenCount: data.usage.total_tokens };
+                        if (contextDeepSeekIncludeThoughts && data.parsedReasoningContent) finalThoughtSummary = data.parsedReasoningContent;
+                    } else {
+                        rawContentFromApi = `${selectedApiProvider.toUpperCase()}からの応答がありません。`;
+                        finalMetadata = { finishReason: 'ERROR' };
+                        if (data.error) rawContentFromApi += ` (エラー: ${data.error.message})`;
+                    }
+                } else if (selectedApiProvider === 'claude') {
+                    if (data.content && data.content.length > 0) {
+                        data.content.forEach(block => {
+                            if (block.type === 'text') rawContentFromApi += block.text;
+                            else if (block.type === 'thinking' && contextClaudeIncludeThoughts) finalThoughtSummary += (block.thinking || "") + "\n\n";
+                        });
+                        finalThoughtSummary = finalThoughtSummary.trim();
+                    }
+                    finalMetadata = { finishReason: data.stop_reason || 'stop' };
+                    if (data.usage) finalUsage = { candidatesTokenCount: data.usage.output_tokens, totalTokenCount: data.usage.input_tokens + data.usage.output_tokens };
+                    if (!rawContentFromApi && data.stop_reason === 'end_turn') rawContentFromApi = "(応答が空です)";
+                } else if (selectedApiProvider === 'openai' || selectedApiProvider === 'xai') {
+                    if (data.choices && data.choices.length > 0) {
+                        rawContentFromApi = data.choices[0].message?.content || "";
+                        finalMetadata = { finishReason: data.choices[0].finish_reason };
+                        if (selectedApiProvider === 'xai' && data.choices[0].message.reasoning_content) finalThoughtSummary = data.choices[0].message.reasoning_content;
+                    }
+                    if (data.usage) {
+                        let reasoningTokens = (selectedApiProvider === 'xai' && data.usage.completion_tokens_details?.reasoning_tokens) ? data.usage.completion_tokens_details.reasoning_tokens : 0;
+                        finalUsage = { candidatesTokenCount: data.usage.completion_tokens + reasoningTokens, totalTokenCount: data.usage.prompt_tokens + data.usage.completion_tokens + reasoningTokens };
+                    }
+                    if (!rawContentFromApi && finalMetadata.finishReason === 'stop') rawContentFromApi = "(応答が空です)";
+                }
+                finalContent = dummyModelPrefix + rawContentFromApi;
+
                 const finishReasonForProofreading = finalMetadata.finishReason;
                 const isRetryableForProofreading = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(finishReasonForProofreading);
-                if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.settings.enableProofreading && finalContent && !isRetryableForProofreading && finishReasonForProofreading !== 'ERROR' && finishReasonForProofreading !== 'ABORTED') {
+                if (isTopLevelCall && state.settings.enableProofreading && finalContent && !isRetryableForProofreading && finishReasonForProofreading !== 'ERROR' && finishReasonForProofreading !== 'ABORTED') {
                     try {
                         state.isProofreading = true;
                         uiUtils.updateLoadingIndicator();
@@ -12048,6 +11964,8 @@
                         state.isProofreading = false;
                         uiUtils.updateLoadingIndicator();
                     }
+                }
+            }
                 if (isBackgroundProcess) {
                     if (modelResponseRawContent || modelThoughtSummaryContent || modelResponseMetadata.finishReason) {
                          const result = {
@@ -12076,7 +11994,7 @@
                         const finalModelMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
                         if (finalModelMessageIndex !== -1) {
                             const msgToUpdate = state.currentMessages[finalModelMessageIndex];
-                            msgToUpdate.content = finalContent;
+                            msgToUpdate.content = modelResponseRawContent;
                             msgToUpdate.timestamp = Date.now();
                             msgToUpdate.finishReason = modelResponseMetadata.finishReason;
                             msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
@@ -12093,6 +12011,30 @@
                             }
                             uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
                             await dbUtils.saveChat();
+
+                            const lastMessage = state.currentMessages[finalModelMessageIndex];
+                            if (isTopLevelCall && lastMessage) {
+                                const isRetryableFinishReason = ['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'OTHER'].includes(lastMessage.finishReason);
+                                if (state.settings.enableProofreading && lastMessage.content && !isRetryableFinishReason && lastMessage.finishReason !== 'ERROR' && lastMessage.finishReason !== 'ABORTED') {
+                                    try {
+                                        state.isProofreading = true;
+                                        uiUtils.updateLoadingIndicator();
+                                        const proofreadContent = await this.proofreadText(lastMessage.content);
+                                        lastMessage.content = proofreadContent;
+                                        uiUtils.updateFinalizedMessageContent(finalModelMessageIndex, proofreadContent);
+                                        await dbUtils.saveChat();
+                                    } catch (proofreadError) {
+                                        const errorMessage = `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
+                                        lastMessage.content += errorMessage;
+                                        uiUtils.updateFinalizedMessageContent(finalModelMessageIndex, lastMessage.content);
+                                        await dbUtils.saveChat();
+                                    } finally {
+                                        state.isProofreading = false;
+                                        uiUtils.updateLoadingIndicator();
+                                    }
+                                }
+                                this.sendWebhookNotification(lastMessage).catch(console.error);
+                            }
                         }
                     } else {
                          const newModelMessage = {
@@ -12666,14 +12608,15 @@
         async saveSettings(showNotice = true) {
             const newSettings = { ...state.settings };
             newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
-            newSettings.showProofreadingSettings = elements.showProofreadingSettingsToggle.checked;
-            newSettings.enableProofreading = elements.enableProofreadingCheckbox.checked;
-            newSettings.proofreadingApiConfigs = state.settings.proofreadingApiConfigs;
-            newSettings.activeProofreadingConfigId = state.settings.activeProofreadingConfigId;
             newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
-            newSettings.autoSaveSettings = elements.autoSaveSettingsToggle.checked;
+        newSettings.autoSaveSettings = elements.autoSaveSettingsToggle.checked;
+        
+        newSettings.showProofreadingSettings = elements.showProofreadingSettingsToggle.checked;
+        newSettings.enableProofreading = elements.enableProofreadingCheckbox.checked;
+        newSettings.proofreadingApiConfigs = state.settings.proofreadingApiConfigs;
+        newSettings.activeProofreadingConfigId = state.settings.activeProofreadingConfigId;
 
-            if (newSettings.showMultiApiKeys) {
+        if (newSettings.showMultiApiKeys) {
             } else {
                 newSettings.apiKey = elements.geminiApiKeyInput.value.trim();
                 newSettings.deepSeekApiKey = elements.deepSeekApiKeyInput.value.trim();
@@ -15496,285 +15439,210 @@
                 response.json = async () => ({ ...data, xaiThoughtSummary: reasoningContent });
             }
             return response;
-        },
-    };
-    const proofreadingApiConfigUtils = {
-        MAX_CONFIGS: 10,
-    
-        initialize() {
-            elements.addProofreadingApiConfigBtn.addEventListener('click', () => this.addConfig());
-            this.renderList();
-        },
-    
-        generateNextConfigLabel() {
-            const index = state.settings.proofreadingApiConfigs.length;
-            return `校正設定 ${index + 1}`;
-        },
-
-        addConfig() {
-            const configs = state.settings.proofreadingApiConfigs;
-            if (configs.length >= this.MAX_CONFIGS) {
-                uiUtils.showCustomAlert(`最大${this.MAX_CONFIGS}個までの校正設定を作成できます。`);
-                return;
-            }
-            const newConfig = {
-                id: Date.now().toString(),
-                label: this.generateNextConfigLabel(),
-                provider: 'gemini',
-                apiKey: '',
-                modelName: DEFAULT_MODEL,
-                systemPrompt: 'あなたはプロの編集者です。受け取った文章をより自然で分かりやすく校正してください。元の文章の意図やニュアンスは変えないでください。校正後の文章のみを出力してください。',
-                temperature: 0.2,
-                maxTokens: null,
-                topK: null,
-                topP: null,
-                presencePenalty: null,
-                frequencyPenalty: null,
-                thinkingBudget: null
-            };
-            configs.push(newConfig);
-            if (configs.length === 1) {
-                state.settings.activeProofreadingConfigId = newConfig.id;
-            }
-            this.renderList();
-        },
-    
-        deleteConfig(configId) {
-            const configs = state.settings.proofreadingApiConfigs;
-            const index = configs.findIndex(c => c.id === configId);
-            if (index === -1) return;
-            
-            configs.splice(index, 1);
-            if (state.settings.activeProofreadingConfigId === configId) {
-                state.settings.activeProofreadingConfigId = configs.length > 0 ? configs[0].id : null;
-            }
-            this.renderList();
-        },
-    
-        selectConfig(configId) {
-            state.settings.activeProofreadingConfigId = configId;
-            this.renderList();
-    elements.proofreadingApiConfigsList.dispatchEvent(new Event('change', { bubbles: true }));
-        },
-    
-        updateConfigValue(configId, key, value) {
-            const config = state.settings.proofreadingApiConfigs.find(c => c.id === configId);
-            if (config) {
-                config[key] = value;
-                if (key === 'provider') {
-                    config.modelName = this.getDefaultModelForProvider(value);
-                    this.renderList();
-                }
-            }
-        },
-    
-        renderList() {
-            const configs = state.settings.proofreadingApiConfigs;
-            const container = elements.proofreadingApiConfigsList;
-            container.innerHTML = '';
-    
-            if (configs.length === 0) {
-                const emptyMsg = document.createElement('p');
-                emptyMsg.textContent = '校正用のAPI設定がありません。';
-                emptyMsg.style.cssText = 'color: var(--text-secondary); font-size: 13px; text-align: center; margin: 10px 0;';
-                container.appendChild(emptyMsg);
-            } else {
-                configs.forEach(config => {
-                    const item = this.createConfigItem(config);
-                    container.appendChild(item);
-                });
-            }
-            elements.addProofreadingApiConfigBtn.disabled = configs.length >= this.MAX_CONFIGS;
-        },
-    
-        createConfigItem(config) {
-            const item = document.createElement('div');
-            item.className = 'api-key-item proofreading-api-config-item';
-            item.dataset.configId = config.id;
-            const isActive = state.settings.activeProofreadingConfigId === config.id;
-            if (isActive) item.classList.add('active');
-
-            const labelInput = document.createElement('input');
-            labelInput.type = 'text';
-            labelInput.className = 'api-key-item-label';
-            labelInput.value = config.label;
-            labelInput.addEventListener('change', (e) => this.updateConfigValue(config.id, 'label', e.target.value));
-
-            const keyInput = document.createElement('input');
-            keyInput.type = 'password';
-            keyInput.className = 'api-key-item-input';
-            keyInput.value = config.apiKey;
-            keyInput.placeholder = 'APIキー...';
-            keyInput.addEventListener('input', (e) => this.updateConfigValue(config.id, 'apiKey', e.target.value));
-
-            const providerSelect = document.createElement('select');
-            providerSelect.className = 'twin-engine-config-provider';
-            API_PROVIDERS.forEach(providerInfo => {
-                if (providerInfo.value !== 'dummy') {
-                    const option = document.createElement('option');
-                    option.value = providerInfo.value;
-                    option.textContent = providerInfo.text.split(' ')[0];
-                    providerSelect.add(option);
-                }
-            });
-            providerSelect.value = config.provider;
-            providerSelect.addEventListener('change', (e) => this.updateConfigValue(config.id, 'provider', e.target.value));
-
-            const modelSelect = document.createElement('select');
-            modelSelect.className = 'twin-engine-config-model';
-            this.populateModelOptions(modelSelect, config.provider);
-            modelSelect.value = config.modelName;
-            modelSelect.addEventListener('change', (e) => this.updateConfigValue(config.id, 'modelName', e.target.value));
-            
-            const systemPromptTextarea = document.createElement('textarea');
-            systemPromptTextarea.className = 'api-key-item-input';
-            systemPromptTextarea.value = config.systemPrompt || '';
-            systemPromptTextarea.placeholder = '校正用のシステムプロンプト...';
-            systemPromptTextarea.rows = 2;
-            systemPromptTextarea.addEventListener('change', (e) => this.updateConfigValue(config.id, 'systemPrompt', e.target.value));
-
-            const actions = document.createElement('div');
-            actions.className = 'api-key-item-actions';
-            const selectBtn = document.createElement('button');
-            selectBtn.className = `api-key-select-btn ${isActive ? 'active' : ''}`;
-            selectBtn.textContent = isActive ? '使用中' : '選択';
-            selectBtn.disabled = isActive;
-            selectBtn.addEventListener('click', () => this.selectConfig(config.id));
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'api-key-delete-btn';
-            deleteBtn.textContent = '削';
-            deleteBtn.addEventListener('click', () => this.deleteConfig(config.id));
-            actions.appendChild(selectBtn);
-            actions.appendChild(deleteBtn);
-    
-            const row1 = document.createElement('div');
-            row1.appendChild(labelInput);
-            row1.appendChild(keyInput);
-    
-            const row2 = document.createElement('div');
-            row2.appendChild(providerSelect);
-            row2.appendChild(modelSelect);
-            
-            const details = document.createElement('details');
-
-            const summary = document.createElement('summary');
-            summary.textContent = '詳細パラメータ';
-            summary.style.cursor = 'pointer';
-            summary.style.fontSize = '13px';
-            summary.style.color = 'var(--text-link)';
-            details.appendChild(summary);
-            
-            const paramsContainer = document.createElement('div');
-            paramsContainer.className = 'param-grid';
-            paramsContainer.style.marginTop = '10px';
-            paramsContainer.style.paddingLeft = '15px';
-
-            const createParamInput = (label, property, type = 'number', placeholder = '', step = 'any') => {
-                const div = document.createElement('div');
-                const lbl = document.createElement('label');
-                lbl.textContent = label;
-                lbl.style.fontSize = '12px';
-                const input = document.createElement('input');
-                input.type = type;
-                input.placeholder = placeholder;
-                if (step !== 'any') input.step = step;
-                input.value = config[property] ?? '';
-                input.style.fontSize = '12px';
-                input.style.padding = '4px 6px';
-                input.addEventListener('change', (e) => {
-                    const value = e.target.value;
-                    const parsedValue = value === '' ? null : (type === 'number' ? parseFloat(value) : value);
-                    this.updateConfigValue(config.id, property, parsedValue);
-                });
-                div.appendChild(lbl);
-                div.appendChild(input);
-                return div;
-            };
-
-            paramsContainer.appendChild(createParamInput('Max Tokens:', 'maxTokens', 'number', '例: 4096', '1'));
-            paramsContainer.appendChild(createParamInput('Temperature:', 'temperature', 'number', '例: 0.7', '0.01'));
-            paramsContainer.appendChild(createParamInput('Top K:', 'topK', 'number', '例: 40', '1'));
-            paramsContainer.appendChild(createParamInput('Top P:', 'topP', 'number', '例: 0.95', '0.01'));
-            paramsContainer.appendChild(createParamInput('Presence Penalty:', 'presencePenalty', 'number', '例: 0.0', '0.1'));
-            paramsContainer.appendChild(createParamInput('Frequency Penalty:', 'frequencyPenalty', 'number', '例: 0.0', '0.1'));
-const thinkingBudgetDiv = createParamInput('Thinking Budget:', 'thinkingBudget', 'number', '例: 5000', '1');
-paramsContainer.appendChild(thinkingBudgetDiv);
-
-const buttonContainer = document.createElement('div');
-buttonContainer.style.display = 'flex';
-buttonContainer.style.gap = '5px';
-buttonContainer.style.marginTop = '3px';
-
-const createBudgetButton = (text, value) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = text;
-    button.dataset.value = value;
-    button.style.cssText = `
-        padding: 2px 6px;
-        font-size: 11px;
-        background-color: var(--bg-button-action);
-        color: var(--text-light);
-        border-radius: 3px;
-        flex-grow: 1;
-        cursor: pointer;
-        border: none;
-    `;
-    button.addEventListener('click', () => {
-        const input = thinkingBudgetDiv.querySelector('input');
-        if (value === 'null') {
-            input.value = '';
-        } else {
-            input.value = value;
-        }
-        input.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    return button;
+            },
 };
 
-buttonContainer.appendChild(createBudgetButton('無', 'null'));
-buttonContainer.appendChild(createBudgetButton('0', '0'));
+const proofreadingApiConfigUtils = {
+    MAX_CONFIGS: 10,
 
-thinkingBudgetDiv.appendChild(buttonContainer);
-            details.appendChild(paramsContainer);
-            
-            item.appendChild(row1);
-            item.appendChild(row2);
-            item.appendChild(systemPromptTextarea);
-            item.appendChild(actions);
-            return item;
-        },
-    
-        populateModelOptions(selectElement, provider) {
-            selectElement.innerHTML = '';
-            let sourceSelect;
-            switch (provider) {
-                case 'gemini': sourceSelect = elements.geminiModelNameSelect; break;
-                case 'deepseek': sourceSelect = elements.deepSeekModelNameSelect; break;
-                case 'claude': sourceSelect = elements.claudeModelNameSelect; break;
-                case 'openai': sourceSelect = elements.openaiModelNameSelect; break;
-                case 'xai': sourceSelect = elements.xaiModelNameSelect; break;
-                case 'llmaggregator': sourceSelect = elements.llmAggregatorModelNameSelect; break;
-                default: return;
+    initialize() {
+        elements.addProofreadingApiConfigBtn.addEventListener('click', () => this.addConfig());
+        this.renderList();
+    },
+
+    generateNextConfigLabel() {
+        const index = state.settings.proofreadingApiConfigs.length;
+        return `校正設定 ${index + 1}`;
+    },
+
+    addConfig() {
+        const configs = state.settings.proofreadingApiConfigs;
+        if (configs.length >= this.MAX_CONFIGS) {
+            uiUtils.showCustomAlert(`最大${this.MAX_CONFIGS}個までの校正設定を作成できます。`);
+            return;
+        }
+        const newConfig = {
+            id: Date.now().toString(),
+            label: this.generateNextConfigLabel(),
+            provider: 'gemini',
+            apiKey: '',
+            modelName: DEFAULT_MODEL,
+            systemPrompt: 'あなたはプロの編集者です。受け取った文章をより自然で分かりやすく校正してください。元の文章の意図やニュアンスは変えないでください。校正後の文章のみを出力してください。',
+            temperature: 0.2,
+            maxTokens: null,
+            topK: null,
+            topP: null,
+            presencePenalty: null,
+            frequencyPenalty: null,
+            thinkingBudget: null
+        };
+        configs.push(newConfig);
+        if (configs.length === 1) {
+            state.settings.activeProofreadingConfigId = newConfig.id;
+        }
+        this.renderList();
+    },
+
+    deleteConfig(configId) {
+        const configs = state.settings.proofreadingApiConfigs;
+        const index = configs.findIndex(c => c.id === configId);
+        if (index === -1) return;
+        
+        configs.splice(index, 1);
+        if (state.settings.activeProofreadingConfigId === configId) {
+            state.settings.activeProofreadingConfigId = configs.length > 0 ? configs[0].id : null;
+        }
+        this.renderList();
+    },
+
+    selectConfig(configId) {
+        state.settings.activeProofreadingConfigId = configId;
+        this.renderList();
+        elements.proofreadingApiConfigsList.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+
+    updateConfigValue(configId, key, value) {
+        const config = state.settings.proofreadingApiConfigs.find(c => c.id === configId);
+        if (config) {
+            config[key] = value;
+            if (key === 'provider') {
+                config.modelName = this.getDefaultModelForProvider(value);
+                this.renderList();
             }
+        }
+    },
+
+    renderList() {
+        const configs = state.settings.proofreadingApiConfigs;
+        const container = elements.proofreadingApiConfigsList;
+        container.innerHTML = '';
+
+        if (configs.length === 0) {
+            const emptyMsg = document.createElement('p');
+            emptyMsg.textContent = '校正用のAPI設定がありません。';
+            emptyMsg.style.cssText = 'color: var(--text-secondary); font-size: 13px; text-align: center; margin: 10px 0;';
+            container.appendChild(emptyMsg);
+        } else {
+            configs.forEach(config => {
+                const item = this.createConfigItem(config);
+                container.appendChild(item);
+            });
+        }
+        elements.addProofreadingApiConfigBtn.disabled = configs.length >= this.MAX_CONFIGS;
+    },
+
+    createConfigItem(config) {
+        const item = document.createElement('div');
+        item.className = 'api-key-item proofreading-api-config-item';
+        item.dataset.configId = config.id;
+        const isActive = state.settings.activeProofreadingConfigId === config.id;
+        if (isActive) item.classList.add('active');
+
+        const labelInput = document.createElement('input');
+        labelInput.type = 'text';
+        labelInput.className = 'api-key-item-label';
+        labelInput.value = config.label;
+        labelInput.addEventListener('change', (e) => this.updateConfigValue(config.id, 'label', e.target.value));
+
+        const keyInput = document.createElement('input');
+        keyInput.type = 'password';
+        keyInput.className = 'api-key-item-input';
+        keyInput.value = config.apiKey;
+        keyInput.placeholder = 'APIキー...';
+        keyInput.addEventListener('input', (e) => this.updateConfigValue(config.id, 'apiKey', e.target.value));
+
+        const providerSelect = document.createElement('select');
+        providerSelect.className = 'twin-engine-config-provider';
+        API_PROVIDERS.forEach(providerInfo => {
+            if (providerInfo.value !== 'dummy') {
+                const option = document.createElement('option');
+                option.value = providerInfo.value;
+                option.textContent = providerInfo.text.split(' ')[0];
+                providerSelect.add(option);
+            }
+        });
+        providerSelect.value = config.provider;
+        providerSelect.addEventListener('change', (e) => this.updateConfigValue(config.id, 'provider', e.target.value));
+
+        const modelSelect = document.createElement('select');
+        modelSelect.className = 'twin-engine-config-model';
+        this.populateModelOptions(modelSelect, config.provider);
+        modelSelect.value = config.modelName;
+        modelSelect.addEventListener('change', (e) => this.updateConfigValue(config.id, 'modelName', e.target.value));
+        
+        const systemPromptTextarea = document.createElement('textarea');
+        systemPromptTextarea.className = 'api-key-item-input';
+        systemPromptTextarea.value = config.systemPrompt || '';
+        systemPromptTextarea.placeholder = '校正用のシステムプロンプト...';
+        systemPromptTextarea.rows = 2;
+        systemPromptTextarea.addEventListener('change', (e) => this.updateConfigValue(config.id, 'systemPrompt', e.target.value));
+
+        const actions = document.createElement('div');
+        actions.className = 'api-key-item-actions';
+        const selectBtn = document.createElement('button');
+        selectBtn.className = `api-key-select-btn ${isActive ? 'active' : ''}`;
+        selectBtn.textContent = isActive ? '使用中' : '選択';
+        selectBtn.disabled = isActive;
+        selectBtn.addEventListener('click', () => this.selectConfig(config.id));
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'api-key-delete-btn';
+        deleteBtn.textContent = '削';
+        deleteBtn.addEventListener('click', () => this.deleteConfig(config.id));
+        actions.appendChild(selectBtn);
+        actions.appendChild(deleteBtn);
+
+        const row1 = document.createElement('div');
+        row1.appendChild(labelInput);
+        row1.appendChild(keyInput);
+
+        const row2 = document.createElement('div');
+        row2.appendChild(providerSelect);
+        row2.appendChild(modelSelect);
+        
+        const container = document.createElement('div');
+        container.appendChild(row1);
+        container.appendChild(row2);
+        container.appendChild(systemPromptTextarea);
+        
+        item.appendChild(container);
+        item.appendChild(actions);
+
+        return item;
+    },
+
+    populateModelOptions(selectElement, provider) {
+        selectElement.innerHTML = '';
+        let sourceSelect;
+        switch (provider) {
+            case 'gemini': sourceSelect = elements.geminiModelNameSelect; break;
+            case 'deepseek': sourceSelect = elements.deepSeekModelNameSelect; break;
+            case 'claude': sourceSelect = elements.claudeModelNameSelect; break;
+            case 'openai': sourceSelect = elements.openaiModelNameSelect; break;
+            case 'xai': sourceSelect = elements.xaiModelNameSelect; break;
+            case 'llmaggregator': sourceSelect = elements.llmAggregatorModelNameSelect; break;
+            default: return;
+        }
+        if (sourceSelect) {
             sourceSelect.querySelectorAll('optgroup, option').forEach(el => {
                 selectElement.add(el.cloneNode(true));
             });
-        },
-    
-        getDefaultModelForProvider(provider) {
-            switch (provider) {
-                case 'gemini': return DEFAULT_MODEL;
-                case 'deepseek': return DEFAULT_DEEPSEEK_MODEL;
-                case 'claude': return DEFAULT_CLAUDE_MODEL;
-                case 'openai': return DEFAULT_OPENAI_MODEL;
-                case 'xai': return DEFAULT_XAI_MODEL;
-                case 'llmaggregator': return DEFAULT_LLMAGGREGATOR_MODEL;
-                default: return '';
-            }
-        },
-    };
-    const errorRecovery = {
+        }
+    },
+
+    getDefaultModelForProvider(provider) {
+        switch (provider) {
+            case 'gemini': return DEFAULT_MODEL;
+            case 'deepseek': return DEFAULT_DEEPSEEK_MODEL;
+            case 'claude': return DEFAULT_CLAUDE_MODEL;
+            case 'openai': return DEFAULT_OPENAI_MODEL;
+            case 'xai': return DEFAULT_XAI_MODEL;
+            case 'llmaggregator': return DEFAULT_LLMAGGREGATOR_MODEL;
+            default: return '';
+        }
+    },
+};
+
+const errorRecovery = {
         errorCount: 0,
         errorTimeWindow: 60000,
         maxErrors: 3,
