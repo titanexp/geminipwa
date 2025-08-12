@@ -6211,6 +6211,10 @@
                                     state.settings.apiProviderCycle.openai = loadedValue.openai === true;
                                     state.settings.apiProviderCycle.xai = loadedValue.xai === true;
                                     state.settings.apiProviderCycle.llmaggregator = loadedValue.llmaggregator === true;
+                                } else if (key === 'proofreadingApiConfigs' && Array.isArray(loadedValue)) {
+                                    state.settings.proofreadingApiConfigs = loadedValue;
+                                } else if (key === 'activeProofreadingConfigId' && typeof loadedValue === 'string') {
+                                    state.settings.activeProofreadingConfigId = loadedValue;
                                 } else if (typeof defaultValue === 'number' || defaultValue === null) {
                                      let num;
                                      if (key.toLowerCase().includes('temperature') || key.toLowerCase().includes('topp') || key.toLowerCase().includes('penalty') ||
@@ -6336,6 +6340,24 @@
                         } else if (loadedSettings.twinEngineApiConfigs) {
                             state.settings.twinEngineApiConfigs = loadedSettings.twinEngineApiConfigs;
                             state.settings.twinEngineActiveConfigId = loadedSettings.twinEngineActiveConfigId;
+                        }
+                        
+                        if (loadedSettings.hasOwnProperty('proofreadingModelName')) {
+                            if (!state.settings.proofreadingApiConfigs || state.settings.proofreadingApiConfigs.length === 0) {
+                                const oldConfig = {
+                                    id: `migrated-proofreading-${Date.now()}`,
+                                    label: '（移行された設定）',
+                                    provider: 'gemini',
+                                    apiKey: state.settings.apiKey || '',
+                                    modelName: loadedSettings.proofreadingModelName,
+                                    systemPrompt: loadedSettings.proofreadingSystemInstruction || '',
+                                    temperature: null, maxTokens: null, topK: null, topP: null
+                                };
+                                state.settings.proofreadingApiConfigs = [oldConfig];
+                                state.settings.activeProofreadingConfigId = oldConfig.id;
+                            }
+                            delete state.settings.proofreadingModelName;
+                            delete state.settings.proofreadingSystemInstruction;
                         }
 
                         resolve(state.settings);
@@ -7924,36 +7946,7 @@
                 this.applyOpacitySettings();
                 this.applyZoomPreventionSetting();
             },
-はい、承知いたしました。uiUtils.applySettingsToUI関数を修正し、チェックボックスの状態がUIに正しく反映されるようにします。
-
-修正箇所: uiUtils.applySettingsToUI 関数
-
-場所: uiUtils.applySettingsToUI 関数の中。
-
-方法: この関数全体を、以下の「修正後」のコードブロックで完全に置き換えてください。
-
-修正前：
-
-code
-JavaScript
-download
-content_copy
-expand_less
-
-applySettingsToUI() {
-                // ... (古いコードのapplySettingsToUI関数の中身)
-            },
-
-修正後（このコードブロックで関数全体を置換）：
-
-code
-JavaScript
-download
-content_copy
-expand_less
-IGNORE_WHEN_COPYING_START
-IGNORE_WHEN_COPYING_END
-applySettingsToUI() {
+            applySettingsToUI() {
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
                 elements.apiProviderSelect.value = state.settings.apiProvider;
                 twinEngineApiConfigUtils.renderList();
@@ -8183,7 +8176,6 @@ applySettingsToUI() {
                 elements.iconNameOffsetYInput.value = state.settings.iconNameOffsetY !== null ? (state.settings.iconNameOffsetY * -1) : (DEFAULT_ICON_NAME_OFFSET_Y * -1);
                 elements.messageIconSizeInput.value = state.settings.messageIconSize ?? DEFAULT_MESSAGE_ICON_SIZE;
                 elements.messageIconOffsetYInput.value = state.settings.messageIconOffsetY !== null ? (state.settings.messageIconOffsetY * -1) : (DEFAULT_MESSAGE_ICON_OFFSET_Y * -1);
-
                 elements.userNameBubbleToggle.checked = state.settings.showUserNameBubble;
                 elements.userNameBubbleUseThemeColorToggle.checked = state.settings.userNameBubbleUseThemeColor;
                 elements.userNameBubbleColorInput.value = state.settings.userNameBubbleColor || DEFAULT_USER_NAME_BUBBLE_COLOR;
@@ -8245,8 +8237,6 @@ applySettingsToUI() {
                 this.applySidePanelSettingsToUI();
                 this.applyMinimizeUI();
                 this.applyAiBubbleWidthSetting();
-                this.applyUserBubbleWidthSetting();
-                this.applyMessageSpacingSetting();
                 this.updateSessionLinkingUI();
                 this.updateApiProviderSelectOptions();
                 this.toggleMultiApiKeysVisibility(state.settings.showMultiApiKeys);
@@ -12721,6 +12711,8 @@ applySettingsToUI() {
              newSettings.preventZoom = elements.preventZoomToggle.checked;
              newSettings.minimizeHeaderFooter = document.getElementById('minimize-header-footer-toggle').checked;
              newSettings.extendAiBubbleWidth = elements.extendAiBubbleWidthToggle.checked;
+             newSettings.extendUserBubbleWidth = elements.extendUserBubbleWidthToggle.checked;
+             newSettings.reduceMessageSpacing = document.getElementById('reduce-message-spacing-toggle').checked;
              newSettings.showSessionLinkingSettings = elements.showSessionLinkingSettingsToggle.checked;
              newSettings.showTwinEngineSettings = elements.showTwinEngineSettingsToggle.checked;
              newSettings.showChatTitle = elements.showChatTitleToggle.checked;
@@ -12764,6 +12756,10 @@ applySettingsToUI() {
              newSettings.disableDeleteMessageConfirmation = elements.disableDeleteMessageConfirmationToggle.checked;
              newSettings.disableAttachmentConfirmation = elements.disableAttachmentConfirmationToggle.checked;
              newSettings.addPrefixOnImport = elements.addPrefixOnImportToggle.checked;
+             newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
+             newSettings.showProofreadingSettings = elements.showProofreadingSettingsToggle.checked;
+             newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
+             newSettings.autoSaveSettings = elements.autoSaveSettingsToggle.checked;
              newSettings.showTopCollapseButton = elements.showTopCollapseButtonToggle.checked;
              newSettings.showBottomCollapseButton = elements.showBottomCollapseButtonToggle.checked;
              newSettings.persistMessageCollapseState = elements.persistMessageCollapseStateCheckbox.checked;
@@ -12796,6 +12792,9 @@ applySettingsToUI() {
              newSettings.dummyTwinEngineDebugMode = elements.dummyTwinEngineDebugModeCheckbox.checked;
              newSettings.dummyDummyModel = elements.dummyDummyModelInput.value.trim();
              newSettings.dummyEnableDummyModel = elements.dummyEnableDummyModelCheckbox.checked;
+            newSettings.proofreadingApiConfigs = state.settings.proofreadingApiConfigs;
+            newSettings.activeProofreadingConfigId = state.settings.activeProofreadingConfigId;
+            newSettings.enableProofreading = elements.enableProofreadingCheckbox.checked;
 
             const validateNumeric = (value, defaultValue, min, max, isInteger = false) => {
                 let num = isInteger ? parseInt(value, 10) : parseFloat(value);
@@ -12917,6 +12916,7 @@ applySettingsToUI() {
                  uiUtils.updateChatScreenElementVisibility();
                  uiUtils.applyMinimizeUI();
                  uiUtils.applyAiBubbleWidthSetting();
+                 uiUtils.updateSessionLinkingUI();
                  elements.settingsScreen.classList.toggle('auto-save-mode', state.settings.autoSaveSettings);
 
                  if (showNotice && !state.settings.disableSaveSettingsConfirmation) {
