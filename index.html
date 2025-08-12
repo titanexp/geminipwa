@@ -3548,7 +3548,7 @@
                 <button id="roll-dice-btn" title="ランダム数値を入力" class="footer-action-button hidden">🎲</button>
                 <button id="ai-to-ai-chat-btn" title="AI間会話ステップ実行" class="footer-action-button hidden">👥</button>
                 <button id="footer-twin-engine-mode-toggle-btn" title="Twin-engineモード切替" class="footer-action-button hidden">🛞</button>
-
+                <button id="footer-resummarize-btn" title="現在のチャット履歴を要約" class="footer-action-button hidden">♻️</button>
                 <button id="paste-to-input-btn" title="入力欄に貼り付け" class="footer-action-button">貼</button>
                 <textarea id="user-input" placeholder="メッセージを入力..." rows="1" aria-label="メッセージ入力"></textarea>
                 <button id="attach-file-btn" title="ファイルを添付" class="footer-action-button">+<span class="attachment-badge"></span></button>
@@ -5030,7 +5030,15 @@
                                 ※ Twin-engineが有効な場合にのみ、フッターに自動/手動モードを切り替えるボタンを表示します。
                             </p>
                         </div>
-
+                        <div style="padding-left: 20px; margin-top: 5px;">
+                            <label class="checkbox-label" style="margin-bottom: 5px;">
+                                <input type="checkbox" id="show-footer-resummarize-button-toggle">
+                                フッターに「要約実行(♻️)」ボタンを表示する
+                            </label>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                                ※ Twin-engineが有効な場合にのみ、フッターに手動で要約を実行するボタンを表示します。
+                            </p>
+                        </div>
                         <div id="twin-engine-inclusion-settings" style="margin-top: 15px; border: 1px solid var(--border-tertiary); padding: 10px; border-radius: 5px;">
                             <h4 style="font-size: 13px; color: var(--text-secondary); margin-top: 0; margin-bottom: 10px;">要約送信時に含める会話履歴</h4>
                             
@@ -5670,10 +5678,10 @@
             twinEngineModeToggleBtn: document.getElementById('twin-engine-mode-toggle-btn'),
             twinEngineApiKeyCycleBtn: document.getElementById('twin-engine-api-key-cycle-btn'),
             footerTwinEngineModeToggleBtn: document.getElementById('footer-twin-engine-mode-toggle-btn'),
-
+            footerResummarizeBtn: document.getElementById('footer-resummarize-btn'),
             twinEngineEnableFullAutoToggle: document.getElementById('twin-engine-enable-full-auto-toggle'),
             showFooterTwinEngineToggleButtonToggle: document.getElementById('show-footer-twin-engine-toggle-button-toggle'),
-
+            showFooterResummarizeButtonToggle: document.getElementById('show-footer-resummarize-button-toggle'),
             twinEngineFullAutoSettingContainer: document.getElementById('twin-engine-full-auto-setting-container'),
             copyTwinEngineSummaryBtn: document.getElementById('copy-twin-engine-summary-btn'),
             clearTwinEngineSummaryBtn: document.getElementById('clear-twin-engine-summary-btn'),
@@ -6016,6 +6024,7 @@ addWebhookBtn: document.getElementById('add-webhook-btn'),
                 llmaggregatorActiveApiKeyIndex: -1,
                 twinEngineEnableFullAuto: false,
                 showFooterTwinEngineToggleButton: false,
+                showFooterResummarizeButton: false,
                 twinEngineSummarizeAfterTurns: DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS,
                 twinEngineInitialTurnsToInclude: 1,
                 twinEngineSummaryPrompt: '以下の会話を、重要なポイントを箇条書きで簡潔に要約してください。',
@@ -8497,7 +8506,10 @@ elements.showProofreadingSettingsToggle.checked = state.settings.showProofreadin
                         const showButton = state.settings.showTwinEngineSettings && state.settings.showFooterTwinEngineToggleButton;
                         elements.footerTwinEngineModeToggleBtn.classList.toggle('hidden', !showButton);
                     }
-
+                    if (elements.footerResummarizeBtn) {
+                        const showButton = state.settings.showTwinEngineSettings && state.settings.showFooterResummarizeButton;
+                        elements.footerResummarizeBtn.classList.toggle('hidden', !showButton);
+                    }
 
                     this.adjustHeaderLayout();
                     this.updateProviderToggleButtons();
@@ -10676,17 +10688,15 @@ async sendWebhookNotification(responseMessage) {
                 return;
             }
 
-            const buttonsToUpdate = [elements.resummarizeBtn]; 
-            const originalPanelBtnText = "要約実行♻️";
+            const buttonsToUpdate = [elements.resummarizeBtn, elements.footerResummarizeBtn];
+            const originalPanelBtnText = elements.resummarizeBtn.textContent;
 
             state.isSummarizing = true;
             uiUtils.updateLoadingIndicator();
             buttonsToUpdate.forEach(btn => {
-                if (btn) {
-                    btn.disabled = true;
-                    if (btn.id === 'resummarize-btn') {
-                        btn.textContent = "要約中...";
-                    }
+                btn.disabled = true;
+                if (btn.id === 'resummarize-btn') {
+                    btn.textContent = "要約中...";
                 }
             });
 
@@ -10701,27 +10711,122 @@ async sendWebhookNotification(responseMessage) {
                     if (state.isTwinEngineSummaryVisible) {
                         elements.twinEngineSummaryEditor.scrollTop = 0;
                     }
-                    if (elements.resummarizeBtn) elements.resummarizeBtn.textContent = "要約完了";
+                    elements.resummarizeBtn.textContent = "要約完了";
                 } else {
-                    if (elements.resummarizeBtn) elements.resummarizeBtn.textContent = "失敗";
+                    elements.resummarizeBtn.textContent = "失敗";
                 }
             } catch (error) {
                 await uiUtils.showCustomAlert(`再要約エラー: ${error.message}`);
-                if (elements.resummarizeBtn) elements.resummarizeBtn.textContent = "エラー";
+                elements.resummarizeBtn.textContent = "エラー";
             } finally {
                 state.isSummarizing = false;
                 uiUtils.updateLoadingIndicator();
-
+                buttonsToUpdate.forEach(btn => btn.disabled = false);
+                
                 setTimeout(() => {
-                    buttonsToUpdate.forEach(btn => {
-                        if (btn) {
-                            btn.disabled = false;
-                            if (btn.id === 'resummarize-btn') {
-                                btn.textContent = originalPanelBtnText;
-                            }
-                        }
-                    });
-                }, 1500);
+                    elements.resummarizeBtn.textContent = originalPanelBtnText;
+                }, 2000);
+            }
+        },
+        async triggerTwinEngineSummaryInBackground() {
+            if (state.currentMessages.length === 0 || state.isSending || state.isAiToAiChatProcessing || state.isSummarizing) {
+                return;
+            }
+        
+            state.isSummarizing = true;
+            uiUtils.updateLoadingIndicator();
+        
+            try {
+                const response = await this.summarizeCurrentSession([...state.currentMessages]);
+        
+                if (response && response.content) {
+                    const newSummaryContent = response.content.trim() + "\n\n";
+        
+                    state.twinEngineSummaryContent = newSummaryContent;
+                    elements.twinEngineSummaryEditor.value = state.twinEngineSummaryContent;
+        
+                    if (state.isTwinEngineSummaryVisible) {
+                        elements.twinEngineSummaryEditor.scrollTop = 0;
+                    }
+                }
+            } catch (error) {
+            } finally {
+                state.isSummarizing = false;
+                uiUtils.updateLoadingIndicator();
+            }
+        },
+        scrollToTop() {
+            requestAnimationFrame(() => {
+                const mainContent = elements.chatScreen.querySelector('.main-content');
+                if (mainContent) {
+                    mainContent.scrollTop = 0;
+                }
+            });
+        },
+        scrollToBottom() {
+            requestAnimationFrame(() => {
+                const mainContent = elements.chatScreen.querySelector('.main-content');
+                if (mainContent) {
+                    mainContent.scrollTop = mainContent.scrollHeight;
+                }
+            });
+        },
+        async pasteToUserInput() {
+            const button = elements.pasteToInputBtn;
+            const originalTextContent = button.textContent;
+            const originalTitle = button.title;
+
+            try {
+                if (!navigator.clipboard || !navigator.clipboard.readText) {
+                    button.textContent = "!";
+                    button.title = "クリップボードAPI非対応";
+                    button.disabled = true;
+                    setTimeout(() => {
+                        button.textContent = originalTextContent;
+                        button.title = originalTitle;
+                        button.disabled = false;
+                    }, 2000);
+                    return;
+                }
+                const textToPaste = await navigator.clipboard.readText();
+                if (textToPaste) {
+                    const currentText = elements.userInput.value;
+                    const selectionStart = elements.userInput.selectionStart;
+                    const selectionEnd = elements.userInput.selectionEnd;
+                    elements.userInput.value = currentText.substring(0, selectionStart) + textToPaste + currentText.substring(selectionEnd);
+                    elements.userInput.selectionStart = elements.userInput.selectionEnd = selectionStart + textToPaste.length;
+                    elements.userInput.focus();
+                    uiUtils.adjustTextareaHeight();
+                    uiUtils.updateAttachmentBadgeVisibility();
+
+                    button.textContent = "✓";
+                    button.title = "貼り付け完了";
+                    setTimeout(() => {
+                        button.textContent = originalTextContent;
+                        button.title = originalTitle;
+                    }, 1500);
+                } else {
+                    button.textContent = "空";
+                    button.title = "クリップボードは空です";
+                    setTimeout(() => {
+                        button.textContent = originalTextContent;
+                        button.title = originalTitle;
+                    }, 1500);
+                }
+            } catch (err) {
+                if (err.name === 'NotAllowedError' || err.message.includes('Read permission denied')) {
+                    button.textContent = "!";
+                    button.title = "クリップボードの許可なし";
+                } else {
+                    button.textContent = "X";
+                    button.title = "貼り付け失敗";
+                }
+                button.disabled = true;
+                setTimeout(() => {
+                    button.textContent = originalTextContent;
+                    button.title = originalTitle;
+                    button.disabled = false;
+                }, 2000);
             }
         },
         rollDiceAndInput() {
@@ -11202,6 +11307,12 @@ async sendWebhookNotification(responseMessage) {
         },
         async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null, isTopLevelCall = true, retryCount = 0) {
             const isBackgroundProcess = !!sourceSessionContext;
+
+            if (!isBackgroundProcess) {
+                if (state.isSending || state.isSummarizing || state.isProofreading || state.isAiToAiChatProcessing) {
+                    return;
+                }
+            }
             
             let apiKeyToUse, modelNameToUse, selectedApiProvider;
             
@@ -11249,20 +11360,6 @@ async sendWebhookNotification(responseMessage) {
             } else {
                 text = elements.userInput.value.trim();
                 attachmentsToSend = [...state.pendingAttachments];
-            }
-
-            if (!isBackgroundProcess) {
-                const isInputEmpty = text.trim() === '';
-                const hasAttachments = attachmentsToSend.length > 0;
-                const isDummyProvider = selectedApiProvider === 'dummy';
-
-                if (state.isSending) {
-                    return;
-                }
-
-                if (!isDummyProvider && isInputEmpty && !hasAttachments) {
-                    return;
-                }
             }
             
             if (selectedApiProvider === 'dummy') {
