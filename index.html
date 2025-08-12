@@ -12326,25 +12326,20 @@ if (!isBackgroundProcess && state.settings.showProofreadingSettings && state.set
                 if (!useStreamingForThisCall) {
                     const data = await apiResponseObject.json();
                     let rawContentFromApi = "";
-if (selectedApiProvider === 'gemini') {
+                    if (selectedApiProvider === 'gemini') {
                         const candidate = data.candidates?.[0];
                         if (candidate) {
                             finalMetadata = { finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings };
                             candidate.content?.parts?.forEach(part => {
-                                if (part.thought === true && contextGeminiIncludeThoughts) {
-                                    finalThoughtSummary += (part.text || "");
-                                } else if (part.thought !== true) {
-                                    rawContentFromApi += (part.text || "");
-                                }
+                                if (part.thought === true && contextGeminiIncludeThoughts) finalThoughtSummary += (part.text || "") + "\n\n";
+                                else if (part.thought !== true) rawContentFromApi += (part.text || "") + "\n\n";
                             });
+                            finalThoughtSummary = finalThoughtSummary.trim();
+                            rawContentFromApi = rawContentFromApi.trim();
                             finalGrounding = candidate.groundingMetadata || null;
                             finalUsage = data.usageMetadata || null;
-                            if (candidate.finishReason && candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") {
-                                rawContentFromApi += `\n\n(理由: ${candidate.finishReason})`;
-                            }
-                            if (!rawContentFromApi && candidate.finishReason === "STOP" && !finalThoughtSummary) {
-                                rawContentFromApi = "(応答が空です)";
-                            }
+                            if (candidate.finishReason && candidate.finishReason !== "STOP" && candidate.finishReason !== "MAX_TOKENS") rawContentFromApi += `\n\n(理由: ${candidate.finishReason})`;
+                            if (!rawContentFromApi && candidate.finishReason === "STOP" && !finalThoughtSummary) rawContentFromApi = "(応答が空です)";
                         } else {
                             rawContentFromApi = "応答候補がありません";
                             if (data.promptFeedback) {
