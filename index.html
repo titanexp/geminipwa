@@ -10658,7 +10658,8 @@ async sendWebhookNotification(responseMessage) {
                     concatDummyModel: state.settings.twinEngineConcatDummyModel
                 };
         
-                const response = await this.handleSend(false, -1, contextForSummary);
+                const summaryAbortController = new AbortController();
+                const response = await this.handleSend(false, -1, contextForSummary, false, 0, summaryAbortController);
         
                 if (response && response.content) {
                     if (state.settings.twinEngineConcatDummyModel && state.settings.twinEngineDummyModel) {
@@ -11292,7 +11293,8 @@ async sendWebhookNotification(responseMessage) {
             };
 
             try {
-                const response = await this.handleSend(false, -1, contextForProofreading, false);
+                const proofreadAbortController = new AbortController();
+                const response = await this.handleSend(false, -1, contextForProofreading, false, 0, proofreadAbortController);
 
                 if (response && response.content) {
                     console.log("--- 校正処理成功 ---");
@@ -11305,24 +11307,15 @@ async sendWebhookNotification(responseMessage) {
                 throw error;
             }
         },
-        async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null, isTopLevelCall = true, retryCount = 0) {
-            const isBackgroundProcess = !!sourceSessionContext;
-
-            let abortControllerForThisCall;
-            if (isTopLevelCall) {
-                state.abortController = new AbortController();
-                abortControllerForThisCall = state.abortController;
-            } else {
-                abortControllerForThisCall = new AbortController();
-            }
-            const { signal } = abortControllerForThisCall;
-            
-            let apiKeyToUse, modelNameToUse, selectedApiProvider;
-            
-            if (isBackgroundProcess) {
-                selectedApiProvider = sourceSessionContext.apiProvider;
-                apiKeyToUse = sourceSessionContext._apiKeyOverride;
-                modelNameToUse = sourceSessionContext._modelNameOverride;
+async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null, isTopLevelCall = true, retryCount = 0, externalAbortController = null) {
+    const isBackgroundProcess = !!sourceSessionContext;
+    
+    let apiKeyToUse, modelNameToUse, selectedApiProvider;
+    
+    if (isBackgroundProcess) {
+        selectedApiProvider = sourceSessionContext.apiProvider;
+        apiKeyToUse = sourceSessionContext._apiKeyOverride;
+        modelNameToUse = sourceSessionContext._modelNameOverride;
             } else {
                 selectedApiProvider = state.settings.apiProvider;
                 if (state.settings.showMultiApiKeys) {
@@ -12024,18 +12017,18 @@ async sendWebhookNotification(responseMessage) {
             try {
                 let apiResponseObject;
                 if (selectedApiProvider === 'gemini') {
-                    apiResponseObject = await apiUtils.callGeminiApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, usePseudoForThisCall, contextGeminiEnableGrounding, signal);
+                    apiResponseObject = await apiUtils.callGeminiApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, usePseudoForThisCall, contextGeminiEnableGrounding);
                 } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
-                    apiResponseObject = await apiUtils.callDeepSeekApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, selectedApiProvider, signal);
+                    apiResponseObject = await apiUtils.callDeepSeekApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, selectedApiProvider);
                 } else if (selectedApiProvider === 'claude') {
-                    apiResponseObject = await apiUtils.callClaudeApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, signal);
+                    apiResponseObject = await apiUtils.callClaudeApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall);
                 } else if (selectedApiProvider === 'openai') {
                     const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
-                    apiResponseObject = await apiUtils.callOpenAICompatibleApi(apiKeyToUse, modelNameToUse, 'openai', apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, hasImage, signal);
+                    apiResponseObject = await apiUtils.callOpenAICompatibleApi(apiKeyToUse, modelNameToUse, 'openai', apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, hasImage);
                 } else if (selectedApiProvider === 'xai') {
                     const hasImage = apiMessages.some(m => m.parts.some(p => p.inlineData && p.inlineData.mimeType.startsWith('image/')));
                     const enableVisionForThisCall = contextXaiVisionEnable || hasImage;
-                    apiResponseObject = await apiUtils.callXaiApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstruction, useStreamingForThisCall, enableVisionForThisCall, signal);
+                    apiResponseObject = await apiUtils.callXaiApi(apiKeyToUse, modelNameToUse, apiMessages, commonGenerationConfig, systemInstructionForProvider, useStreamingForThisCall, enableVisionForThisCall);
                 } else {
                     throw new Error("不明なAPIプロバイダーが選択されています。");
                 }
@@ -12566,18 +12559,18 @@ catch (error) {
         uiUtils.displayError(displayErrorMessage, !isAbort);
     }
 }
-            } finally {
-                if (!isBackgroundProcess && isTopLevelCall) {
-                    uiUtils.setSendingState(false);
-                    state.abortController = null;
-                    state.partialStreamContent = '';
-                    state.partialThoughtStreamContent = '';
-                    if (state.settings.autoScrollOnNewMessage) {
-                        uiUtils.scrollToBottom();
-                    }
-                    uiUtils.updateAttachmentBadgeVisibility();
-                }
-            }
+finally {
+    if (isTopLevelCall && !isBackgroundProcess) {
+        uiUtils.setSendingState(false);
+        state.abortController = null;
+        state.partialStreamContent = '';
+        state.partialThoughtStreamContent = '';
+        if (state.settings.autoScrollOnNewMessage) {
+            uiUtils.scrollToBottom();
+        }
+        uiUtils.updateAttachmentBadgeVisibility();
+    }
+}
             if (isBackgroundProcess) return null;
         },
         async toggleApiProvider() {
@@ -15156,11 +15149,18 @@ const webhookUtils = {
     }
 };
     const apiUtils = {
-          async callGeminiApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding, signal) {
+        async callGeminiApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding) {
             if (!apiKey) {
                 throw new Error("APIキーが設定されていません。");
             }
+            
             let baseUrl = GEMINI_API_BASE_URL;
+            
+            const abortController = externalAbortController || new AbortController();
+            if (isTopLevelCall) {
+                state.abortController = abortController;
+            }
+            const { signal } = abortController;
             
             let endpointMethod = useStreaming
                 ? (usePseudo ? 'generateContent?alt=sse&' : 'streamGenerateContent?alt=sse&')
@@ -15368,7 +15368,7 @@ const webhookUtils = {
                  }
              }
         },
-        async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek', signal) {
+        async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
             let baseUrl;
             if (provider === 'llmaggregator') {
                 baseUrl = state.settings.llmAggregatorApiBackend;
@@ -15382,6 +15382,8 @@ const webhookUtils = {
             if (!apiKey) {
                 throw new Error(`${provider.toUpperCase()} APIキーが設定されていません。`);
             }
+            state.abortController = new AbortController();
+            const { signal } = state.abortController;
 
             const endpoint = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
 
@@ -15539,10 +15541,12 @@ const webhookUtils = {
                 }
             }
         },
-        async callClaudeApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, signal) {
+        async callClaudeApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming) {
             if (!apiKey) {
                 throw new Error("Claude APIキーが設定されていません。");
             }
+            state.abortController = new AbortController();
+            const { signal } = state.abortController;
             
             const baseUrl = CLAUDE_API_BASE_URL;
             
@@ -15784,7 +15788,7 @@ const webhookUtils = {
 
             return body;
         },
-        async callOpenAICompatibleApi(apiKey, model, provider, messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision, signal) {
+        async callOpenAICompatibleApi(apiKey, model, provider, messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
             let baseUrl;
             
             if (provider === 'openai') {
@@ -15801,6 +15805,9 @@ const webhookUtils = {
             if (!apiKey) {
                 throw new Error(`${provider} のAPIキーが設定されていません。`);
             }
+
+            state.abortController = new AbortController();
+            const { signal } = state.abortController;
 
             const headers = {
                 "Content-Type": "application/json",
@@ -15915,10 +15922,12 @@ const webhookUtils = {
                 }
             }
         },
-        async callXaiApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision, signal) {
+        async callXaiApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
             if (!apiKey) {
                 throw new Error("xAI APIキーが設定されていません。");
             }
+            state.abortController = new AbortController();
+            const { signal } = state.abortController;
 
             const headers = {
                 "Content-Type": "application/json",
