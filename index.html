@@ -725,6 +725,39 @@
             --default-user-name-bubble-custom-rgb: 245, 245, 245;
             --default-ai-name-bubble-custom-rgb: 245, 245, 245;
         }
+        
+        body.turf-mode {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f0f2f5;
+            --bg-user-message: #dcf8c6;
+            --bg-model-message: #e5e5ea;
+            --bg-button: #4CAF50;
+            --bg-button-rgb: 76, 175, 80;
+            --bg-button-hover: #45a049;
+            --bg-header: #4CAF50;
+            --text-link: #4CAF50;
+            --border-system: #a5d6a7;
+            --bg-button-save: #68b36b;
+            --bg-button-save-hover: #5a9e5e;
+            --bg-button-retry: #81C784;
+            --bg-button-retry-hover: #66bb6a;
+            --bg-button-update: #68b36b;
+            --bg-button-update-hover: #5a9e5e;
+            --bg-button-export: #a5d6a7;
+            --bg-button-export-hover: #81c784;
+        }
+
+        body.turf-mode .mermaid-diagram {
+            background-color: #f8fff8 !important;
+        }
+
+        body.turf-mode .mermaid-diagram svg .node rect,
+        body.turf-mode .mermaid-diagram svg .node circle,
+        body.turf-mode .mermaid-diagram svg .node ellipse,
+        body.turf-mode .mermaid-diagram svg .node polygon {
+            fill: #e8f5e9 !important;
+            stroke: #4CAF50 !important;
+        }
 
         * {
             margin: 0;
@@ -5502,6 +5535,7 @@
                                 <option value="pastel-yellow">パステルモード🟡</option>
                                 <option value="pastel-purple">パステルモード🟣</option>
                                 <option value="pastel-rainbow">パステルモード🌈</option>
+                                <option value="turf">ターフモード🌱</option>
                             </select>
                             <p style="height:10px"></p>
                             <details id="settings-group-behavior-adjustment" open>
@@ -6300,7 +6334,8 @@
         const PASTEL_BLUE_THEME_COLOR = '#87cefa';
         const PASTEL_YELLOW_THEME_COLOR = '#ffd700';
         const PASTEL_PURPLE_THEME_COLOR = '#ab47bc';
-        const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
+const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
+        const TURF_THEME_COLOR = '#4CAF50';
 
         const DARK_MODE_USER_MESSAGE_COLOR = '#056162';
         const DARK_MODE_MODEL_MESSAGE_COLOR = '#3a3a3c';
@@ -6336,6 +6371,12 @@
         const PASTEL_RAINBOW_SECONDARY_COLOR = '#f0f0f0';
         const PASTEL_RAINBOW_HEADER_COLOR = '#ffadad';
         const PASTEL_RAINBOW_PRIMARY_COLOR = '#fdfdfd';
+
+        const TURF_USER_MESSAGE_COLOR = '#dcf8c6';
+        const TURF_MODEL_MESSAGE_COLOR = '#e5e5ea';
+        const TURF_SECONDARY_COLOR = '#f0f2f5';
+        const TURF_HEADER_COLOR = '#4CAF50';
+        const TURF_PRIMARY_COLOR = '#ffffff';
 
         const LIGHT_MODE_USER_MESSAGE_COLOR = '#dcf8c6';
         const LIGHT_MODE_MODEL_MESSAGE_COLOR = '#e5e5ea';
@@ -7325,8 +7366,8 @@
                                     } else {
                                         state.settings[key] = null;
                                     }
-                                } else if (key === 'theme') {
-                                    if (['light', 'dark', 'pastel-pink', 'pastel-blue', 'pastel-yellow', 'pastel-purple', 'pastel-rainbow'].includes(loadedValue)) {
+} else if (key === 'theme') {
+                                    if (['light', 'dark', 'pastel-pink', 'pastel-blue', 'pastel-yellow', 'pastel-purple', 'pastel-rainbow', 'turf'].includes(loadedValue)) {
                                         state.settings[key] = loadedValue;
                                     } else {
                                         state.settings[key] = defaultValue;
@@ -8669,10 +8710,12 @@
                     return;
                 }
 
-                const getCurrentMermaidTheme = () => {
+const getCurrentMermaidTheme = () => {
                     const bodyClasses = document.body.classList;
                     if (bodyClasses.contains('dark-mode')) {
                         return 'dark';
+                    } else if (bodyClasses.contains('turf-mode')) {
+                        return 'default';
                     } else if (bodyClasses.contains('pastel-pink-mode')) {
                         return 'base';
                     } else if (bodyClasses.contains('pastel-blue-mode')) {
@@ -9292,13 +9335,21 @@
 
                 let headerColor, secondaryColor, userMessageColor, modelMessageColor, overlayBaseColor, tertiaryColorRgbStr;
 
-                switch (state.settings.theme) {
+switch (state.settings.theme) {
                     case 'dark':
                         headerColor = DARK_THEME_COLOR;
                         secondaryColor = DARK_MODE_SECONDARY_COLOR;
                         userMessageColor = DARK_MODE_USER_MESSAGE_COLOR;
                         modelMessageColor = DARK_MODE_MODEL_MESSAGE_COLOR;
                         overlayBaseColor = DARK_MODE_PRIMARY_COLOR;
+                        tertiaryColorRgbStr = getComputedStyle(document.body).getPropertyValue('--bg-tertiary-rgb').trim();
+                        break;
+                    case 'turf':
+                        headerColor = TURF_HEADER_COLOR;
+                        secondaryColor = TURF_SECONDARY_COLOR;
+                        userMessageColor = TURF_USER_MESSAGE_COLOR;
+                        modelMessageColor = TURF_MODEL_MESSAGE_COLOR;
+                        overlayBaseColor = TURF_PRIMARY_COLOR;
                         tertiaryColorRgbStr = getComputedStyle(document.body).getPropertyValue('--bg-tertiary-rgb').trim();
                         break;
                     case 'pastel-pink':
@@ -9412,7 +9463,7 @@
             },
             applyTheme() {
                 const theme = state.settings.theme;
-                document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mode', 'pastel-blue-mode', 'pastel-yellow-mode', 'pastel-purple-mode', 'pastel-rainbow-mode');
+document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mode', 'pastel-blue-mode', 'pastel-yellow-mode', 'pastel-purple-mode', 'pastel-rainbow-mode', 'turf-mode');
                 let themeColorMetaValue;
                 let currentThemeUserMessageBgRgb = this.hexToRgb(LIGHT_MODE_USER_MESSAGE_COLOR) || { r: 220, g: 248, b: 198 };
                 let currentThemeModelMessageBgRgb = this.hexToRgb(LIGHT_MODE_MODEL_MESSAGE_COLOR) || { r: 229, g: 229, b: 234 };
@@ -9423,6 +9474,12 @@
                         themeColorMetaValue = DARK_THEME_COLOR;
                         currentThemeUserMessageBgRgb = this.hexToRgb(DARK_MODE_USER_MESSAGE_COLOR) || { r: 5, g: 97, b: 98 };
                         currentThemeModelMessageBgRgb = this.hexToRgb(DARK_MODE_MODEL_MESSAGE_COLOR) || { r: 58, g: 58, b: 60 };
+                        break;
+                    case 'turf':
+                        document.body.classList.add('turf-mode');
+                        themeColorMetaValue = TURF_THEME_COLOR;
+                        currentThemeUserMessageBgRgb = this.hexToRgb(TURF_USER_MESSAGE_COLOR) || { r: 220, g: 248, b: 198 };
+                        currentThemeModelMessageBgRgb = this.hexToRgb(TURF_MODEL_MESSAGE_COLOR) || { r: 229, g: 229, b: 234 };
                         break;
                     case 'pastel-pink':
                         document.body.classList.add('pastel-pink-mode');
