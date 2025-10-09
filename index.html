@@ -727,19 +727,21 @@
         }
         
     body.turf-mode {
-        --depth: 0.16;
-        /* 縦方向の奥行き（暗部）の濃さ */
+        --depth: 0.12;        /* 全体の暗さ（かなり薄め） */
+        --patchDark: 0.08;    /* 暗いパッチの濃度 */
+        --patchLight: 0.05;   /* 明るいパッチの濃度 */
         --stripeDark: 0.10;
         /* 迷彩の暗い部分の濃さ */
         --stripeLight: 0.06;
         /* 迷彩の明るい部分の濃さ */
-        --dazzleRot1: 35deg;
+        --dazzleRot1: 18deg;
         /* 迷彩レイヤー1（円錐形）の回転角度 */
-        --dazzleRot2: -42deg;
+        --dazzleRot2: -27deg;
         /* 迷彩レイヤー2（直線形）の回転角度 */
-        --dazzleScale1: 400%;
-        /* 迷彩レイヤー1のスケール（大きく） */
-        --dazzleScale2: 350%;
+        --dazzleScale1: 180%;
+        /* 迷彩レイヤー1のスケール（大きさ） */
+        --dazzleScale2: 140%;
+        /* 迷彩レイヤー2のスケール（大きさ） */
     }
 
             /* 基本色 */
@@ -4076,81 +4078,87 @@
     body.turf-mode .app-header,
     body.turf-mode button {
         /* 既存の3D的な質感は維持 */
+        /* 既存の3D的な質感は維持 */
         border: 1px solid rgba(0, 0, 0, 0.4);
         border-top-color: rgba(0, 0, 0, 0.3);
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
         text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.3);
-
-        /* アニメーションの対象を明示的に指定 */
-        transition: background-position 0.25s ease-in-out, transform 0.1s ease-in-out, box-shadow 0.1s ease-in-out;
+        transition: all 0.15s ease-in-out;
 
         /*
-         * -- ダズル迷彩グラデーション（粗め） --
-         * 繰り返し角度を広げて、大きなブロック状のパターンにしました。
+         * 大きめの不規則パッチを複数重ねる
+         * radial-gradient で丸いぼやけたパッチを作成
          */
         background-image:
-            /* レイヤー1: 円錐形グラデーション（角度を広げて放射状を減らす） */
-            repeating-conic-gradient(from var(--dazzleRot1) at 40% 25%,
-                rgba(255, 255, 255, var(--stripeLight)) 0deg 45deg,
-                rgba(0, 0, 0, var(--stripeDark)) 45deg 90deg),
-            /* レイヤー2: 斜めの直線グラデーション（ストライプを太く） */
-            repeating-linear-gradient(var(--dazzleRot2),
-                rgba(255, 255, 255, calc(var(--stripeLight) * 0.7)) 0px 60px,
-                rgba(0, 0, 0, calc(var(--stripeDark) * 0.7)) 60px 120px),
-            /* レイヤー3: 縦方向の薄いグラデーションで奥行きを表現 */
-            linear-gradient(to bottom,
-                rgba(0, 0, 0, 0) 0%,
+            /* レイヤー1: 大きめの楕円パッチ（左上） */
+            radial-gradient(ellipse 800px 600px at 15% 20%, 
+                rgba(0, 0, 0, var(--patchDark)) 0%, 
+                transparent 40%),
+            
+            /* レイヤー2: 横長パッチ（右側） */
+            radial-gradient(ellipse 900px 400px at 85% 60%, 
+                rgba(255, 255, 255, var(--patchLight)) 0%, 
+                transparent 35%),
+            
+            /* レイヤー3: 斜めの大きなストライプ（ランダム感を出す） */
+            linear-gradient(137deg,
+                transparent 0%,
+                rgba(0, 0, 0, calc(var(--patchDark) * 0.6)) 25%,
+                transparent 40%,
+                rgba(255, 255, 255, calc(var(--patchLight) * 0.8)) 65%,
+                transparent 80%),
+            
+            /* レイヤー4: 別角度の太いストライプ */
+            linear-gradient(-23deg,
+                transparent 10%,
+                rgba(0, 0, 0, calc(var(--patchDark) * 0.5)) 30%,
+                transparent 50%,
+                rgba(0, 0, 0, calc(var(--patchDark) * 0.4)) 70%,
+                transparent 90%),
+            
+            /* レイヤー5: 下部の楕円パッチ */
+            radial-gradient(ellipse 700px 500px at 40% 95%, 
+                rgba(0, 0, 0, calc(var(--patchDark) * 0.7)) 0%, 
+                transparent 45%),
+            
+            /* レイヤー6: 全体の縦グラデーション（薄め） */
+            linear-gradient(to bottom, 
+                transparent 0%, 
                 rgba(0, 0, 0, var(--depth)) 100%);
 
-        /* 各レイヤーの合成方法を指定（overlayで色を重ねる） */
-        background-blend-mode: overlay, overlay, normal;
-
-        /* 各レイヤーのサイズを指定（かなり大きく） */
-        background-size:
-            var(--dazzleScale1) var(--dazzleScale1),
-            var(--dazzleScale2) var(--dazzleScale2),
-            100% 100%;
-
-        /* 各レイヤーの初期位置を指定 */
-        background-position: 0% 0%, 100% 0%, 0% 0%;
+        background-blend-mode: normal;
+        background-size: 100% 100%;
+        background-position: 0 0;
     }
 
-    /*
-     * -- ボタンのインタラクション --
-     */
     body.turf-mode button:hover:not(:disabled) {
-        /* ホバー時に奥行きを少し濃くし、迷彩パターンをずらして動きを出す */
-        --depth: 0.20;
-        background-position: 15% 10%, 85% 15%, 0% 0%;
+        /* ホバー時は少しだけ濃く */
+        --depth: 0.16;
+        --patchDark: 0.10;
+        /* 微妙に明るさを変えて反応を示す */
+        filter: brightness(1.05);
     }
 
     body.turf-mode button:active:not(:disabled) {
-        /* 押下時にさらに奥行きを濃くし、パターンをずらす */
-        --depth: 0.22;
-        background-position: 30% 25%, 70% 30%, 0% 0%;
-        /* 押された感を出すための既存スタイル */
+        --depth: 0.18;
+        --patchDark: 0.12;
         box-shadow: inset 0 2px 2px rgba(0, 0, 0, 0.2);
         transform: translateY(1px);
+        filter: brightness(0.98);
     }
 
     body.turf-mode button:disabled {
-        /* 無効化されたボタンはすべての装飾を解除 */
         background-image: none;
         box-shadow: none;
         text-shadow: none;
         border-color: rgba(0, 0, 0, 0.2);
+        filter: none;
     }
 
-    /*
-     * -- ヘッダーのインタラクション無効化 --
-     */
     body.turf-mode .app-header:hover,
     body.turf-mode .app-header:active {
-        /* ヘッダーはホバーやクリックで反応しないように固定 */
-        background-position: 0% 0%, 100% 0%, 0% 0%;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
         transform: none;
-
+        filter: none;
     }
 </style>
 
