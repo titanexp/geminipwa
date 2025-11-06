@@ -6325,7 +6325,7 @@ body.turf-mode.elevation-enabled .message.model {
                             <div class="input-slider-wrapper">
                                 <input type="number" id="message-bubble-opacity" min="0" max="1" step="0.05" placeholder="例: 0.8" aria-label="メッセージバブルの透明度">
                                 <input type="range" id="message-bubble-opacity-slider" min="0" max="1" step="0.05">
-                                <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="message-bubble-opacity"> OFF</label>
+                                <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="message-bubble-opacity"> ON</label>
                             </div>
                         </div>
 
@@ -6334,7 +6334,7 @@ body.turf-mode.elevation-enabled .message.model {
                             <div class="input-slider-wrapper">
                                 <input type="number" id="message-actions-background-opacity" min="0" max="1" step="0.05" placeholder="例: 0.8" aria-label="メッセージツールバーの透明度（除ボタン）">
                                 <input type="range" id="message-actions-background-opacity-slider" min="0" max="1" step="0.05">
-                                <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="message-actions-background-opacity"> OFF</label>
+                                <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="message-actions-background-opacity"> ON</label>
                             </div>
                         </div>
                         
@@ -6343,7 +6343,7 @@ body.turf-mode.elevation-enabled .message.model {
                             <div class="input-slider-wrapper">
                                 <input type="number" id="chat-overlay-opacity" min="0" max="1" step="0.05" placeholder="例: 0.6" aria-label="チャット背景オーバーレイの透明度">
                                 <input type="range" id="chat-overlay-opacity-slider" min="0" max="1" step="0.05">
-                                 <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="chat-overlay-opacity"> OFF</label>
+                                 <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="chat-overlay-opacity"> ON</label>
                             </div>
                         </div>
 
@@ -6352,7 +6352,7 @@ body.turf-mode.elevation-enabled .message.model {
                             <div class="input-slider-wrapper">
                                 <input type="number" id="header-footer-opacity" min="0" max="1" step="0.05" placeholder="例: 0.9" aria-label="ヘッダー/フッターの透明度">
                                 <input type="range" id="header-footer-opacity-slider" min="0" max="1" step="0.05">
-                                <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="header-footer-opacity"> OFF</label>
+                                <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="header-footer-opacity"> ON</label>
                             </div>
                         </div>
                         
@@ -6361,7 +6361,7 @@ body.turf-mode.elevation-enabled .message.model {
                             <div class="input-slider-wrapper">
                                 <input type="number" id="toggle-button-top-opacity" min="0" max="1" step="0.05" placeholder="例: 0.6" aria-label="右上折りたたみボタンの透明度">
                                 <input type="range" id="toggle-button-top-opacity-slider" min="0" max="1" step="0.05">
-                                <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="toggle-button-top-opacity"> OFF</label>
+                                <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="toggle-button-top-opacity"> ON</label>
                             </div>
                         </div>
 
@@ -6370,7 +6370,7 @@ body.turf-mode.elevation-enabled .message.model {
                             <div class="input-slider-wrapper">
                                 <input type="number" id="thought-summary-opacity" min="0" max="1" step="0.05" placeholder="例: 0.85" aria-label="思考プロセス背景の透明度">
                                 <input type="range" id="thought-summary-opacity-slider" min="0" max="1" step="0.05">
-                                <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="thought-summary-opacity"> OFF</label>
+                                <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="thought-summary-opacity"> ON</label>
                             </div>
                         </div>
 
@@ -7485,8 +7485,14 @@ const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
                 twinEngineApiConfigs: [],
                 twinEngineActiveConfigId: null,
                 thoughtSummaryOpacity: DEFAULT_THOUGHT_SUMMARY_OPACITY,
-    enableElevation: false,
-                settingsUIDetailsOpenStates: {},
+enableMessageBubbleOpacity: true,
+enableChatOverlayOpacity: true,
+enableHeaderFooterOpacity: true,
+enableMessageActionsBackgroundOpacity: true,
+enableToggleButtonTopOpacity: true,
+enableThoughtSummaryOpacity: true,
+enableElevation: false,
+settingsUIDetailsOpenStates: {},
                 showApiProviderToggleHeader: false,
                 showApiProviderToggleFooter: true,
                 apiProviderCycle: {
@@ -11317,33 +11323,43 @@ elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPr
 _setupOpacitySlider(inputId, cssVar, defaultValue) {
             const numberInput = document.getElementById(inputId);
             const sliderInput = document.getElementById(inputId + '-slider');
-            const disableCheckbox = document.querySelector(`.opacity-disable-checkbox[data-target-id="${inputId}"]`);
+            const enableCheckbox = document.querySelector(`.opacity-disable-checkbox[data-target-id="${inputId}"]`);
+            const settingKey = `enable${inputId.replace(/-(\w)/g, (match, p1) => p1.toUpperCase()).replace(/^\w/, c => c.toUpperCase())}`;
 
             const updateValue = (value) => {
                 const numValue = parseFloat(value);
                 const finalValue = (isNaN(numValue) || value === '') ? defaultValue : numValue;
-                
-                if (numberInput.value !== value) numberInput.value = value;
-                if (sliderInput.value !== value) sliderInput.value = value;
-                
-                document.documentElement.style.setProperty(cssVar, finalValue);
-            };
-            
-            const handleCheckboxChange = () => {
-                const isDisabled = !disableCheckbox.checked;
-                numberInput.disabled = isDisabled;
-                sliderInput.disabled = isDisabled;
-                
-                if (isDisabled) {
-                    document.documentElement.style.setProperty(cssVar, 1);
-                } else {
-                    updateValue(numberInput.value);
+
+                if (String(numberInput.value) !== String(value)) numberInput.value = value;
+                if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
+
+                if (state.settings[settingKey]) {
+                    document.documentElement.style.setProperty(cssVar, finalValue);
                 }
             };
 
+            const handleCheckboxChange = () => {
+                const isEnabled = enableCheckbox.checked;
+                state.settings[settingKey] = isEnabled;
+                numberInput.disabled = !isEnabled;
+                sliderInput.disabled = !isEnabled;
+
+                if (isEnabled) {
+                    updateValue(numberInput.value);
+                } else {
+                    document.documentElement.style.setProperty(cssVar, 1);
+                }
+            };
+
+            const initialValue = state.settings[inputId.replace(/-(\w)/g, (match, p1) => p1.toUpperCase())];
+            numberInput.value = (initialValue === null || initialValue === undefined) ? '' : initialValue;
+            sliderInput.value = initialValue ?? defaultValue;
+            
+            enableCheckbox.checked = state.settings[settingKey];
+
             numberInput.addEventListener('input', (e) => updateValue(e.target.value));
             sliderInput.addEventListener('input', (e) => updateValue(e.target.value));
-            disableCheckbox.addEventListener('change', handleCheckboxChange);
+            enableCheckbox.addEventListener('change', handleCheckboxChange);
             
             handleCheckboxChange();
         },
