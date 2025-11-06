@@ -6386,14 +6386,10 @@ body.turf-mode.elevation-enabled .message.model {
                         style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor:pointer; font-weight: normal;">
                         UIの立体表現</summary>
                     <div style="padding-left: 15px; margin-top: 10px;">
-                        <div class="param-slider-container">
-                            <label for="elevation-strength">立体表現の強さ (0で無効):</label>
-                            <div class="param-slider-wrapper">
-                                <input type="number" id="elevation-strength" step="0.1" min="0" max="3" placeholder="例: 1.0">
-                                <input type="range" id="elevation-strength-slider" step="0.1" min="0" max="3">
-                            </div>
-                        </div>
-
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="enable-elevation-toggle">
+                            UIに立体的な影を追加する
+                        </label>
                     </div>
                 </details>
                         </div>
@@ -7070,8 +7066,7 @@ const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
             headerFooterOpacityInput: document.getElementById('header-footer-opacity'),
             messageActionsBackgroundOpacityInput: document.getElementById('message-actions-background-opacity'),
             thoughtSummaryOpacityInput: document.getElementById('thought-summary-opacity'),
-     elevationStrengthInput: document.getElementById('elevation-strength'),
-    elevationStrengthSlider: document.getElementById('elevation-strength-slider'),
+    enableElevationToggle: document.getElementById('enable-elevation-toggle'),
             appVersionSpan: document.getElementById('app-version'),
             backgroundImageInput: document.getElementById('background-image-input'),
             uploadBackgroundBtn: document.getElementById('upload-background-btn'),
@@ -7492,7 +7487,7 @@ const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
                 twinEngineApiConfigs: [],
                 twinEngineActiveConfigId: null,
                 thoughtSummaryOpacity: DEFAULT_THOUGHT_SUMMARY_OPACITY,
-    elevationStrength: 1.0,
+    enableElevation: false,
                 settingsUIDetailsOpenStates: {},
                 showApiProviderToggleHeader: false,
                 showApiProviderToggleFooter: true,
@@ -7713,18 +7708,10 @@ const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
                     request.onsuccess = (event) => {
                         const settingsArray = event.target.result;
                         const loadedSettings = {};
-                    settingsArray.forEach(item => {
-                        loadedSettings[item.key] = item.value;
-                    });
-
-                    if (loadedSettings.hasOwnProperty('enableElevation')) {
-                        if (!loadedSettings.hasOwnProperty('elevationStrength')) {
-                            loadedSettings.elevationStrength = loadedSettings.enableElevation ? 1.0 : 0.0;
-                        }
-                        delete loadedSettings.enableElevation;
-                    }
-
-                    const defaultSettings = { ...state.settings };
+                        settingsArray.forEach(item => {
+                            loadedSettings[item.key] = item.value;
+                        });
+                        const defaultSettings = { ...state.settings };
                         state.settings = { ...defaultSettings };
 
                         if (loadedSettings.hasOwnProperty('darkMode') && !loadedSettings.hasOwnProperty('theme')) {
@@ -7786,7 +7773,6 @@ const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
                         }
                         for (const key in loadedSettings) {
                             if (key === 'darkMode') continue;
-                            if (key === 'enableElevation') continue;
                             if (key === 'memoWidth') continue;
                             if (key === 'showCollapseButtons') continue;
 
@@ -9961,39 +9947,8 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 this.applyOpacitySettings();
                 this.applyZoomPreventionSetting();
             },
-            applyElevationSetting() {
-        const s = state.settings.elevationStrength ?? 1.0;
-
-        if (s <= 0 || isNaN(s) || state.settings.theme === 'turf') {
-            document.body.classList.remove('elevation-enabled');
-            document.documentElement.style.setProperty('--elevation-shadow-1', 'none');
-            document.documentElement.style.setProperty('--elevation-shadow-2', 'none');
-            document.documentElement.style.setProperty('--elevation-shadow-3', 'none');
-            document.documentElement.style.setProperty('--elevation-shadow-inset', 'none');
-            return;
-        }
-
-        document.body.classList.add('elevation-enabled');
-
-        const isDarkMode = document.body.classList.contains('dark-mode');
-
-        const shadows = {};
-        if (isDarkMode) {
-            shadows.s1 = `0 ${1*s}px ${2*s}px rgba(0,0,0,${Math.min(0.3*s, 1)}), 0 ${2*s}px ${4*s}px rgba(0,0,0,${Math.min(0.4*s, 1)})`;
-            shadows.s2 = `0 ${4*s}px ${8*s}px rgba(0,0,0,${Math.min(0.4*s, 1)}), 0 ${4*s}px ${8*s}px rgba(0,0,0,${Math.min(0.5*s, 1)})`;
-            shadows.s3 = `0 ${12*s}px ${24*s}px rgba(0,0,0,${Math.min(0.5*s, 1)}), 0 ${8*s}px ${8*s}px rgba(0,0,0,${Math.min(0.6*s, 1)})`;
-            shadows.inset = `inset 0 ${2*s}px ${4*s}px 0 rgba(0,0,0,${Math.min(0.2*s, 1)})`;
-        } else {
-            shadows.s1 = `0 ${1*s}px ${3*s}px rgba(0,0,0,${Math.min(0.1*s, 1)}), 0 ${1*s}px ${2*s}px rgba(0,0,0,${Math.min(0.1*s, 1)})`;
-            shadows.s2 = `0 ${3*s}px ${6*s}px rgba(0,0,0,${Math.min(0.12*s, 1)}), 0 ${3*s}px ${6*s}px rgba(0,0,0,${Math.min(0.15*s, 1)})`;
-            shadows.s3 = `0 ${10*s}px ${20*s}px rgba(0,0,0,${Math.min(0.15*s, 1)}), 0 ${6*s}px ${6*s}px rgba(0,0,0,${Math.min(0.18*s, 1)})`;
-            shadows.inset = `inset 0 ${2*s}px ${4*s}px 0 rgba(0,0,0,${Math.min(0.06*s, 1)})`;
-        }
-
-        document.documentElement.style.setProperty('--elevation-shadow-1', shadows.s1);
-        document.documentElement.style.setProperty('--elevation-shadow-2', shadows.s2);
-        document.documentElement.style.setProperty('--elevation-shadow-3', shadows.s3);
-        document.documentElement.style.setProperty('--elevation-shadow-inset', shadows.inset);
+    applyElevationSetting() {
+        document.body.classList.toggle('elevation-enabled', state.settings.enableElevation);
     },
             applySettingsToUI() {
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
@@ -10245,8 +10200,7 @@ elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPr
                 elements.messageActionsBackgroundOpacityInput.value = state.settings.messageActionsBackgroundOpacity ?? DEFAULT_MESSAGE_ACTIONS_BACKGROUND_OPACITY;
                 elements.toggleButtonTopOpacityInput.value = state.settings.toggleButtonTopOpacity ?? DEFAULT_TOGGLE_BUTTON_TOP_OPACITY;
                 elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity ?? DEFAULT_THOUGHT_SUMMARY_OPACITY;
-    elements.elevationStrengthInput.value = state.settings.elevationStrength;
-    elements.elevationStrengthSlider.value = state.settings.elevationStrength;
+    elements.enableElevationToggle.checked = state.settings.enableElevation;
     this.applyElevationSetting();
 
                 document.getElementById('message-bubble-opacity-slider').value = elements.messageBubbleOpacityInput.value;
@@ -12308,31 +12262,10 @@ _setupFontSizeSlider(inputId, cssVar, defaultValue) {
                         this.toggleMessageCollapse(index);
                     }
                 });
-
-                const elevationStrengthNumberHandler = () => {
-                    const value = parseFloat(elements.elevationStrengthInput.value);
-                    if (!isNaN(value)) {
-                        elements.elevationStrengthSlider.value = value;
-                        state.settings.elevationStrength = value;
-                        uiUtils.applyElevationSetting();
-                        handleSettingsChange();
-                    } else if (elements.elevationStrengthInput.value === '') {
-                        elements.elevationStrengthSlider.value = 0;
-                        state.settings.elevationStrength = 0;
-                        uiUtils.applyElevationSetting();
-                        handleSettingsChange();
-                    }
-                };
-                const elevationStrengthSliderHandler = () => {
-                    const value = parseFloat(elements.elevationStrengthSlider.value);
-                    elements.elevationStrengthInput.value = value;
-                    state.settings.elevationStrength = value;
-                    uiUtils.applyElevationSetting();
-                    handleSettingsChange();
-                };
-                elements.elevationStrengthInput.addEventListener('input', elevationStrengthNumberHandler);
-                elements.elevationStrengthSlider.addEventListener('input', elevationStrengthSliderHandler);
-                
+    elements.enableElevationToggle.addEventListener('change', () => {
+        state.settings.enableElevation = elements.enableElevationToggle.checked;
+        uiUtils.applyElevationSetting();
+    });
                 document.querySelectorAll('#settings-screen details[id]').forEach(details => {
                     details.addEventListener('toggle', (event) => {
                         if (details.id) {
@@ -15440,8 +15373,7 @@ newSettings.geminiSystemPrompt = elements.geminiSystemPromptDefaultTextarea.valu
                 newSettings.toggleButtonBottomTextCollapse = elements.toggleButtonBottomTextCollapseInput.value.trim() || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 newSettings.toggleButtonBottomTextExpand = elements.toggleButtonBottomTextExpandInput.value.trim() || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
                 newSettings.thoughtSummaryOpacity = elements.thoughtSummaryOpacityInput.value === '' ? DEFAULT_THOUGHT_SUMMARY_OPACITY : parseFloat(elements.thoughtSummaryOpacityInput.value);
-    const elevationStrength = parseFloat(elements.elevationStrengthInput.value);
-    newSettings.elevationStrength = (elements.elevationStrengthInput.value === '' || isNaN(elevationStrength)) ? 0 : elevationStrength;
+    newSettings.enableElevation = elements.enableElevationToggle.checked;
                 newSettings.showApiProviderToggleHeader = elements.showApiProviderToggleHeaderCheckbox.checked;
                 newSettings.showApiProviderToggleFooter = elements.showApiProviderToggleFooterCheckbox.checked;
                 newSettings.apiProviderCycle = {
