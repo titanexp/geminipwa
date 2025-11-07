@@ -4632,8 +4632,13 @@ body.turf-mode.elevation-enabled .message.model {
                                 複数APIキー管理 (Gemini)</summary>
                             <div style="padding-left: 15px; margin-top: 10px;">
                                 <div id="gemini-api-keys-list" class="api-keys-list"></div>
-                                <button type="button" id="add-gemini-api-key-btn"
-                                    class="add-api-key-btn">新しいAPIキーを追加</button>
+                                <div style="margin-top: 15px; display: flex; gap: 8px; align-items: flex-start;">
+                                    <textarea id="gemini-new-api-keys-input" class="api-key-item-input" placeholder="新しいAPIキーを入力..." rows="2" style="flex-grow: 1; margin-bottom: 0;"></textarea>
+                                    <button type="button" id="add-gemini-api-key-btn" class="add-api-key-btn" style="width: auto; padding: 8px 15px; height: auto;">追加</button>
+                                </div>
+                                <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px;">
+                                    ※ カンマ(,)区切りで複数のAPIキーを一括追加
+                                </p>
                             </div>
                         </details>
                         <label for="gemini-model-name">モデル名:</label>
@@ -7299,12 +7304,10 @@ const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
                 geminiDummyModel: '',
                 geminiEnableDummyModel: true,
                 geminiConcatDummyModel: false,
-geminiPseudoStreaming: false,
-geminiEnableGrounding: false,
-geminiMaxTokensSliderMax: null,
-geminiTopKSliderMax: null,
-geminiThinkingBudgetSliderMax: null,
-enableImageUrlReplacement: false,
+                geminiPseudoStreaming: false,
+                geminiEnableGrounding: false,
+                // ▼ここから追加▼
+                enableImageUrlReplacement: false, // デフォルトは無効
                 imageUrlReplacementBase: '',      // ベースURLは空
                 enableAutoBaseUrlDetection: true, // デフォルトでON
                 enableFuzzySearchNormalization: false, // デフォルトでON
@@ -11426,12 +11429,15 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                         sliderInput.value = maxVal;
                         numberInput.value = maxVal;
                     }
+                    if (storageKey) {
+                        state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
+                    }
                 }
             };
             
             if (maxInput) {
                 const storedMax = storageKey ? state.settings[storageKey] : null;
-                maxInput.value = (storedMax === null || storedMax === undefined) ? '' : storedMax;
+                maxInput.value = storedMax === null ? '' : storedMax;
                 handleMaxInputChange(); 
             }
 
@@ -15218,13 +15224,6 @@ newSettings.geminiSystemPrompt = elements.geminiSystemPromptDefaultTextarea.valu
                 newSettings.geminiPresencePenalty = getParamValue('gemini-presence-penalty');
                 newSettings.geminiFrequencyPenalty = getParamValue('gemini-frequency-penalty');
                 newSettings.geminiThinkingBudget = getParamValue('gemini-thinking-budget', true);
-                
-                const getSliderMaxValue = (paramId) => {
-                    const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
-                    if (!maxInput) return undefined;
-                    const value = maxInput.value.trim();
-                    return value === '' ? null : parseInt(value, 10);
-                };
 
                 newSettings.geminiMaxTokensSliderMax = getSliderMaxValue('gemini-max-tokens');
                 newSettings.geminiTopKSliderMax = getSliderMaxValue('gemini-top-k');
@@ -18573,29 +18572,45 @@ newSettings.geminiSystemPrompt = elements.geminiSystemPromptDefaultTextarea.valu
             },
 
             addApiKey(provider) {
+                const inputElement = document.getElementById(`${provider}-new-api-keys-input`);
+                if (!inputElement) return;
+
                 const keys = this.getApiKeysArray(provider);
-                if (keys.length >= this.MAX_API_KEYS) {
-                    uiUtils.showCustomAlert(`最大${this.MAX_API_KEYS}個までのAPIキーを設定できます。`);
+                const keysToAdd = inputElement.value.split(',')
+                    .map(key => key.trim())
+                    .filter(key => key !== '');
+
+                if (keysToAdd.length === 0) {
+                    uiUtils.showCustomAlert('追加するAPIキーを入力してください。');
                     return;
                 }
 
-                const newKey = {
-                    id: Date.now().toString(),
-                    label: `キー ${keys.length + 1}`,
-                    value: '',
-                    isActive: keys.length === 0
-                };
-
-                keys.push(newKey);
-
-                if (newKey.isActive) {
-                    this.setActiveApiKeyIndex(provider, keys.length - 1);
+                if (keys.length + keysToAdd.length > this.MAX_API_KEYS) {
+                    uiUtils.showCustomAlert(`最大${this.MAX_API_KEYS}個までのAPIキーを設定できます。現在のキー数: ${keys.length}, 追加しようとしたキー数: ${keysToAdd.length}`);
+                    return;
                 }
 
+                const wasEmpty = keys.length === 0;
+
+                keysToAdd.forEach(keyValue => {
+                    const newKey = {
+                        id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                        label: `キー ${keys.length + 1}`,
+                        value: keyValue,
+                        isActive: false 
+                    };
+                    keys.push(newKey);
+                });
+
+                if (wasEmpty && keys.length > 0) {
+                    keys[0].isActive = true;
+                    this.setActiveApiKeyIndex(provider, 0);
+                }
+
+                inputElement.value = ''; 
                 this.renderApiKeyList(provider);
                 this.updateMainApiKeyInput(provider);
             },
-
             async deleteApiKey(provider, keyId) {
                 const keys = this.getApiKeysArray(provider);
                 const keyIndex = keys.findIndex(key => key.id === keyId);
