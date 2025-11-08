@@ -4325,6 +4325,139 @@ body.turf-mode.elevation-enabled .message.user {
 body.turf-mode.elevation-enabled .message.model {
     border-color: #FD6EA3;
 }
+    #mobile-console-wrapper {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s;
+}
+
+#mobile-console-wrapper:not(.hidden) {
+    opacity: 1;
+    visibility: visible;
+}
+
+#mobile-console {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    height: 60%;
+    max-height: 80vh;
+    border-top: 1px solid var(--border-primary);
+    box-shadow: 0 -2px 10px var(--shadow-secondary);
+    display: flex;
+    flex-direction: column;
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+}
+
+#mobile-console-wrapper:not(.hidden) #mobile-console {
+    transform: translateY(0);
+}
+
+#console-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background-color: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-secondary);
+    flex-shrink: 0;
+}
+
+#console-header span {
+    font-weight: bold;
+}
+
+#console-actions button {
+    padding: 4px 8px;
+    font-size: 12px;
+    margin-left: 8px;
+}
+
+#clear-console-btn {
+    background-color: var(--bg-button-action);
+}
+#clear-console-btn:hover {
+    background-color: var(--bg-button-action-hover);
+}
+#close-console-btn {
+    background-color: var(--bg-button-cancel);
+}
+#close-console-btn:hover {
+    background-color: var(--bg-button-cancel-hover);
+}
+
+#console-output {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 10px;
+    font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    word-break: break-all;
+    white-space: pre-wrap;
+}
+
+.console-log-entry {
+    padding: 2px 0;
+    border-bottom: 1px solid var(--border-tertiary);
+}
+.console-log-entry:last-child {
+    border-bottom: none;
+}
+
+.console-log-entry.log { color: var(--text-primary); }
+.console-log-entry.info { color: #2196F3; }
+body.dark-mode .console-log-entry.info { color: #64B5F6; }
+.console-log-entry.warn { color: #FFC107; }
+body.dark-mode .console-log-entry.warn { color: #FFD54F; }
+.console-log-entry.error { color: var(--text-error); }
+.console-log-entry.command { color: var(--text-secondary); font-style: italic; }
+.console-log-entry.result { color: #9C27B0; }
+body.dark-mode .console-log-entry.result { color: #CE93D8; }
+
+
+.console-log-entry .timestamp {
+    color: var(--text-secondary);
+    margin-right: 8px;
+    font-size: 10px;
+}
+
+#console-input-wrapper {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border-secondary);
+    background-color: var(--bg-tertiary);
+    flex-shrink: 0;
+}
+
+#console-input-wrapper span {
+    margin-right: 8px;
+    color: var(--text-secondary);
+}
+
+#console-input {
+    flex-grow: 1;
+    background-color: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+    font-size: 13px;
+    outline: none;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+}
     </style>
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
@@ -4439,6 +4572,7 @@ body.turf-mode.elevation-enabled .message.model {
                 <button id="toggle-memo-btn" class="header-button" aria-label="メモを開閉">📝</button>
                 <button id="twin-engine-summary-btn" class="header-button hidden" aria-label="要約セッション履歴を開閉"
                     title="要約セッション履歴">⚗️</button>
+                    <button id="toggle-console-btn" class="header-button" aria-label="コンソールを開閉" title="コンソール">📜</button>
                 <button id="goto-settings-btn" class="header-button" aria-label="設定へ">⚙</button>
             </header>
 
@@ -4545,10 +4679,8 @@ body.turf-mode.elevation-enabled .message.model {
             <header class="app-header">
                 <button id="back-to-chat-from-settings" class="header-button" aria-label="チャットへ戻る">＜</button>
                 <h1>設定</h1>
-                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
-        <button class="js-save-settings-btn header-save-button" title="設定を保存">設定を保存</button>
-        <span id="settings-save-notice" class="header-notice" style="font-size: 10px; margin-right: 2px;">※反映には保存が必要</span>
-    </div>
+                <span id="settings-save-notice" class="header-notice">※反映には保存が必要</span>
+                <button class="js-save-settings-btn header-save-button" title="設定を保存">設定を保存</button>
             </header>
             <main class="main-content">
                 <details open class="settings-group" id="settings-group-api-provider">
@@ -6708,6 +6840,22 @@ body.turf-mode.elevation-enabled .message.model {
             <button id="initFailureOkBtn" value="ok" class="dialog-ok-btn">OK</button>
         </div>
     </dialog>
+    <div id="mobile-console-wrapper" class="hidden">
+        <div id="mobile-console">
+            <div id="console-header">
+                <span>開発者コンソール</span>
+                <div id="console-actions">
+                    <button id="clear-console-btn">クリア</button>
+                    <button id="close-console-btn">閉じる</button>
+                </div>
+            </div>
+            <div id="console-output"></div>
+            <div id="console-input-wrapper">
+                <span>&gt;</span>
+                <input type="text" id="console-input" placeholder="JavaScriptコードを入力してEnter..." autocomplete="off" autocapitalize="off" spellcheck="false">
+            </div>
+        </div>
+    </div>
     <script>
         const DB_NAME = 'GeminiPWA_DB';
         const DB_VERSION = 8;
@@ -7276,6 +7424,12 @@ const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
             webhookFormatTextRadio: document.getElementById('webhook-format-text'),
             webhooksList: document.getElementById('webhooks-list'),
             addWebhookBtn: document.getElementById('add-webhook-btn'),
+                toggleConsoleBtn: document.getElementById('toggle-console-btn'),
+                mobileConsoleWrapper: document.getElementById('mobile-console-wrapper'),
+                consoleOutput: document.getElementById('console-output'),
+                consoleInput: document.getElementById('console-input'),
+                clearConsoleBtn: document.getElementById('clear-console-btn'),
+                closeConsoleBtn: document.getElementById('close-console-btn'),
         };
 
         const state = {
@@ -11340,6 +11494,115 @@ elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPr
         }
         const appLogic = {
 _setupOpacitySlider(inputId, cssVar, defaultValue) {
+const mobileConsole = {
+            originalConsole: {},
+            isInitialized: false,
+
+            init() {
+                if (this.isInitialized) return;
+
+                ['log', 'warn', 'error', 'info'].forEach(method => {
+                    this.originalConsole[method] = console[method];
+                    console[method] = (...args) => {
+                        this.originalConsole[method](...args);
+                        this.logToUI(method, args);
+                    };
+                });
+                
+                window.addEventListener('error', (event) => {
+                    this.logToUI('error', [`Uncaught Error: ${event.message}`, `at ${event.filename}:${event.lineno}`]);
+                });
+                window.addEventListener('unhandledrejection', (event) => {
+                    this.logToUI('error', [`Unhandled Promise Rejection:`, event.reason]);
+                });
+                
+                elements.toggleConsoleBtn.addEventListener('click', () => this.toggle());
+                elements.closeConsoleBtn.addEventListener('click', () => this.toggle(false));
+                elements.clearConsoleBtn.addEventListener('click', () => this.clear());
+                elements.consoleInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        this.executeCommand();
+                    }
+                });
+
+                this.isInitialized = true;
+                console.info("Mobile console initialized.");
+            },
+
+            toggle(forceShow) {
+                const wrapper = elements.mobileConsoleWrapper;
+                if (!wrapper) return;
+                const shouldShow = forceShow !== undefined ? forceShow : wrapper.classList.contains('hidden');
+                wrapper.classList.toggle('hidden', !shouldShow);
+                if (shouldShow) {
+                    elements.consoleInput.focus();
+                }
+            },
+            
+            logToUI(level, args) {
+                if (!elements.consoleOutput) return;
+
+                const entry = document.createElement('div');
+                entry.classList.add('console-log-entry', level);
+                
+                const timestamp = document.createElement('span');
+                timestamp.className = 'timestamp';
+                timestamp.textContent = new Date().toLocaleTimeString();
+                entry.appendChild(timestamp);
+
+                const content = document.createElement('span');
+                content.innerHTML = args.map(arg => this.formatArgument(arg)).join(' ');
+                entry.appendChild(content);
+                
+                const isScrolledToBottom = elements.consoleOutput.scrollHeight - elements.consoleOutput.clientHeight <= elements.consoleOutput.scrollTop + 1;
+
+                elements.consoleOutput.appendChild(entry);
+
+                if(isScrolledToBottom) {
+                    elements.consoleOutput.scrollTop = elements.consoleOutput.scrollHeight;
+                }
+            },
+            
+            formatArgument(arg) {
+                const sanitize = (str) => str.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                if (arg instanceof Error) {
+                    return `<pre>${sanitize(arg.stack || arg.message)}</pre>`;
+                }
+                if (typeof arg === 'object' && arg !== null) {
+                    try {
+                        const jsonString = JSON.stringify(arg, (key, value) => 
+                            typeof value === 'bigint' ? value.toString() : value, 2);
+                        return `<pre>${sanitize(jsonString)}</pre>`;
+                    } catch (e) {
+                        return '[Circular Object]';
+                    }
+                }
+                return sanitize(String(arg));
+            },
+
+            executeCommand() {
+                const command = elements.consoleInput.value;
+                if (command.trim() === '') return;
+
+                this.logToUI('command', [`> ${command}`]);
+                elements.consoleInput.value = '';
+
+                try {
+                    const result = new Function(`return ${command}`).call(window);
+                    
+                    if (result !== undefined) {
+                        this.logToUI('result', [result]);
+                    }
+                } catch (e) {
+                    this.logToUI('error', [e]);
+                }
+            },
+
+            clear() {
+                elements.consoleOutput.innerHTML = '';
+            }
+        };
             const numberInput = document.getElementById(inputId);
             const sliderInput = document.getElementById(inputId + '-slider');
             const enableCheckbox = document.querySelector(`.opacity-disable-checkbox[data-target-id="${inputId}"]`);
@@ -11625,6 +11888,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     updateMessageMaxWidthVar();
                     webhookUtils.initialize();
                     proofreadingApiConfigUtils.initialize();
+                    mobileConsole.init();
                     this.setupEventListeners();
                     this.updateZoomState();
                     uiUtils.adjustTextareaHeight();
