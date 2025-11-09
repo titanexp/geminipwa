@@ -4259,7 +4259,7 @@ body.turf-mode button:nth-of-type(6n) {
     background-color: var(--bg-secondary);
 }
 #settings-group-gemini-other-params .param-slider-container {
-    margin-bottom: 5px;
+    margin-bottom: 8px;
 }
 :root {
     --elevation-shadow-1: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.1);
@@ -7595,9 +7595,6 @@ enableToggleButtonTopOpacity: true,
 enableThoughtSummaryOpacity: true,
 enableElevation: false,
 enableElevationHover: false,
-geminiMaxTokensSliderMax: null,
-geminiTopKSliderMax: null,
-geminiThinkingBudgetSliderMax: null,
 settingsUIDetailsOpenStates: {},
                 showApiProviderToggleHeader: false,
                 showApiProviderToggleFooter: true,
@@ -11494,7 +11491,6 @@ _setupFontSizeSlider(inputId, cssVar, defaultValue) {
             numberInput.addEventListener('input', (e) => updateValue(e.target.value));
             sliderInput.addEventListener('input', (e) => updateValue(e.target.value));
         },
-
 _setupParamSlider(paramId, defaultValue, storageKey) {
             const numberInput = document.getElementById(paramId);
             const sliderInput = document.getElementById(paramId + '-slider');
@@ -11519,11 +11515,8 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
             };
 
             const handleMaxInputChange = () => {
-                if (!maxInput) return; 
-
                 const maxValStr = maxInput.value.trim();
-                const sliderDefaultMax = parseFloat(sliderInput.getAttribute('max')) || 999999;
-                const maxVal = maxValStr === '' ? sliderDefaultMax : parseFloat(maxValStr);
+                const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
                 
                 if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
                     sliderInput.max = maxVal;
@@ -11531,29 +11524,26 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                         sliderInput.value = maxVal;
                         numberInput.value = maxVal;
                     }
-                }
-                                if (storageKey) {
-                    const valueToStore = maxValStr === '' ? null : parseFloat(maxValStr);
-                    if (!isNaN(valueToStore) || valueToStore === null) {
-                        state.settings[storageKey] = valueToStore;
+                    if (storageKey) {
+                        state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
                     }
                 }
             };
             
             if (maxInput) {
-                const storedMax = storageKey ? state.settings[storageKey] : undefined;
-                maxInput.value = (storedMax === null || storedMax === undefined) ? '' : storedMax;
-                handleMaxInputChange();
+                const storedMax = storageKey ? state.settings[storageKey] : null;
+                maxInput.value = storedMax === null ? '' : storedMax;
+                handleMaxInputChange(); 
             }
 
             numberInput.addEventListener('input', (e) => updateValue(e.target.value, 'number'));
             sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
             defaultCheckbox.addEventListener('change', handleCheckboxChange);
             if (maxInput) {
-
-                maxInput.addEventListener('input', handleMaxInputChange);
+                maxInput.addEventListener('change', handleMaxInputChange);
             }
         },
+        
         
             async sendWebhookNotification(responseMessage) {
                 if (!state.settings.enableWebhookNotification || !state.settings.webhooks || state.settings.webhooks.length === 0) {
