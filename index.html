@@ -10060,6 +10060,50 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
         document.body.classList.toggle('elevation-hover-enabled', state.settings.enableElevationHover);
     },
             applySettingsToUI() {
+                const setupParamUI = (paramId, storageKey) => {
+        const numberInput = document.getElementById(paramId);
+        const sliderInput = document.getElementById(paramId + '-slider');
+        const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
+        const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
+
+        if (!numberInput || !sliderInput || !checkbox) return;
+
+        const paramKey = paramId.replace(/-(\w)/g, (_, c) => c.toUpperCase());
+        const value = state.settings[paramKey] ?? null;
+        const useCustomValue = value !== null;
+
+        checkbox.checked = useCustomValue;
+        numberInput.disabled = !useCustomValue;
+        sliderInput.disabled = !useCustomValue;
+        if (maxInput) maxInput.disabled = !useCustomValue;
+
+        if (useCustomValue) {
+            numberInput.value = value;
+        } else {
+            numberInput.value = '';
+        }
+
+        if (maxInput && storageKey) {
+            const storedMax = state.settings[storageKey];
+            maxInput.value = (storedMax === null || storedMax === undefined) ? '' : storedMax;
+
+            const maxValStr = maxInput.value.trim();
+            const defaultSliderMax = parseFloat(sliderInput.getAttribute('max')) || 10000;
+            const maxVal = maxValStr === '' ? defaultSliderMax : parseFloat(maxValStr);
+            
+            if (!isNaN(maxVal) && maxVal >= parseFloat(sliderInput.min)) {
+                sliderInput.max = maxVal;
+            }
+        }
+
+
+        if (useCustomValue) {
+             sliderInput.value = value;
+        } else {
+
+             sliderInput.value = (parseFloat(sliderInput.min) + parseFloat(sliderInput.max)) / 2;
+        }
+    };
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
                 elements.apiProviderSelect.value = state.settings.apiProvider;
                 twinEngineApiConfigUtils.renderList();
@@ -10109,7 +10153,13 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
 
 elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPrompt || '';
                 elements.geminiEnableSystemPromptDefaultCheckbox.checked = state.settings.geminiEnableSystemPromptDefault;
-                
+            setupParamUI('gemini-max-tokens', 'geminiMaxTokensSliderMax');
+            setupParamUI('gemini-temperature');
+            setupParamUI('gemini-top-k', 'geminiTopKSliderMax');
+            setupParamUI('gemini-top-p');
+            setupParamUI('gemini-presence-penalty');
+            setupParamUI('gemini-frequency-penalty');
+            setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
                 const setupParamUI = (paramId, storageKey) => {
                     const numberInput = document.getElementById(paramId);
                     const sliderInput = document.getElementById(paramId + '-slider');
@@ -11515,23 +11565,24 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
             };
 
             const handleMaxInputChange = () => {
-                if (!maxInput) return;
                 const maxValStr = maxInput.value.trim();
-                const defaultSliderMax = parseFloat(sliderInput.getAttribute('max')) || 10000;
-                const maxVal = maxValStr === '' ? defaultSliderMax : parseFloat(maxValStr);
-
-                if (!isNaN(maxVal) && maxVal >= parseFloat(sliderInput.min)) {
+                const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
+                
+                if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
                     sliderInput.max = maxVal;
                     if (parseFloat(sliderInput.value) > maxVal) {
                         sliderInput.value = maxVal;
                         numberInput.value = maxVal;
                     }
+                    if (storageKey) {
+                        state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
+                    }
                 }
             };
             
-            if (maxInput && storageKey) {
-                const storedMax = state.settings[storageKey];
-                maxInput.value = (storedMax === null || storedMax === undefined) ? '' : storedMax;
+            if (maxInput) {
+                const storedMax = storageKey ? state.settings[storageKey] : null;
+                maxInput.value = storedMax === null ? '' : storedMax;
                 handleMaxInputChange(); 
             }
 
@@ -15273,7 +15324,14 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                     await uiUtils.showCustomAlert(`${type === 'user' ? 'ユーザー' : 'AI'}アイコンの削除エラー: ${error}`);
                 }
             },
-            
+        getSliderMaxValue(paramId) {
+            const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
+            if (!maxInput) return undefined;
+            const value = maxInput.value.trim();
+            if (value === '') return null;
+            const num = parseInt(value, 10);
+            return isNaN(num) ? null : num;
+        },
             async saveSettings(showNotice = true) {
                 const newSettings = { ...state.settings };
                 newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
@@ -19377,54 +19435,7 @@ const multiApiKeyUtils = {
         errorRecovery.init();
 
         window.errorRecovery = errorRecovery;
-const paramSliders = document.querySelectorAll('.param-slider-container');
-            paramSliders.forEach(container => {
-                const numberInput = container.querySelector('input[type="number"]');
-                const sliderInput = container.querySelector('input[type="range"]');
-                const checkbox = container.querySelector('.param-default-checkbox');
-                const maxInput = container.querySelector('.param-slider-max-input');
-                
-                if (!numberInput || !sliderInput || !checkbox) return;
 
-                const syncValues = (value) => {
-                    if (String(numberInput.value) !== String(value)) numberInput.value = value;
-                    if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
-                };
-
-                const updateUIState = (useCustom) => {
-                    numberInput.disabled = !useCustom;
-                    sliderInput.disabled = !useCustom;
-                    if (maxInput) maxInput.disabled = !useCustom;
-                    if (checkbox.checked !== useCustom) checkbox.checked = useCustom;
-
-                    if (!useCustom) {
-                        numberInput.value = '';
-                    }
-                };
-
-                checkbox.addEventListener('change', () => {
-                    const useCustom = checkbox.checked;
-                    updateUIState(useCustom);
-                    if (useCustom && numberInput.value === '') {
-                        const sliderDefault = sliderInput.getAttribute('value') || 
-                                              (parseFloat(sliderInput.min) + parseFloat(sliderInput.max)) / 2;
-                        const step = sliderInput.step || 1;
-                        const precision = step.includes('.') ? step.split('.')[1].length : 0;
-                        const roundedDefault = Math.round(sliderDefault / step) * step;
-                        syncValues(roundedDefault.toFixed(precision));
-                    }
-                });
-
-                const onInputChange = (e) => {
-                    if (!checkbox.checked) {
-                        updateUIState(true);
-                    }
-                    syncValues(e.target.value);
-                };
-
-                numberInput.addEventListener('input', onInputChange);
-                sliderInput.addEventListener('input', onInputChange);
-            });
         appLogic.initializeApp();
     </script>
 </body>
