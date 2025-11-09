@@ -8662,7 +8662,119 @@ settingsUIDetailsOpenStates: {},
             return input; // 完全一致もFuzzy Searchもヒットしなかった場合は元の入力を返す
         }
         // ▲▲▲ ここまで追加 ▲▲▲
-        const uiUtils = {
+const uiUtils = {
+            _setupOpacitySlider(inputId, cssVar, defaultValue) {
+                const numberInput = document.getElementById(inputId);
+                const sliderInput = document.getElementById(inputId + '-slider');
+                const enableCheckbox = document.querySelector(`.opacity-disable-checkbox[data-target-id="${inputId}"]`);
+                const settingKey = `enable${inputId.replace(/-(\w)/g, (match, p1) => p1.toUpperCase()).replace(/^\w/, c => c.toUpperCase())}`;
+    
+                const updateValue = (value) => {
+                    const numValue = parseFloat(value);
+                    const finalValue = (isNaN(numValue) || value === '') ? defaultValue : numValue;
+    
+                    if (String(numberInput.value) !== String(value)) numberInput.value = value;
+                    if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
+    
+                    if (state.settings[settingKey]) {
+                        document.documentElement.style.setProperty(cssVar, finalValue);
+                    }
+                };
+    
+                const handleCheckboxChange = () => {
+                    const isEnabled = enableCheckbox.checked;
+                    state.settings[settingKey] = isEnabled;
+                    numberInput.disabled = !isEnabled;
+                    sliderInput.disabled = !isEnabled;
+    
+                    if (isEnabled) {
+                        updateValue(numberInput.value);
+                    } else {
+                        document.documentElement.style.setProperty(cssVar, 1);
+                    }
+                };
+    
+                const initialValue = state.settings[inputId.replace(/-(\w)/g, (match, p1) => p1.toUpperCase())];
+                numberInput.value = (initialValue === null || initialValue === undefined) ? '' : initialValue;
+                sliderInput.value = initialValue ?? defaultValue;
+                
+                enableCheckbox.checked = state.settings[settingKey];
+    
+                numberInput.addEventListener('input', (e) => updateValue(e.target.value));
+                sliderInput.addEventListener('input', (e) => updateValue(e.target.value));
+                enableCheckbox.addEventListener('change', handleCheckboxChange);
+                
+                handleCheckboxChange();
+            },
+            _setupFontSizeSlider(inputId, cssVar, defaultValue) {
+                const numberInput = document.getElementById(inputId);
+                const sliderInput = document.getElementById(inputId + '-slider');
+    
+                const updateValue = (value) => {
+                    const numValue = parseInt(value, 10);
+                    const finalValue = (isNaN(numValue) || value === '') ? defaultValue : numValue;
+    
+                    if (numberInput.value !== value) numberInput.value = value;
+                    if (sliderInput.value !== value) sliderInput.value = value;
+                    
+                    document.documentElement.style.setProperty(cssVar, `${finalValue}px`);
+                };
+    
+                numberInput.addEventListener('input', (e) => updateValue(e.target.value));
+                sliderInput.addEventListener('input', (e) => updateValue(e.target.value));
+            },
+            _setupParamSlider(paramId, defaultValue, storageKey) {
+                const numberInput = document.getElementById(paramId);
+                const sliderInput = document.getElementById(paramId + '-slider');
+                const defaultCheckbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
+                const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
+    
+                const updateValue = (value, from) => {
+                    if (numberInput.value !== value) numberInput.value = value;
+                    if (sliderInput.value !== value) sliderInput.value = value;
+                };
+                
+                const handleCheckboxChange = () => {
+                    const isDefault = !defaultCheckbox.checked;
+                    numberInput.disabled = isDefault;
+                    sliderInput.disabled = isDefault;
+                    if (maxInput) maxInput.disabled = isDefault;
+    
+                    if (isDefault) {
+    
+                        sliderInput.value = defaultValue;
+                    }
+                };
+    
+                const handleMaxInputChange = () => {
+                    const maxValStr = maxInput.value.trim();
+                    const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
+                    
+                    if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
+                        sliderInput.max = maxVal;
+                        if (parseFloat(sliderInput.value) > maxVal) {
+                            sliderInput.value = maxVal;
+                            numberInput.value = maxVal;
+                        }
+                        if (storageKey) {
+                            state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
+                        }
+                    }
+                };
+                
+                if (maxInput) {
+                    const storedMax = storageKey ? state.settings[storageKey] : null;
+                    maxInput.value = storedMax === null ? '' : storedMax;
+                    handleMaxInputChange(); 
+                }
+    
+                numberInput.addEventListener('input', (e) => updateValue(e.target.value, 'number'));
+                sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
+                defaultCheckbox.addEventListener('change', handleCheckboxChange);
+                if (maxInput) {
+                    maxInput.addEventListener('change', handleMaxInputChange);
+                }
+            },
             _sanitizeAndParseMarkdown(content) {
                 // state.settings.enableImageUrlReplacement と state.settings.imageUrlReplacementBase のチェックを修正
                 if (typeof content === 'string' && state.settings.enableImageUrlReplacement) {
@@ -11621,120 +11733,8 @@ setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
             });
         }
         const appLogic = {
-_setupOpacitySlider(inputId, cssVar, defaultValue) {
-            const numberInput = document.getElementById(inputId);
-            const sliderInput = document.getElementById(inputId + '-slider');
-            const enableCheckbox = document.querySelector(`.opacity-disable-checkbox[data-target-id="${inputId}"]`);
-            const settingKey = `enable${inputId.replace(/-(\w)/g, (match, p1) => p1.toUpperCase()).replace(/^\w/, c => c.toUpperCase())}`;
 
-            const updateValue = (value) => {
-                const numValue = parseFloat(value);
-                const finalValue = (isNaN(numValue) || value === '') ? defaultValue : numValue;
-
-                if (String(numberInput.value) !== String(value)) numberInput.value = value;
-                if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
-
-                if (state.settings[settingKey]) {
-                    document.documentElement.style.setProperty(cssVar, finalValue);
-                }
-            };
-
-            const handleCheckboxChange = () => {
-                const isEnabled = enableCheckbox.checked;
-                state.settings[settingKey] = isEnabled;
-                numberInput.disabled = !isEnabled;
-                sliderInput.disabled = !isEnabled;
-
-                if (isEnabled) {
-                    updateValue(numberInput.value);
-                } else {
-                    document.documentElement.style.setProperty(cssVar, 1);
-                }
-            };
-
-            const initialValue = state.settings[inputId.replace(/-(\w)/g, (match, p1) => p1.toUpperCase())];
-            numberInput.value = (initialValue === null || initialValue === undefined) ? '' : initialValue;
-            sliderInput.value = initialValue ?? defaultValue;
-            
-            enableCheckbox.checked = state.settings[settingKey];
-
-            numberInput.addEventListener('input', (e) => updateValue(e.target.value));
-            sliderInput.addEventListener('input', (e) => updateValue(e.target.value));
-            enableCheckbox.addEventListener('change', handleCheckboxChange);
-            
-            handleCheckboxChange();
-        },
-_setupFontSizeSlider(inputId, cssVar, defaultValue) {
-            const numberInput = document.getElementById(inputId);
-            const sliderInput = document.getElementById(inputId + '-slider');
-
-            const updateValue = (value) => {
-                const numValue = parseInt(value, 10);
-                const finalValue = (isNaN(numValue) || value === '') ? defaultValue : numValue;
-
-                if (numberInput.value !== value) numberInput.value = value;
-                if (sliderInput.value !== value) sliderInput.value = value;
-                
-                document.documentElement.style.setProperty(cssVar, `${finalValue}px`);
-            };
-
-            numberInput.addEventListener('input', (e) => updateValue(e.target.value));
-            sliderInput.addEventListener('input', (e) => updateValue(e.target.value));
-        },
-_setupParamSlider(paramId, defaultValue, storageKey) {
-            const numberInput = document.getElementById(paramId);
-            const sliderInput = document.getElementById(paramId + '-slider');
-            const defaultCheckbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
-            const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
-
-            const updateValue = (value, from) => {
-                if (numberInput.value !== value) numberInput.value = value;
-                if (sliderInput.value !== value) sliderInput.value = value;
-            };
-            
-            const handleCheckboxChange = () => {
-                const isDefault = !defaultCheckbox.checked;
-                numberInput.disabled = isDefault;
-                sliderInput.disabled = isDefault;
-                if (maxInput) maxInput.disabled = isDefault;
-
-                if (isDefault) {
-
-                    sliderInput.value = defaultValue;
-                }
-            };
-
-            const handleMaxInputChange = () => {
-                const maxValStr = maxInput.value.trim();
-                const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
-                
-                if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
-                    sliderInput.max = maxVal;
-                    if (parseFloat(sliderInput.value) > maxVal) {
-                        sliderInput.value = maxVal;
-                        numberInput.value = maxVal;
-                    }
-                    if (storageKey) {
-                        state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
-                    }
-                }
-            };
-            
-            if (maxInput) {
-                const storedMax = storageKey ? state.settings[storageKey] : null;
-                maxInput.value = storedMax === null ? '' : storedMax;
-                handleMaxInputChange(); 
-            }
-
-            numberInput.addEventListener('input', (e) => updateValue(e.target.value, 'number'));
-            sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
-            defaultCheckbox.addEventListener('change', handleCheckboxChange);
-            if (maxInput) {
-                maxInput.addEventListener('change', handleMaxInputChange);
-            }
-        },
-        
-        
+const appLogic = {
             async sendWebhookNotification(responseMessage) {
                 if (!state.settings.enableWebhookNotification || !state.settings.webhooks || state.settings.webhooks.length === 0) {
                     return;
