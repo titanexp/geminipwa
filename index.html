@@ -11515,28 +11515,25 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
             };
 
             const handleMaxInputChange = () => {
+                if (!maxInput) return;
                 const maxValStr = maxInput.value.trim();
+                const defaultSliderMax = parseFloat(sliderInput.getAttribute('max')) || 10000;
+                const maxVal = maxValStr === '' ? defaultSliderMax : parseFloat(maxValStr);
 
-                const defaultMax = parseFloat(sliderInput.getAttribute('max')) || 100;
-                const maxVal = maxValStr === '' ? defaultMax : parseFloat(maxValStr);
-                
-                if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
+                if (!isNaN(maxVal) && maxVal >= parseFloat(sliderInput.min)) {
                     sliderInput.max = maxVal;
                     if (parseFloat(sliderInput.value) > maxVal) {
                         sliderInput.value = maxVal;
                         numberInput.value = maxVal;
                     }
-
                 }
             };
             
-
-            if (maxInput) {
-                const storedMax = storageKey ? state.settings[storageKey] : null;
-                maxInput.value = storedMax === null || storedMax === undefined ? '' : storedMax;
+            if (maxInput && storageKey) {
+                const storedMax = state.settings[storageKey];
+                maxInput.value = (storedMax === null || storedMax === undefined) ? '' : storedMax;
                 handleMaxInputChange(); 
             }
-
 
             numberInput.addEventListener('input', (e) => updateValue(e.target.value, 'number'));
             sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
@@ -15276,14 +15273,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                     await uiUtils.showCustomAlert(`${type === 'user' ? 'ユーザー' : 'AI'}アイコンの削除エラー: ${error}`);
                 }
             },
-        getSliderMaxValue(paramId) {
-            const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
-            if (!maxInput) return undefined;
-            const value = maxInput.value.trim();
-            if (value === '') return null;
-            const num = parseInt(value, 10);
-            return isNaN(num) ? null : num;
-        },
+            
             async saveSettings(showNotice = true) {
                 const newSettings = { ...state.settings };
                 newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
