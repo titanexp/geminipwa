@@ -11519,8 +11519,11 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
             };
 
             const handleMaxInputChange = () => {
+                if (!maxInput) return; 
+
                 const maxValStr = maxInput.value.trim();
-                const maxVal = maxValStr === '' ? parseFloat(sliderInput.getAttribute('max')) || 999999 : parseFloat(maxValStr);
+                const sliderDefaultMax = parseFloat(sliderInput.getAttribute('max')) || 999999;
+                const maxVal = maxValStr === '' ? sliderDefaultMax : parseFloat(maxValStr);
                 
                 if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
                     sliderInput.max = maxVal;
@@ -11528,15 +11531,17 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                         sliderInput.value = maxVal;
                         numberInput.value = maxVal;
                     }
-                    if (storageKey) {
-                        state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
+                }
+                                if (storageKey) {
+                    const valueToStore = maxValStr === '' ? null : parseFloat(maxValStr);
+                    if (!isNaN(valueToStore) || valueToStore === null) {
+                        state.settings[storageKey] = valueToStore;
                     }
                 }
             };
             
             if (maxInput) {
                 const storedMax = storageKey ? state.settings[storageKey] : undefined;
-                // storedMaxがnullまたはundefinedの場合、入力欄を空にする
                 maxInput.value = (storedMax === null || storedMax === undefined) ? '' : storedMax;
                 handleMaxInputChange();
             }
@@ -11545,7 +11550,8 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
             sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
             defaultCheckbox.addEventListener('change', handleCheckboxChange);
             if (maxInput) {
-                maxInput.addEventListener('change', handleMaxInputChange);
+
+                maxInput.addEventListener('input', handleMaxInputChange);
             }
         },
         
