@@ -18704,40 +18704,42 @@ const multiApiKeyUtils = {
             },
             
             async handleBatchAddApiKeys(inputText) {
-                inputText = inputText.replace(/,/g, ' ').trim();
-
+                const commands = inputText.split(',').map(cmd => cmd.trim()).filter(cmd => cmd);
+                
                 const prefixes = Object.keys(this.providerPrefixMap).join('|');
-                const regex = new RegExp(`(?:^|\\s)(${prefixes}):\\s*([^\\s]+)`, 'gi');
+                const regex = new RegExp(`^(${prefixes}):\\s*([^\\s]+)$`, 'i');
 
-                let match;
                 const results = {
                     success: {},
                     failed: {}
                 };
                 let commandsFound = 0;
 
-                while ((match = regex.exec(inputText)) !== null) {
-                    commandsFound++;
-                    const prefix = match[1].toLowerCase();
-                    const keyValue = match[2];
-                    const provider = this.providerPrefixMap[prefix];
+                for (const command of commands) {
+                    const match = command.match(regex);
+                    if (match) {
+                        commandsFound++;
+                        const prefix = match[1].toLowerCase();
+                        const keyValue = match[2];
+                        const provider = this.providerPrefixMap[prefix];
 
-                    if (provider && keyValue) {
-                        const keys = this.getApiKeysArray(provider);
-                        if (keys.length < this.MAX_API_KEYS) {
-                            const newKey = {
-                                id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-                                label: `キー ${keys.length + 1}`,
-                                value: keyValue,
-                                isActive: keys.length === 0
-                            };
-                            keys.push(newKey);
-                            if (newKey.isActive) {
-                                this.setActiveApiKeyIndex(provider, 0);
+                        if (provider && keyValue) {
+                            const keys = this.getApiKeysArray(provider);
+                            if (keys.length < this.MAX_API_KEYS) {
+                                const newKey = {
+                                    id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                                    label: `キー ${keys.length + 1}`,
+                                    value: keyValue,
+                                    isActive: keys.length === 0
+                                };
+                                keys.push(newKey);
+                                if (newKey.isActive) {
+                                    this.setActiveApiKeyIndex(provider, 0);
+                                }
+                                results.success[provider] = (results.success[provider] || 0) + 1;
+                            } else {
+                                results.failed[provider] = (results.failed[provider] || 0) + 1;
                             }
-                            results.success[provider] = (results.success[provider] || 0) + 1;
-                        } else {
-                            results.failed[provider] = (results.failed[provider] || 0) + 1;
                         }
                     }
                 }
@@ -18767,10 +18769,10 @@ const multiApiKeyUtils = {
             async addApiKey(provider) {
                 const inputElement = document.getElementById(`${provider}-new-api-keys-input`);
                 if (!inputElement) return;
-                const inputText = inputElement.value.trim();
+                const inputText = inputElement.value; // .trim() を削除
 
                 const prefixes = Object.keys(this.providerPrefixMap).join('|');
-                const commandRegex = new RegExp(`(?:\\s|^)(${prefixes}):`, 'i');
+                const commandRegex = new RegExp(`(?:^|\\s|,|\\n)(${prefixes}):`, 'i');
 
                 if (commandRegex.test(inputText)) {
                     await this.handleBatchAddApiKeys(inputText);
