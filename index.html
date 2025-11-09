@@ -5447,6 +5447,11 @@ body.pastel-yellow-mode .api-key-help-icon {
                                         <input type="range" id="openai-presence-penalty-slider" step="0.1" min="-2.0"
                                             max="2.0">
                                     </div>
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+                </details>
 
 <details id="xai-params-group" class="settings-group hidden" open>
                     <summary
@@ -7570,7 +7575,6 @@ appVersionSpan: document.getElementById('app-version'),
 geminiMaxTokensSliderMax: null,
 geminiTopKSliderMax: null,
 geminiThinkingBudgetSliderMax: null,
-openaiMaxTokensSliderMax: null,
 geminiIncludeThoughts: false,
                 geminiExpandThoughtsByDefault: false,
                 geminiStreamingOutput: true,
@@ -8662,119 +8666,7 @@ settingsUIDetailsOpenStates: {},
             return input; // 完全一致もFuzzy Searchもヒットしなかった場合は元の入力を返す
         }
         // ▲▲▲ ここまで追加 ▲▲▲
-const uiUtils = {
-            _setupOpacitySlider(inputId, cssVar, defaultValue) {
-                const numberInput = document.getElementById(inputId);
-                const sliderInput = document.getElementById(inputId + '-slider');
-                const enableCheckbox = document.querySelector(`.opacity-disable-checkbox[data-target-id="${inputId}"]`);
-                const settingKey = `enable${inputId.replace(/-(\w)/g, (match, p1) => p1.toUpperCase()).replace(/^\w/, c => c.toUpperCase())}`;
-    
-                const updateValue = (value) => {
-                    const numValue = parseFloat(value);
-                    const finalValue = (isNaN(numValue) || value === '') ? defaultValue : numValue;
-    
-                    if (String(numberInput.value) !== String(value)) numberInput.value = value;
-                    if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
-    
-                    if (state.settings[settingKey]) {
-                        document.documentElement.style.setProperty(cssVar, finalValue);
-                    }
-                };
-    
-                const handleCheckboxChange = () => {
-                    const isEnabled = enableCheckbox.checked;
-                    state.settings[settingKey] = isEnabled;
-                    numberInput.disabled = !isEnabled;
-                    sliderInput.disabled = !isEnabled;
-    
-                    if (isEnabled) {
-                        updateValue(numberInput.value);
-                    } else {
-                        document.documentElement.style.setProperty(cssVar, 1);
-                    }
-                };
-    
-                const initialValue = state.settings[inputId.replace(/-(\w)/g, (match, p1) => p1.toUpperCase())];
-                numberInput.value = (initialValue === null || initialValue === undefined) ? '' : initialValue;
-                sliderInput.value = initialValue ?? defaultValue;
-                
-                enableCheckbox.checked = state.settings[settingKey];
-    
-                numberInput.addEventListener('input', (e) => updateValue(e.target.value));
-                sliderInput.addEventListener('input', (e) => updateValue(e.target.value));
-                enableCheckbox.addEventListener('change', handleCheckboxChange);
-                
-                handleCheckboxChange();
-            },
-            _setupFontSizeSlider(inputId, cssVar, defaultValue) {
-                const numberInput = document.getElementById(inputId);
-                const sliderInput = document.getElementById(inputId + '-slider');
-    
-                const updateValue = (value) => {
-                    const numValue = parseInt(value, 10);
-                    const finalValue = (isNaN(numValue) || value === '') ? defaultValue : numValue;
-    
-                    if (numberInput.value !== value) numberInput.value = value;
-                    if (sliderInput.value !== value) sliderInput.value = value;
-                    
-                    document.documentElement.style.setProperty(cssVar, `${finalValue}px`);
-                };
-    
-                numberInput.addEventListener('input', (e) => updateValue(e.target.value));
-                sliderInput.addEventListener('input', (e) => updateValue(e.target.value));
-            },
-            _setupParamSlider(paramId, defaultValue, storageKey) {
-                const numberInput = document.getElementById(paramId);
-                const sliderInput = document.getElementById(paramId + '-slider');
-                const defaultCheckbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
-                const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
-    
-                const updateValue = (value, from) => {
-                    if (numberInput.value !== value) numberInput.value = value;
-                    if (sliderInput.value !== value) sliderInput.value = value;
-                };
-                
-                const handleCheckboxChange = () => {
-                    const isDefault = !defaultCheckbox.checked;
-                    numberInput.disabled = isDefault;
-                    sliderInput.disabled = isDefault;
-                    if (maxInput) maxInput.disabled = isDefault;
-    
-                    if (isDefault) {
-    
-                        sliderInput.value = defaultValue;
-                    }
-                };
-    
-                const handleMaxInputChange = () => {
-                    const maxValStr = maxInput.value.trim();
-                    const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
-                    
-                    if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
-                        sliderInput.max = maxVal;
-                        if (parseFloat(sliderInput.value) > maxVal) {
-                            sliderInput.value = maxVal;
-                            numberInput.value = maxVal;
-                        }
-                        if (storageKey) {
-                            state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
-                        }
-                    }
-                };
-                
-                if (maxInput) {
-                    const storedMax = storageKey ? state.settings[storageKey] : null;
-                    maxInput.value = storedMax === null ? '' : storedMax;
-                    handleMaxInputChange(); 
-                }
-    
-                numberInput.addEventListener('input', (e) => updateValue(e.target.value, 'number'));
-                sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
-                defaultCheckbox.addEventListener('change', handleCheckboxChange);
-                if (maxInput) {
-                    maxInput.addEventListener('change', handleMaxInputChange);
-                }
-            },
+        const uiUtils = {
             _sanitizeAndParseMarkdown(content) {
                 // state.settings.enableImageUrlReplacement と state.settings.imageUrlReplacementBase のチェックを修正
                 if (typeof content === 'string' && state.settings.enableImageUrlReplacement) {
@@ -10512,11 +10404,11 @@ setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
 
                 elements.openaiSystemPromptDefaultTextarea.value = state.settings.openaiSystemPrompt || '';
                 elements.openaiEnableSystemPromptDefaultCheckbox.checked = state.settings.openaiEnableSystemPromptDefault;
-                this._setupParamSlider('openai-max-tokens', 4096, 'openaiMaxTokensSliderMax');
-                this._setupParamSlider('openai-temperature', 1.0, null);
-                this._setupParamSlider('openai-top-p', 1.0, null);
-                this._setupParamSlider('openai-presence-penalty', 0.0, null);
-                this._setupParamSlider('openai-frequency-penalty', 0.0, null);
+                elements.openaiTemperatureInput.value = state.settings.openaiTemperature === null ? '' : state.settings.openaiTemperature;
+                elements.openaiMaxTokensInput.value = state.settings.openaiMaxTokens === null ? '' : state.settings.openaiMaxTokens;
+                elements.openaiTopPInput.value = state.settings.openaiTopP === null ? '' : state.settings.openaiTopP;
+                elements.openaiPresencePenaltyInput.value = state.settings.openaiPresencePenalty === null ? '' : state.settings.openaiPresencePenalty;
+                elements.openaiFrequencyPenaltyInput.value = state.settings.openaiFrequencyPenalty === null ? '' : state.settings.openaiFrequencyPenalty;
                 elements.openaiStreamingOutputCheckbox.checked = state.settings.openaiStreamingOutput;
                 elements.openaiStreamingSpeedInput.value = state.settings.openaiStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
                 elements.openaiDummyUserInput.value = state.settings.openaiDummyUser || '';
@@ -11733,8 +11625,120 @@ setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
             });
         }
         const appLogic = {
+_setupOpacitySlider(inputId, cssVar, defaultValue) {
+            const numberInput = document.getElementById(inputId);
+            const sliderInput = document.getElementById(inputId + '-slider');
+            const enableCheckbox = document.querySelector(`.opacity-disable-checkbox[data-target-id="${inputId}"]`);
+            const settingKey = `enable${inputId.replace(/-(\w)/g, (match, p1) => p1.toUpperCase()).replace(/^\w/, c => c.toUpperCase())}`;
 
-const appLogic = {
+            const updateValue = (value) => {
+                const numValue = parseFloat(value);
+                const finalValue = (isNaN(numValue) || value === '') ? defaultValue : numValue;
+
+                if (String(numberInput.value) !== String(value)) numberInput.value = value;
+                if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
+
+                if (state.settings[settingKey]) {
+                    document.documentElement.style.setProperty(cssVar, finalValue);
+                }
+            };
+
+            const handleCheckboxChange = () => {
+                const isEnabled = enableCheckbox.checked;
+                state.settings[settingKey] = isEnabled;
+                numberInput.disabled = !isEnabled;
+                sliderInput.disabled = !isEnabled;
+
+                if (isEnabled) {
+                    updateValue(numberInput.value);
+                } else {
+                    document.documentElement.style.setProperty(cssVar, 1);
+                }
+            };
+
+            const initialValue = state.settings[inputId.replace(/-(\w)/g, (match, p1) => p1.toUpperCase())];
+            numberInput.value = (initialValue === null || initialValue === undefined) ? '' : initialValue;
+            sliderInput.value = initialValue ?? defaultValue;
+            
+            enableCheckbox.checked = state.settings[settingKey];
+
+            numberInput.addEventListener('input', (e) => updateValue(e.target.value));
+            sliderInput.addEventListener('input', (e) => updateValue(e.target.value));
+            enableCheckbox.addEventListener('change', handleCheckboxChange);
+            
+            handleCheckboxChange();
+        },
+_setupFontSizeSlider(inputId, cssVar, defaultValue) {
+            const numberInput = document.getElementById(inputId);
+            const sliderInput = document.getElementById(inputId + '-slider');
+
+            const updateValue = (value) => {
+                const numValue = parseInt(value, 10);
+                const finalValue = (isNaN(numValue) || value === '') ? defaultValue : numValue;
+
+                if (numberInput.value !== value) numberInput.value = value;
+                if (sliderInput.value !== value) sliderInput.value = value;
+                
+                document.documentElement.style.setProperty(cssVar, `${finalValue}px`);
+            };
+
+            numberInput.addEventListener('input', (e) => updateValue(e.target.value));
+            sliderInput.addEventListener('input', (e) => updateValue(e.target.value));
+        },
+_setupParamSlider(paramId, defaultValue, storageKey) {
+            const numberInput = document.getElementById(paramId);
+            const sliderInput = document.getElementById(paramId + '-slider');
+            const defaultCheckbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
+            const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
+
+            const updateValue = (value, from) => {
+                if (numberInput.value !== value) numberInput.value = value;
+                if (sliderInput.value !== value) sliderInput.value = value;
+            };
+            
+            const handleCheckboxChange = () => {
+                const isDefault = !defaultCheckbox.checked;
+                numberInput.disabled = isDefault;
+                sliderInput.disabled = isDefault;
+                if (maxInput) maxInput.disabled = isDefault;
+
+                if (isDefault) {
+
+                    sliderInput.value = defaultValue;
+                }
+            };
+
+            const handleMaxInputChange = () => {
+                const maxValStr = maxInput.value.trim();
+                const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
+                
+                if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
+                    sliderInput.max = maxVal;
+                    if (parseFloat(sliderInput.value) > maxVal) {
+                        sliderInput.value = maxVal;
+                        numberInput.value = maxVal;
+                    }
+                    if (storageKey) {
+                        state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
+                    }
+                }
+            };
+            
+            if (maxInput) {
+                const storedMax = storageKey ? state.settings[storageKey] : null;
+                maxInput.value = storedMax === null ? '' : storedMax;
+                handleMaxInputChange(); 
+            }
+
+            numberInput.addEventListener('input', (e) => updateValue(e.target.value, 'number'));
+            sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
+            defaultCheckbox.addEventListener('change', handleCheckboxChange);
+            if (maxInput) {
+                maxInput.addEventListener('change', handleMaxInputChange);
+            }
+        },
+        
+        
             async sendWebhookNotification(responseMessage) {
                 if (!state.settings.enableWebhookNotification || !state.settings.webhooks || state.settings.webhooks.length === 0) {
                     return;
@@ -15615,12 +15619,11 @@ newSettings.geminiThinkingBudgetSliderMax = getSliderMaxValue('gemini-thinking-b
 
                 newSettings.openaiSystemPrompt = elements.openaiSystemPromptDefaultTextarea.value.trim();
                 newSettings.openaiEnableSystemPromptDefault = elements.openaiEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.openaiMaxTokens = getParamValue('openai-max-tokens', true);
-                newSettings.openaiTemperature = getParamValue('openai-temperature');
-                newSettings.openaiTopP = getParamValue('openai-top-p');
-                newSettings.openaiPresencePenalty = getParamValue('openai-presence-penalty');
-                newSettings.openaiFrequencyPenalty = getParamValue('openai-frequency-penalty');
-                newSettings.openaiMaxTokensSliderMax = getSliderMaxValue('openai-max-tokens');
+                newSettings.openaiTemperature = elements.openaiTemperatureInput.value === '' ? null : parseFloat(elements.openaiTemperatureInput.value);
+                newSettings.openaiMaxTokens = elements.openaiMaxTokensInput.value === '' ? null : parseInt(elements.openaiMaxTokensInput.value);
+                newSettings.openaiTopP = elements.openaiTopPInput.value === '' ? null : parseFloat(elements.openaiTopPInput.value);
+                newSettings.openaiPresencePenalty = elements.openaiPresencePenaltyInput.value === '' ? null : parseFloat(elements.openaiPresencePenaltyInput.value);
+                newSettings.openaiFrequencyPenalty = elements.openaiFrequencyPenaltyInput.value === '' ? null : parseFloat(elements.openaiFrequencyPenaltyInput.value);
                 newSettings.openaiStreamingOutput = elements.openaiStreamingOutputCheckbox.checked;
                 newSettings.openaiStreamingSpeed = elements.openaiStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.openaiStreamingSpeedInput.value);
                 newSettings.openaiDummyUser = elements.openaiDummyUserInput.value.trim();
