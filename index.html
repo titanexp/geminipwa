@@ -11500,7 +11500,9 @@ _setupParamSlider(paramId, storageKey) {
             const defaultCheckbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
             const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
 
-            const updateValue = (value, from) => {
+            if (!numberInput || !sliderInput || !defaultCheckbox) return;
+
+            const syncValues = (value) => {
                 if (String(numberInput.value) !== String(value)) numberInput.value = value;
                 if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
             };
@@ -11514,13 +11516,12 @@ _setupParamSlider(paramId, storageKey) {
                 if (!useCustomValue) {
                     numberInput.value = '';
                 } else if (numberInput.value === '') {
-                    const defaultValue = sliderInput.getAttribute('value') ||
-                        (parseFloat(sliderInput.min) + parseFloat(sliderInput.max)) / 2;
-                    syncValues(defaultValue);
+                    syncValues(sliderInput.value);
                 }
             };
 
             const handleMaxInputChange = () => {
+                if (!maxInput) return;
                 const maxValStr = maxInput.value.trim();
                 const parsedValue = parseInt(maxValStr, 10);
                 const sliderMax = (!isNaN(parsedValue) && parsedValue > 0) ? parsedValue : 999999;
@@ -11528,27 +11529,32 @@ _setupParamSlider(paramId, storageKey) {
                 sliderInput.max = sliderMax;
 
                 if (parseFloat(sliderInput.value) > sliderMax) {
-                    const newValue = String(sliderMax);
-                    sliderInput.value = newValue;
-                    numberInput.value = newValue;
+                    syncValues(String(sliderMax));
                 }
             };
-            
-            const syncValues = (value) => {
-                if (String(numberInput.value) !== String(value)) numberInput.value = value;
-                if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
-            };
-
-            if (maxInput) {
-                const storedMax = storageKey ? state.settings[storageKey] : null;
-                maxInput.value = storedMax === null || storedMax === undefined ? '' : storedMax;
-                handleMaxInputChange();
-                maxInput.addEventListener('change', handleMaxInputChange);
-            }
 
             numberInput.addEventListener('input', (e) => syncValues(e.target.value));
             sliderInput.addEventListener('input', (e) => syncValues(e.target.value));
             defaultCheckbox.addEventListener('change', handleCheckboxChange);
+            if (maxInput) {
+                maxInput.addEventListener('input', handleMaxInputChange);
+            }
+            
+            const paramKey = paramId.replace(/-(\w)/g, (_, c) => c.toUpperCase());
+            const value = state.settings[paramKey] ?? null;
+            const useCustomValue = value !== null;
+
+            defaultCheckbox.checked = useCustomValue;
+            numberInput.value = useCustomValue ? value : '';
+            sliderInput.value = useCustomValue ? value : (sliderInput.getAttribute('value') || 0);
+            
+            if (maxInput && storageKey) {
+                const storedMax = state.settings[storageKey];
+                maxInput.value = (storedMax === null || storedMax === undefined) ? '' : storedMax;
+            }
+            
+            handleCheckboxChange();
+            handleMaxInputChange();
         },
         
         
