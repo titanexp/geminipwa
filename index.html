@@ -5386,12 +5386,17 @@ body.pastel-yellow-mode .api-key-help-icon {
                                     <div class="param-slider-wrapper" style="margin-top: 5px;">
                                         <input type="range" id="claude-thinking-budget-slider" step="1" min="1024">
                                     </div>
+                                    <div style="display: flex; gap: 8px; margin-top: 5px; margin-bottom: 10px;">
+                                        <button type="button" class="set-claude-param-btn" data-target="claude-thinking-budget" data-value="null" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px; flex-grow:1;">未指定</button>
+                                        <button type="button" class="set-claude-param-btn" data-target="claude-thinking-budget" data-value="2048" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px; flex-grow:1;">2048</button>
+                                        <button type="button" class="set-claude-param-btn" data-target="claude-thinking-budget" data-value="4096" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px; flex-grow:1;">4096</button>
+                                        <button type="button" class="set-claude-param-btn" data-target="claude-thinking-budget" data-value="8192" style="padding: 4px 8px; font-size: 12px; background-color: var(--bg-button-action); color: var(--text-light); border-radius:3px; flex-grow:1;">8192</button>
+                                    </div>
                                     <p
                                         style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                                         ※ 1024以上の値を指定。
                                     </p>
                                 </div>
-                            </div>
                         </details>
                     </div>
                 </details>
@@ -11883,6 +11888,26 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
             if (maxInput) {
                 maxInput.addEventListener('change', handleMaxInputChange);
             }
+            const buttons = document.querySelectorAll(`.set-claude-param-btn[data-target="${paramId}"]`);
+            buttons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const value = button.dataset.value;
+                    if (value === 'null') {
+                        numberInput.value = '';
+                        if (!checkbox.checked) {
+                            updateUIState(false);
+                        } else {
+                            updateUIState(true);
+                            sliderInput.value = defaultValue;
+                        }
+                    } else {
+                        if (!checkbox.checked) {
+                            updateUIState(true);
+                        }
+                        syncValues(value);
+                    }
+                });
+            });
         },
         
         
@@ -12456,7 +12481,8 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 this._setupParamSlider('gemini-presence-penalty', 0.0, null);
                 this._setupParamSlider('gemini-frequency-penalty', 0.0, null);
                 this._setupParamSlider('gemini-thinking-budget', 8192, 'geminiThinkingBudgetSliderMax');
-
+                this._setupParamSlider('claude-thinking-budget', 2048, 'claudeThinkingBudgetSliderMax');
+                
                 elements.enableCommonSystemPromptDefaultCheckbox.addEventListener('change', () => {
                     state.settings.enableCommonSystemPromptDefault = elements.enableCommonSystemPromptDefaultCheckbox.checked;
                 });
@@ -15762,7 +15788,7 @@ newSettings.geminiThinkingBudgetSliderMax = getSliderMaxValue('gemini-thinking-b
                 newSettings.claudeConcatDummyModel = elements.claudeConcatDummyModelCheckbox.checked;
                 newSettings.claudeIncludeThoughts = elements.claudeIncludeThoughtsToggle.checked;
                 newSettings.claudeExpandThoughtsByDefault = elements.claudeExpandThoughtsByDefaultToggle.checked;
-                newSettings.claudeThinkingBudget = elements.claudeThinkingBudgetInput.value === '' ? null : parseInt(elements.claudeThinkingBudgetInput.value, 10);
+                newSettings.claudeThinkingBudget = getParamValue('claude-thinking-budget', true);
 
                 newSettings.openaiSystemPrompt = elements.openaiSystemPromptDefaultTextarea.value.trim();
                 newSettings.openaiEnableSystemPromptDefault = elements.openaiEnableSystemPromptDefaultCheckbox.checked;
