@@ -4243,7 +4243,7 @@ body.turf-mode button:nth-of-type(6n) {
     display: flex;
     align-items: center;
     cursor: pointer;
-    margin-bottom: 0 !important; /* ラベルのデフォルトCSSを上書き */
+    margin-bottom: 0 !important;
 }
 .param-slider-max-input {
     width: 60px !important;
@@ -11516,7 +11516,9 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
 
             const handleMaxInputChange = () => {
                 const maxValStr = maxInput.value.trim();
-                const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
+
+                const defaultMax = parseFloat(sliderInput.getAttribute('max')) || 100;
+                const maxVal = maxValStr === '' ? defaultMax : parseFloat(maxValStr);
                 
                 if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
                     sliderInput.max = maxVal;
@@ -11524,17 +11526,17 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                         sliderInput.value = maxVal;
                         numberInput.value = maxVal;
                     }
-                    if (storageKey) {
-                        state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
-                    }
+
                 }
             };
             
+
             if (maxInput) {
                 const storedMax = storageKey ? state.settings[storageKey] : null;
-                maxInput.value = storedMax === null ? '' : storedMax;
+                maxInput.value = storedMax === null || storedMax === undefined ? '' : storedMax;
                 handleMaxInputChange(); 
             }
+
 
             numberInput.addEventListener('input', (e) => updateValue(e.target.value, 'number'));
             sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
@@ -15274,6 +15276,14 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                     await uiUtils.showCustomAlert(`${type === 'user' ? 'ユーザー' : 'AI'}アイコンの削除エラー: ${error}`);
                 }
             },
+        getSliderMaxValue(paramId) {
+            const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
+            if (!maxInput) return undefined;
+            const value = maxInput.value.trim();
+            if (value === '') return null;
+            const num = parseInt(value, 10);
+            return isNaN(num) ? null : num;
+        },
             async saveSettings(showNotice = true) {
                 const newSettings = { ...state.settings };
                 newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
