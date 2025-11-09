@@ -5448,7 +5448,7 @@ body.pastel-yellow-mode .api-key-help-icon {
                                             max="2.0">
                                     </div>
                                 </div>
-<div class="param-slider-container">
+                                <div class="param-slider-container">
                                     <label for="openai-frequency-penalty">Frequency Penalty:</label>
                                     <div class="param-slider-wrapper">
                                         <input type="number" id="openai-frequency-penalty" step="0.1" min="-2.0" max="2.0"
@@ -7801,8 +7801,8 @@ enableHeaderFooterOpacity: true,
 enableMessageActionsBackgroundOpacity: true,
 enableToggleButtonTopOpacity: true,
 enableThoughtSummaryOpacity: true,
-enableElevation: false,
-enableElevationHover: false,
+enableElevation: true,
+enableElevationHover: true,
 settingsUIDetailsOpenStates: {},
                 showApiProviderToggleHeader: false,
                 showApiProviderToggleFooter: true,
@@ -10062,16 +10062,27 @@ const getCurrentMermaidTheme = () => {
                     if (opacityLabel) opacityLabel.style.display = state.settings.showAiNameBubble ? 'block' : 'none';
                 }
             },
-            applyOpacitySettings() {
-                document.documentElement.style.setProperty('--message-bubble-opacity', state.settings.messageBubbleOpacity);
-                document.documentElement.style.setProperty('--header-footer-opacity', state.settings.headerFooterOpacity);
-                document.documentElement.style.setProperty('--chat-overlay-alpha', state.settings.chatOverlayOpacity);
-                document.documentElement.style.setProperty('--message-actions-bg-opacity', state.settings.messageActionsBackgroundOpacity);
-                document.documentElement.style.setProperty('--thought-summary-opacity', state.settings.thoughtSummaryOpacity);
+applyOpacitySettings() {
+                const applyOpacity = (settingKey, cssVar, defaultValue) => {
+                    const enableKey = `enable${settingKey.charAt(0).toUpperCase() + settingKey.slice(1)}`;
+                    const isEnabled = state.settings[enableKey] !== false;
+                    if (isEnabled) {
+                        document.documentElement.style.setProperty(cssVar, state.settings[settingKey] ?? defaultValue);
+                    } else {
+                        document.documentElement.style.setProperty(cssVar, 1);
+                    }
+                };
+
+                applyOpacity('messageBubbleOpacity', '--message-bubble-opacity', DEFAULT_MESSAGE_BUBBLE_OPACITY);
+                applyOpacity('headerFooterOpacity', '--header-footer-opacity', DEFAULT_HEADER_FOOTER_OPACITY);
+                applyOpacity('chatOverlayOpacity', '--chat-overlay-alpha', DEFAULT_CHAT_OVERLAY_OPACITY);
+                applyOpacity('messageActionsBackgroundOpacity', '--message-actions-bg-opacity', DEFAULT_MESSAGE_ACTIONS_BACKGROUND_OPACITY);
+                applyOpacity('toggleButtonTopOpacity', '--message-toggle-button-top-opacity', DEFAULT_TOGGLE_BUTTON_TOP_OPACITY);
+                applyOpacity('thoughtSummaryOpacity', '--thought-summary-opacity', DEFAULT_THOUGHT_SUMMARY_OPACITY);
 
                 let headerColor, secondaryColor, userMessageColor, modelMessageColor, overlayBaseColor, tertiaryColorRgbStr;
 
-switch (state.settings.theme) {
+                switch (state.settings.theme) {
                     case 'dark':
                         headerColor = DARK_THEME_COLOR;
                         secondaryColor = DARK_MODE_SECONDARY_COLOR;
@@ -10081,7 +10092,7 @@ switch (state.settings.theme) {
                         tertiaryColorRgbStr = getComputedStyle(document.body).getPropertyValue('--bg-tertiary-rgb').trim();
                         break;
                     case 'turf':
-                        headerColor = TURF_HEADER_COLOR;
+                        headerColor = TURF_THEME_COLOR;
                         secondaryColor = TURF_SECONDARY_COLOR;
                         userMessageColor = TURF_USER_MESSAGE_COLOR;
                         modelMessageColor = TURF_MODEL_MESSAGE_COLOR;
@@ -15759,6 +15770,16 @@ newSettings.geminiThinkingBudgetSliderMax = getSliderMaxValue('gemini-thinking-b
                 newSettings.toggleButtonBottomTextCollapse = elements.toggleButtonBottomTextCollapseInput.value.trim() || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 newSettings.toggleButtonBottomTextExpand = elements.toggleButtonBottomTextExpandInput.value.trim() || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
                 newSettings.thoughtSummaryOpacity = elements.thoughtSummaryOpacityInput.value === '' ? DEFAULT_THOUGHT_SUMMARY_OPACITY : parseFloat(elements.thoughtSummaryOpacityInput.value);
+                const opacityCheckboxes = document.querySelectorAll('.opacity-disable-checkbox');
+opacityCheckboxes.forEach(checkbox => {
+    const targetId = checkbox.dataset.targetId;
+    if (targetId) {
+        const settingKey = `enable${targetId.replace(/-(\w)/g, (match, p1) => p1.toUpperCase()).replace(/^\w/, c => c.toUpperCase())}`;
+        if (newSettings.hasOwnProperty(settingKey)) {
+            newSettings[settingKey] = checkbox.checked;
+        }
+    }
+});
     newSettings.enableElevation = elements.enableElevationToggle.checked;
     newSettings.enableElevationHover = elements.enableElevationHoverToggle.checked;
     newSettings.showApiProviderToggleHeader = elements.showApiProviderToggleHeaderCheckbox.checked;
