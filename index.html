@@ -18693,7 +18693,7 @@ const firstDeleteConfirmCheckbox = document.querySelector('.js-disable-delete-ap
                 this.triggerForceReload('Manual Recovery', { reason: 'User triggered' }, true);
             }
         };
-        const multiApiKeyUtils = {
+const multiApiKeyUtils = {
             MAX_API_KEYS: 1000,
             providerPrefixMap: {
                 'g': 'gemini', 'ge': 'gemini', 'gemini': 'gemini',
@@ -18703,7 +18703,10 @@ const firstDeleteConfirmCheckbox = document.querySelector('.js-disable-delete-ap
                 'x': 'xai', 'xa': 'xai', 'xai': 'xai',
                 'l': 'llmaggregator', 'la': 'llmaggregator', 'llm': 'llmaggregator'
             },
-                        async handleBatchAddApiKeys(inputText) {
+            
+            async handleBatchAddApiKeys(inputText) {
+                inputText = inputText.replace(/,/g, ' ');
+
                 const prefixes = Object.keys(this.providerPrefixMap).join('|');
                 const regex = new RegExp(`(?:\\s|^)(${prefixes}):([^\\s]+)`, 'g');
 
@@ -18750,6 +18753,7 @@ const firstDeleteConfirmCheckbox = document.querySelector('.js-disable-delete-ap
                     if (uniqueProviderName) this.updateMainApiKeyInput(uniqueProviderName);
                 });
             },
+
             initializeMultiApiKeys() {
                 elements.addGeminiApiKeyBtn.addEventListener('click', () => this.addApiKey('gemini'));
                 elements.addDeepseekApiKeyBtn.addEventListener('click', () => this.addApiKey('deepseek'));
@@ -18761,7 +18765,7 @@ const firstDeleteConfirmCheckbox = document.querySelector('.js-disable-delete-ap
                 this.renderAllApiKeyLists();
             },
 
-            addApiKey(provider) {
+            async addApiKey(provider) {
                 const inputElement = document.getElementById(`${provider}-new-api-keys-input`);
                 if (!inputElement) return;
                 const inputText = inputElement.value.trim();
@@ -18770,8 +18774,8 @@ const firstDeleteConfirmCheckbox = document.querySelector('.js-disable-delete-ap
                 const commandRegex = new RegExp(`(?:\\s|^)(${prefixes}):`);
 
                 if (commandRegex.test(inputText)) {
-                    this.handleBatchAddApiKeys(inputText);
-                    inputElement.value = '';
+                    await this.handleBatchAddApiKeys(inputText);
+                    this.clearAllNewKeyTextareas();
                     return;
                 }
 
@@ -18811,6 +18815,17 @@ const firstDeleteConfirmCheckbox = document.querySelector('.js-disable-delete-ap
                 this.renderApiKeyList(provider);
                 this.updateMainApiKeyInput(provider);
             },
+            
+            clearAllNewKeyTextareas() {
+                const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'];
+                providers.forEach(provider => {
+                    const inputElement = document.getElementById(`${provider}-new-api-keys-input`);
+                    if (inputElement) {
+                        inputElement.value = '';
+                    }
+                });
+            },
+            
             async deleteApiKey(provider, keyId) {
                 const keys = this.getApiKeysArray(provider);
                 const keyIndex = keys.findIndex(key => key.id === keyId);
@@ -18976,7 +18991,7 @@ const firstDeleteConfirmCheckbox = document.querySelector('.js-disable-delete-ap
                 labelInput.className = 'api-key-item-label';
                 labelInput.value = key.label;
                 labelInput.placeholder = `キー ${index + 1}`;
-                labelInput.style.marginBottom = '0'; // 下マージンをリセット
+                labelInput.style.marginBottom = '0';
                 labelInput.addEventListener('change', (e) => {
                     this.updateApiKeyLabel(provider, key.id, e.target.value);
                 });
@@ -19076,7 +19091,6 @@ const firstDeleteConfirmCheckbox = document.querySelector('.js-disable-delete-ap
                 }
             }
         };
-
         const twinEngineApiConfigUtils = {
             MAX_CONFIGS: 1000,
 
