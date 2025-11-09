@@ -11494,57 +11494,61 @@ _setupFontSizeSlider(inputId, cssVar, defaultValue) {
             numberInput.addEventListener('input', (e) => updateValue(e.target.value));
             sliderInput.addEventListener('input', (e) => updateValue(e.target.value));
         },
-_setupParamSlider(paramId, defaultValue, storageKey) {
+_setupParamSlider(paramId, storageKey) {
             const numberInput = document.getElementById(paramId);
             const sliderInput = document.getElementById(paramId + '-slider');
             const defaultCheckbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
             const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
 
             const updateValue = (value, from) => {
-                if (numberInput.value !== value) numberInput.value = value;
-                if (sliderInput.value !== value) sliderInput.value = value;
+                if (String(numberInput.value) !== String(value)) numberInput.value = value;
+                if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
             };
             
             const handleCheckboxChange = () => {
-                const isDefault = !defaultCheckbox.checked;
-                numberInput.disabled = isDefault;
-                sliderInput.disabled = isDefault;
-                if (maxInput) maxInput.disabled = isDefault;
-                
-                if (isDefault) {
+                const useCustomValue = defaultCheckbox.checked;
+                numberInput.disabled = !useCustomValue;
+                sliderInput.disabled = !useCustomValue;
+                if (maxInput) maxInput.disabled = !useCustomValue;
+
+                if (!useCustomValue) {
                     numberInput.value = '';
-                    sliderInput.value = defaultValue;
+                } else if (numberInput.value === '') {
+                    const defaultValue = sliderInput.getAttribute('value') ||
+                        (parseFloat(sliderInput.min) + parseFloat(sliderInput.max)) / 2;
+                    syncValues(defaultValue);
                 }
             };
 
             const handleMaxInputChange = () => {
                 const maxValStr = maxInput.value.trim();
-                const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
+                const parsedValue = parseInt(maxValStr, 10);
+                const sliderMax = (!isNaN(parsedValue) && parsedValue > 0) ? parsedValue : 999999;
                 
-                if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
-                    sliderInput.max = maxVal;
-                    if (parseFloat(sliderInput.value) > maxVal) {
-                        sliderInput.value = maxVal;
-                        numberInput.value = maxVal;
-                    }
-                    if (storageKey) {
-                        state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
-                    }
+                sliderInput.max = sliderMax;
+
+                if (parseFloat(sliderInput.value) > sliderMax) {
+                    const newValue = String(sliderMax);
+                    sliderInput.value = newValue;
+                    numberInput.value = newValue;
                 }
             };
             
+            const syncValues = (value) => {
+                if (String(numberInput.value) !== String(value)) numberInput.value = value;
+                if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
+            };
+
             if (maxInput) {
                 const storedMax = storageKey ? state.settings[storageKey] : null;
-                maxInput.value = storedMax === null ? '' : storedMax;
-                handleMaxInputChange(); 
-            }
-
-            numberInput.addEventListener('input', (e) => updateValue(e.target.value, 'number'));
-            sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
-            defaultCheckbox.addEventListener('change', handleCheckboxChange);
-            if (maxInput) {
+                maxInput.value = storedMax === null || storedMax === undefined ? '' : storedMax;
+                handleMaxInputChange();
                 maxInput.addEventListener('change', handleMaxInputChange);
             }
+
+            numberInput.addEventListener('input', (e) => syncValues(e.target.value));
+            sliderInput.addEventListener('input', (e) => syncValues(e.target.value));
+            defaultCheckbox.addEventListener('change', handleCheckboxChange);
         },
         
         
