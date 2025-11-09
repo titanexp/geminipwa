@@ -18633,8 +18633,72 @@ const firstDeleteConfirmCheckbox = document.querySelector('.js-disable-delete-ap
             }
         };
         const multiApiKeyUtils = {
-            MAX_API_KEYS: 10,
+            MAX_API_KEYS: 1000,
+            providerPrefixMap: {
+                'g': 'gemini', 'ge': 'gemini', 'gemini': 'gemini',
+                'd': 'deepseek', 'ds': 'deepseek', 'deepseek': 'deepseek',
+                'c': 'claude', 'cl': 'claude', 'claude': 'claude',
+                'o': 'openai', 'op': 'openai', 'openai': 'openai',
+                'x': 'xai', 'xa': 'xai', 'xai': 'xai',
+                'l': 'llmaggregator', 'la': 'llmaggregator', 'llm': 'llmaggregator'
+            },
+                        async handleBatchAddApiKeys(inputText) {
+                const prefixes = Object.keys(this.providerPrefixMap).join('|');
+                const regex = new RegExp(`(?:\\s|^)(${prefixes}):([^\\s]+)`, 'g');
 
+                let match;
+                const results = {
+                    success: {},
+                    failed: {}
+                };
+                let commandsFound = 0;
+
+                while ((match = regex.exec(inputText)) !== null) {
+                    commandsFound++;
+                    const prefix = match[1];
+                    const keyValue = match[2];
+                    const provider = this.providerPrefixMap[prefix];
+
+                    if (provider && keyValue) {
+                        const keys = this.getApiKeysArray(provider);
+                        if (keys.length < this.MAX_API_KEYS) {
+                            const newKey = {
+                                id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                                label: `キー ${keys.length + 1}`,
+                                value: keyValue,
+                                isActive: keys.length === 0
+                            };
+                            keys.push(newKey);
+                            if (newKey.isActive) {
+                                this.setActiveApiKeyIndex(provider, 0);
+                            }
+                            results.success[provider] = (results.success[provider] || 0) + 1;
+                        } else {
+                            results.failed[provider] = (results.failed[provider] || 0) + 1;
+                        }
+                    }
+                }
+
+                if (commandsFound === 0) {
+                    uiUtils.showCustomAlert('有効なコマンドが見つかりませんでした。形式: `g:key1 c:key2 ...`');
+                    return;
+                }
+
+                this.renderAllApiKeyLists();
+                Object.values(this.providerPrefixMap).forEach(p => {
+                    const uniqueProviderName = [...new Set(Object.values(this.providerPrefixMap))].find(name => name === p);
+                    if (uniqueProviderName) this.updateMainApiKeyInput(uniqueProviderName);
+                });
+
+                let summary = "一括登録結果:\n\n";
+                for (const provider in results.success) {
+                    summary += `✅ ${provider}: ${results.success[provider]}件 追加成功\n`;
+                }
+                for (const provider in results.failed) {
+                    summary += `❌ ${provider}: ${results.failed[provider]}件 追加失敗 (上限超過)\n`;
+                }
+                uiUtils.showCustomAlert(summary);
+            },
             initializeMultiApiKeys() {
                 elements.addGeminiApiKeyBtn.addEventListener('click', () => this.addApiKey('gemini'));
                 elements.addDeepseekApiKeyBtn.addEventListener('click', () => this.addApiKey('deepseek'));
@@ -18649,9 +18713,19 @@ const firstDeleteConfirmCheckbox = document.querySelector('.js-disable-delete-ap
             addApiKey(provider) {
                 const inputElement = document.getElementById(`${provider}-new-api-keys-input`);
                 if (!inputElement) return;
+                const inputText = inputElement.value.trim();
+
+                const prefixes = Object.keys(this.providerPrefixMap).join('|');
+                const commandRegex = new RegExp(`(?:\\s|^)(${prefixes}):`);
+
+                if (commandRegex.test(inputText)) {
+                    this.handleBatchAddApiKeys(inputText);
+                    inputElement.value = '';
+                    return;
+                }
 
                 const keys = this.getApiKeysArray(provider);
-                const keysToAdd = inputElement.value.split(',')
+                const keysToAdd = inputText.split(',')
                     .map(key => key.trim())
                     .filter(key => key !== '');
 
@@ -18672,7 +18746,7 @@ const firstDeleteConfirmCheckbox = document.querySelector('.js-disable-delete-ap
                         id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
                         label: `キー ${keys.length + 1}`,
                         value: keyValue,
-                        isActive: false 
+                        isActive: false
                     };
                     keys.push(newKey);
                 });
@@ -18682,7 +18756,7 @@ const firstDeleteConfirmCheckbox = document.querySelector('.js-disable-delete-ap
                     this.setActiveApiKeyIndex(provider, 0);
                 }
 
-                inputElement.value = ''; 
+                inputElement.value = '';
                 this.renderApiKeyList(provider);
                 this.updateMainApiKeyInput(provider);
             },
