@@ -10311,6 +10311,7 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
         document.body.classList.toggle('elevation-enabled', state.settings.enableElevation);
         document.body.classList.toggle('elevation-hover-enabled', state.settings.enableElevationHover);
     },
+           
             applySettingsToUI() {
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
                 elements.apiProviderSelect.value = state.settings.apiProvider;
@@ -10359,14 +10360,13 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 multiApiKeyUtils.updateMainApiKeyInput('xai');
                 multiApiKeyUtils.updateMainApiKeyInput('llmaggregator');
 
-elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPrompt || '';
-                elements.geminiEnableSystemPromptDefaultCheckbox.checked = state.settings.geminiEnableSystemPromptDefault;
-                
                 const setupParamUI = (paramId, storageKey) => {
                     const numberInput = document.getElementById(paramId);
                     const sliderInput = document.getElementById(paramId + '-slider');
                     const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
                     const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
+                    if (!numberInput || !sliderInput || !checkbox) return;
+                    
                     const label = checkbox.parentElement;
                     if (label) {
                         label.title = "カスタム値を指定する (チェックを入れると有効)";
@@ -10387,23 +10387,59 @@ elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPr
                         sliderInput.value = value;
                     } else {
                         numberInput.value = '';
+                        const defaultValue = sliderInput.getAttribute('value') || (parseFloat(sliderInput.min) + parseFloat(sliderInput.max)) / 2;
+                        sliderInput.value = defaultValue;
                     }
                     
                     if (maxInput) {
-                        const maxVal = state.settings[storageKey] || parseFloat(sliderInput.getAttribute('max')) || 100;
+                        const maxValKey = paramKey + 'SliderMax';
+                        const maxVal = state.settings[maxValKey] ?? parseFloat(maxInput.placeholder) || parseFloat(sliderInput.getAttribute('max')) || 100;
                         sliderInput.max = maxVal;
-                        maxInput.value = maxVal;
+                        maxInput.value = state.settings[maxValKey] ?? '';
                     }
                 };
 
                 setupParamUI('gemini-max-tokens', 'geminiMaxTokensSliderMax');
-setupParamUI('gemini-temperature');
-setupParamUI('gemini-top-k', 'geminiTopKSliderMax');
-setupParamUI('gemini-top-p');
-setupParamUI('gemini-presence-penalty');
-setupParamUI('gemini-frequency-penalty');
-setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
-                elements.geminiThinkingBudgetInput.value = state.settings.geminiThinkingBudget === null ? '' : state.settings.geminiThinkingBudget;
+                setupParamUI('gemini-temperature');
+                setupParamUI('gemini-top-k', 'geminiTopKSliderMax');
+                setupParamUI('gemini-top-p');
+                setupParamUI('gemini-presence-penalty');
+                setupParamUI('gemini-frequency-penalty');
+                setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
+
+                setupParamUI('deepseek-max-tokens', 'deepseekMaxTokensSliderMax');
+                setupParamUI('deepseek-temperature');
+                setupParamUI('deepseek-top-p');
+                setupParamUI('deepseek-presence-penalty');
+                setupParamUI('deepseek-frequency-penalty');
+
+                setupParamUI('claude-max-tokens', 'claudeMaxTokensSliderMax');
+                setupParamUI('claude-temperature');
+                setupParamUI('claude-top-k', 'claudeTopKSliderMax');
+                setupParamUI('claude-top-p');
+                setupParamUI('claude-thinking-budget', 'claudeThinkingBudgetSliderMax');
+
+                setupParamUI('openai-max-tokens', 'openaiMaxTokensSliderMax');
+                setupParamUI('openai-temperature');
+                setupParamUI('openai-top-p');
+                setupParamUI('openai-presence-penalty');
+                setupParamUI('openai-frequency-penalty');
+                
+                setupParamUI('xai-max-tokens', 'xaiMaxTokensSliderMax');
+                setupParamUI('xai-temperature');
+                setupParamUI('xai-top-p');
+                setupParamUI('xai-presence-penalty');
+                setupParamUI('xai-frequency-penalty');
+                
+                setupParamUI('llmaggregator-max-tokens', 'llmaggregatorMaxTokensSliderMax');
+                setupParamUI('llmaggregator-temperature');
+                setupParamUI('llmaggregator-top-p');
+                setupParamUI('llmaggregator-top-k', 'llmaggregatorTopKSliderMax');
+                setupParamUI('llmaggregator-presence-penalty');
+                setupParamUI('llmaggregator-frequency-penalty');
+
+                elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPrompt || '';
+                elements.geminiEnableSystemPromptDefaultCheckbox.checked = state.settings.geminiEnableSystemPromptDefault;
                 elements.geminiIncludeThoughtsToggle.checked = state.settings.geminiIncludeThoughts;
                 elements.geminiExpandThoughtsByDefaultToggle.checked = state.settings.geminiExpandThoughtsByDefault;
                 elements.geminiStreamingOutputCheckbox.checked = state.settings.geminiStreamingOutput;
@@ -10415,7 +10451,6 @@ setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
                 elements.geminiConcatDummyModelCheckbox.checked = state.settings.geminiConcatDummyModel;
                 elements.geminiPseudoStreamingCheckbox.checked = state.settings.geminiPseudoStreaming;
                 elements.geminiEnableGroundingToggle.checked = state.settings.geminiEnableGrounding;
-                // ▼「elements.geminiEnableGroundingToggle.checked = ...」の行の下あたりに追加▼
                 elements.enableImageUrlReplacementCheckbox.checked = state.settings.enableImageUrlReplacement;
                 elements.imageUrlReplacementBaseInput.value = state.settings.imageUrlReplacementBase || '';
                 elements.imageUrlReplacementOptionsDiv.classList.toggle('hidden', !state.settings.enableImageUrlReplacement);
@@ -10428,11 +10463,6 @@ setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
 
                 elements.deepSeekSystemPromptDefaultTextarea.value = state.settings.deepSeekSystemPrompt || '';
                 elements.deepSeekEnableSystemPromptDefaultCheckbox.checked = state.settings.deepSeekEnableSystemPromptDefault;
-                elements.deepSeekTemperatureInput.value = state.settings.deepSeekTemperature === null ? '' : state.settings.deepSeekTemperature;
-                elements.deepSeekMaxTokensInput.value = state.settings.deepSeekMaxTokens === null ? '' : state.settings.deepSeekMaxTokens;
-                elements.deepSeekTopPInput.value = state.settings.deepSeekTopP === null ? '' : state.settings.deepSeekTopP;
-                elements.deepSeekPresencePenaltyInput.value = state.settings.deepSeekPresencePenalty === null ? '' : state.settings.deepSeekPresencePenalty;
-                elements.deepSeekFrequencyPenaltyInput.value = state.settings.deepSeekFrequencyPenalty === null ? '' : state.settings.deepSeekFrequencyPenalty;
                 elements.deepSeekIncludeThoughtsToggle.checked = state.settings.deepSeekIncludeDeepSeekThoughts;
                 elements.deepSeekExpandThoughtsByDefaultToggle.checked = state.settings.deepSeekExpandThoughtsByDefault;
                 elements.deepSeekStreamingOutputCheckbox.checked = state.settings.deepSeekStreamingOutput;
@@ -10445,10 +10475,6 @@ setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
 
                 elements.claudeSystemPromptDefaultTextarea.value = state.settings.claudeSystemPrompt || '';
                 elements.claudeEnableSystemPromptDefaultCheckbox.checked = state.settings.claudeEnableSystemPromptDefault;
-                elements.claudeTemperatureInput.value = state.settings.claudeTemperature === null ? '' : state.settings.claudeTemperature;
-                elements.claudeMaxTokensInput.value = state.settings.claudeMaxTokens === null ? '' : state.settings.claudeMaxTokens;
-                elements.claudeTopKInput.value = state.settings.claudeTopK === null ? '' : state.settings.claudeTopK;
-                elements.claudeTopPInput.value = state.settings.claudeTopP === null ? '' : state.settings.claudeTopP;
                 elements.claudeStreamingOutputCheckbox.checked = state.settings.claudeStreamingOutput;
                 elements.claudeStreamingSpeedInput.value = state.settings.claudeStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
                 elements.claudeDummyUserInput.value = state.settings.claudeDummyUser || '';
@@ -10458,15 +10484,9 @@ setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
                 elements.claudeConcatDummyModelCheckbox.checked = state.settings.claudeConcatDummyModel;
                 elements.claudeIncludeThoughtsToggle.checked = state.settings.claudeIncludeThoughts;
                 elements.claudeExpandThoughtsByDefaultToggle.checked = state.settings.claudeExpandThoughtsByDefault;
-                elements.claudeThinkingBudgetInput.value = state.settings.claudeThinkingBudget === null ? '' : state.settings.claudeThinkingBudget;
-
+                
                 elements.openaiSystemPromptDefaultTextarea.value = state.settings.openaiSystemPrompt || '';
                 elements.openaiEnableSystemPromptDefaultCheckbox.checked = state.settings.openaiEnableSystemPromptDefault;
-                elements.openaiTemperatureInput.value = state.settings.openaiTemperature === null ? '' : state.settings.openaiTemperature;
-                elements.openaiMaxTokensInput.value = state.settings.openaiMaxTokens === null ? '' : state.settings.openaiMaxTokens;
-                elements.openaiTopPInput.value = state.settings.openaiTopP === null ? '' : state.settings.openaiTopP;
-                elements.openaiPresencePenaltyInput.value = state.settings.openaiPresencePenalty === null ? '' : state.settings.openaiPresencePenalty;
-                elements.openaiFrequencyPenaltyInput.value = state.settings.openaiFrequencyPenalty === null ? '' : state.settings.openaiFrequencyPenalty;
                 elements.openaiStreamingOutputCheckbox.checked = state.settings.openaiStreamingOutput;
                 elements.openaiStreamingSpeedInput.value = state.settings.openaiStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
                 elements.openaiDummyUserInput.value = state.settings.openaiDummyUser || '';
@@ -10477,11 +10497,6 @@ setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
 
                 elements.xaiSystemPromptDefaultTextarea.value = state.settings.xaiSystemPrompt || '';
                 elements.xaiEnableSystemPromptDefaultCheckbox.checked = state.settings.xaiEnableSystemPromptDefault;
-                elements.xaiTemperatureInput.value = state.settings.xaiTemperature === null ? '' : state.settings.xaiTemperature;
-                elements.xaiMaxTokensInput.value = state.settings.xaiMaxTokens === null ? '' : state.settings.xaiMaxTokens;
-                elements.xaiTopPInput.value = state.settings.xaiTopP === null ? '' : state.settings.xaiTopP;
-                elements.xaiPresencePenaltyInput.value = state.settings.xaiPresencePenalty === null ? '' : state.settings.xaiPresencePenalty;
-                elements.xaiFrequencyPenaltyInput.value = state.settings.xaiFrequencyPenalty === null ? '' : state.settings.xaiFrequencyPenalty;
                 elements.xaiStreamingOutputCheckbox.checked = state.settings.xaiStreamingOutput;
                 elements.xaiStreamingSpeedInput.value = state.settings.xaiStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
                 elements.xaiDummyUserInput.value = state.settings.xaiDummyUser || '';
@@ -10496,12 +10511,6 @@ setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
 
                 elements.llmAggregatorSystemPromptDefaultTextarea.value = state.settings.llmAggregatorSystemPrompt || '';
                 elements.llmAggregatorEnableSystemPromptDefaultCheckbox.checked = state.settings.llmAggregatorEnableSystemPromptDefault;
-                elements.llmAggregatorTemperatureInput.value = state.settings.llmAggregatorTemperature === null ? '' : state.settings.llmAggregatorTemperature;
-                elements.llmAggregatorMaxTokensInput.value = state.settings.llmAggregatorMaxTokens === null ? '' : state.settings.llmAggregatorMaxTokens;
-                elements.llmAggregatorTopPInput.value = state.settings.llmAggregatorTopP === null ? '' : state.settings.llmAggregatorTopP;
-                elements.llmAggregatorTopKInput.value = state.settings.llmAggregatorTopK === null ? '' : state.settings.llmAggregatorTopK;
-                elements.llmAggregatorPresencePenaltyInput.value = state.settings.llmAggregatorPresencePenalty === null ? '' : state.settings.llmAggregatorPresencePenalty;
-                elements.llmAggregatorFrequencyPenaltyInput.value = state.settings.llmAggregatorFrequencyPenalty === null ? '' : state.settings.llmAggregatorFrequencyPenalty;
                 elements.llmAggregatorIncludeThoughtsToggle.checked = state.settings.llmAggregatorIncludeThoughts;
                 elements.llmAggregatorExpandThoughtsByDefaultToggle.checked = state.settings.llmAggregatorExpandThoughtsByDefault;
                 elements.llmAggregatorStreamingOutputCheckbox.checked = state.settings.llmAggregatorStreamingOutput;
@@ -10679,6 +10688,7 @@ setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
                 checkbox.checked = state.settings.disableDeleteApiKeyConfirmation;
             });
             },
+            
             applyMinimizeUI() {
                 elements.appContainer.classList.toggle('minimized-ui', state.settings.minimizeHeaderFooter);
             },
@@ -12432,7 +12442,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 this._setupParamSlider('llmaggregator-top-k', 0, 'llmaggregatorTopKSliderMax');
                 this._setupParamSlider('llmaggregator-presence-penalty', 0.0, null);
                 this._setupParamSlider('llmaggregator-frequency-penalty', 0.0, null);
-                this._setupParamSlider('claude-thinking-budget', 2048, 'claudeThinkingBudgetSliderMax');
+               
                 
                 elements.enableCommonSystemPromptDefaultCheckbox.addEventListener('change', () => {
                     state.settings.enableCommonSystemPromptDefault = elements.enableCommonSystemPromptDefaultCheckbox.checked;
