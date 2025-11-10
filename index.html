@@ -5274,7 +5274,7 @@ body.pastel-yellow-mode .api-key-help-icon {
                         </details>
                     </div>
                 </details>
-
+                
 <details id="claude-params-group" class="settings-group hidden" open>
                     <summary
                         style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">
@@ -5492,6 +5492,7 @@ body.pastel-yellow-mode .api-key-help-icon {
                         </details>
                     </div>
                 </details>
+                
 <details id="xai-params-group" class="settings-group hidden" open>
                     <summary
                         style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">
@@ -5608,7 +5609,7 @@ body.pastel-yellow-mode .api-key-help-icon {
                         </details>
                     </div>
                 </details>
-
+                
 <details id="xai-params-group" class="settings-group hidden" open>
                     <summary
                         style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">
@@ -11864,7 +11865,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
 
             const handleMaxInputChange = () => {
                 const maxValStr = maxInput.value.trim();
-                const maxVal = maxValStr === '' ? 1000000 : parseFloat(maxValStr);
+                const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
                 
                 if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
                     sliderInput.max = maxVal;
@@ -12483,6 +12484,42 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 this._setupParamSlider('gemini-presence-penalty', 0.0, null);
                 this._setupParamSlider('gemini-frequency-penalty', 0.0, null);
                 this._setupParamSlider('gemini-thinking-budget', 8192, 'geminiThinkingBudgetSliderMax');
+
+                // DeepSeek Params
+                this._setupParamSlider('deepseek-max-tokens', 4096, 'deepseekMaxTokensSliderMax');
+                this._setupParamSlider('deepseek-temperature', 0.9, null);
+                this._setupParamSlider('deepseek-top-p', 0.95, null);
+                this._setupParamSlider('deepseek-presence-penalty', 0.0, null);
+                this._setupParamSlider('deepseek-frequency-penalty', 0.0, null);
+
+                // Claude Params
+                this._setupParamSlider('claude-max-tokens', 4096, 'claudeMaxTokensSliderMax');
+                this._setupParamSlider('claude-temperature', 0.7, null);
+                this._setupParamSlider('claude-top-k', 5, 'claudeTopKSliderMax');
+                this._setupParamSlider('claude-top-p', 1.0, null);
+                this._setupParamSlider('claude-thinking-budget', 2048, 'claudeThinkingBudgetSliderMax');
+
+                // OpenAI Params
+                this._setupParamSlider('openai-max-tokens', 4096, 'openaiMaxTokensSliderMax');
+                this._setupParamSlider('openai-temperature', 1.0, null);
+                this._setupParamSlider('openai-top-p', 1.0, null);
+                this._setupParamSlider('openai-presence-penalty', 0.0, null);
+                this._setupParamSlider('openai-frequency-penalty', 0.0, null);
+
+                // xAI Params
+                this._setupParamSlider('xai-max-tokens', 4096, 'xaiMaxTokensSliderMax');
+                this._setupParamSlider('xai-temperature', 1.0, null);
+                this._setupParamSlider('xai-top-p', 1.0, null);
+                this._setupParamSlider('xai-presence-penalty', 0.0, null);
+                this._setupParamSlider('xai-frequency-penalty', 0.0, null);
+
+                // LLM Aggregator Params
+                this._setupParamSlider('llmaggregator-max-tokens', 4096, 'llmaggregatorMaxTokensSliderMax');
+                this._setupParamSlider('llmaggregator-temperature', 1.0, null);
+                this._setupParamSlider('llmaggregator-top-p', 1.0, null);
+                this._setupParamSlider('llmaggregator-top-k', 0, 'llmaggregatorTopKSliderMax');
+                this._setupParamSlider('llmaggregator-presence-penalty', 0.0, null);
+                this._setupParamSlider('llmaggregator-frequency-penalty', 0.0, null);
                 this._setupParamSlider('claude-thinking-budget', 2048, 'claudeThinkingBudgetSliderMax');
                 
                 elements.enableCommonSystemPromptDefaultCheckbox.addEventListener('change', () => {
@@ -19647,52 +19684,7 @@ const multiApiKeyUtils = {
         errorRecovery.init();
 
         window.errorRecovery = errorRecovery;
-const paramSliders = document.querySelectorAll('.param-slider-container');
-            paramSliders.forEach(container => {
-                const numberInput = container.querySelector('input[type="number"]');
-                const sliderInput = container.querySelector('input[type="range"]');
-                const checkbox = container.querySelector('.param-default-checkbox');
-                const maxInput = container.querySelector('.param-slider-max-input');
-                
-                if (!numberInput || !sliderInput || !checkbox) return;
 
-                const syncValues = (value) => {
-                    if (String(numberInput.value) !== String(value)) numberInput.value = value;
-                    if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
-                };
-
-                const updateUIState = (useCustom) => {
-                    numberInput.disabled = !useCustom;
-                    sliderInput.disabled = !useCustom;
-                    if (maxInput) maxInput.disabled = !useCustom;
-                    if (checkbox.checked !== useCustom) checkbox.checked = useCustom;
-
-                };
-                updateUIState(checkbox.checked);
-                
-                checkbox.addEventListener('change', () => {
-                    const useCustom = checkbox.checked;
-                    updateUIState(useCustom);
-                    if (useCustom && numberInput.value === '') {
-                        const sliderDefault = sliderInput.getAttribute('value') || 
-                                              (parseFloat(sliderInput.min) + parseFloat(sliderInput.max)) / 2;
-                        const step = sliderInput.step || 1;
-                        const precision = step.includes('.') ? step.split('.')[1].length : 0;
-                        const roundedDefault = Math.round(sliderDefault / step) * step;
-                        syncValues(roundedDefault.toFixed(precision));
-                    }
-                });
-
-                const onInputChange = (e) => {
-                    if (!checkbox.checked) {
-                        updateUIState(true);
-                    }
-                    syncValues(e.target.value);
-                };
-
-                numberInput.addEventListener('input', onInputChange);
-                sliderInput.addEventListener('input', onInputChange);
-            });
         appLogic.initializeApp();
     </script>
 </body>
