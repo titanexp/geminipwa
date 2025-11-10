@@ -10370,7 +10370,12 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                         label.title = "カスタム値を指定する (チェックを入れると有効)";
                     }
                     
-                    const paramKey = paramId.replace(/-(\w)/g, (_, c) => c.toUpperCase());
+                    let paramKey = paramId.replace(/-(\w)/g, (_, c) => c.toUpperCase());
+                    if (paramKey.startsWith('deepseek')) {
+                        paramKey = 'deepSeek' + paramKey.substring('deepseek'.length);
+                    } else if (paramKey.startsWith('llmaggregator')) {
+                        paramKey = 'llmAggregator' + paramKey.substring('llmaggregator'.length);
+                    }
                     const value = state.settings[paramKey] ?? null;
                     
                     const useCustomValue = value !== null;
@@ -10397,11 +10402,11 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPrompt || '';
                 elements.geminiEnableSystemPromptDefaultCheckbox.checked = state.settings.geminiEnableSystemPromptDefault;
                 setupParamUI('gemini-max-tokens', 'geminiMaxTokensSliderMax');
-                setupParamUI('gemini-temperature', null);
+                setupParamUI('gemini-temperature');
                 setupParamUI('gemini-top-k', 'geminiTopKSliderMax');
-                setupParamUI('gemini-top-p', null);
-                setupParamUI('gemini-presence-penalty', null);
-                setupParamUI('gemini-frequency-penalty', null);
+                setupParamUI('gemini-top-p');
+                setupParamUI('gemini-presence-penalty');
+                setupParamUI('gemini-frequency-penalty');
                 setupParamUI('gemini-thinking-budget', 'geminiThinkingBudgetSliderMax');
                 elements.geminiThinkingBudgetInput.value = state.settings.geminiThinkingBudget === null ? '' : state.settings.geminiThinkingBudget;
                 elements.geminiIncludeThoughtsToggle.checked = state.settings.geminiIncludeThoughts;
@@ -15592,7 +15597,8 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                     await uiUtils.showCustomAlert(`${type === 'user' ? 'ユーザー' : 'AI'}アイコンの削除エラー: ${error}`);
                 }
             },
-          async saveSettings(showNotice = true) {
+          
+           async saveSettings(showNotice = true) {
                 const newSettings = { ...state.settings };
 
                 const getParamValue = (paramId, isInteger = false, min, max) => {
