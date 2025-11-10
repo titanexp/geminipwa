@@ -10376,9 +10376,9 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                     } else if (paramKey.startsWith('llmaggregator')) {
                         paramKey = 'llmAggregator' + paramKey.substring('llmaggregator'.length);
                     }
-                    const value = state.settings[paramKey] ?? null;
+                    const value = state.settings[paramKey]; // ?? null を削除
                     
-                    const useCustomValue = value !== null;
+                    const useCustomValue = value !== null && value !== undefined;
                     
                     checkbox.checked = useCustomValue;
                     numberInput.disabled = !useCustomValue;
@@ -10386,10 +10386,11 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                     if (maxInput) maxInput.disabled = !useCustomValue;
 
                     if (useCustomValue) {
-                        numberInput.value = value;
-                        sliderInput.value = value;
+                        numberInput.value = (value === '' || value === null) ? '' : value; // 値が空でもセット
+                        sliderInput.value = (value === '' || value === null) ? (sliderInput.defaultValue || 0) : value;
                     } else {
-                        numberInput.value = '';
+                        // チェックが外れている場合でも、もし値があれば入力欄に表示しておく
+                        numberInput.value = state.settings[paramKey] ?? '';
                     }
                     
                     if (maxInput) {
@@ -15604,18 +15605,20 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 const getParamValue = (paramId, isInteger = false, min, max) => {
                     const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
                     if (!checkbox || !checkbox.checked) {
-                        return null;
+                        return null; // チェックが外れていればnullを返す
                     }
 
                     const input = document.getElementById(paramId);
                     const value = input.value.trim();
+                    // チェックがオンでも値が空の場合は、空文字列として保存する
                     if (value === '') {
-                        return null;
+                        return '';
                     }
 
                     let num = isInteger ? parseInt(value, 10) : parseFloat(value);
+                    // 不正な数値の場合は空文字列として扱う
                     if (isNaN(num)) {
-                        return null;
+                        return '';
                     }
 
                     if (min !== undefined && num < min) num = min;
