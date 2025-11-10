@@ -7965,8 +7965,7 @@ settingsUIDetailsOpenStates: {},
                 twinEngineConcatDummyModel: false,
                 enableWebhookNotification: false,
                 webhooks: [],
-                disableDeleteApiKeyConfirmation: false,
-                parameterUiValues: {},
+                disableDeleteApiKeyConfirmation: false, // この行を追加
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -10400,15 +10399,6 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
         document.body.classList.toggle('elevation-hover-enabled', state.settings.enableElevationHover);
     },
             applySettingsToUI() {
-                if (state.settings.parameterUiValues) {
-                    for (const [inputId, value] of Object.entries(state.settings.parameterUiValues)) {
-                        const inputElement = document.getElementById(inputId);
-                        if (inputElement) {
-                            inputElement.value = value;
-                        }
-                    }
-                }
-
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
                 elements.apiProviderSelect.value = state.settings.apiProvider;
                 twinEngineApiConfigUtils.renderList();
@@ -10460,37 +10450,38 @@ elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPr
                 elements.geminiEnableSystemPromptDefaultCheckbox.checked = state.settings.geminiEnableSystemPromptDefault;
                 
                 const setupParamUI = (paramId, storageKey) => {
-                    const numberInput = document.getElementById(paramId);
-                    const sliderInput = document.getElementById(paramId + '-slider');
-                    const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
-                    const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
-                    const label = checkbox.parentElement;
-                    if (label) {
-                        label.title = "カスタム値を指定する (チェックを入れると有効)";
-                    }
-                    
-                    const paramKey = paramId.replace(/-(\w)/g, (_, c) => c.toUpperCase());
-                    const value = state.settings[paramKey] ?? null;
-                    
-                    const useCustomValue = value !== null;
-                    
-                    checkbox.checked = useCustomValue;
-                    numberInput.disabled = !useCustomValue;
-                    sliderInput.disabled = !useCustomValue;
-                    if (maxInput) maxInput.disabled = !useCustomValue;
+                        const numberInput = document.getElementById(paramId);
+                        const sliderInput = document.getElementById(paramId + '-slider');
+                        const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
+                        const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
+                        const label = checkbox.parentElement;
+                        if (label) {
+                            label.title = "カスタム値を指定する (チェックを入れると有効)";
+                        }
+                        
+                        const paramKey = paramId.replace(/-(\w)/g, (_, c) => c.toUpperCase());
+                        const value = state.settings[paramKey] ?? null;
 
-                    if (useCustomValue) {
-                        numberInput.value = value;
-                        sliderInput.value = value;
-                    }
-                    
-                    if (maxInput) {
-                        const maxVal = state.settings[storageKey] || parseFloat(sliderInput.getAttribute('max')) || 100;
-                        sliderInput.max = maxVal;
-                        maxInput.value = maxVal;
-                    }
-                };
+                        const isEnabled = value === null || value >= 0;
+                        const displayValue = value !== null ? (value === -0.000000001 ? 0 : Math.abs(value)) : '';
 
+                        checkbox.checked = isEnabled;
+                        numberInput.disabled = !isEnabled;
+                        sliderInput.disabled = !isEnabled;
+                        if (maxInput) maxInput.disabled = !isEnabled;
+
+                        numberInput.value = displayValue;
+                        if (displayValue !== '' && !isNaN(parseFloat(displayValue))) {
+                            sliderInput.value = displayValue;
+                        }
+
+                        if (maxInput) {
+                            const maxVal = state.settings[storageKey] || parseFloat(sliderInput.getAttribute('max')) || 100;
+                            sliderInput.max = maxVal;
+                            maxInput.value = maxVal;
+                        }
+                    };
+                    
                 setupParamUI('gemini-max-tokens', 'geminiMaxTokensSliderMax');
 setupParamUI('gemini-temperature');
 setupParamUI('gemini-top-k', 'geminiTopKSliderMax');
@@ -14603,18 +14594,21 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 if (dummyModelTextToUse) apiMessages.push({ role: 'model', parts: [{ text: dummyModelTextToUse }] });
 
                 const commonGenerationConfig = {};
-                if (contextTemperature !== null) commonGenerationConfig.temperature = contextTemperature;
-                if (contextMaxTokens !== null) commonGenerationConfig.maxOutputTokens = contextMaxTokens;
-                if (contextTopP !== null) commonGenerationConfig.topP = contextTopP;
-                if (contextPresencePenalty !== null) commonGenerationConfig.presencePenalty = contextPresencePenalty;
-                if (contextFrequencyPenalty !== null) commonGenerationConfig.frequencyPenalty = contextFrequencyPenalty;
+                if (contextTemperature !== null && contextTemperature >= 0) commonGenerationConfig.temperature = contextTemperature === -0.000000001 ? 0 : contextTemperature;
+                if (contextMaxTokens !== null && contextMaxTokens >= 0) commonGenerationConfig.maxOutputTokens = contextMaxTokens;
+                if (contextTopP !== null && contextTopP >= 0) commonGenerationConfig.topP = contextTopP === -0.000000001 ? 0 : contextTopP;
+                if (contextPresencePenalty !== null && contextPresencePenalty >= 0) commonGenerationConfig.presencePenalty = contextPresencePenalty === -0.000000001 ? 0 : contextPresencePenalty;
+                if (contextFrequencyPenalty !== null && contextFrequencyPenalty >= 0) commonGenerationConfig.frequencyPenalty = contextFrequencyPenalty === -0.000000001 ? 0 : contextFrequencyPenalty;
 
                 if (selectedApiProvider === 'gemini') {
-                    if (contextGeminiTopK !== null) commonGenerationConfig.topK = contextGeminiTopK;
-                    if (contextGeminiThinkingBudget !== null || contextGeminiIncludeThoughts) {
+                    if (contextGeminiTopK !== null && contextGeminiTopK >= 0) commonGenerationConfig.topK = contextGeminiTopK;
+                    if ((contextGeminiThinkingBudget !== null && contextGeminiThinkingBudget >= 0) || contextGeminiIncludeThoughts) {
                         commonGenerationConfig.thinkingConfig = commonGenerationConfig.thinkingConfig || {};
-                        if (contextGeminiThinkingBudget !== null && Number.isInteger(contextGeminiThinkingBudget) && contextGeminiThinkingBudget >= 0) {
-                            commonGenerationConfig.thinkingConfig.thinkingBudget = contextGeminiThinkingBudget;
+                        if (contextGeminiThinkingBudget !== null && contextGeminiThinkingBudget >= 0) {
+                            const budgetValue = contextGeminiThinkingBudget === -0.000000001 ? 0 : contextGeminiThinkingBudget;
+                            if (Number.isInteger(budgetValue) && budgetValue >= 0) {
+                                commonGenerationConfig.thinkingConfig.thinkingBudget = budgetValue;
+                            }
                         }
                         if (contextGeminiIncludeThoughts) {
                             commonGenerationConfig.thinkingConfig.includeThoughts = true;
@@ -14622,15 +14616,18 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                         if (Object.keys(commonGenerationConfig.thinkingConfig).length === 0) delete commonGenerationConfig.thinkingConfig;
                     }
                 } else if (selectedApiProvider === 'claude') {
-                    if (contextClaudeTopK !== null) commonGenerationConfig.topK = contextClaudeTopK;
+                    if (contextClaudeTopK !== null && contextClaudeTopK >= 0) commonGenerationConfig.topK = contextClaudeTopK;
                     if (contextClaudeIncludeThoughts) {
                         commonGenerationConfig.thinkingConfig = { "type": "enabled" };
-                        if (contextClaudeThinkingBudget !== null && Number.isInteger(contextClaudeThinkingBudget) && contextClaudeThinkingBudget >= 1024) {
-                            commonGenerationConfig.thinkingConfig.budget_tokens = contextClaudeThinkingBudget;
+                        if (contextClaudeThinkingBudget !== null && contextClaudeThinkingBudget >= 1024) {
+                            const budgetValue = contextClaudeThinkingBudget;
+                            if (Number.isInteger(budgetValue) && budgetValue >= 1024) {
+                                commonGenerationConfig.thinkingConfig.budget_tokens = budgetValue;
+                            }
                         }
                     }
                 } else if (selectedApiProvider === 'llmaggregator') {
-                    if (contextLlmAggregatorTopK !== null) commonGenerationConfig.topK = contextLlmAggregatorTopK;
+                    if (contextLlmAggregatorTopK !== null && contextLlmAggregatorTopK >= 0) commonGenerationConfig.topK = contextLlmAggregatorTopK;
                 }
 
                 let systemInstructionForProvider = null;
@@ -15653,14 +15650,6 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
             },
             async saveSettings(showNotice = true) {
                 const newSettings = { ...state.settings };
-
-                newSettings.parameterUiValues = {};
-                document.querySelectorAll('.param-slider-container input[type="number"]').forEach(input => {
-                    if (input.id) { 
-                        newSettings.parameterUiValues[input.id] = input.value;
-                    }
-                });
-                
                 newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
                 newSettings.showProofreadingSettings = elements.showProofreadingSettingsToggle.checked;
                 newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
@@ -15713,17 +15702,21 @@ newSettings.geminiSystemPrompt = elements.geminiSystemPromptDefaultTextarea.valu
                 newSettings.geminiEnableSystemPromptDefault = elements.geminiEnableSystemPromptDefaultCheckbox.checked;
 
                 const getParamValue = (paramId, isInteger = false) => {
-    const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
-    if (!checkbox.checked) { 
-        return null;
-    }
-    const input = document.getElementById(paramId);
-    const value = input.value;
-    if (value === '') return null;
-    
-    const num = isInteger ? parseInt(value, 10) : parseFloat(value);
-    return isNaN(num) ? null : num;
-};
+                    const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
+                    const input = document.getElementById(paramId);
+                    const value = input.value;
+
+                    if (value === '') return null;
+
+                    const num = isInteger ? parseInt(value, 10) : parseFloat(value);
+                    if (isNaN(num)) return null;
+
+                    if (checkbox.checked) {
+                        return Math.abs(num);
+                    } else {
+                        return num === 0 ? -0.000000001 : -Math.abs(num);
+                    }
+                };
 
 const getSliderMaxValue = (paramId) => {
     const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
