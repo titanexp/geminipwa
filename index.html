@@ -10470,17 +10470,21 @@ elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPr
                     if (maxInput) maxInput.disabled = !useCustomValue;
 
                     const displayValue = (value === null || value === undefined) ? '' : value;
-                    numberInput.value = displayValue;
-                    sliderInput.value = displayValue === '' ? (parseFloat(sliderInput.min) + parseFloat(sliderInput.max)) / 2 : displayValue;
-
+                    if (numberInput.value !== displayValue) {
+                         numberInput.value = displayValue;
+                    }
+                    if (sliderInput.value !== displayValue) {
+                        sliderInput.value = displayValue === '' ? (parseFloat(sliderInput.min) + parseFloat(sliderInput.max)) / 2 : displayValue;
+                    }
 
                     if (maxInput) {
-                        const maxVal = state.settings[storageKey] || parseFloat(sliderInput.getAttribute('max')) || 100;
+                        const maxValKey = `${paramKey}SliderMax`;
+                        const maxVal = state.settings[maxValKey] ?? parseFloat(sliderInput.getAttribute('max')) ?? 100;
                         sliderInput.max = maxVal;
-                        maxInput.value = maxVal;
+                        maxInput.value = state.settings[maxValKey] ?? '';
                     }
                 };
-
+                
                 setupParamUI('gemini-max-tokens', 'geminiMaxTokensSliderMax');
 setupParamUI('gemini-temperature');
 setupParamUI('gemini-top-k', 'geminiTopKSliderMax');
@@ -15696,14 +15700,12 @@ newSettings.geminiSystemPrompt = elements.geminiSystemPromptDefaultTextarea.valu
 
                 const getParamValue = (paramId, isInteger = false) => {
                     const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
-                    if (!checkbox.checked) {
-                        const input = document.getElementById(paramId);
-                        const value = input.value;
-                        if (value === '') return null;
-                        const num = isInteger ? parseInt(value, 10) : parseFloat(value);
-                        return isNaN(num) ? null : num;
-                    }
                     const input = document.getElementById(paramId);
+                    
+                    if (!checkbox.checked) {
+                        return null;
+                    }
+
                     const value = input.value;
                     if (value === '') return null;
                     
@@ -19766,44 +19768,45 @@ const paramSliders = document.querySelectorAll('.param-slider-container');
                 const sliderInput = container.querySelector('input[type="range"]');
                 const checkbox = container.querySelector('.param-default-checkbox');
                 const maxInput = container.querySelector('.param-slider-max-input');
-                
+
                 if (!numberInput || !sliderInput || !checkbox) return;
 
                 const syncValues = (value) => {
-                    if (String(numberInput.value) !== String(value)) numberInput.value = value;
-                    if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
-                };
-
-                const updateUIState = (useCustom) => {
-                    numberInput.disabled = !useCustom;
-                    sliderInput.disabled = !useCustom;
-                    if (maxInput) maxInput.disabled = !useCustom;
-                    if (checkbox.checked !== useCustom) checkbox.checked = useCustom;
-
+                    if (numberInput.value !== value) numberInput.value = value;
+                    if (sliderInput.value !== value) sliderInput.value = value;
                 };
 
                 checkbox.addEventListener('change', () => {
-                const useCustom = checkbox.checked;
-                updateUIState(useCustom);
-                if (useCustom && numberInput.value === '') {
-                    const sliderDefault = sliderInput.getAttribute('value') || 
-                                          (parseFloat(sliderInput.min) + parseFloat(sliderInput.max)) / 2;
-                    const step = sliderInput.step || 1;
-                    const precision = step.toString().includes('.') ? step.toString().split('.')[1].length : 0;
-                    const roundedDefault = Math.round(sliderDefault / step) * step;
-                    syncValues(roundedDefault.toFixed(precision));
-                }
-            });
+                    const useCustom = checkbox.checked;
+                    numberInput.disabled = !useCustom;
+                    sliderInput.disabled = !useCustom;
+                    if (maxInput) maxInput.disabled = !useCustom;
+                });
 
                 const onInputChange = (e) => {
                     if (!checkbox.checked) {
-                        updateUIState(true);
+                        checkbox.checked = true;
+                        numberInput.disabled = false;
+                        sliderInput.disabled = false;
+                        if (maxInput) maxInput.disabled = false;
                     }
                     syncValues(e.target.value);
                 };
 
                 numberInput.addEventListener('input', onInputChange);
                 sliderInput.addEventListener('input', onInputChange);
+
+                if (maxInput) {
+                    maxInput.addEventListener('change', () => {
+                        const maxVal = parseFloat(maxInput.value);
+                        if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
+                            sliderInput.max = maxVal;
+                            if (parseFloat(sliderInput.value) > maxVal) {
+                                syncValues(maxVal.toString());
+                            }
+                        }
+                    });
+                }
             });
         appLogic.initializeApp();
     </script>
