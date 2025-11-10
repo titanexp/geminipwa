@@ -7689,9 +7689,8 @@ appVersionSpan: document.getElementById('app-version'),
 
         const state = {
             db: null,
-            isInitialLoad: true,
             currentChatId: null,
-            currentChatBaseUrl: null,
+            currentChatBaseUrl: null, // チャット固有のベースURLを保持
             currentMessages: [],
             settings: {
                 apiKey: '',
@@ -10455,43 +10454,33 @@ elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPr
                     const sliderInput = document.getElementById(paramId + '-slider');
                     const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
                     const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
-                    if (!numberInput || !sliderInput || !checkbox) return;
-
+                    const label = checkbox.parentElement;
+                    if (label) {
+                        label.title = "カスタム値を指定する (チェックを入れると有効)";
+                    }
+                    
                     const paramKey = paramId.replace(/-(\w)/g, (_, c) => c.toUpperCase());
                     const value = state.settings[paramKey] ?? null;
+                    
                     const useCustomValue = value !== null;
-
+                    
                     checkbox.checked = useCustomValue;
                     numberInput.disabled = !useCustomValue;
                     sliderInput.disabled = !useCustomValue;
                     if (maxInput) maxInput.disabled = !useCustomValue;
 
                     if (useCustomValue) {
-                        numberInput.value = value;
-                        sliderInput.value = value;
-                    } else {
-                        if (state.isInitialLoad) {
-                            numberInput.value = '';
-                            const defaultValue = sliderInput.getAttribute('value') || 
-                                                  (parseFloat(sliderInput.min) + parseFloat(sliderInput.max)) / 2 || 0;
-                            const step = sliderInput.step || 1;
-                            const precision = step.includes('.') ? step.split('.')[1].length : 0;
-                            const roundedDefault = Math.round(defaultValue / step) * step;
-                            sliderInput.value = roundedDefault.toFixed(precision);
-                        }
-                    }
-
+    numberInput.value = value;
+    sliderInput.value = value;
+}
+                    
                     if (maxInput) {
-                        const storedMax = storageKey ? state.settings[storageKey] : null;
-                        if (storedMax !== null && storedMax !== undefined) {
-                            maxInput.value = storedMax;
-                            sliderInput.max = storedMax;
-                        } else {
-                            maxInput.value = sliderInput.getAttribute('max') || '';
-                        }
+                        const maxVal = state.settings[storageKey] || parseFloat(sliderInput.getAttribute('max')) || 100;
+                        sliderInput.max = maxVal;
+                        maxInput.value = maxVal;
                     }
                 };
-                
+
                 setupParamUI('gemini-max-tokens', 'geminiMaxTokensSliderMax');
 setupParamUI('gemini-temperature');
 setupParamUI('gemini-top-k', 'geminiTopKSliderMax');
@@ -12079,8 +12068,6 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     }
 
                     uiUtils.applySettingsToUI();
-                     state.isInitialLoad = false;
-
 
                     const chats = await dbUtils.getAllChats(state.settings.historySortOrder);
                     if (chats && chats.length > 0) {
@@ -19788,19 +19775,31 @@ const paramSliders = document.querySelectorAll('.param-slider-container');
                     sliderInput.disabled = !useCustom;
                     if (maxInput) maxInput.disabled = !useCustom;
                     if (checkbox.checked !== useCustom) checkbox.checked = useCustom;
-
+                };
+                
+                const getSliderDefaultValue = (paramId) => {
+                    switch (paramId) {
+                        case 'gemini-max-tokens': return 8192;
+                        case 'gemini-temperature': return 0.9;
+                        case 'gemini-top-k': return 40;
+                        case 'gemini-top-p': return 0.95;
+                        case 'gemini-thinking-budget': return 8192;
+                        case 'claude-thinking-budget': return 2048;
+                        default:
+                            const step = parseFloat(sliderInput.step) || 1;
+                            const precision = sliderInput.step.includes('.') ? sliderInput.step.split('.')[1].length : 0;
+                            const midValue = (parseFloat(sliderInput.min) + parseFloat(sliderInput.max)) / 2;
+                            const roundedDefault = Math.round(midValue / step) * step;
+                            return parseFloat(roundedDefault.toFixed(precision));
+                    }
                 };
 
                 checkbox.addEventListener('change', () => {
                     const useCustom = checkbox.checked;
                     updateUIState(useCustom);
                     if (useCustom && numberInput.value === '') {
-                        const sliderDefault = sliderInput.getAttribute('value') || 
-                                              (parseFloat(sliderInput.min) + parseFloat(sliderInput.max)) / 2;
-                        const step = sliderInput.step || 1;
-                        const precision = step.includes('.') ? step.split('.')[1].length : 0;
-                        const roundedDefault = Math.round(sliderDefault / step) * step;
-                        syncValues(roundedDefault.toFixed(precision));
+                        const defaultValue = getSliderDefaultValue(numberInput.id);
+                        syncValues(defaultValue);
                     }
                 });
 
