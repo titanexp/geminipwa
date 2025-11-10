@@ -11753,77 +11753,81 @@ _setupFontSizeSlider(inputId, cssVar, defaultValue) {
             sliderInput.addEventListener('input', (e) => updateValue(e.target.value));
         },
 _setupParamSlider(paramId, defaultValue, storageKey) {
-            const numberInput = document.getElementById(paramId);
-            const sliderInput = document.getElementById(paramId + '-slider');
-            const defaultCheckbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
-            const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
+    const numberInput = document.getElementById(paramId);
+    const sliderInput = document.getElementById(paramId + '-slider');
+    const defaultCheckbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
+    const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
 
-            const updateValue = (value, from) => {
-                if (numberInput.value !== value) numberInput.value = value;
-                if (sliderInput.value !== value) sliderInput.value = value;
-            };
-            
-            const handleCheckboxChange = () => {
-                const isDefault = !defaultCheckbox.checked;
-                numberInput.disabled = isDefault;
-                sliderInput.disabled = isDefault;
-                if (maxInput) maxInput.disabled = isDefault;
+    const paramKey = paramId.replace(/-(\w)/g, (_, c) => c.toUpperCase());
+    const currentValue = state.settings[paramKey] ?? null;
 
-                if (isDefault) {
+    const updateUIState = (useCustom) => {
+        numberInput.disabled = !useCustom;
+        sliderInput.disabled = !useCustom;
+        if (maxInput) maxInput.disabled = !useCustom;
+        if (defaultCheckbox.checked !== useCustom) defaultCheckbox.checked = useCustom;
+    };
 
-                    sliderInput.value = defaultValue;
-                }
-            };
-
-            const handleMaxInputChange = () => {
-                const maxValStr = maxInput.value.trim();
-                const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
-                
-                if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
-                    sliderInput.max = maxVal;
-                    if (parseFloat(sliderInput.value) > maxVal) {
-                        sliderInput.value = maxVal;
-                        numberInput.value = maxVal;
-                    }
-                    if (storageKey) {
-                        state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
-                    }
-                }
-            };
-            
-            if (maxInput) {
-                const storedMax = storageKey ? state.settings[storageKey] : null;
-                maxInput.value = storedMax === null ? '' : storedMax;
-                handleMaxInputChange(); 
+    const handleMaxInputChange = () => {
+        if (!maxInput) return;
+        const maxValStr = maxInput.value.trim();
+        const maxVal = maxValStr === '' 
+            ? parseFloat(sliderInput.getAttribute('max')) || 100
+            : parseFloat(maxValStr);
+        
+        if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
+            sliderInput.max = maxVal;
+            if (parseFloat(sliderInput.value) > maxVal) {
+                sliderInput.value = maxVal;
+                numberInput.value = maxVal;
             }
+        }
+    };
 
-            numberInput.addEventListener('input', (e) => updateValue(e.target.value, 'number'));
-            sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
-            defaultCheckbox.addEventListener('change', handleCheckboxChange);
-            if (maxInput) {
-                maxInput.addEventListener('change', handleMaxInputChange);
-            }
-            const buttons = document.querySelectorAll(`.set-claude-param-btn[data-target="${paramId}"]`);
-            buttons.forEach(button => {
-                button.addEventListener('click', () => {
-                    const value = button.dataset.value;
-                    if (value === 'null') {
-                        numberInput.value = '';
-                        if (!checkbox.checked) {
-                            updateUIState(false);
-                        } else {
-                            updateUIState(true);
-                            sliderInput.value = defaultValue;
-                        }
-                    } else {
-                        if (!checkbox.checked) {
-                            updateUIState(true);
-                        }
-                        syncValues(value);
-                    }
-                });
-            });
-        },
+    if (maxInput && storageKey) {
+        const storedMax = state.settings[storageKey];
+        maxInput.value = (storedMax === null || storedMax === undefined) ? '' : storedMax;
+        handleMaxInputChange();
+    }
+
+    const useCustomValue = currentValue !== null;
+    updateUIState(useCustomValue);
+
+    if (useCustomValue) {
+        numberInput.value = currentValue;
+        sliderInput.value = currentValue;
+    } else {
+        numberInput.value = '';
+        sliderInput.value = defaultValue;
+    }
+
+    const syncValues = (value) => {
+        if (String(numberInput.value) !== String(value)) numberInput.value = value;
+        if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
+    };
+
+    const onInputChange = (e) => {
+        if (!defaultCheckbox.checked) {
+            updateUIState(true);
+        }
+        syncValues(e.target.value);
+    };
+
+    numberInput.addEventListener('input', onInputChange);
+    sliderInput.addEventListener('input', onInputChange);
+
+    defaultCheckbox.addEventListener('change', () => {
+        const useCustom = defaultCheckbox.checked;
+        updateUIState(useCustom);
+        if (useCustom && numberInput.value === '') {
+            syncValues(defaultValue);
+        }
+    });
+
+    if (maxInput) {
+        maxInput.addEventListener('change', handleMaxInputChange);
+    }
+},
         
         
             async sendWebhookNotification(responseMessage) {
@@ -15592,8 +15596,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                     await uiUtils.showCustomAlert(`${type === 'user' ? 'ユーザー' : 'AI'}アイコンの削除エラー: ${error}`);
                 }
             },
-          
-async saveSettings(showNotice = true) {
+          async saveSettings(showNotice = true) {
                 const newSettings = { ...state.settings };
 
                 const getParamValue = (paramId, isInteger = false, min, max) => {
@@ -15662,16 +15665,6 @@ async saveSettings(showNotice = true) {
                 newSettings.geminiMaxTokensSliderMax = getSliderMaxValue('gemini-max-tokens');
                 newSettings.geminiTopKSliderMax = getSliderMaxValue('gemini-top-k');
                 newSettings.geminiThinkingBudgetSliderMax = getSliderMaxValue('gemini-thinking-budget');
-                
-                newSettings.deepseekMaxTokensSliderMax = getSliderMaxValue('deepseek-max-tokens');
-                newSettings.claudeMaxTokensSliderMax = getSliderMaxValue('claude-max-tokens');
-                newSettings.claudeTopKSliderMax = getSliderMaxValue('claude-top-k');
-                newSettings.claudeThinkingBudgetSliderMax = getSliderMaxValue('claude-thinking-budget');
-                newSettings.openaiMaxTokensSliderMax = getSliderMaxValue('openai-max-tokens');
-                newSettings.xaiMaxTokensSliderMax = getSliderMaxValue('xai-max-tokens');
-                newSettings.llmaggregatorMaxTokensSliderMax = getSliderMaxValue('llmaggregator-max-tokens');
-                newSettings.llmaggregatorTopKSliderMax = getSliderMaxValue('llmaggregator-top-k');
-
                 newSettings.geminiIncludeThoughts = elements.geminiIncludeThoughtsToggle.checked;
                 newSettings.geminiExpandThoughtsByDefault = elements.geminiExpandThoughtsByDefaultToggle.checked;
                 newSettings.geminiStreamingOutput = elements.geminiStreamingOutputCheckbox.checked;
