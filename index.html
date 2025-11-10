@@ -8184,18 +8184,16 @@ settingsUIDetailsOpenStates: {},
                                         num = parseInt(loadedValue, 10);
                                     }
                                     if (isNaN(num)) {
-                        if (loadedValue === '') {
-                            state.settings[key] = '';
-                        } else if ((key.toLowerCase().includes('temperature') || key.toLowerCase().includes('maxtokens') || key.toLowerCase().includes('topk') || key.toLowerCase().includes('topp') ||
-                            key.toLowerCase().includes('penalty') || key.toLowerCase().includes('budget') ||
-                            key.toLowerCase().includes('opacity') || key.toLowerCase().includes('fontsize') || key.toLowerCase().includes('iconsize') ||
-                            key === 'diceMinValue' || key === 'diceMaxValue'
-                        ) && (loadedValue === null)) {
-                            state.settings[key] = null;
-                        } else {
-                            state.settings[key] = defaultValue;
-                        }
-                    } else {
+                                        if ((key.toLowerCase().includes('temperature') || key.toLowerCase().includes('maxtokens') || key.toLowerCase().includes('topk') || key.toLowerCase().includes('topp') ||
+                                            key.toLowerCase().includes('penalty') || key.toLowerCase().includes('budget') ||
+                                            key.toLowerCase().includes('opacity') || key.toLowerCase().includes('fontsize') || key.toLowerCase().includes('iconsize') ||
+                                            key === 'diceMinValue' || key === 'diceMaxValue'
+                                        ) && (loadedValue === null || loadedValue === '')) {
+                                            state.settings[key] = null;
+                                        } else {
+                                            state.settings[key] = defaultValue;
+                                        }
+                                    } else {
                                         if (key.toLowerCase().includes('temperature') && (num < 0 || num > 2)) num = defaultValue;
                                         if (key.toLowerCase().includes('maxtokens') && num < 1) num = defaultValue;
                                         if (key.toLowerCase().includes('topk') && num < 1) num = defaultValue;
@@ -10373,9 +10371,12 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                     }
                     
                     let paramKey = paramId.replace(/-(\w)/g, (_, c) => c.toUpperCase());
-                    if (paramKey.startsWith('deepseek')) { paramKey = 'deepSeek' + paramKey.substring('deepseek'.length); }
-                    else if (paramKey.startsWith('llmaggregator')) { paramKey = 'llmAggregator' + paramKey.substring('llmaggregator'.length); }
-                    const value = state.settings[paramKey];
+                    if (paramKey.startsWith('deepseek')) {
+                        paramKey = 'deepSeek' + paramKey.substring('deepseek'.length);
+                    } else if (paramKey.startsWith('llmaggregator')) {
+                        paramKey = 'llmAggregator' + paramKey.substring('llmaggregator'.length);
+                    }
+                    const value = state.settings[paramKey] ?? null;
                     
                     const useCustomValue = value !== null;
                     
@@ -10386,16 +10387,15 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
 
                     if (useCustomValue) {
                         numberInput.value = value;
-                        sliderInput.value = (value === '' || value === null) ? sliderInput.min : value;
+                        sliderInput.value = value;
                     } else {
                         numberInput.value = '';
-                        sliderInput.value = sliderInput.min;
                     }
                     
                     if (maxInput) {
                         const maxVal = state.settings[storageKey] || parseFloat(sliderInput.getAttribute('max')) || 100;
                         sliderInput.max = maxVal;
-                        maxInput.value = state.settings[storageKey] || '';
+                        maxInput.value = maxVal;
                     }
                 };
 
@@ -15609,20 +15609,30 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
 
                     const input = document.getElementById(paramId);
                     const value = input.value.trim();
-
                     if (value === '') {
-                        return '';
+                        return null;
                     }
 
                     let num = isInteger ? parseInt(value, 10) : parseFloat(value);
                     if (isNaN(num)) {
-                        return '';
+                        return null;
                     }
 
                     if (min !== undefined && num < min) num = min;
                     if (max !== undefined && num > max) num = max;
                     
                     return num;
+                };
+
+                const getSliderMaxValue = (paramId) => {
+                    const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
+                    if (maxInput) {
+                        const value = maxInput.value.trim();
+                        if (value === '') return null;
+                        const numValue = parseInt(value, 10);
+                        return isNaN(numValue) ? null : numValue;
+                    }
+                    return undefined;
                 };
 
                 newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
