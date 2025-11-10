@@ -10449,7 +10449,7 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
 elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPrompt || '';
                 elements.geminiEnableSystemPromptDefaultCheckbox.checked = state.settings.geminiEnableSystemPromptDefault;
                 
-const setupParamUI = (paramId, storageKey) => {
+                const setupParamUI = (paramId, storageKey) => {
                     const numberInput = document.getElementById(paramId);
                     const sliderInput = document.getElementById(paramId + '-slider');
                     const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
@@ -10464,25 +10464,22 @@ const setupParamUI = (paramId, storageKey) => {
                     
                     const useCustomValue = value !== null;
                     
-                    if (useCustomValue) {
-                        numberInput.value = value;
-                        sliderInput.value = value;
-                    } else {
-                        if (numberInput.value === '') {
-                             const defaultValue = sliderInput.getAttribute('value') || (parseFloat(sliderInput.min) + parseFloat(sliderInput.max)) / 2;
-                             sliderInput.value = defaultValue;
-                        }
-                    }
-                    
                     checkbox.checked = useCustomValue;
                     numberInput.disabled = !useCustomValue;
                     sliderInput.disabled = !useCustomValue;
                     if (maxInput) maxInput.disabled = !useCustomValue;
+
+                    if (useCustomValue) {
+                        numberInput.value = value;
+                        sliderInput.value = value;
+                    } else {
+                        numberInput.value = '';
+                    }
                     
                     if (maxInput) {
                         const maxVal = state.settings[storageKey] || parseFloat(sliderInput.getAttribute('max')) || 100;
                         sliderInput.max = maxVal;
-                        maxInput.value = maxVal === 100 ? '' : maxVal;
+                        maxInput.value = maxVal;
                     }
                 };
 
@@ -11842,88 +11839,57 @@ _setupFontSizeSlider(inputId, cssVar, defaultValue) {
             numberInput.addEventListener('input', (e) => updateValue(e.target.value));
             sliderInput.addEventListener('input', (e) => updateValue(e.target.value));
         },
-
 _setupParamSlider(paramId, defaultValue, storageKey) {
             const numberInput = document.getElementById(paramId);
             const sliderInput = document.getElementById(paramId + '-slider');
             const defaultCheckbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
             const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
 
-            const syncValues = (value) => {
-                if (String(numberInput.value) !== String(value)) numberInput.value = value;
-                if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
+            const updateValue = (value, from) => {
+                if (numberInput.value !== value) numberInput.value = value;
+                if (sliderInput.value !== value) sliderInput.value = value;
             };
-
-            const updateUIState = (useCustom) => {
-                numberInput.disabled = !useCustom;
-                sliderInput.disabled = !useCustom;
-                if (maxInput) maxInput.disabled = !useCustom;
-                if (defaultCheckbox.checked !== useCustom) defaultCheckbox.checked = useCustom;
-            };
-
+            
             const handleCheckboxChange = () => {
-                const useCustom = defaultCheckbox.checked;
-                updateUIState(useCustom);
+                const isDefault = !defaultCheckbox.checked;
+                numberInput.disabled = isDefault;
+                sliderInput.disabled = isDefault;
+                if (maxInput) maxInput.disabled = isDefault;
+
+                if (isDefault) {
+
+                    sliderInput.value = defaultValue;
+                }
             };
 
             const handleMaxInputChange = () => {
-                if (!maxInput) return;
                 const maxValStr = maxInput.value.trim();
-                const maxVal = maxValStr === '' ? (parseFloat(sliderInput.getAttribute('max')) || 99999999999999999) : parseFloat(maxValStr);
+                const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
                 
                 if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
                     sliderInput.max = maxVal;
                     if (parseFloat(sliderInput.value) > maxVal) {
-                        const clampedValue = String(maxVal);
-                        syncValues(clampedValue);
+                        sliderInput.value = maxVal;
+                        numberInput.value = maxVal;
                     }
                     if (storageKey) {
                         state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
                     }
                 }
             };
+            
+            if (maxInput) {
+                const storedMax = storageKey ? state.settings[storageKey] : null;
+                maxInput.value = storedMax === null ? '' : storedMax;
+                handleMaxInputChange(); 
+            }
 
-            const onInputChange = (e) => {
-                if (!defaultCheckbox.checked) {
-                    updateUIState(true);
-                }
-                syncValues(e.target.value);
-            };
-
-            numberInput.removeEventListener('input', onInputChange);
-            sliderInput.removeEventListener('input', onInputChange);
-            defaultCheckbox.removeEventListener('change', handleCheckboxChange);
-            if (maxInput) maxInput.removeEventListener('change', handleMaxInputChange);
-
-            numberInput.addEventListener('input', onInputChange);
-            sliderInput.addEventListener('input', onInputChange);
+            numberInput.addEventListener('input', (e) => updateValue(e.target.value, 'number'));
+            sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
             defaultCheckbox.addEventListener('change', handleCheckboxChange);
-            if (maxInput) maxInput.addEventListener('change', handleMaxInputChange);
-
-            const buttons = document.querySelectorAll(`.set-claude-param-btn[data-target="${paramId}"], .set-thinking-budget-btn[data-value]`);
-            buttons.forEach(button => {
-                const targetId = button.dataset.target || (button.closest('.param-slider-container')?.querySelector('input[type=number]')?.id);
-                if (targetId === paramId) {
-                    const newButton = button.cloneNode(true);
-                    button.parentNode.replaceChild(newButton, button);
-
-                    newButton.addEventListener('click', () => {
-                        const value = newButton.dataset.value;
-                        if (value === 'null') {
-                            numberInput.value = '';
-                            if (defaultCheckbox.checked) {
-                                sliderInput.value = defaultValue;
-                            }
-                        } else {
-                            if (!defaultCheckbox.checked) {
-                                updateUIState(true);
-                            }
-                            syncValues(value);
-                        }
-                    });
-                }
-            });
-        },
+            if (maxInput) {
+                maxInput.addEventListener('change', handleMaxInputChange);
+            }
             const buttons = document.querySelectorAll(`.set-claude-param-btn[data-target="${paramId}"]`);
             buttons.forEach(button => {
                 button.addEventListener('click', () => {
