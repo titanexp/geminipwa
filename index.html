@@ -7965,7 +7965,8 @@ settingsUIDetailsOpenStates: {},
                 twinEngineConcatDummyModel: false,
                 enableWebhookNotification: false,
                 webhooks: [],
-                disableDeleteApiKeyConfirmation: false, // この行を追加
+                disableDeleteApiKeyConfirmation: false,
+                parameterUiValues: {},
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -10399,6 +10400,15 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
         document.body.classList.toggle('elevation-hover-enabled', state.settings.enableElevationHover);
     },
             applySettingsToUI() {
+                if (state.settings.parameterUiValues) {
+                    for (const [inputId, value] of Object.entries(state.settings.parameterUiValues)) {
+                        const inputElement = document.getElementById(inputId);
+                        if (inputElement) {
+                            inputElement.value = value;
+                        }
+                    }
+                }
+
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
                 elements.apiProviderSelect.value = state.settings.apiProvider;
                 twinEngineApiConfigUtils.renderList();
@@ -10472,8 +10482,6 @@ elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPr
                     if (useCustomValue) {
                         numberInput.value = value;
                         sliderInput.value = value;
-                    } else {
-                        numberInput.value = '';
                     }
                     
                     if (maxInput) {
@@ -15645,6 +15653,14 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
             },
             async saveSettings(showNotice = true) {
                 const newSettings = { ...state.settings };
+
+                newSettings.parameterUiValues = {};
+                document.querySelectorAll('.param-slider-container input[type="number"]').forEach(input => {
+                    if (input.id) { 
+                        newSettings.parameterUiValues[input.id] = input.value;
+                    }
+                });
+                
                 newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
                 newSettings.showProofreadingSettings = elements.showProofreadingSettingsToggle.checked;
                 newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
