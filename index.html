@@ -8184,16 +8184,18 @@ settingsUIDetailsOpenStates: {},
                                         num = parseInt(loadedValue, 10);
                                     }
                                     if (isNaN(num)) {
-                                        if ((key.toLowerCase().includes('temperature') || key.toLowerCase().includes('maxtokens') || key.toLowerCase().includes('topk') || key.toLowerCase().includes('topp') ||
-                                            key.toLowerCase().includes('penalty') || key.toLowerCase().includes('budget') ||
-                                            key.toLowerCase().includes('opacity') || key.toLowerCase().includes('fontsize') || key.toLowerCase().includes('iconsize') ||
-                                            key === 'diceMinValue' || key === 'diceMaxValue'
-                                        ) && (loadedValue === null || loadedValue === '')) {
-                                            state.settings[key] = null;
-                                        } else {
-                                            state.settings[key] = defaultValue;
-                                        }
-                                    } else {
+                        if (loadedValue === '') {
+                            state.settings[key] = '';
+                        } else if ((key.toLowerCase().includes('temperature') || key.toLowerCase().includes('maxtokens') || key.toLowerCase().includes('topk') || key.toLowerCase().includes('topp') ||
+                            key.toLowerCase().includes('penalty') || key.toLowerCase().includes('budget') ||
+                            key.toLowerCase().includes('opacity') || key.toLowerCase().includes('fontsize') || key.toLowerCase().includes('iconsize') ||
+                            key === 'diceMinValue' || key === 'diceMaxValue'
+                        ) && (loadedValue === null)) {
+                            state.settings[key] = null;
+                        } else {
+                            state.settings[key] = defaultValue;
+                        }
+                    } else {
                                         if (key.toLowerCase().includes('temperature') && (num < 0 || num > 2)) num = defaultValue;
                                         if (key.toLowerCase().includes('maxtokens') && num < 1) num = defaultValue;
                                         if (key.toLowerCase().includes('topk') && num < 1) num = defaultValue;
@@ -10387,9 +10389,10 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
 
                     if (useCustomValue) {
                         numberInput.value = value;
-                        sliderInput.value = value;
+                        sliderInput.value = (value === '' || value === null) ? (sliderInput.min) : value;
                     } else {
                         numberInput.value = '';
+                        sliderInput.value = defaultValue ?? sliderInput.min;
                     }
                     
                     if (maxInput) {
@@ -11765,8 +11768,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
 
             const updateValue = (value, from) => {
                 if (numberInput.value !== value) numberInput.value = value;
-                const sliderValue = (value === '' || isNaN(parseFloat(value))) ? sliderInput.min : value;
-                if (sliderInput.value !== sliderValue) sliderInput.value = sliderValue;
+                if (sliderInput.value !== value) sliderInput.value = value;
             };
             
             const handleCheckboxChange = () => {
@@ -11776,6 +11778,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 if (maxInput) maxInput.disabled = isDefault;
 
                 if (isDefault) {
+
                     sliderInput.value = defaultValue;
                 }
             };
@@ -11801,7 +11804,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 maxInput.value = storedMax === null ? '' : storedMax;
                 handleMaxInputChange(); 
             }
-            
+
             numberInput.addEventListener('input', (e) => updateValue(e.target.value, 'number'));
             sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
             defaultCheckbox.addEventListener('change', handleCheckboxChange);
@@ -11812,17 +11815,6 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
             buttons.forEach(button => {
                 button.addEventListener('click', () => {
                     const value = button.dataset.value;
-                    const checkbox = defaultCheckbox;
-                    const updateUIState = (checked) => {
-                        checkbox.checked = checked;
-                        numberInput.disabled = !checked;
-                        sliderInput.disabled = !checked;
-                        if (maxInput) maxInput.disabled = !checked;
-                    };
-                    const syncValues = (val) => {
-                        numberInput.value = val;
-                        sliderInput.value = val;
-                    };
                     if (value === 'null') {
                         numberInput.value = '';
                         if (!checkbox.checked) {
