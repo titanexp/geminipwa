@@ -10389,10 +10389,9 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
 
                     if (useCustomValue) {
                         numberInput.value = value;
-                        sliderInput.value = (value === '' || value === null) ? (sliderInput.min) : value;
+                        sliderInput.value = value;
                     } else {
                         numberInput.value = '';
-                        sliderInput.value = defaultValue ?? sliderInput.min;
                     }
                     
                     if (maxInput) {
@@ -11765,72 +11764,60 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
             const sliderInput = document.getElementById(paramId + '-slider');
             const defaultCheckbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
             const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
-
-            const updateValue = (value, from) => {
-                if (numberInput.value !== value) numberInput.value = value;
-                if (sliderInput.value !== value) sliderInput.value = value;
-            };
-            
-            const handleCheckboxChange = () => {
-                const isDefault = !defaultCheckbox.checked;
-                numberInput.disabled = isDefault;
-                sliderInput.disabled = isDefault;
-                if (maxInput) maxInput.disabled = isDefault;
-
-                if (isDefault) {
-
-                    sliderInput.value = defaultValue;
-                }
-            };
-
-            const handleMaxInputChange = () => {
-                const maxValStr = maxInput.value.trim();
-                const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
-                
-                if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
-                    sliderInput.max = maxVal;
-                    if (parseFloat(sliderInput.value) > maxVal) {
-                        sliderInput.value = maxVal;
-                        numberInput.value = maxVal;
-                    }
-                    if (storageKey) {
-                        state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
-                    }
-                }
-            };
-            
+    
+            let paramKey = paramId.replace(/-(\w)/g, (_, c) => c.toUpperCase());
+            if (paramKey.startsWith('deepseek')) { paramKey = 'deepSeek' + paramKey.substring('deepseek'.length); }
+            else if (paramKey.startsWith('llmaggregator')) { paramKey = 'llmAggregator' + paramKey.substring('llmaggregator'.length); }
+            const value = state.settings[paramKey];
+    
+            const useCustomValue = value !== null;
+            defaultCheckbox.checked = useCustomValue;
+            numberInput.disabled = !useCustomValue;
+            sliderInput.disabled = !useCustomValue;
+            if (maxInput) maxInput.disabled = !useCustomValue;
+    
+            numberInput.value = value;
+            sliderInput.value = (value === '' || value === null) ? (defaultValue ?? sliderInput.min ?? 0) : value;
+    
             if (maxInput) {
                 const storedMax = storageKey ? state.settings[storageKey] : null;
-                maxInput.value = storedMax === null ? '' : storedMax;
-                handleMaxInputChange(); 
+                const maxVal = storedMax ?? parseFloat(sliderInput.getAttribute('max')) ?? 100;
+                sliderInput.max = maxVal;
+                maxInput.value = storedMax ?? '';
             }
-
-            numberInput.addEventListener('input', (e) => updateValue(e.target.value, 'number'));
-            sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
-            defaultCheckbox.addEventListener('change', handleCheckboxChange);
+    
+            const syncValues = (val) => {
+                if (numberInput.value !== val) numberInput.value = val;
+                const sliderVal = (val === '' || isNaN(parseFloat(val))) ? (sliderInput.min ?? 0) : val;
+                if (sliderInput.value !== sliderVal) sliderInput.value = sliderVal;
+            };
+    
+            numberInput.addEventListener('input', (e) => syncValues(e.target.value));
+            sliderInput.addEventListener('input', (e) => syncValues(e.target.value));
+    
+            defaultCheckbox.addEventListener('change', () => {
+                const isChecked = defaultCheckbox.checked;
+                numberInput.disabled = !isChecked;
+                sliderInput.disabled = !isChecked;
+                if (maxInput) maxInput.disabled = !isChecked;
+                if (!isChecked) {
+                    sliderInput.value = defaultValue ?? sliderInput.min ?? 0;
+                }
+            });
+    
             if (maxInput) {
-                maxInput.addEventListener('change', handleMaxInputChange);
-            }
-            const buttons = document.querySelectorAll(`.set-claude-param-btn[data-target="${paramId}"]`);
-            buttons.forEach(button => {
-                button.addEventListener('click', () => {
-                    const value = button.dataset.value;
-                    if (value === 'null') {
-                        numberInput.value = '';
-                        if (!checkbox.checked) {
-                            updateUIState(false);
-                        } else {
-                            updateUIState(true);
-                            sliderInput.value = defaultValue;
+                maxInput.addEventListener('change', () => {
+                    const maxValStr = maxInput.value.trim();
+                    const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
+                    if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
+                        sliderInput.max = maxVal;
+                        if (parseFloat(sliderInput.value) > maxVal) {
+                            sliderInput.value = maxVal;
+                            numberInput.value = maxVal;
                         }
-                    } else {
-                        if (!checkbox.checked) {
-                            updateUIState(true);
-                        }
-                        syncValues(value);
                     }
                 });
-            });
+            }
         },
         
         
@@ -15612,14 +15599,13 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
 
                     const input = document.getElementById(paramId);
                     const value = input.value.trim();
-
                     if (value === '') {
-                        return '';
+                        return null;
                     }
 
                     let num = isInteger ? parseInt(value, 10) : parseFloat(value);
                     if (isNaN(num)) {
-                        return '';
+                        return null;
                     }
 
                     if (min !== undefined && num < min) num = min;
