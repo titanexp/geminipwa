@@ -11845,32 +11845,37 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
             const defaultCheckbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
             const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
 
-            const updateValue = (value, from) => {
-                if (numberInput.value !== value) numberInput.value = value;
-                if (sliderInput.value !== value) sliderInput.value = value;
+            const syncValues = (value) => {
+                if (String(numberInput.value) !== String(value)) numberInput.value = value;
+                if (String(sliderInput.value) !== String(value)) sliderInput.value = value;
             };
             
-            const handleCheckboxChange = () => {
-                const isDefault = !defaultCheckbox.checked;
-                numberInput.disabled = isDefault;
-                sliderInput.disabled = isDefault;
-                if (maxInput) maxInput.disabled = isDefault;
+            const updateUIState = (useCustom) => {
+                numberInput.disabled = !useCustom;
+                sliderInput.disabled = !useCustom;
+                if (maxInput) maxInput.disabled = !useCustom;
+                if (checkbox.checked !== useCustom) checkbox.checked = useCustom;
 
-                if (isDefault) {
-
-                    sliderInput.value = defaultValue;
+                if (!useCustom) {
+                    // チェックを外したときに値をクリアしないように変更
+                    // numberInput.value = ''; 
                 }
+            };
+
+            const handleCheckboxChange = () => {
+                const useCustom = defaultCheckbox.checked;
+                updateUIState(useCustom);
             };
 
             const handleMaxInputChange = () => {
                 const maxValStr = maxInput.value.trim();
-                const maxVal = maxValStr === '' ? 99999999999999999 : parseFloat(maxValStr);
+                const maxVal = maxValStr === '' ? (parseFloat(sliderInput.getAttribute('max')) || 99999999999999999) : parseFloat(maxValStr);
                 
                 if (!isNaN(maxVal) && maxVal > parseFloat(sliderInput.min)) {
                     sliderInput.max = maxVal;
                     if (parseFloat(sliderInput.value) > maxVal) {
-                        sliderInput.value = maxVal;
-                        numberInput.value = maxVal;
+                        const clampedValue = String(maxVal);
+                        syncValues(clampedValue);
                     }
                     if (storageKey) {
                         state.settings[storageKey] = (maxValStr === '') ? null : parseFloat(maxValStr);
@@ -11883,32 +11888,44 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 maxInput.value = storedMax === null ? '' : storedMax;
                 handleMaxInputChange(); 
             }
+            
+            const onInputChange = (e) => {
+                if (!defaultCheckbox.checked) {
+                    updateUIState(true);
+                }
+                syncValues(e.target.value);
+            };
 
-            numberInput.addEventListener('input', (e) => updateValue(e.target.value, 'number'));
-            sliderInput.addEventListener('input', (e) => updateValue(e.target.value, 'slider'));
+            numberInput.addEventListener('input', onInputChange);
+            sliderInput.addEventListener('input', onInputChange);
             defaultCheckbox.addEventListener('change', handleCheckboxChange);
             if (maxInput) {
                 maxInput.addEventListener('change', handleMaxInputChange);
             }
-            const buttons = document.querySelectorAll(`.set-claude-param-btn[data-target="${paramId}"]`);
+            
+            const checkbox = defaultCheckbox; // エイリアス
+            const buttons = document.querySelectorAll(`.set-claude-param-btn[data-target="${paramId}"], .set-thinking-budget-btn[data-value]`);
             buttons.forEach(button => {
-                button.addEventListener('click', () => {
-                    const value = button.dataset.value;
-                    if (value === 'null') {
-                        numberInput.value = '';
-                        if (!checkbox.checked) {
-                            updateUIState(false);
+                const targetId = button.dataset.target || (button.closest('.param-slider-container')?.querySelector('input[type=number]')?.id);
+                if (targetId === paramId) {
+                    button.addEventListener('click', () => {
+                        const value = button.dataset.value;
+                        if (value === 'null') {
+                            numberInput.value = '';
+                            if (checkbox.checked) {
+                                // チェックが入っている場合は値をリセットするが、チェックは外さない
+                                sliderInput.value = defaultValue;
+                            } else {
+                                // チェックが入っていない場合は何もしない
+                            }
                         } else {
-                            updateUIState(true);
-                            sliderInput.value = defaultValue;
+                            if (!checkbox.checked) {
+                                updateUIState(true);
+                            }
+                            syncValues(value);
                         }
-                    } else {
-                        if (!checkbox.checked) {
-                            updateUIState(true);
-                        }
-                        syncValues(value);
-                    }
-                });
+                    });
+                }
             });
         },
         
