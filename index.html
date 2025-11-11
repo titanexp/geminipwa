@@ -10361,40 +10361,51 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                     const sliderInput = document.getElementById(paramId + '-slider');
                     const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
                     const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
-                    const label = checkbox.parentElement;
-                    if (label) {
-                        label.title = "カスタム値を指定する (チェックを入れると有効)";
-                    }
-                    
+
+                    const label = checkbox?.parentElement;
+                    if (label) label.title = "カスタム値を指定する (チェックを入れると有効)";
+
                     let paramKey = paramId.replace(/-(\w)/g, (_, c) => c.toUpperCase());
                     if (paramKey.startsWith('deepseek')) {
                         paramKey = 'deepSeek' + paramKey.substring('deepseek'.length);
                     } else if (paramKey.startsWith('llmaggregator')) {
                         paramKey = 'llmAggregator' + paramKey.substring('llmaggregator'.length);
                     }
-                    const value = state.settings[paramKey] ?? null;
-                    
-                    const useCustomValue = value !== null;
-                    
-                    checkbox.checked = useCustomValue;
-                    numberInput.disabled = !useCustomValue;
-                    sliderInput.disabled = !useCustomValue;
-                    if (maxInput) maxInput.disabled = !useCustomValue;
+                    const enabledKey = paramKey + 'Enabled';
 
-                    if (useCustomValue) {
-                        numberInput.value = value;
-                        sliderInput.value = value;
-                    } else {
-                        numberInput.value = '';
-                    }
-                    
-                    if (maxInput) {
+                    const savedValue = state.settings[paramKey];
+                    const enabled = (enabledKey in state.settings)
+                        ? !!state.settings[enabledKey]
+                        : (savedValue !== null && savedValue !== undefined);
+
+                    checkbox.checked = enabled;
+
+                    if (maxInput && sliderInput) {
                         const maxVal = state.settings[storageKey] || parseFloat(sliderInput.getAttribute('max')) || 100;
                         sliderInput.max = maxVal;
                         maxInput.value = maxVal;
                     }
-                };
 
+                    if (savedValue !== undefined && savedValue !== null && savedValue !== '') {
+                        numberInput.value = savedValue;
+                        if (sliderInput) sliderInput.value = savedValue;
+                    } else {
+                        numberInput.value = '';
+                        if (sliderInput) sliderInput.value = sliderInput.defaultValue ?? 0;
+                    }
+
+                    numberInput.disabled = !enabled;
+                    if (sliderInput) sliderInput.disabled = !enabled;
+                    if (maxInput) maxInput.disabled = !enabled;
+
+                    checkbox.addEventListener('change', () => {
+                        const isOn = checkbox.checked;
+                        numberInput.disabled = !isOn;
+                        if (sliderInput) sliderInput.disabled = !isOn;
+                        if (maxInput) maxInput.disabled = !isOn;
+                    });
+                };
+                
                 elements.geminiSystemPromptDefaultTextarea.value = state.settings.geminiSystemPrompt || '';
                 elements.geminiEnableSystemPromptDefaultCheckbox.checked = state.settings.geminiEnableSystemPromptDefault;
                 setupParamUI('gemini-max-tokens', 'geminiMaxTokensSliderMax');
@@ -15597,57 +15608,48 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
            async saveSettings(showNotice = true) {
                 const newSettings = { ...state.settings };
 
-                // **【変更点】** パラメータの「生の値」と「有効状態」を保存するためのオブジェクトを準備します。
-                // これにより、チェックが外れていても入力された数値が記憶されるようになります。
-                if (!newSettings.paramRawValues) {
-                    newSettings.paramRawValues = {};
-                }
-                if (!newSettings.paramEnabled) {
-                    newSettings.paramEnabled = {};
-                }
-
-                // **【変更点】** このヘルパー関数を全面的に書き換えました。
-                // チェックボックスの状態に関わらず、常に入力された値を取得し、
-                // 「生の値」と「有効状態」を別々に保存します。
-                const getParamValue = (paramId, isInteger = false, min, max) => {
-                    // 1. チェックボックスから「有効かどうか」の状態を取得します。
+                const getParamValueAndEnabled = (paramId, isInteger = false, min, max, keyOverride) => {
                     const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
                     const enabled = !!(checkbox && checkbox.checked);
 
-                    // 2. 入力フィールドから「生の値」を常に取得・解析します。
                     const input = document.getElementById(paramId);
-                    let rawValue = null;
-                    if (input) {
-                        const value = input.value.trim();
-                        if (value !== '') {
-                            let num = isInteger ? parseInt(value, 10) : parseFloat(value);
-                            if (!isNaN(num)) {
-                                // 最小値・最大値の範囲内に収めます。
-                                if (min !== undefined && num < min) num = min;
-                                if (max !== undefined && num > max) num = max;
-                                rawValue = num;
-                            }
+                    const raw = input ? input.value.trim() : '';
+                    let num = null;
+
+                    if (raw !== '') {
+                        num = isInteger ? parseInt(raw, 10) : parseFloat(raw);
+                        if (isNaN(num)) {
+                            num = null;
+                        } else {
+                            if (min !== undefined && num < min) num = min;
+                            if (max !== undefined && num > max) num = max;
                         }
                     }
 
-                    // 3. 解析した「生の値」と「有効状態」を新しい設定項目に保存します。
-                    newSettings.paramRawValues[paramId] = rawValue;
-                    newSettings.paramEnabled[paramId] = enabled;
+                    let key = keyOverride || paramId.replace(/-(\w)/g, (_, c) => c.toUpperCase());
+                    if (key.startsWith('deepseek')) {
+                        key = 'deepSeek' + key.substring('deepseek'.length);
+                    } else if (key.startsWith('llmaggregator')) {
+                        key = 'llmAggregator' + key.substring('llmaggregator'.length);
+                    }
 
-                    // 4. 従来の動作を維持するため、有効な場合のみ値を返し、無効な場合はnullを返します。
-                    //    これにより、この関数を呼び出している他の部分のコードを変更する必要がなくなります。
-                    return enabled ? rawValue : null;
+                    return { key, value: num, enabledKey: key + 'Enabled', enabled };
                 };
 
-                const getSliderMaxValue = (paramId) => {
+                const setParam = (paramId, isInteger, min, max, keyOverride) => {
+                    const { key, value, enabledKey, enabled } =
+                    getParamValueAndEnabled(paramId, isInteger, min, max, keyOverride);
+                    newSettings[key] = value;
+                    newSettings[enabledKey] = enabled;
+                };
+
+                const readSliderMax = (paramId) => {
                     const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
-                    if (maxInput) {
-                        const value = maxInput.value.trim();
-                        if (value === '') return null;
-                        const numValue = parseInt(value, 10);
-                        return isNaN(numValue) ? null : numValue;
-                    }
-                    return undefined;
+                    if (!maxInput) return undefined;
+                    const value = maxInput.value.trim();
+                    if (value === '') return null;
+                    const num = parseInt(value, 10);
+                    return isNaN(num) ? null : num;
                 };
 
                 newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
@@ -15672,16 +15674,17 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
                 newSettings.geminiSystemPrompt = elements.geminiSystemPromptDefaultTextarea.value.trim();
                 newSettings.geminiEnableSystemPromptDefault = elements.geminiEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.geminiMaxTokens = getParamValue('gemini-max-tokens', true, 1);
-                newSettings.geminiTemperature = getParamValue('gemini-temperature', false, 0, 2);
-                newSettings.geminiTopK = getParamValue('gemini-top-k', true, 1);
-                newSettings.geminiTopP = getParamValue('gemini-top-p', false, 0, 1);
-                newSettings.geminiPresencePenalty = getParamValue('gemini-presence-penalty', false, -2.0, 2.0);
-                newSettings.geminiFrequencyPenalty = getParamValue('gemini-frequency-penalty', false, -2.0, 2.0);
-                newSettings.geminiThinkingBudget = getParamValue('gemini-thinking-budget', true, 0);
-                newSettings.geminiMaxTokensSliderMax = getSliderMaxValue('gemini-max-tokens');
-                newSettings.geminiTopKSliderMax = getSliderMaxValue('gemini-top-k');
-                newSettings.geminiThinkingBudgetSliderMax = getSliderMaxValue('gemini-thinking-budget');
+                setParam('gemini-max-tokens', true, 1);
+                setParam('gemini-temperature', false, 0, 2);
+                setParam('gemini-top-k', true, 1);
+                setParam('gemini-top-p', false, 0, 1);
+                setParam('gemini-presence-penalty', false, -2.0, 2.0);
+                setParam('gemini-frequency-penalty', false, -2.0, 2.0);
+                setParam('gemini-thinking-budget', true, 0);
+                newSettings.geminiMaxTokensSliderMax = readSliderMax('gemini-max-tokens');
+                newSettings.geminiTopKSliderMax = readSliderMax('gemini-top-k');
+                newSettings.geminiThinkingBudgetSliderMax = readSliderMax('gemini-thinking-budget');
+
                 newSettings.geminiIncludeThoughts = elements.geminiIncludeThoughtsToggle.checked;
                 newSettings.geminiExpandThoughtsByDefault = elements.geminiExpandThoughtsByDefaultToggle.checked;
                 newSettings.geminiStreamingOutput = elements.geminiStreamingOutputCheckbox.checked;
@@ -15693,17 +15696,25 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.geminiConcatDummyModel = elements.geminiConcatDummyModelCheckbox.checked;
                 newSettings.geminiPseudoStreaming = elements.geminiPseudoStreamingCheckbox.checked;
                 newSettings.geminiEnableGrounding = elements.geminiEnableGroundingToggle.checked;
+                newSettings.enableImageUrlReplacement = elements.enableImageUrlReplacementCheckbox.checked;
+                newSettings.imageUrlReplacementBase = elements.imageUrlReplacementBaseInput.value.trim();
+                newSettings.characterNamesList = elements.characterNamesListTextarea.value.trim();
+                newSettings.enableRomajiToKatakanaConversion = elements.enableRomajiToKatakanaConversionCheckbox.checked;
+                newSettings.enableAutoBaseUrlDetection = elements.enableAutoBaseUrlDetectionCheckbox.checked;
+                newSettings.enableFuzzySearchNormalization = elements.enableFuzzySearchNormalizationCheckbox.checked;
+                const threshold = parseInt(elements.fuzzySearchThresholdInput.value, 10);
+                newSettings.fuzzySearchThreshold = isNaN(threshold) || threshold < 0 ? 1 : threshold;
 
                 newSettings.deepSeekModelName = elements.deepSeekModelNameSelect.value;
                 newSettings.deepSeekAdditionalModels = elements.deepSeekAdditionalModelsTextarea.value.trim();
                 newSettings.deepSeekApiEndpoint = elements.deepSeekApiEndpointInput.value.trim();
                 newSettings.deepSeekSystemPrompt = elements.deepSeekSystemPromptDefaultTextarea.value.trim();
                 newSettings.deepSeekEnableSystemPromptDefault = elements.deepSeekEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.deepSeekMaxTokens = getParamValue('deepseek-max-tokens', true, 1);
-                newSettings.deepSeekTemperature = getParamValue('deepseek-temperature', false, 0, 2);
-                newSettings.deepSeekTopP = getParamValue('deepseek-top-p', false, 0, 1);
-                newSettings.deepSeekPresencePenalty = getParamValue('deepseek-presence-penalty', false, -2.0, 2.0);
-                newSettings.deepSeekFrequencyPenalty = getParamValue('deepseek-frequency-penalty', false, -2.0, 2.0);
+                setParam('deepseek-max-tokens', true, 1);
+                setParam('deepseek-temperature', false, 0, 2);
+                setParam('deepseek-top-p', false, 0, 1);
+                setParam('deepseek-presence-penalty', false, -2.0, 2.0);
+                setParam('deepseek-frequency-penalty', false, -2.0, 2.0);
                 newSettings.deepSeekIncludeDeepSeekThoughts = elements.deepSeekIncludeThoughtsToggle.checked;
                 newSettings.deepSeekExpandThoughtsByDefault = elements.deepSeekExpandThoughtsByDefaultToggle.checked;
                 newSettings.deepSeekStreamingOutput = elements.deepSeekStreamingOutputCheckbox.checked;
@@ -15718,11 +15729,11 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.claudeAdditionalModels = elements.claudeAdditionalModelsTextarea.value.trim();
                 newSettings.claudeSystemPrompt = elements.claudeSystemPromptDefaultTextarea.value.trim();
                 newSettings.claudeEnableSystemPromptDefault = elements.claudeEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.claudeMaxTokens = getParamValue('claude-max-tokens', true, 1);
-                newSettings.claudeTemperature = getParamValue('claude-temperature', false, 0, 1);
-                newSettings.claudeTopK = getParamValue('claude-top-k', true, 1);
-                newSettings.claudeTopP = getParamValue('claude-top-p', false, 0, 1);
-                newSettings.claudeThinkingBudget = getParamValue('claude-thinking-budget', true, 1024);
+                setParam('claude-max-tokens', true, 1);
+                setParam('claude-temperature', false, 0, 1);
+                setParam('claude-top-k', true, 1);
+                setParam('claude-top-p', false, 0, 1);
+                setParam('claude-thinking-budget', true, 1024);
                 newSettings.claudeIncludeThoughts = elements.claudeIncludeThoughtsToggle.checked;
                 newSettings.claudeExpandThoughtsByDefault = elements.claudeExpandThoughtsByDefaultToggle.checked;
                 newSettings.claudeStreamingOutput = elements.claudeStreamingOutputCheckbox.checked;
@@ -15732,16 +15743,16 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.claudeDummyModel = elements.claudeDummyModelInput.value.trim();
                 newSettings.claudeEnableDummyModel = elements.claudeEnableDummyModelCheckbox.checked;
                 newSettings.claudeConcatDummyModel = elements.claudeConcatDummyModelCheckbox.checked;
-
+                
                 newSettings.openaiModelName = elements.openaiModelNameSelect.value;
                 newSettings.openaiAdditionalModels = elements.openaiAdditionalModelsTextarea.value.trim();
                 newSettings.openaiSystemPrompt = elements.openaiSystemPromptDefaultTextarea.value.trim();
                 newSettings.openaiEnableSystemPromptDefault = elements.openaiEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.openaiMaxTokens = getParamValue('openai-max-tokens', true, 1);
-                newSettings.openaiTemperature = getParamValue('openai-temperature', false, 0, 2);
-                newSettings.openaiTopP = getParamValue('openai-top-p', false, 0, 1);
-                newSettings.openaiPresencePenalty = getParamValue('openai-presence-penalty', false, -2.0, 2.0);
-                newSettings.openaiFrequencyPenalty = getParamValue('openai-frequency-penalty', false, -2.0, 2.0);
+                setParam('openai-max-tokens', true, 1);
+                setParam('openai-temperature', false, 0, 2);
+                setParam('openai-top-p', false, 0, 1);
+                setParam('openai-presence-penalty', false, -2.0, 2.0);
+                setParam('openai-frequency-penalty', false, -2.0, 2.0);
                 newSettings.openaiStreamingOutput = elements.openaiStreamingOutputCheckbox.checked;
                 newSettings.openaiStreamingSpeed = elements.openaiStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.openaiStreamingSpeedInput.value, 10);
                 newSettings.openaiDummyUser = elements.openaiDummyUserInput.value.trim();
@@ -15754,11 +15765,11 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.xaiAdditionalModels = elements.xaiAdditionalModelsTextarea.value.trim();
                 newSettings.xaiSystemPrompt = elements.xaiSystemPromptDefaultTextarea.value.trim();
                 newSettings.xaiEnableSystemPromptDefault = elements.xaiEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.xaiMaxTokens = getParamValue('xai-max-tokens', true, 1);
-                newSettings.xaiTemperature = getParamValue('xai-temperature', false, 0, 2);
-                newSettings.xaiTopP = getParamValue('xai-top-p', false, 0, 1);
-                newSettings.xaiPresencePenalty = getParamValue('xai-presence-penalty', false, -2.0, 2.0);
-                newSettings.xaiFrequencyPenalty = getParamValue('xai-frequency-penalty', false, -2.0, 2.0);
+                setParam('xai-max-tokens', true, 1);
+                setParam('xai-temperature', false, 0, 2);
+                setParam('xai-top-p', false, 0, 1);
+                setParam('xai-presence-penalty', false, -2.0, 2.0);
+                setParam('xai-frequency-penalty', false, -2.0, 2.0);
                 newSettings.xaiIncludeThoughts = elements.xaiIncludeThoughtsToggle.checked;
                 newSettings.xaiExpandThoughtsByDefault = elements.xaiExpandThoughtsByDefaultToggle.checked;
                 newSettings.xaiReasoningEffort = elements.xaiReasoningEffortSelect.value;
@@ -15776,12 +15787,12 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalModelsTextarea.value.trim();
                 newSettings.llmAggregatorSystemPrompt = elements.llmAggregatorSystemPromptDefaultTextarea.value.trim();
                 newSettings.llmAggregatorEnableSystemPromptDefault = elements.llmAggregatorEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.llmAggregatorMaxTokens = getParamValue('llmaggregator-max-tokens', true, 1);
-                newSettings.llmAggregatorTemperature = getParamValue('llmaggregator-temperature', false, 0, 2);
-                newSettings.llmAggregatorTopP = getParamValue('llmaggregator-top-p', false, 0, 1);
-                newSettings.llmAggregatorTopK = getParamValue('llmaggregator-top-k', true, 0);
-                newSettings.llmAggregatorPresencePenalty = getParamValue('llmaggregator-presence-penalty', false, -2.0, 2.0);
-                newSettings.llmAggregatorFrequencyPenalty = getParamValue('llmaggregator-frequency-penalty', false, -2.0, 2.0);
+                setParam('llmaggregator-max-tokens', true, 1);
+                setParam('llmaggregator-temperature', false, 0, 2);
+                setParam('llmaggregator-top-p', false, 0, 1);
+                setParam('llmaggregator-top-k', true, 0);
+                setParam('llmaggregator-presence-penalty', false, -2.0, 2.0);
+                setParam('llmaggregator-frequency-penalty', false, -2.0, 2.0);
                 newSettings.llmAggregatorIncludeThoughts = elements.llmAggregatorIncludeThoughtsToggle.checked;
                 newSettings.llmAggregatorExpandThoughtsByDefault = elements.llmAggregatorExpandThoughtsByDefaultToggle.checked;
                 newSettings.llmAggregatorStreamingOutput = elements.llmAggregatorStreamingOutputCheckbox.checked;
@@ -15915,15 +15926,6 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.twinEngineEnableDummyModel = elements.twinEngineEnableDummyModelCheckbox.checked;
                 newSettings.twinEngineConcatDummyModel = elements.twinEngineConcatDummyModelCheckbox.checked;
 
-                newSettings.enableImageUrlReplacement = elements.enableImageUrlReplacementCheckbox.checked;
-                newSettings.imageUrlReplacementBase = elements.imageUrlReplacementBaseInput.value.trim();
-                newSettings.characterNamesList = elements.characterNamesListTextarea.value.trim();
-                newSettings.enableRomajiToKatakanaConversion = elements.enableRomajiToKatakanaConversionCheckbox.checked;
-                newSettings.enableAutoBaseUrlDetection = elements.enableAutoBaseUrlDetectionCheckbox.checked;
-                newSettings.enableFuzzySearchNormalization = elements.enableFuzzySearchNormalizationCheckbox.checked;
-                const threshold = parseInt(elements.fuzzySearchThresholdInput.value, 10);
-                newSettings.fuzzySearchThreshold = isNaN(threshold) || threshold < 0 ? 1 : threshold;
-                
                 newSettings.proofreadingApiConfigs = state.settings.proofreadingApiConfigs;
                 newSettings.activeProofreadingConfigId = state.settings.activeProofreadingConfigId;
                 newSettings.webhooks = state.settings.webhooks.map(webhook => {
@@ -15960,7 +15962,6 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                     await uiUtils.showCustomAlert(`設定の保存中にエラーが発生しました: ${error}`);
                 }
             },
-
             async updateApp() {
                 if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
                     await uiUtils.showCustomAlert("Service Workerが検出されませんでした。ページをリロードしてから再試行してください。");
