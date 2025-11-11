@@ -10365,25 +10365,29 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                     if (label) {
                         label.title = "カスタム値を指定する (チェックを入れると有効)";
                     }
-
+                    
                     let paramKey = paramId.replace(/-(\w)/g, (_, c) => c.toUpperCase());
-                     if (paramKey.startsWith('deepseek')) {
+                    if (paramKey.startsWith('deepseek')) {
                         paramKey = 'deepSeek' + paramKey.substring('deepseek'.length);
                     } else if (paramKey.startsWith('llmaggregator')) {
                         paramKey = 'llmAggregator' + paramKey.substring('llmaggregator'.length);
                     }
-                    const settingKeyForCheckbox = paramKey + 'Enabled';
-                    
                     const value = state.settings[paramKey] ?? null;
-                    numberInput.value = (value === null) ? '' : value;
-                    if (sliderInput) sliderInput.value = value ?? sliderInput.defaultValue ?? 0;
-
-                    const useCustomValue = state.settings[settingKeyForCheckbox] === true;
+                    
+                    const useCustomValue = value !== null;
+                    
                     checkbox.checked = useCustomValue;
                     numberInput.disabled = !useCustomValue;
-                    if (sliderInput) sliderInput.disabled = !useCustomValue;
+                    sliderInput.disabled = !useCustomValue;
                     if (maxInput) maxInput.disabled = !useCustomValue;
 
+                    if (useCustomValue) {
+                        numberInput.value = value;
+                        sliderInput.value = value;
+                    } else {
+                        numberInput.value = '';
+                    }
+                    
                     if (maxInput) {
                         const maxVal = state.settings[storageKey] || parseFloat(sliderInput.getAttribute('max')) || 100;
                         sliderInput.max = maxVal;
@@ -15593,27 +15597,38 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
            async saveSettings(showNotice = true) {
                 const newSettings = { ...state.settings };
 
-                const readParamValue = (paramId, isInteger = false) => {
+                const getParamValue = (paramId, isInteger = false, min, max) => {
+                    const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
+                    if (!checkbox || !checkbox.checked) {
+                        return null;
+                    }
+
                     const input = document.getElementById(paramId);
-                    if (!input) return null;
                     const value = input.value.trim();
-                    if (value === '') return null;
-                    const num = isInteger ? parseInt(value, 10) : parseFloat(value);
-                    return isNaN(num) ? null : num;
+                    if (value === '') {
+                        return null;
+                    }
+
+                    let num = isInteger ? parseInt(value, 10) : parseFloat(value);
+                    if (isNaN(num)) {
+                        return null;
+                    }
+
+                    if (min !== undefined && num < min) num = min;
+                    if (max !== undefined && num > max) num = max;
+                    
+                    return num;
                 };
 
-                const readCheckboxState = (paramId) => {
-                    const checkbox = document.querySelector(`.param-default-checkbox[data-target-id="${paramId}"]`);
-                    return checkbox ? checkbox.checked : false;
-                };
-                
-                const readSliderMax = (paramId) => {
+                const getSliderMaxValue = (paramId) => {
                     const maxInput = document.querySelector(`.param-slider-max-input[data-target-id="${paramId}"]`);
-                    if (!maxInput) return undefined;
-                    const value = maxInput.value.trim();
-                    if (value === '') return null;
-                    const num = parseInt(value, 10);
-                    return isNaN(num) ? null : num;
+                    if (maxInput) {
+                        const value = maxInput.value.trim();
+                        if (value === '') return null;
+                        const numValue = parseInt(value, 10);
+                        return isNaN(numValue) ? null : numValue;
+                    }
+                    return undefined;
                 };
 
                 newSettings.showMultiApiKeys = elements.showMultiApiKeysToggle.checked;
@@ -15638,23 +15653,16 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.additionalModels = elements.geminiAdditionalModelsTextarea.value.trim();
                 newSettings.geminiSystemPrompt = elements.geminiSystemPromptDefaultTextarea.value.trim();
                 newSettings.geminiEnableSystemPromptDefault = elements.geminiEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.geminiMaxTokens = readParamValue('gemini-max-tokens', true);
-                newSettings.geminiMaxTokensEnabled = readCheckboxState('gemini-max-tokens');
-                newSettings.geminiTemperature = readParamValue('gemini-temperature');
-                newSettings.geminiTemperatureEnabled = readCheckboxState('gemini-temperature');
-                newSettings.geminiTopK = readParamValue('gemini-top-k', true);
-                newSettings.geminiTopKEnabled = readCheckboxState('gemini-top-k');
-                newSettings.geminiTopP = readParamValue('gemini-top-p');
-                newSettings.geminiTopPEnabled = readCheckboxState('gemini-top-p');
-                newSettings.geminiPresencePenalty = readParamValue('gemini-presence-penalty');
-                newSettings.geminiPresencePenaltyEnabled = readCheckboxState('gemini-presence-penalty');
-                newSettings.geminiFrequencyPenalty = readParamValue('gemini-frequency-penalty');
-                newSettings.geminiFrequencyPenaltyEnabled = readCheckboxState('gemini-frequency-penalty');
-                newSettings.geminiThinkingBudget = readParamValue('gemini-thinking-budget', true);
-                newSettings.geminiThinkingBudgetEnabled = readCheckboxState('gemini-thinking-budget');
-                newSettings.geminiMaxTokensSliderMax = readSliderMax('gemini-max-tokens');
-                newSettings.geminiTopKSliderMax = readSliderMax('gemini-top-k');
-                newSettings.geminiThinkingBudgetSliderMax = readSliderMax('gemini-thinking-budget');
+                newSettings.geminiMaxTokens = getParamValue('gemini-max-tokens', true, 1);
+                newSettings.geminiTemperature = getParamValue('gemini-temperature', false, 0, 2);
+                newSettings.geminiTopK = getParamValue('gemini-top-k', true, 1);
+                newSettings.geminiTopP = getParamValue('gemini-top-p', false, 0, 1);
+                newSettings.geminiPresencePenalty = getParamValue('gemini-presence-penalty', false, -2.0, 2.0);
+                newSettings.geminiFrequencyPenalty = getParamValue('gemini-frequency-penalty', false, -2.0, 2.0);
+                newSettings.geminiThinkingBudget = getParamValue('gemini-thinking-budget', true, 0);
+                newSettings.geminiMaxTokensSliderMax = getSliderMaxValue('gemini-max-tokens');
+                newSettings.geminiTopKSliderMax = getSliderMaxValue('gemini-top-k');
+                newSettings.geminiThinkingBudgetSliderMax = getSliderMaxValue('gemini-thinking-budget');
                 newSettings.geminiIncludeThoughts = elements.geminiIncludeThoughtsToggle.checked;
                 newSettings.geminiExpandThoughtsByDefault = elements.geminiExpandThoughtsByDefaultToggle.checked;
                 newSettings.geminiStreamingOutput = elements.geminiStreamingOutputCheckbox.checked;
@@ -15666,30 +15674,17 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.geminiConcatDummyModel = elements.geminiConcatDummyModelCheckbox.checked;
                 newSettings.geminiPseudoStreaming = elements.geminiPseudoStreamingCheckbox.checked;
                 newSettings.geminiEnableGrounding = elements.geminiEnableGroundingToggle.checked;
-                newSettings.enableImageUrlReplacement = elements.enableImageUrlReplacementCheckbox.checked;
-                newSettings.imageUrlReplacementBase = elements.imageUrlReplacementBaseInput.value.trim();
-                newSettings.characterNamesList = elements.characterNamesListTextarea.value.trim();
-                newSettings.enableRomajiToKatakanaConversion = elements.enableRomajiToKatakanaConversionCheckbox.checked;
-                newSettings.enableAutoBaseUrlDetection = elements.enableAutoBaseUrlDetectionCheckbox.checked;
-                newSettings.enableFuzzySearchNormalization = elements.enableFuzzySearchNormalizationCheckbox.checked;
-                const threshold = parseInt(elements.fuzzySearchThresholdInput.value, 10);
-                newSettings.fuzzySearchThreshold = isNaN(threshold) || threshold < 0 ? 1 : threshold;
 
                 newSettings.deepSeekModelName = elements.deepSeekModelNameSelect.value;
                 newSettings.deepSeekAdditionalModels = elements.deepSeekAdditionalModelsTextarea.value.trim();
                 newSettings.deepSeekApiEndpoint = elements.deepSeekApiEndpointInput.value.trim();
                 newSettings.deepSeekSystemPrompt = elements.deepSeekSystemPromptDefaultTextarea.value.trim();
                 newSettings.deepSeekEnableSystemPromptDefault = elements.deepSeekEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.deepSeekMaxTokens = readParamValue('deepseek-max-tokens', true);
-                newSettings.deepSeekMaxTokensEnabled = readCheckboxState('deepseek-max-tokens');
-                newSettings.deepSeekTemperature = readParamValue('deepseek-temperature');
-                newSettings.deepSeekTemperatureEnabled = readCheckboxState('deepseek-temperature');
-                newSettings.deepSeekTopP = readParamValue('deepseek-top-p');
-                newSettings.deepSeekTopPEnabled = readCheckboxState('deepseek-top-p');
-                newSettings.deepSeekPresencePenalty = readParamValue('deepseek-presence-penalty');
-                newSettings.deepSeekPresencePenaltyEnabled = readCheckboxState('deepseek-presence-penalty');
-                newSettings.deepSeekFrequencyPenalty = readParamValue('deepseek-frequency-penalty');
-                newSettings.deepSeekFrequencyPenaltyEnabled = readCheckboxState('deepseek-frequency-penalty');
+                newSettings.deepSeekMaxTokens = getParamValue('deepseek-max-tokens', true, 1);
+                newSettings.deepSeekTemperature = getParamValue('deepseek-temperature', false, 0, 2);
+                newSettings.deepSeekTopP = getParamValue('deepseek-top-p', false, 0, 1);
+                newSettings.deepSeekPresencePenalty = getParamValue('deepseek-presence-penalty', false, -2.0, 2.0);
+                newSettings.deepSeekFrequencyPenalty = getParamValue('deepseek-frequency-penalty', false, -2.0, 2.0);
                 newSettings.deepSeekIncludeDeepSeekThoughts = elements.deepSeekIncludeThoughtsToggle.checked;
                 newSettings.deepSeekExpandThoughtsByDefault = elements.deepSeekExpandThoughtsByDefaultToggle.checked;
                 newSettings.deepSeekStreamingOutput = elements.deepSeekStreamingOutputCheckbox.checked;
@@ -15704,16 +15699,11 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.claudeAdditionalModels = elements.claudeAdditionalModelsTextarea.value.trim();
                 newSettings.claudeSystemPrompt = elements.claudeSystemPromptDefaultTextarea.value.trim();
                 newSettings.claudeEnableSystemPromptDefault = elements.claudeEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.claudeMaxTokens = readParamValue('claude-max-tokens', true);
-                newSettings.claudeMaxTokensEnabled = readCheckboxState('claude-max-tokens');
-                newSettings.claudeTemperature = readParamValue('claude-temperature');
-                newSettings.claudeTemperatureEnabled = readCheckboxState('claude-temperature');
-                newSettings.claudeTopK = readParamValue('claude-top-k', true);
-                newSettings.claudeTopKEnabled = readCheckboxState('claude-top-k');
-                newSettings.claudeTopP = readParamValue('claude-top-p');
-                newSettings.claudeTopPEnabled = readCheckboxState('claude-top-p');
-                newSettings.claudeThinkingBudget = readParamValue('claude-thinking-budget', true);
-                newSettings.claudeThinkingBudgetEnabled = readCheckboxState('claude-thinking-budget');
+                newSettings.claudeMaxTokens = getParamValue('claude-max-tokens', true, 1);
+                newSettings.claudeTemperature = getParamValue('claude-temperature', false, 0, 1);
+                newSettings.claudeTopK = getParamValue('claude-top-k', true, 1);
+                newSettings.claudeTopP = getParamValue('claude-top-p', false, 0, 1);
+                newSettings.claudeThinkingBudget = getParamValue('claude-thinking-budget', true, 1024);
                 newSettings.claudeIncludeThoughts = elements.claudeIncludeThoughtsToggle.checked;
                 newSettings.claudeExpandThoughtsByDefault = elements.claudeExpandThoughtsByDefaultToggle.checked;
                 newSettings.claudeStreamingOutput = elements.claudeStreamingOutputCheckbox.checked;
@@ -15723,21 +15713,16 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.claudeDummyModel = elements.claudeDummyModelInput.value.trim();
                 newSettings.claudeEnableDummyModel = elements.claudeEnableDummyModelCheckbox.checked;
                 newSettings.claudeConcatDummyModel = elements.claudeConcatDummyModelCheckbox.checked;
-                
+
                 newSettings.openaiModelName = elements.openaiModelNameSelect.value;
                 newSettings.openaiAdditionalModels = elements.openaiAdditionalModelsTextarea.value.trim();
                 newSettings.openaiSystemPrompt = elements.openaiSystemPromptDefaultTextarea.value.trim();
                 newSettings.openaiEnableSystemPromptDefault = elements.openaiEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.openaiMaxTokens = readParamValue('openai-max-tokens', true);
-                newSettings.openaiMaxTokensEnabled = readCheckboxState('openai-max-tokens');
-                newSettings.openaiTemperature = readParamValue('openai-temperature');
-                newSettings.openaiTemperatureEnabled = readCheckboxState('openai-temperature');
-                newSettings.openaiTopP = readParamValue('openai-top-p');
-                newSettings.openaiTopPEnabled = readCheckboxState('openai-top-p');
-                newSettings.openaiPresencePenalty = readParamValue('openai-presence-penalty');
-                newSettings.openaiPresencePenaltyEnabled = readCheckboxState('openai-presence-penalty');
-                newSettings.openaiFrequencyPenalty = readParamValue('openai-frequency-penalty');
-                newSettings.openaiFrequencyPenaltyEnabled = readCheckboxState('openai-frequency-penalty');
+                newSettings.openaiMaxTokens = getParamValue('openai-max-tokens', true, 1);
+                newSettings.openaiTemperature = getParamValue('openai-temperature', false, 0, 2);
+                newSettings.openaiTopP = getParamValue('openai-top-p', false, 0, 1);
+                newSettings.openaiPresencePenalty = getParamValue('openai-presence-penalty', false, -2.0, 2.0);
+                newSettings.openaiFrequencyPenalty = getParamValue('openai-frequency-penalty', false, -2.0, 2.0);
                 newSettings.openaiStreamingOutput = elements.openaiStreamingOutputCheckbox.checked;
                 newSettings.openaiStreamingSpeed = elements.openaiStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.openaiStreamingSpeedInput.value, 10);
                 newSettings.openaiDummyUser = elements.openaiDummyUserInput.value.trim();
@@ -15750,16 +15735,11 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.xaiAdditionalModels = elements.xaiAdditionalModelsTextarea.value.trim();
                 newSettings.xaiSystemPrompt = elements.xaiSystemPromptDefaultTextarea.value.trim();
                 newSettings.xaiEnableSystemPromptDefault = elements.xaiEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.xaiMaxTokens = readParamValue('xai-max-tokens', true);
-                newSettings.xaiMaxTokensEnabled = readCheckboxState('xai-max-tokens');
-                newSettings.xaiTemperature = readParamValue('xai-temperature');
-                newSettings.xaiTemperatureEnabled = readCheckboxState('xai-temperature');
-                newSettings.xaiTopP = readParamValue('xai-top-p');
-                newSettings.xaiTopPEnabled = readCheckboxState('xai-top-p');
-                newSettings.xaiPresencePenalty = readParamValue('xai-presence-penalty');
-                newSettings.xaiPresencePenaltyEnabled = readCheckboxState('xai-presence-penalty');
-                newSettings.xaiFrequencyPenalty = readParamValue('xai-frequency-penalty');
-                newSettings.xaiFrequencyPenaltyEnabled = readCheckboxState('xai-frequency-penalty');
+                newSettings.xaiMaxTokens = getParamValue('xai-max-tokens', true, 1);
+                newSettings.xaiTemperature = getParamValue('xai-temperature', false, 0, 2);
+                newSettings.xaiTopP = getParamValue('xai-top-p', false, 0, 1);
+                newSettings.xaiPresencePenalty = getParamValue('xai-presence-penalty', false, -2.0, 2.0);
+                newSettings.xaiFrequencyPenalty = getParamValue('xai-frequency-penalty', false, -2.0, 2.0);
                 newSettings.xaiIncludeThoughts = elements.xaiIncludeThoughtsToggle.checked;
                 newSettings.xaiExpandThoughtsByDefault = elements.xaiExpandThoughtsByDefaultToggle.checked;
                 newSettings.xaiReasoningEffort = elements.xaiReasoningEffortSelect.value;
@@ -15777,18 +15757,12 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalModelsTextarea.value.trim();
                 newSettings.llmAggregatorSystemPrompt = elements.llmAggregatorSystemPromptDefaultTextarea.value.trim();
                 newSettings.llmAggregatorEnableSystemPromptDefault = elements.llmAggregatorEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.llmAggregatorMaxTokens = readParamValue('llmaggregator-max-tokens', true);
-                newSettings.llmAggregatorMaxTokensEnabled = readCheckboxState('llmaggregator-max-tokens');
-                newSettings.llmAggregatorTemperature = readParamValue('llmaggregator-temperature');
-                newSettings.llmAggregatorTemperatureEnabled = readCheckboxState('llmaggregator-temperature');
-                newSettings.llmAggregatorTopP = readParamValue('llmaggregator-top-p');
-                newSettings.llmAggregatorTopPEnabled = readCheckboxState('llmaggregator-top-p');
-                newSettings.llmAggregatorTopK = readParamValue('llmaggregator-top-k', true);
-                newSettings.llmAggregatorTopKEnabled = readCheckboxState('llmaggregator-top-k');
-                newSettings.llmAggregatorPresencePenalty = readParamValue('llmaggregator-presence-penalty');
-                newSettings.llmAggregatorPresencePenaltyEnabled = readCheckboxState('llmaggregator-presence-penalty');
-                newSettings.llmAggregatorFrequencyPenalty = readParamValue('llmaggregator-frequency-penalty');
-                newSettings.llmAggregatorFrequencyPenaltyEnabled = readCheckboxState('llmaggregator-frequency-penalty');
+                newSettings.llmAggregatorMaxTokens = getParamValue('llmaggregator-max-tokens', true, 1);
+                newSettings.llmAggregatorTemperature = getParamValue('llmaggregator-temperature', false, 0, 2);
+                newSettings.llmAggregatorTopP = getParamValue('llmaggregator-top-p', false, 0, 1);
+                newSettings.llmAggregatorTopK = getParamValue('llmaggregator-top-k', true, 0);
+                newSettings.llmAggregatorPresencePenalty = getParamValue('llmaggregator-presence-penalty', false, -2.0, 2.0);
+                newSettings.llmAggregatorFrequencyPenalty = getParamValue('llmaggregator-frequency-penalty', false, -2.0, 2.0);
                 newSettings.llmAggregatorIncludeThoughts = elements.llmAggregatorIncludeThoughtsToggle.checked;
                 newSettings.llmAggregatorExpandThoughtsByDefault = elements.llmAggregatorExpandThoughtsByDefaultToggle.checked;
                 newSettings.llmAggregatorStreamingOutput = elements.llmAggregatorStreamingOutputCheckbox.checked;
@@ -15922,6 +15896,15 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.twinEngineEnableDummyModel = elements.twinEngineEnableDummyModelCheckbox.checked;
                 newSettings.twinEngineConcatDummyModel = elements.twinEngineConcatDummyModelCheckbox.checked;
 
+                newSettings.enableImageUrlReplacement = elements.enableImageUrlReplacementCheckbox.checked;
+                newSettings.imageUrlReplacementBase = elements.imageUrlReplacementBaseInput.value.trim();
+                newSettings.characterNamesList = elements.characterNamesListTextarea.value.trim();
+                newSettings.enableRomajiToKatakanaConversion = elements.enableRomajiToKatakanaConversionCheckbox.checked;
+                newSettings.enableAutoBaseUrlDetection = elements.enableAutoBaseUrlDetectionCheckbox.checked;
+                newSettings.enableFuzzySearchNormalization = elements.enableFuzzySearchNormalizationCheckbox.checked;
+                const threshold = parseInt(elements.fuzzySearchThresholdInput.value, 10);
+                newSettings.fuzzySearchThreshold = isNaN(threshold) || threshold < 0 ? 1 : threshold;
+                
                 newSettings.proofreadingApiConfigs = state.settings.proofreadingApiConfigs;
                 newSettings.activeProofreadingConfigId = state.settings.activeProofreadingConfigId;
                 newSettings.webhooks = state.settings.webhooks.map(webhook => {
