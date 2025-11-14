@@ -8118,6 +8118,7 @@ settingsUIDetailsOpenStates: {},
     delete loadedSettings.webhookFormat;
 }
 
+
 const paramKeys = [
     'geminiMaxTokens', 'geminiTemperature', 'geminiTopK', 'geminiTopP', 'geminiPresencePenalty', 'geminiFrequencyPenalty', 'geminiThinkingBudget',
     'deepSeekMaxTokens', 'deepSeekTemperature', 'deepSeekTopP', 'deepSeekPresencePenalty', 'deepSeekFrequencyPenalty',
@@ -8140,7 +8141,7 @@ for (const key in loadedSettings) {
     if (key === 'memoWidth') continue;
     if (key === 'showCollapseButtons') continue;
 
-    if (key in defaultSettings) {
+    if (key in defaultSettings || key.endsWith('Enabled')) {
         const loadedValue = loadedSettings[key];
         const defaultValue = defaultSettings[key];
 
@@ -8162,7 +8163,7 @@ for (const key in loadedSettings) {
             } else {
                 state.settings[key] = defaultValue;
             }
-        } else if (typeof defaultValue === 'boolean') {
+        } else if (typeof defaultValue === 'boolean' || key.endsWith('Enabled')) {
             state.settings[key] = loadedValue === true;
         } else if (key === 'toggleButtonTopFontSize' || key === 'toggleButtonBottomFontSize' || key === 'toggleButtonTopWidth' || key === 'toggleButtonTopHeight') {
             let num = parseInt(loadedValue, 10);
@@ -14133,193 +14134,136 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 let contextLlmAggregatorTopK;
 
                 if (isBackgroundProcess) {
-                    const providerForSettingsB = sourceSessionContext.apiProvider || state.settings.apiProvider;
-                    if (providerForSettingsB === 'gemini') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.geminiTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.geminiMaxTokens;
-                        contextGeminiTopK = sourceSessionContext.topK ?? state.settings.geminiTopK;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.geminiTopP;
-                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.geminiPresencePenalty;
-                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.geminiFrequencyPenalty;
-                        contextGeminiThinkingBudget = sourceSessionContext.thinkingBudget ?? state.settings.geminiThinkingBudget;
+    const settingsSource = sourceSessionContext;
+    const provider = settingsSource.apiProvider || state.settings.apiProvider;
+    contextTemperature = settingsSource.temperature;
+    contextMaxTokens = settingsSource.maxTokens;
+    contextTopP = settingsSource.topP;
+    contextPresencePenalty = settingsSource.presencePenalty;
+    contextFrequencyPenalty = settingsSource.frequencyPenalty;
+    contextStreamingOutput = settingsSource.streamingOutput;
+    contextStreamingSpeed = settingsSource.streamingSpeed;
+    contextDummyUser = settingsSource.dummyUser;
+    contextEnableDummyUser = settingsSource.enableDummyUser;
+    contextDummyModel = settingsSource.dummyModel;
+    contextEnableDummyModel = settingsSource.enableDummyModel;
+    contextConcatDummyModel = settingsSource.concatDummyModel;
 
-                        contextGeminiIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.geminiIncludeThoughts;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.geminiStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.geminiStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.geminiDummyUser;
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.geminiEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.geminiDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.geminiEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.geminiConcatDummyModel;
-                        contextGeminiPseudoStreaming = sourceSessionContext.pseudoStreaming ?? state.settings.geminiPseudoStreaming;
-                        contextGeminiEnableGrounding = sourceSessionContext.enableGrounding ?? state.settings.geminiEnableGrounding;
-                    } else if (providerForSettingsB === 'deepseek') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.deepSeekTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.deepSeekMaxTokens;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.deepSeekTopP;
-                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.deepSeekPresencePenalty;
-                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.deepSeekFrequencyPenalty;
-                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeDeepSeekThoughts ?? state.settings.deepSeekIncludeDeepSeekThoughts;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.deepSeekStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.deepSeekStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.deepSeekDummyUser;
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.deepSeekEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.deepSeekDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.deepSeekEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.deepSeekConcatDummyModel;
-                    } else if (providerForSettingsB === 'llmaggregator') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.llmAggregatorTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.llmAggregatorMaxTokens;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.llmAggregatorTopP;
-                        contextLlmAggregatorTopK = sourceSessionContext.topK ?? state.settings.llmAggregatorTopK;
-                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.llmAggregatorIncludeThoughts;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.llmAggregatorStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.llmAggregatorStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.llmAggregatorDummyUser;
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.llmAggregatorEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.llmAggregatorDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.llmAggregatorEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.llmAggregatorConcatDummyModel;
-                    } else if (providerForSettingsB === 'claude') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.claudeTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.claudeMaxTokens;
-                        contextClaudeTopK = sourceSessionContext.topK ?? state.settings.claudeTopK;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.claudeTopP;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.claudeStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.claudeStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.claudeDummyUser;
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.claudeEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.claudeDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.claudeEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.claudeConcatDummyModel;
-                        contextClaudeIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.claudeIncludeThoughts;
-                        contextClaudeThinkingBudget = sourceSessionContext.thinkingBudget ?? state.settings.claudeThinkingBudget;
-                        contextClaudeExpandThoughtsByDefault = sourceSessionContext.expandThoughtsByDefault ?? state.settings.claudeExpandThoughtsByDefault;
-                    } else if (providerForSettingsB === 'openai') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.openaiTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.openaiMaxTokens;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.openaiTopP;
-                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.openaiPresencePenalty;
-                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.openaiFrequencyPenalty;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.openaiStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.openaiStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.openaiDummyUser;
-                        enableDummyUserB = state.settings.openaiEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.openaiDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.openaiEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.openaiConcatDummyModel;
-                    } else if (providerForSettingsB === 'xai') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.xaiTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.xaiMaxTokens;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.xaiTopP;
-                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.xaiPresencePenalty;
-                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.xaiFrequencyPenalty;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.xaiStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.xaiStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.xaiDummyUser;
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.xaiEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.xaiDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.xaiEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.xaiConcatDummyModel;
-                        contextXaiVisionEnable = sourceSessionContext.visionEnable ?? state.settings.xaiVisionEnable;
-                        contextXaiIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.xaiIncludeThoughts;
-                        contextXaiReasoningEffort = sourceSessionContext.reasoningEffort ?? state.settings.xaiReasoningEffort;
-                    }
-                } else {
-                    if (selectedApiProvider === 'gemini') {
-                        contextTemperature = state.settings.geminiTemperature;
-                        contextMaxTokens = state.settings.geminiMaxTokens;
-                        contextGeminiTopK = state.settings.geminiTopK;
-                        contextTopP = state.settings.geminiTopP;
-                        contextPresencePenalty = state.settings.geminiPresencePenalty;
-                        contextFrequencyPenalty = state.settings.geminiFrequencyPenalty;
-                        contextGeminiThinkingBudget = state.settings.geminiThinkingBudget;
-                        contextGeminiIncludeThoughts = state.settings.geminiIncludeThoughts;
-                        contextStreamingOutput = state.settings.geminiStreamingOutput;
-                        contextStreamingSpeed = state.settings.geminiStreamingSpeed;
-                        contextDummyUser = state.settings.geminiDummyUser;
-                        contextEnableDummyUser = state.settings.geminiEnableDummyUser;
-                        contextDummyModel = state.settings.geminiDummyModel;
-                        contextEnableDummyModel = state.settings.geminiEnableDummyModel;
-                        contextConcatDummyModel = state.settings.geminiConcatDummyModel;
-                        contextGeminiPseudoStreaming = state.settings.geminiPseudoStreaming;
-                        contextGeminiEnableGrounding = state.settings.geminiEnableGrounding;
-                    } else if (selectedApiProvider === 'deepseek') {
-                        contextTemperature = state.settings.deepSeekTemperature;
-                        contextMaxTokens = state.settings.deepSeekMaxTokens;
-                        contextTopP = state.settings.deepSeekTopP;
-                        contextPresencePenalty = state.settings.deepSeekPresencePenalty;
-                        contextFrequencyPenalty = state.settings.deepSeekFrequencyPenalty;
-                        contextDeepSeekIncludeThoughts = state.settings.deepSeekIncludeDeepSeekThoughts;
-                        contextStreamingOutput = state.settings.deepSeekStreamingOutput;
-                        contextStreamingSpeed = state.settings.deepSeekStreamingSpeed;
-                        contextDummyUser = state.settings.deepSeekDummyUser;
-                        contextEnableDummyUser = state.settings.deepSeekEnableDummyUser;
-                        contextDummyModel = state.settings.deepSeekDummyModel;
-                        contextEnableDummyModel = state.settings.deepSeekEnableDummyModel;
-                        contextConcatDummyModel = state.settings.deepSeekConcatDummyModel;
-                    } else if (selectedApiProvider === 'claude') {
-                        contextTemperature = state.settings.claudeTemperature;
-                        contextMaxTokens = state.settings.claudeMaxTokens;
-                        contextClaudeTopK = state.settings.claudeTopK;
-                        contextTopP = state.settings.claudeTopP;
-                        contextStreamingOutput = state.settings.claudeStreamingOutput;
-                        contextStreamingSpeed = state.settings.claudeStreamingSpeed;
-                        contextDummyUser = state.settings.claudeDummyUser;
-                        contextEnableDummyUser = state.settings.claudeEnableDummyUser;
-                        contextDummyModel = state.settings.claudeDummyModel;
-                        contextEnableDummyModel = state.settings.claudeEnableDummyModel;
-                        contextConcatDummyModel = state.settings.claudeConcatDummyModel;
-                        contextClaudeIncludeThoughts = state.settings.claudeIncludeThoughts;
-                        contextClaudeThinkingBudget = state.settings.claudeThinkingBudget;
-                        contextClaudeExpandThoughtsByDefault = state.settings.claudeExpandThoughtsByDefault;
-                    } else if (selectedApiProvider === 'openai') {
-                        contextTemperature = state.settings.openaiTemperature;
-                        contextMaxTokens = state.settings.openaiMaxTokens;
-                        contextTopP = state.settings.openaiTopP;
-                        contextPresencePenalty = state.settings.openaiPresencePenalty;
-                        contextFrequencyPenalty = state.settings.openaiFrequencyPenalty;
-                        contextStreamingOutput = state.settings.openaiStreamingOutput;
-                        contextStreamingSpeed = state.settings.openaiStreamingSpeed;
-                        contextDummyUser = state.settings.openaiDummyUser;
-                        contextEnableDummyUser = state.settings.openaiEnableDummyUser;
-                        contextDummyModel = state.settings.openaiDummyModel;
-                        contextEnableDummyModel = state.settings.openaiEnableDummyModel;
-                        contextConcatDummyModel = state.settings.openaiConcatDummyModel;
-                    } else if (selectedApiProvider === 'xai') {
-                        contextTemperature = state.settings.xaiTemperature;
-                        contextMaxTokens = state.settings.xaiMaxTokens;
-                        contextTopP = state.settings.xaiTopP;
-                        contextPresencePenalty = state.settings.xaiPresencePenalty;
-                        contextFrequencyPenalty = state.settings.xaiFrequencyPenalty;
-                        contextStreamingOutput = state.settings.xaiStreamingOutput;
-                        contextStreamingSpeed = state.settings.xaiStreamingSpeed;
-                        contextDummyUser = state.settings.xaiDummyUser;
-                        contextEnableDummyUser = state.settings.xaiEnableDummyUser;
-                        contextDummyModel = state.settings.xaiDummyModel;
-                        contextEnableDummyModel = state.settings.xaiEnableDummyModel;
-                        contextConcatDummyModel = state.settings.xaiConcatDummyModel;
-                        contextXaiVisionEnable = state.settings.xaiVisionEnable;
-                        contextXaiIncludeThoughts = state.settings.xaiIncludeThoughts;
-                        contextXaiReasoningEffort = state.settings.xaiReasoningEffort;
-                    } else if (selectedApiProvider === 'llmaggregator') {
-                        contextTemperature = state.settings.llmAggregatorTemperature;
-                        contextMaxTokens = state.settings.llmAggregatorMaxTokens;
-                        contextTopP = state.settings.llmAggregatorTopP;
-                        contextLlmAggregatorTopK = state.settings.llmAggregatorTopK;
-                        contextPresencePenalty = state.settings.llmAggregatorPresencePenalty;
-                        contextFrequencyPenalty = state.settings.llmAggregatorFrequencyPenalty;
-                        contextDeepSeekIncludeThoughts = state.settings.llmAggregatorIncludeThoughts;
-                        contextStreamingOutput = state.settings.llmAggregatorStreamingOutput;
-                        contextStreamingSpeed = state.settings.llmAggregatorStreamingSpeed;
-                        contextDummyUser = state.settings.llmAggregatorDummyUser;
-                        contextEnableDummyUser = state.settings.llmAggregatorEnableDummyUser;
-                        contextDummyModel = state.settings.llmAggregatorDummyModel;
-                        contextEnableDummyModel = state.settings.llmAggregatorEnableDummyModel;
-                        contextConcatDummyModel = state.settings.llmAggregatorConcatDummyModel;
-                    }
-                }
-
+    if (provider === 'gemini') {
+        contextGeminiTopK = settingsSource.topK;
+        contextGeminiThinkingBudget = settingsSource.thinkingBudget;
+        contextGeminiIncludeThoughts = settingsSource.includeThoughts;
+        contextGeminiPseudoStreaming = settingsSource.pseudoStreaming;
+        contextGeminiEnableGrounding = settingsSource.enableGrounding;
+    } else if (provider === 'deepseek' || provider === 'llmaggregator') {
+        contextDeepSeekIncludeThoughts = settingsSource.includeThoughts;
+        if (provider === 'llmaggregator') contextLlmAggregatorTopK = settingsSource.topK;
+    } else if (provider === 'claude') {
+        contextClaudeTopK = settingsSource.topK;
+        contextClaudeIncludeThoughts = settingsSource.includeThoughts;
+        contextClaudeThinkingBudget = settingsSource.thinkingBudget;
+        contextClaudeExpandThoughtsByDefault = settingsSource.expandThoughtsByDefault;
+    } else if (provider === 'xai') {
+        contextXaiVisionEnable = settingsSource.visionEnable;
+        contextXaiIncludeThoughts = settingsSource.includeThoughts;
+        contextXaiReasoningEffort = settingsSource.reasoningEffort;
+    }
+} else {
+    const valIfEnabled = (key) => state.settings[key + 'Enabled'] ? state.settings[key] : null;
+    
+    if (selectedApiProvider === 'gemini') {
+        contextTemperature = valIfEnabled('geminiTemperature');
+        contextMaxTokens = valIfEnabled('geminiMaxTokens');
+        contextGeminiTopK = valIfEnabled('geminiTopK');
+        contextTopP = valIfEnabled('geminiTopP');
+        contextPresencePenalty = valIfEnabled('geminiPresencePenalty');
+        contextFrequencyPenalty = valIfEnabled('geminiFrequencyPenalty');
+        contextGeminiThinkingBudget = valIfEnabled('geminiThinkingBudget');
+        contextGeminiIncludeThoughts = state.settings.geminiIncludeThoughts;
+        contextStreamingOutput = state.settings.geminiStreamingOutput;
+        contextStreamingSpeed = state.settings.geminiStreamingSpeed;
+        contextDummyUser = state.settings.geminiDummyUser;
+        contextEnableDummyUser = state.settings.geminiEnableDummyUser;
+        contextDummyModel = state.settings.geminiDummyModel;
+        contextEnableDummyModel = state.settings.geminiEnableDummyModel;
+        contextConcatDummyModel = state.settings.geminiConcatDummyModel;
+        contextGeminiPseudoStreaming = state.settings.geminiPseudoStreaming;
+        contextGeminiEnableGrounding = state.settings.geminiEnableGrounding;
+    } else if (selectedApiProvider === 'deepseek') {
+        contextTemperature = valIfEnabled('deepSeekTemperature');
+        contextMaxTokens = valIfEnabled('deepSeekMaxTokens');
+        contextTopP = valIfEnabled('deepSeekTopP');
+        contextPresencePenalty = valIfEnabled('deepSeekPresencePenalty');
+        contextFrequencyPenalty = valIfEnabled('deepSeekFrequencyPenalty');
+        contextDeepSeekIncludeThoughts = state.settings.deepSeekIncludeDeepSeekThoughts;
+        contextStreamingOutput = state.settings.deepSeekStreamingOutput;
+        contextStreamingSpeed = state.settings.deepSeekStreamingSpeed;
+        contextDummyUser = state.settings.deepSeekDummyUser;
+        contextEnableDummyUser = state.settings.deepSeekEnableDummyUser;
+        contextDummyModel = state.settings.deepSeekDummyModel;
+        contextEnableDummyModel = state.settings.deepSeekEnableDummyModel;
+        contextConcatDummyModel = state.settings.deepSeekConcatDummyModel;
+    } else if (selectedApiProvider === 'claude') {
+        contextTemperature = valIfEnabled('claudeTemperature');
+        contextMaxTokens = valIfEnabled('claudeMaxTokens');
+        contextClaudeTopK = valIfEnabled('claudeTopK');
+        contextTopP = valIfEnabled('claudeTopP');
+        contextClaudeThinkingBudget = valIfEnabled('claudeThinkingBudget');
+        contextStreamingOutput = state.settings.claudeStreamingOutput;
+        contextStreamingSpeed = state.settings.claudeStreamingSpeed;
+        contextDummyUser = state.settings.claudeDummyUser;
+        contextEnableDummyUser = state.settings.claudeEnableDummyUser;
+        contextDummyModel = state.settings.claudeDummyModel;
+        contextEnableDummyModel = state.settings.claudeEnableDummyModel;
+        contextConcatDummyModel = state.settings.claudeConcatDummyModel;
+        contextClaudeIncludeThoughts = state.settings.claudeIncludeThoughts;
+        contextClaudeExpandThoughtsByDefault = state.settings.claudeExpandThoughtsByDefault;
+    } else if (selectedApiProvider === 'openai') {
+        contextTemperature = valIfEnabled('openaiTemperature');
+        contextMaxTokens = valIfEnabled('openaiMaxTokens');
+        contextTopP = valIfEnabled('openaiTopP');
+        contextPresencePenalty = valIfEnabled('openaiPresencePenalty');
+        contextFrequencyPenalty = valIfEnabled('openaiFrequencyPenalty');
+        contextStreamingOutput = state.settings.openaiStreamingOutput;
+        contextStreamingSpeed = state.settings.openaiStreamingSpeed;
+        contextDummyUser = state.settings.openaiDummyUser;
+        contextEnableDummyUser = state.settings.openaiEnableDummyUser;
+        contextDummyModel = state.settings.openaiDummyModel;
+        contextEnableDummyModel = state.settings.openaiEnableDummyModel;
+        contextConcatDummyModel = state.settings.openaiConcatDummyModel;
+    } else if (selectedApiProvider === 'xai') {
+        contextTemperature = valIfEnabled('xaiTemperature');
+        contextMaxTokens = valIfEnabled('xaiMaxTokens');
+        contextTopP = valIfEnabled('xaiTopP');
+        contextPresencePenalty = valIfEnabled('xaiPresencePenalty');
+        contextFrequencyPenalty = valIfEnabled('xaiFrequencyPenalty');
+        contextStreamingOutput = state.settings.xaiStreamingOutput;
+        contextStreamingSpeed = state.settings.xaiStreamingSpeed;
+        contextDummyUser = state.settings.xaiDummyUser;
+        contextEnableDummyUser = state.settings.xaiEnableDummyUser;
+        contextDummyModel = state.settings.xaiDummyModel;
+        contextEnableDummyModel = state.settings.xaiEnableDummyModel;
+        contextConcatDummyModel = state.settings.xaiConcatDummyModel;
+        contextXaiVisionEnable = state.settings.xaiVisionEnable;
+        contextXaiIncludeThoughts = state.settings.xaiIncludeThoughts;
+        contextXaiReasoningEffort = state.settings.xaiReasoningEffort;
+    } else if (selectedApiProvider === 'llmaggregator') {
+        contextTemperature = valIfEnabled('llmAggregatorTemperature');
+        contextMaxTokens = valIfEnabled('llmAggregatorMaxTokens');
+        contextTopP = valIfEnabled('llmAggregatorTopP');
+        contextLlmAggregatorTopK = valIfEnabled('llmAggregatorTopK');
+        contextPresencePenalty = valIfEnabled('llmAggregatorPresencePenalty');
+        contextFrequencyPenalty = valIfEnabled('llmAggregatorFrequencyPenalty');
+        contextDeepSeekIncludeThoughts = state.settings.llmAggregatorIncludeThoughts;
+        contextStreamingOutput = state.settings.llmAggregatorStreamingOutput;
+        contextStreamingSpeed = state.settings.llmAggregatorStreamingSpeed;
+        contextDummyUser = state.settings.llmAggregatorDummyUser;
+        contextEnableDummyUser = state.settings.llmAggregatorEnableDummyUser;
+        contextDummyModel = state.settings.llmAggregatorDummyModel;
+        contextEnableDummyModel = state.settings.llmAggregatorEnableDummyModel;
+        contextConcatDummyModel = state.settings.llmAggregatorConcatDummyModel;
+    }
+}
                 if (!apiKeyToUse && selectedApiProvider !== 'dummy') {
                     if (!isBackgroundProcess) {
                         await uiUtils.showCustomAlert(`${selectedApiProvider} APIキーが設定されていません。設定画面を開きます。`);
