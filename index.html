@@ -4952,45 +4952,15 @@ body.pastel-yellow-mode .api-key-help-icon {
                         style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">
                         LLM Aggregator 設定</summary>
                     <div style="margin-top:15px;">
-                        <details open style="margin-bottom: 15px;">
-                            <summary
-                                style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor:pointer; font-weight: normal;">
-                                バックエンド管理
-                            </summary>
-                            <div style="padding-left: 15px; margin-top: 10px;">
-                                <div id="llmaggregator-backends-list" class="api-keys-list"></div>
-                                <button type="button" id="add-llmaggregator-backend-btn" class="add-api-key-btn">新しいバックエンドを追加</button>
+                        <div id="llmaggregator-configs-container">
+                            <label>バックエンド設定:</label>
+                            <div id="llmaggregator-api-keys-list" class="api-keys-list"></div>
+                            <div style="margin-top: 10px;">
+                                <button type="button" id="add-llmaggregator-api-key-btn" class="add-api-key-btn">新しいバックエンド設定を追加</button>
                             </div>
-                        </details>
-                    
-                        <details id="llmaggregator-multi-api-keys-section" class="hidden" style="margin-top: 10px;">
-                            <summary
-                                style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor: pointer; font-weight: normal;">
-                                <span id="llmaggregator-api-keys-title">APIキー管理</span>
-                            </summary>
-                            <div style="padding-left: 15px; margin-top: 10px;">
-                                <div id="llmaggregator-api-keys-list" class="api-keys-list"></div>
-                                <div style="margin-top: -5px; display: flex; gap: 5px; align-items: center;">
-                                    <textarea id="llmaggregator-new-api-keys-input" class="api-key-item-input"
-                                        placeholder="新しいAPIキーを入力..."
-                                        style="flex-grow: 1; margin-bottom: 0; height: 38px; resize: vertical; min-height: 0; padding-top: 10px;"></textarea>
-                                    <button type="button" id="add-llmaggregator-api-key-btn" class="add-api-key-btn"
-                                        style="width: auto; padding: 8px 15px; min-width: 84px;">追加</button>
-                                </div>
-                                <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px; margin-bottom: 15px;">
-                                    ※ カンマ(,)区切りで複数のAPIキーを一括追加<span class="api-key-help-icon" title="一括登録コマンドの使い方">?</span>
-                                </p>
-                                <label class="checkbox-label" style="font-size: 12px; margin-top: -5px;">
-                                    <input type="checkbox" class="js-remove-duplicate-api-keys-toggle">
-                                    重複登録されたAPIキーを削除
-                                </label>
-                                <label class="checkbox-label" style="font-size: 12px; margin-top: -5px;">
-                                    <input type="checkbox" class="js-disable-delete-api-key-confirmation-toggle">
-                                    APIキー削除時の確認ダイアログ
-                                </label>
-                            </div>
-                        </details>
-                    
+                            <div id="llmaggregator-url-error"
+                                style="color: red; font-size: 11px; margin-top: 5px; height: 14px;"></div>
+                        </div>
                         <label for="llmaggregator-model-name" style="margin-top: 15px;">モデル名:</label>
                         <select id="llmaggregator-model-name" aria-label="LLM Aggregator モデル名">
                             <optgroup label="Hugging Faceサンプル">
@@ -5013,6 +4983,7 @@ body.pastel-yellow-mode .api-key-help-icon {
                         <textarea id="llmaggregator-additional-models"
                             placeholder="例: mistralai/Mixtral-8x7B-Instruct-v0.1,another/model"
                             aria-label="LLM Aggregator 追加モデル"></textarea>
+                        </p>
                     </div>
                 </details>
 
@@ -7271,8 +7242,9 @@ const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
             xaiUserDefinedModelsGroup: document.getElementById('xai-user-defined-models-group'),
             xaiAdditionalModelsTextarea: document.getElementById('xai-additional-models'),
             llmAggregatorSettingsGroup: document.getElementById('llmaggregator-settings-group'),
-            addLlmaggregatorBackendBtn: document.getElementById('add-llmaggregator-backend-btn'),
-            llmaggregatorBackendsList: document.getElementById('llmaggregator-backends-list'),
+            llmAggregatorApiBackendInput: document.getElementById('llmaggregator-api-backend'),
+            llmAggregatorUrlError: document.getElementById('llmaggregator-url-error'),
+            llmAggregatorApiKeyInput: document.getElementById('llmaggregator-api-key'),
             llmAggregatorModelNameSelect: document.getElementById('llmaggregator-model-name'),
             llmAggregatorUserDefinedModelsGroup: document.getElementById('llmaggregator-user-defined-models-group'),
             llmAggregatorAdditionalModelsTextarea: document.getElementById('llmaggregator-additional-models'),
@@ -7758,8 +7730,8 @@ geminiIncludeThoughts: false,
                 xaiIncludeThoughts: false,
                 xaiExpandThoughtsByDefault: false,
                 xaiReasoningEffort: 'low',
-                llmaggregatorBackends: [],
-                activeLlmAggregatorBackendId: null,
+                llmAggregatorApiBackend: '',
+                llmAggregatorApiKey: '',
                 llmAggregatorModelName: DEFAULT_LLMAGGREGATOR_MODEL,
                 llmAggregatorAdditionalModels: '',
                 llmAggregatorSystemPrompt: '',
@@ -7905,7 +7877,8 @@ settingsUIDetailsOpenStates: {},
                 xaiApiKeys: [],
                 xaiActiveApiKeyIndex: -1,
                 llmaggregatorApiKeys: [],
-                llmaggregatorActiveApiKeyIndex: -1,
+                llmaggregatorApiConfigs: [],
+                llmaggregatorActiveConfigId: null,
                 twinEngineEnableFullAuto: false,
                 showFooterTwinEngineToggleButton: false,
                 showFooterResummarizeButton: false,
@@ -8360,36 +8333,7 @@ settingsUIDetailsOpenStates: {},
                             delete state.settings.proofreadingModelName;
                             delete state.settings.proofreadingSystemInstruction;
                         }
-if (loadedSettings.llmaggregatorApiBackend !== undefined || loadedSettings.llmaggregatorApiKeys !== undefined) {
-                        if (!loadedSettings.llmaggregatorBackends || loadedSettings.llmaggregatorBackends.length === 0) {
-                            state.settings.llmaggregatorBackends = [];
-                            const oldUrl = loadedSettings.llmaggregatorApiBackend || '';
-                            if (oldUrl) {
-                                const newBackend = {
-                                    id: `migrated-${Date.now()}`,
-                                    label: '以前の設定',
-                                    url: oldUrl,
-                                    apiKeys: loadedSettings.llmaggregatorApiKeys || []
-                                };
-                                if (newBackend.apiKeys.length > 0 && !newBackend.apiKeys.some(k => k.isActive)) {
-                                    newBackend.apiKeys[0].isActive = true;
-                                }
-                                state.settings.llmaggregatorBackends.push(newBackend);
-                                state.settings.activeLlmAggregatorBackendId = newBackend.id;
-                            }
-                        }
-                        delete state.settings.llmaggregatorApiBackend;
-                        delete state.settings.llmaggregatorApiKey;
-                        delete state.settings.llmaggregatorApiKeys;
-                        delete state.settings.llmaggregatorActiveApiKeyIndex;
-                    }
 
-                    if (!state.settings.llmaggregatorBackends) {
-                        state.settings.llmaggregatorBackends = [];
-                    }
-                    if (!state.settings.activeLlmAggregatorBackendId) {
-                        state.settings.activeLlmAggregatorBackendId = null;
-                    }
                         resolve(state.settings);
                     };
                     request.onerror = (event) => reject(`設定読み込みエラー: ${event.target.error}`);
@@ -10418,8 +10362,8 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 elements.xaiApiKeyInput.value = state.settings.xaiApiKey || '';
                 elements.xaiModelNameSelect.value = state.settings.xaiModelName || DEFAULT_XAI_MODEL;
                 elements.xaiAdditionalModelsTextarea.value = state.settings.xaiAdditionalModels || '';
-
-llmAggregatorBackendUtils.renderList();
+                elements.llmAggregatorApiBackendInput.value = state.settings.llmAggregatorApiBackend || '';
+                elements.llmAggregatorApiKeyInput.value = state.settings.llmAggregatorApiKey || '';
                 elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
                 elements.llmAggregatorAdditionalModelsTextarea.value = state.settings.llmAggregatorAdditionalModels || '';
 
@@ -12109,7 +12053,6 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     state.currentScreen = 'chat';
 
                     updateMessageMaxWidthVar();
-                    llmAggregatorBackendUtils.initialize();
                     webhookUtils.initialize();
                     proofreadingApiConfigUtils.initialize();
                     const deleteConfirmCheckboxes = document.querySelectorAll('.js-disable-delete-api-key-confirmation-toggle');
@@ -14037,15 +13980,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                             case 'claude': apiKeyToUse = state.settings.claudeApiKey; break;
                             case 'openai': apiKeyToUse = state.settings.openaiApiKey; break;
                             case 'xai': apiKeyToUse = state.settings.xaiApiKey; break;
-                            case 'llmaggregator': 
-                                const activeBackend = state.settings.llmaggregatorBackends.find(b => b.id === state.settings.activeLlmAggregatorBackendId);
-                                if (activeBackend) {
-                                    const activeKey = activeBackend.apiKeys.find(k => k.isActive);
-                                    apiKeyToUse = activeKey ? activeKey.value : (activeBackend.apiKeys.length > 0 ? activeBackend.apiKeys[0].value : '');
-                                } else {
-                                    apiKeyToUse = '';
-                                }
-                                break;
+                            case 'llmaggregator': apiKeyToUse = state.settings.llmAggregatorApiKey; break;
                         }
                     }
                     switch (selectedApiProvider) {
@@ -14440,15 +14375,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 }
 
                 if (selectedApiProvider === 'llmaggregator') {
-                    const activeBackend = state.settings.llmaggregatorBackends.find(b => b.id === state.settings.activeLlmAggregatorBackendId);
-                    if (!activeBackend || !activeBackend.url) {
-                        if (!isBackgroundProcess) {
-                            await uiUtils.showCustomAlert('LLM AggregatorのアクティブなバックエンドURLが設定されていません。');
-                            uiUtils.showScreen('settings');
-                        }
-                        return "バックエンド未設定";
-                    }
-                    if (!isAllowedAggregatorDomain(activeBackend.url)) {
+                    if (!isAllowedAggregatorDomain(state.settings.llmAggregatorApiBackend)) {
                         if (!isBackgroundProcess) {
                             await uiUtils.showCustomAlert('LLM AggregatorのバックエンドURLがホワイトリスト外のため、送信できません。設定を確認してください。');
                             uiUtils.showScreen('settings');
@@ -15808,7 +15735,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                     newSettings.claudeApiKey = elements.claudeApiKeyInput.value.trim();
                     newSettings.openaiApiKey = elements.openaiApiKeyInput.value.trim();
                     newSettings.xaiApiKey = elements.xaiApiKeyInput.value.trim();
-
+                    newSettings.llmAggregatorApiKey = elements.llmAggregatorApiKeyInput.value.trim();
                 }
 
                 newSettings.apiProvider = elements.apiProviderSelect.value;
@@ -15918,9 +15845,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.xaiConcatDummyModel = elements.xaiConcatDummyModelCheckbox.checked;
                 newSettings.xaiVisionEnable = elements.xaiVisionEnableCheckbox.checked;
 
-
-newSettings.llmaggregatorBackends = state.settings.llmaggregatorBackends;
-                newSettings.activeLlmAggregatorBackendId = state.settings.activeLlmAggregatorBackendId;
+                newSettings.llmAggregatorApiBackend = elements.llmAggregatorApiBackendInput.value.trim();
                 newSettings.llmAggregatorModelName = elements.llmAggregatorModelNameSelect.value;
                 newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalModelsTextarea.value.trim();
                 newSettings.llmAggregatorSystemPrompt = elements.llmAggregatorSystemPromptDefaultTextarea.value.trim();
@@ -17738,176 +17663,6 @@ newSettings.llmaggregatorBackends = state.settings.llmaggregatorBackends;
                 dialog.showModal();
             },
         };
-        const llmAggregatorBackendUtils = {
-            MAX_BACKENDS: 10,
-        
-            initialize() {
-                elements.addLlmaggregatorBackendBtn.addEventListener('click', () => this.addBackend());
-                this.renderList();
-            },
-        
-            addBackend() {
-                const backends = state.settings.llmaggregatorBackends;
-                if (backends.length >= this.MAX_BACKENDS) {
-                    uiUtils.showCustomAlert(`最大${this.MAX_BACKENDS}個までのバックエンドを登録できます。`);
-                    return;
-                }
-                const newBackend = {
-                    id: `backend-${Date.now()}`,
-                    label: `バックエンド ${backends.length + 1}`,
-                    url: '',
-                    apiKeys: []
-                };
-                backends.push(newBackend);
-                if (backends.length === 1) {
-                    this.selectBackend(newBackend.id);
-                }
-                this.renderList();
-            },
-            
-            async deleteBackend(backendId) {
-                const backends = state.settings.llmaggregatorBackends;
-                const backend = backends.find(b => b.id === backendId);
-                if (!backend) return;
-                
-                const confirmed = await uiUtils.showCustomConfirm(`バックエンド「${backend.label}」を削除しますか？\n関連するAPIキーもすべて削除されます。`);
-                if (confirmed) {
-                    state.settings.llmaggregatorBackends = backends.filter(b => b.id !== backendId);
-                    if (state.settings.activeLlmAggregatorBackendId === backendId) {
-                        const newActiveId = state.settings.llmaggregatorBackends.length > 0 ? state.settings.llmaggregatorBackends[0].id : null;
-                        this.selectBackend(newActiveId);
-                    }
-                    this.renderList();
-                }
-            },
-        
-            selectBackend(backendId) {
-                state.settings.activeLlmAggregatorBackendId = backendId;
-                this.renderList();
-                multiApiKeyUtils.renderApiKeyList('llmaggregator');
-                const container = elements.llmaggregatorBackendsList;
-                if (container) {
-                    container.dispatchEvent(new Event('change', { bubbles: true }));
-                }
-            },
-        
-            updateBackendValue(backendId, key, value) {
-                const backend = state.settings.llmaggregatorBackends.find(b => b.id === backendId);
-                if (backend) {
-                    backend[key] = value;
-                    if(key === 'label') {
-                        this.renderList();
-                    }
-                }
-            },
-        
-            renderList() {
-                const backends = state.settings.llmaggregatorBackends;
-                const container = elements.llmaggregatorBackendsList;
-                container.innerHTML = '';
-        
-                if (backends.length === 0) {
-                    container.innerHTML = '<p style="color: var(--text-secondary); font-size: 13px; text-align: center; margin: 10px 0;">バックエンドURLが設定されていません。</p>';
-                } else {
-                    backends.forEach(backend => {
-                        container.appendChild(this.createBackendItem(backend));
-                    });
-                }
-                elements.addLlmaggregatorBackendBtn.disabled = backends.length >= this.MAX_BACKENDS;
-                
-                const apiKeySection = document.getElementById('llmaggregator-multi-api-keys-section');
-                const apiKeyTitle = document.getElementById('llmaggregator-api-keys-title');
-                const activeBackend = backends.find(b => b.id === state.settings.activeLlmAggregatorBackendId);
-                
-                if (activeBackend) {
-                    apiKeySection.classList.remove('hidden');
-                    apiKeyTitle.textContent = `APIキー管理 (${activeBackend.label})`;
-                } else {
-                    apiKeySection.classList.add('hidden');
-                    apiKeyTitle.textContent = 'APIキー管理';
-                }
-            },
-        
-            createBackendItem(backend) {
-                const item = document.createElement('div');
-                item.className = 'api-key-item';
-                item.style.flexDirection = 'column';
-                const isActive = state.settings.activeLlmAggregatorBackendId === backend.id;
-                if (isActive) item.classList.add('active');
-        
-                const row = document.createElement('div');
-                row.style.display = 'flex';
-                row.style.gap = '8px';
-                row.style.alignItems = 'center';
-                row.style.width = '100%';
-        
-                const labelInput = document.createElement('input');
-                labelInput.type = 'text';
-                labelInput.className = 'api-key-item-label';
-                labelInput.value = backend.label;
-                labelInput.placeholder = 'ラベル (例: OpenRouter)';
-                labelInput.style.flex = '1 1 120px';
-                labelInput.addEventListener('change', (e) => this.updateBackendValue(backend.id, 'label', e.target.value));
-        
-                const urlInput = document.createElement('input');
-                urlInput.type = 'text';
-                urlInput.className = 'api-key-item-input';
-                urlInput.value = backend.url;
-                urlInput.placeholder = 'https://...';
-                urlInput.style.flex = '1 1 200px';
-                urlInput.addEventListener('change', (e) => this.updateBackendValue(backend.id, 'url', e.target.value));
-                
-                const urlError = document.createElement('div');
-                urlError.style.color = 'red';
-                urlError.style.fontSize = '11px';
-                urlError.style.position = 'absolute';
-                urlError.style.bottom = '-15px';
-                urlError.style.left = '0';
-                
-                const validateUrl = () => {
-                    if (urlInput.value && !isAllowedAggregatorDomain(urlInput.value)) {
-                        urlError.textContent = '許可されないドメインです。';
-                    } else {
-                        urlError.textContent = '';
-                    }
-                };
-                urlInput.addEventListener('input', validateUrl);
-                urlInput.addEventListener('blur', validateUrl);
-                validateUrl();
-        
-                const actions = document.createElement('div');
-                actions.className = 'api-key-item-actions';
-        
-                const selectBtn = document.createElement('button');
-                selectBtn.className = `api-key-select-btn ${isActive ? 'active' : ''}`;
-                selectBtn.textContent = isActive ? '使用中' : '選択';
-                selectBtn.disabled = isActive;
-                selectBtn.addEventListener('click', () => this.selectBackend(backend.id));
-                
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'api-key-delete-btn';
-                deleteBtn.textContent = '削';
-                deleteBtn.addEventListener('click', () => this.deleteBackend(backend.id));
-                
-                actions.appendChild(selectBtn);
-                actions.appendChild(deleteBtn);
-                
-                row.appendChild(labelInput);
-                
-                const urlContainer = document.createElement('div');
-                urlContainer.style.position = 'relative';
-                urlContainer.style.flex = '1 1 200px';
-                urlContainer.appendChild(urlInput);
-                urlContainer.appendChild(urlError);
-        
-                row.appendChild(urlContainer);
-                row.appendChild(actions);
-                
-                item.appendChild(row);
-                
-                return item;
-            }
-        };
         const webhookUtils = {
             MAX_WEBHOOKS: 10,
 
@@ -18238,16 +17993,18 @@ newSettings.llmaggregatorBackends = state.settings.llmaggregatorBackends;
             },
             async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
                 let baseUrl;
+                let finalApiKey = apiKey;
+
                 if (provider === 'llmaggregator') {
-                    const activeBackend = state.settings.llmaggregatorBackends.find(b => b.id === state.settings.activeLlmAggregatorBackendId);
-                    baseUrl = activeBackend ? activeBackend.url : '';
-                    if (!baseUrl) {
-                        throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
+                    const activeConfig = state.settings.llmaggregatorApiConfigs.find(c => c.id === state.settings.llmaggregatorActiveConfigId);
+                    if (!activeConfig || !activeConfig.url) {
+                        throw new Error("LLM AggregatorのアクティブなバックエンドURLが設定されていません。");
                     }
+                    baseUrl = activeConfig.url;
+                    finalApiKey = activeConfig.value;
                 } else {
                     baseUrl = state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
                 }
-
                 if (!apiKey) {
                     throw new Error(`${provider.toUpperCase()} APIキーが設定されていません。`);
                 }
@@ -18291,9 +18048,9 @@ newSettings.llmaggregatorBackends = state.settings.llmaggregatorBackends;
                 try {
                     const response = await fetch(endpoint, {
                         method: 'POST',
-                        headers: {
+headers: {
                             'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${apiKey}`
+                            'Authorization': `Bearer ${finalApiKey}`
                         },
                         body: JSON.stringify(dsRequestBody),
                         signal
@@ -18665,14 +18422,17 @@ newSettings.llmaggregatorBackends = state.settings.llmaggregatorBackends;
             },
             async callOpenAICompatibleApi(apiKey, model, provider, messagesForApi, generationConfig, systemInstruction, useStreaming, enableVision) {
                 let baseUrl;
+                let finalApiKey = apiKey;
 
                 if (provider === 'openai') {
                     baseUrl = OPENAI_API_BASE_URL;
                 } else if (provider === 'llmaggregator') {
-                    baseUrl = state.settings.llmAggregatorApiBackend;
-                    if (!baseUrl) {
-                        throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
+                    const activeConfig = state.settings.llmaggregatorApiConfigs.find(c => c.id === state.settings.llmaggregatorActiveConfigId);
+                    if (!activeConfig || !activeConfig.url) {
+                        throw new Error("LLM AggregatorのアクティブなバックエンドURLが設定されていません。");
                     }
+                    baseUrl = activeConfig.url;
+                    finalApiKey = activeConfig.value;
                 } else {
                     throw new Error(`Unsupported provider for callOpenAICompatibleApi: ${provider}`);
                 }
@@ -18686,7 +18446,7 @@ newSettings.llmaggregatorBackends = state.settings.llmaggregatorBackends;
 
                 const headers = {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${apiKey}`
+                    "Authorization": `Bearer ${finalApiKey}`
                 };
 
                 const body = this._createOpenAICompatibleRequestBody(
@@ -18806,7 +18566,7 @@ newSettings.llmaggregatorBackends = state.settings.llmaggregatorBackends;
 
                 const headers = {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${apiKey}`
+                    "Authorization": `Bearer ${finalApiKey}`
                 };
 
                 const body = this._createOpenAICompatibleRequestBody(
@@ -19273,16 +19033,10 @@ const multiApiKeyUtils = {
             
             async handleBatchAddApiKeys(inputText) {
                 const commands = inputText.split(',').map(cmd => cmd.trim()).filter(cmd => cmd);
-                
                 const prefixes = Object.keys(this.providerPrefixMap).join('|');
                 const regex = new RegExp(`^(${prefixes}):\\s*([^\\s]+)$`, 'i');
-
-                const results = {
-                    success: {},
-                    failed: {}
-                };
+                const results = { success: {}, failed: {} };
                 let commandsFound = 0;
-
                 for (const command of commands) {
                     const match = command.match(regex);
                     if (match) {
@@ -19290,16 +19044,11 @@ const multiApiKeyUtils = {
                         const prefix = match[1].toLowerCase();
                         const keyValue = match[2];
                         const provider = this.providerPrefixMap[prefix];
-
                         if (provider && keyValue) {
+                            if (provider === 'llmaggregator') continue;
                             const keys = this.getApiKeysArray(provider);
-
-                            if (state.settings.removeDuplicateApiKeys && keys.some(k => k.value === keyValue)) {
-                                // 重複しているのでスキップ
-                                continue;
-                            }
-
                             if (keys.length < this.MAX_API_KEYS) {
+                                if (state.settings.removeDuplicateApiKeys && keys.some(k => k.value === keyValue)) continue;
                                 const newKey = {
                                     id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
                                     label: `キー ${keys.length + 1}`,
@@ -19307,9 +19056,7 @@ const multiApiKeyUtils = {
                                     isActive: keys.length === 0
                                 };
                                 keys.push(newKey);
-                                if (newKey.isActive) {
-                                    this.setActiveApiKeyIndex(provider, 0);
-                                }
+                                if (newKey.isActive) this.setActiveApiKeyIndex(provider, 0);
                                 results.success[provider] = (results.success[provider] || 0) + 1;
                             } else {
                                 results.failed[provider] = (results.failed[provider] || 0) + 1;
@@ -19317,16 +19064,9 @@ const multiApiKeyUtils = {
                         }
                     }
                 }
-
-                if (commandsFound === 0) {
-                    return;
-                }
-
+                if (commandsFound === 0) return;
                 this.renderAllApiKeyLists();
-                Object.values(this.providerPrefixMap).forEach(p => {
-                    const uniqueProviderName = [...new Set(Object.values(this.providerPrefixMap))].find(name => name === p);
-                    if (uniqueProviderName) this.updateMainApiKeyInput(uniqueProviderName);
-                });
+                Object.keys(results.success).forEach(p => this.updateMainApiKeyInput(p));
             },
 
             initializeMultiApiKeys() {
@@ -19336,175 +19076,180 @@ const multiApiKeyUtils = {
                 elements.addOpenaiApiKeyBtn.addEventListener('click', () => this.addApiKey('openai'));
                 elements.addXaiApiKeyBtn.addEventListener('click', () => this.addApiKey('xai'));
                 elements.addLlmaggregatorApiKeyBtn.addEventListener('click', () => this.addApiKey('llmaggregator'));
-
                 this.renderAllApiKeyLists();
             },
 
-if (provider === 'llmaggregator' && !state.settings.activeLlmAggregatorBackendId) {
-                    uiUtils.showCustomAlert('APIキーを追加する前に、使用するバックエンドを選択してください。');
-                    return;
-                }
             async addApiKey(provider) {
-                const inputElement = document.getElementById(`${provider}-new-api-keys-input`);
-                if (!inputElement) return;
-                const inputText = inputElement.value; // .trim() を削除
-
-                const prefixes = Object.keys(this.providerPrefixMap).join('|');
-                const commandRegex = new RegExp(`(?:^|\\s|,|\\n)(${prefixes}):`, 'i');
-
-                if (commandRegex.test(inputText)) {
-                    await this.handleBatchAddApiKeys(inputText);
-                    this.clearAllNewKeyTextareas();
-                    return;
-                }
-
-                const keys = this.getApiKeysArray(provider);
-                const keysToAdd = inputText.split(',')
-                    .map(key => key.trim())
-                    .filter(key => key !== '');
-
-                if (keysToAdd.length === 0) {
-                    uiUtils.showCustomAlert('追加するAPIキーを入力してください。');
-                    return;
-                }
-
-                let addedCount = 0;
-                let duplicateCount = 0;
-
-                const wasEmpty = keys.length === 0;
-
-                keysToAdd.forEach(keyValue => {
-                    if (state.settings.removeDuplicateApiKeys && keys.some(k => k.value === keyValue)) {
-                        duplicateCount++;
-                        return; 
-                    }
-
-                    if (keys.length >= this.MAX_API_KEYS) {
-
+                if (provider === 'llmaggregator') {
+                    const configs = state.settings.llmaggregatorApiConfigs;
+                    if (configs.length >= this.MAX_API_KEYS) {
+                        uiUtils.showCustomAlert(`最大${this.MAX_API_KEYS}個までのバックエンド設定を追加できます。`);
                         return;
                     }
-
-                    const newKey = {
+                    const newConfig = {
                         id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-                        label: `キー ${keys.length + 1}`,
-                        value: keyValue,
-                        isActive: false
+                        label: `バックエンド ${configs.length + 1}`,
+                        url: '',
+                        value: '',
+                        isActive: configs.length === 0,
                     };
-                    keys.push(newKey);
-                    addedCount++;
-                });
-
-
-                if (addedCount === 0) {
+                    configs.push(newConfig);
+                    if (newConfig.isActive) state.settings.llmaggregatorActiveConfigId = newConfig.id;
+                } else {
+                    const inputElement = document.getElementById(`${provider}-new-api-keys-input`);
+                    if (!inputElement) return;
+                    const inputText = inputElement.value;
+                    const prefixes = Object.keys(this.providerPrefixMap).join('|');
+                    const commandRegex = new RegExp(`(?:^|\\s|,|\\n)(${prefixes}):`, 'i');
+                    if (commandRegex.test(inputText)) {
+                        await this.handleBatchAddApiKeys(inputText);
+                        this.clearAllNewKeyTextareas();
+                        return;
+                    }
+                    const keys = this.getApiKeysArray(provider);
+                    const keysToAdd = inputText.split(',').map(key => key.trim()).filter(key => key !== '');
+                    if (keysToAdd.length === 0) {
+                        uiUtils.showCustomAlert('追加するAPIキーを入力してください。');
+                        return;
+                    }
+                    if (keys.length + keysToAdd.length > this.MAX_API_KEYS) {
+                        uiUtils.showCustomAlert(`最大${this.MAX_API_KEYS}個までのAPIキーを設定できます。`);
+                        return;
+                    }
+                    let addedCount = 0;
+                    let duplicateCount = 0;
+                    const wasEmpty = keys.length === 0;
+                    keysToAdd.forEach(keyValue => {
+                        if (state.settings.removeDuplicateApiKeys && keys.some(k => k.value === keyValue)) {
+                            duplicateCount++;
+                            return;
+                        }
+                        if (keys.length >= this.MAX_API_KEYS) return;
+                        const newKey = {
+                            id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                            label: `キー ${keys.length + 1}`,
+                            value: keyValue,
+                            isActive: false
+                        };
+                        keys.push(newKey);
+                        addedCount++;
+                    });
+                    if (duplicateCount > 0) uiUtils.showCustomAlert(`${duplicateCount}件のAPIキーは既に存在するため、追加されませんでした。`);
+                    if (addedCount === 0) {
+                        inputElement.value = '';
+                        return;
+                    }
+                    if (wasEmpty && keys.length > 0) {
+                        keys[0].isActive = true;
+                        this.setActiveApiKeyIndex(provider, 0);
+                    }
                     inputElement.value = '';
-                    return;
                 }
-
-                if (keys.length + keysToAdd.length > this.MAX_API_KEYS) {
-                    uiUtils.showCustomAlert(`最大${this.MAX_API_KEYS}個までのAPIキーを設定できます。現在のキー数: ${keys.length}, 追加しようとしたキー数: ${keysToAdd.length}`);
-                    return;
-                }
-
-
-                if (wasEmpty && keys.length > 0) {
-                    keys[0].isActive = true;
-                    this.setActiveApiKeyIndex(provider, 0);
-                }
-
-                inputElement.value = '';
                 this.renderApiKeyList(provider);
                 this.updateMainApiKeyInput(provider);
                 uiUtils.updateApiKeyCycleButtons();
             },
             
             clearAllNewKeyTextareas() {
-                const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'];
+                const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai'];
                 providers.forEach(provider => {
                     const inputElement = document.getElementById(`${provider}-new-api-keys-input`);
-                    if (inputElement) {
-                        inputElement.value = '';
-                    }
+                    if (inputElement) inputElement.value = '';
                 });
             },
             
             async deleteApiKey(provider, keyId) {
-                const keys = this.getApiKeysArray(provider);
-                const keyIndex = keys.findIndex(key => key.id === keyId);
-                if (keyIndex === -1) return;
+                if (provider === 'llmaggregator') {
+                    const configs = state.settings.llmaggregatorApiConfigs;
+                    const configIndex = configs.findIndex(c => c.id === keyId);
+                    if (configIndex === -1) return;
+                    const configToDelete = configs[configIndex];
+                    const confirmed = state.settings.disableDeleteApiKeyConfirmation ? true : await uiUtils.showCustomConfirm(`バックエンド設定「${configToDelete.label}」を削除しますか？`);
+                    if (!confirmed) return;
+                    
+                    const wasActive = configToDelete.isActive;
+                    configs.splice(configIndex, 1);
+                    if (wasActive && configs.length > 0) {
+                        const newActiveIndex = Math.min(configIndex, configs.length - 1);
+                        configs[newActiveIndex].isActive = true;
+                        state.settings.llmaggregatorActiveConfigId = configs[newActiveIndex].id;
+                    } else if (configs.length === 0) {
+                        state.settings.llmaggregatorActiveConfigId = null;
+                    }
+                } else {
+                    const keys = this.getApiKeysArray(provider);
+                    const keyIndex = keys.findIndex(key => key.id === keyId);
+                    if (keyIndex === -1) return;
+                    const keyToDelete = keys[keyIndex];
+                    let confirmed = state.settings.disableDeleteApiKeyConfirmation ? true : await uiUtils.showCustomConfirm(`APIキー「${keyToDelete.label}」を削除しますか？`);
+                    if (!confirmed) return;
 
-                const keyToDelete = keys[keyIndex];
-                let confirmed = false;
-if (state.settings.disableDeleteApiKeyConfirmation) {
-    confirmed = await uiUtils.showCustomConfirm(
-        `APIキー「${keyToDelete.label}」を削除しますか？`
-    );
-} else {
-    confirmed = true;
-}
-                if (!confirmed) return;
-
-                const wasActive = keyToDelete.isActive;
-                keys.splice(keyIndex, 1);
-
-                if (wasActive && keys.length > 0) {
-                    const newActiveIndex = Math.min(keyIndex, keys.length - 1);
-                    keys[newActiveIndex].isActive = true;
-                    this.setActiveApiKeyIndex(provider, newActiveIndex);
-                } else if (keys.length === 0) {
-                    this.setActiveApiKeyIndex(provider, -1);
+                    const wasActive = keyToDelete.isActive;
+                    keys.splice(keyIndex, 1);
+                    if (wasActive && keys.length > 0) {
+                        const newActiveIndex = Math.min(keyIndex, keys.length - 1);
+                        keys[newActiveIndex].isActive = true;
+                        this.setActiveApiKeyIndex(provider, newActiveIndex);
+                    } else if (keys.length === 0) {
+                        this.setActiveApiKeyIndex(provider, -1);
+                    }
                 }
-
                 this.renderApiKeyList(provider);
                 this.updateMainApiKeyInput(provider);
                 uiUtils.updateApiKeyCycleButtons();
             },
 
             selectApiKey(provider, keyId) {
-                const keys = this.getApiKeysArray(provider);
-                const selectedIndex = keys.findIndex(key => key.id === keyId);
-                if (selectedIndex === -1) return;
-
-                keys.forEach((key, index) => {
-                    key.isActive = index === selectedIndex;
-                });
-
-                this.setActiveApiKeyIndex(provider, selectedIndex);
+                if (provider === 'llmaggregator') {
+                    const configs = state.settings.llmaggregatorApiConfigs;
+                    configs.forEach(c => c.isActive = (c.id === keyId));
+                    state.settings.llmaggregatorActiveConfigId = keyId;
+                } else {
+                    const keys = this.getApiKeysArray(provider);
+                    const selectedIndex = keys.findIndex(key => key.id === keyId);
+                    if (selectedIndex === -1) return;
+                    keys.forEach((key, index) => key.isActive = index === selectedIndex);
+                    this.setActiveApiKeyIndex(provider, selectedIndex);
+                }
                 this.renderApiKeyList(provider);
                 this.updateMainApiKeyInput(provider);
                 uiUtils.updateApiKeyCycleButtons();
-
                 const container = this.getListContainer(provider);
-                if (container) {
-                    container.dispatchEvent(new Event('change', { bubbles: true }));
-                }
+                if (container) container.dispatchEvent(new Event('change', { bubbles: true }));
             },
 
             updateApiKeyValue(provider, keyId, newValue) {
-                const keys = this.getApiKeysArray(provider);
-                const key = keys.find(k => k.id === keyId);
-                if (key) {
-                    key.value = newValue.trim();
-                    if (key.isActive) {
-                        this.updateMainApiKeyInput(provider);
+                if (provider === 'llmaggregator') {
+                    const config = state.settings.llmaggregatorApiConfigs.find(c => c.id === keyId);
+                    if (config) config.value = newValue.trim();
+                } else {
+                    const keys = this.getApiKeysArray(provider);
+                    const key = keys.find(k => k.id === keyId);
+                    if (key) {
+                        key.value = newValue.trim();
+                        if (key.isActive) this.updateMainApiKeyInput(provider);
                     }
                 }
             },
 
             updateApiKeyLabel(provider, keyId, newLabel) {
-                const keys = this.getApiKeysArray(provider);
-                const key = keys.find(k => k.id === keyId);
-                if (key) {
-                    key.label = newLabel.trim() || `キー ${keys.indexOf(key) + 1}`;
+                 if (provider === 'llmaggregator') {
+                    const config = state.settings.llmaggregatorApiConfigs.find(c => c.id === keyId);
+                    if (config) config.label = newLabel.trim() || `バックエンド ${state.settings.llmaggregatorApiConfigs.indexOf(config) + 1}`;
+                } else {
+                    const keys = this.getApiKeysArray(provider);
+                    const key = keys.find(k => k.id === keyId);
+                    if (key) key.label = newLabel.trim() || `キー ${keys.indexOf(key) + 1}`;
                 }
             },
 
+            updateLlmConfigUrl(keyId, newUrl) {
+                const config = state.settings.llmaggregatorApiConfigs.find(c => c.id === keyId);
+                if (config) config.url = newUrl.trim();
+            },
+
             getApiKeysArray(provider) {
-                if (provider === 'llmaggregator') {
-                    const activeBackendId = state.settings.activeLlmAggregatorBackendId;
-                    if (!activeBackendId) return [];
-                    const activeBackend = state.settings.llmaggregatorBackends.find(b => b.id === activeBackendId);
-                    return activeBackend ? activeBackend.apiKeys : [];
-                }
+                if (provider === 'llmaggregator') return state.settings.llmaggregatorApiConfigs;
                 switch (provider) {
                     case 'gemini': return state.settings.geminiApiKeys;
                     case 'deepseek': return state.settings.deepseekApiKeys;
@@ -19516,15 +19261,6 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             },
 
             setActiveApiKeyIndex(provider, index) {
-                if (provider === 'llmaggregator') {
-                    const activeBackend = state.settings.llmaggregatorBackends.find(b => b.id === state.settings.activeLlmAggregatorBackendId);
-                    if (activeBackend && activeBackend.apiKeys) {
-                        activeBackend.apiKeys.forEach((key, i) => {
-                            key.isActive = (i === index);
-                        });
-                    }
-                    return;
-                }
                 switch (provider) {
                     case 'gemini': state.settings.geminiActiveApiKeyIndex = index; break;
                     case 'deepseek': state.settings.deepseekActiveApiKeyIndex = index; break;
@@ -19535,52 +19271,36 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             },
 
             getActiveApiKey(provider) {
+                if (provider === 'llmaggregator') {
+                    const activeConfig = state.settings.llmaggregatorApiConfigs.find(c => c.isActive);
+                    return activeConfig ? activeConfig.value : '';
+                }
                 const keys = this.getApiKeysArray(provider);
                 const activeKey = keys.find(key => key.isActive);
                 return activeKey ? activeKey.value : '';
             },
 
             updateMainApiKeyInput(provider) {
-                if (!state.settings.showMultiApiKeys) {
-                    return;
-                }
+                if (provider === 'llmaggregator' || !state.settings.showMultiApiKeys) return;
                 const activeKey = this.getActiveApiKey(provider);
-                switch (provider) {
-                    case 'gemini':
-                        elements.geminiApiKeyInput.value = activeKey;
-                        break;
-                    case 'deepseek':
-                        elements.deepSeekApiKeyInput.value = activeKey;
-                        break;
-                    case 'claude':
-                        elements.claudeApiKeyInput.value = activeKey;
-                        break;
-                    case 'openai':
-                        elements.openaiApiKeyInput.value = activeKey;
-                        break;
-                    case 'xai':
-                        elements.xaiApiKeyInput.value = activeKey;
-                        break;
-                    case 'llmaggregator':
-                        elements.llmAggregatorApiKeyInput.value = activeKey;
-                        break;
-                }
+                const inputElement = document.getElementById(provider === 'gemini' ? 'gemini-api-key' : `${provider}-api-key`);
+                if (inputElement) inputElement.value = activeKey;
             },
 
             renderApiKeyList(provider) {
+                if (provider === 'llmaggregator') {
+                    this.renderLlmAggregatorConfigList();
+                    return;
+                }
                 const keys = this.getApiKeysArray(provider);
                 const container = this.getListContainer(provider);
                 const addButton = this.getAddButton(provider);
 
                 container.innerHTML = '';
-
                 if (keys.length === 0) {
                     const emptyMsg = document.createElement('p');
                     emptyMsg.textContent = 'APIキーが設定されていません。';
-                    emptyMsg.style.color = 'var(--text-secondary)';
-                    emptyMsg.style.fontSize = '13px';
-                    emptyMsg.style.textAlign = 'center';
-                    emptyMsg.style.margin = '10px 0';
+                    emptyMsg.style.cssText = 'color: var(--text-secondary); font-size: 13px; text-align: center; margin: 10px 0;';
                     container.appendChild(emptyMsg);
                 } else {
                     keys.forEach((key, index) => {
@@ -19588,92 +19308,140 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                         container.appendChild(item);
                     });
                 }
-
                 addButton.disabled = keys.length >= this.MAX_API_KEYS;
-                addButton.textContent = keys.length >= this.MAX_API_KEYS
-                    ? `最大${this.MAX_API_KEYS}個まで`
-                    : '追加';
+                addButton.textContent = keys.length >= this.MAX_API_KEYS ? `最大${this.MAX_API_KEYS}個まで` : '追加';
             },
 
             createApiKeyItem(provider, key, index) {
                 const item = document.createElement('div');
                 item.className = `api-key-item ${key.isActive ? 'active' : ''}`;
-
                 const row1 = document.createElement('div');
                 row1.style.display = 'flex';
                 row1.style.gap = '5px';
-
                 const labelInput = document.createElement('input');
                 labelInput.type = 'text';
                 labelInput.className = 'api-key-item-label';
                 labelInput.value = key.label;
                 labelInput.placeholder = `キー ${index + 1}`;
                 labelInput.style.marginBottom = '0';
-                labelInput.addEventListener('change', (e) => {
-                    this.updateApiKeyLabel(provider, key.id, e.target.value);
-                });
-
+                labelInput.addEventListener('change', (e) => this.updateApiKeyLabel(provider, key.id, e.target.value));
                 const keyInput = document.createElement('input');
                 keyInput.type = 'password';
                 keyInput.className = 'api-key-item-input';
                 keyInput.value = key.value;
                 keyInput.placeholder = 'APIキーを入力...';
                 keyInput.style.marginBottom = '0';
-                keyInput.addEventListener('input', (e) => {
-                    this.updateApiKeyValue(provider, key.id, e.target.value);
-                });
-
+                keyInput.addEventListener('input', (e) => this.updateApiKeyValue(provider, key.id, e.target.value));
                 const actions = document.createElement('div');
                 actions.className = 'api-key-item-actions';
-
                 const selectBtn = document.createElement('button');
                 selectBtn.className = `api-key-select-btn ${key.isActive ? 'active' : ''}`;
-                selectBtn.textContent = key.isActive ? '使用中' : '未選択';
+                selectBtn.textContent = key.isActive ? '使用中' : '選択';
                 selectBtn.disabled = key.isActive;
-                selectBtn.addEventListener('click', () => {
-                    this.selectApiKey(provider, key.id);
-                });
-
+                selectBtn.addEventListener('click', () => this.selectApiKey(provider, key.id));
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'api-key-delete-btn';
                 deleteBtn.textContent = '削';
-                deleteBtn.addEventListener('click', () => {
-                    this.deleteApiKey(provider, key.id);
-                });
-
+                deleteBtn.addEventListener('click', () => this.deleteApiKey(provider, key.id));
                 actions.appendChild(selectBtn);
                 actions.appendChild(deleteBtn);
-
                 row1.appendChild(labelInput);
                 row1.appendChild(keyInput);
                 row1.appendChild(actions);
-
                 item.appendChild(row1);
                 return item;
             },
 
-            getListContainer(provider) {
-                switch (provider) {
-                    case 'gemini': return elements.geminiApiKeysList;
-                    case 'deepseek': return elements.deepseekApiKeysList;
-                    case 'claude': return elements.claudeApiKeysList;
-                    case 'openai': return elements.openaiApiKeysList;
-                    case 'xai': return elements.xaiApiKeysList;
-                    case 'llmaggregator': return elements.llmaggregatorApiKeysList;
-                    default: return null;
+            renderLlmAggregatorConfigList() {
+                const configs = state.settings.llmaggregatorApiConfigs;
+                const container = this.getListContainer('llmaggregator');
+                const addButton = this.getAddButton('llmaggregator');
+                container.innerHTML = '';
+                if (configs.length === 0) {
+                    const emptyMsg = document.createElement('p');
+                    emptyMsg.textContent = 'バックエンド設定がありません。';
+                    emptyMsg.style.cssText = 'color: var(--text-secondary); font-size: 13px; text-align: center; margin: 10px 0;';
+                    container.appendChild(emptyMsg);
+                } else {
+                    configs.forEach((config, index) => {
+                        const item = this.createLlmConfigItem(config, index);
+                        container.appendChild(item);
+                    });
                 }
+                addButton.disabled = configs.length >= this.MAX_API_KEYS;
+                addButton.textContent = configs.length >= this.MAX_API_KEYS ? `最大${this.MAX_API_KEYS}個まで` : '新しいバックエンド設定を追加';
+            },
+            
+            createLlmConfigItem(config, index) {
+                const item = document.createElement('div');
+                item.className = `api-key-item ${config.isActive ? 'active' : ''}`;
+                item.style.flexDirection = 'column';
+                item.style.gap = '5px';
+            
+                const row1 = document.createElement('div');
+                row1.style.display = 'flex';
+                row1.style.gap = '5px';
+                row1.style.alignItems = 'center';
+            
+                const labelInput = document.createElement('input');
+                labelInput.type = 'text';
+                labelInput.className = 'api-key-item-label';
+                labelInput.value = config.label;
+                labelInput.placeholder = `バックエンド ${index + 1}`;
+                labelInput.style.marginBottom = '0';
+                labelInput.addEventListener('change', (e) => this.updateApiKeyLabel('llmaggregator', config.id, e.target.value));
+            
+                const actions = document.createElement('div');
+                actions.className = 'api-key-item-actions';
+                const selectBtn = document.createElement('button');
+                selectBtn.className = `api-key-select-btn ${config.isActive ? 'active' : ''}`;
+                selectBtn.textContent = config.isActive ? '使用中' : '選択';
+                selectBtn.disabled = config.isActive;
+                selectBtn.addEventListener('click', () => this.selectApiKey('llmaggregator', config.id));
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'api-key-delete-btn';
+                deleteBtn.textContent = '削';
+                deleteBtn.addEventListener('click', () => this.deleteApiKey('llmaggregator', config.id));
+                actions.appendChild(selectBtn);
+                actions.appendChild(deleteBtn);
+            
+                row1.appendChild(labelInput);
+                row1.appendChild(actions);
+            
+                const row2 = document.createElement('div');
+                row2.style.display = 'flex';
+                row2.style.gap = '5px';
+            
+                const urlInput = document.createElement('input');
+                urlInput.type = 'text';
+                urlInput.className = 'api-key-item-input';
+                urlInput.value = config.url || '';
+                urlInput.placeholder = 'APIバックエンドURL';
+                urlInput.style.marginBottom = '0';
+                urlInput.addEventListener('change', (e) => this.updateLlmConfigUrl(config.id, e.target.value));
+
+                const keyInput = document.createElement('input');
+                keyInput.type = 'password';
+                keyInput.className = 'api-key-item-input';
+                keyInput.value = config.value || '';
+                keyInput.placeholder = 'APIキー';
+                keyInput.style.marginBottom = '0';
+                keyInput.addEventListener('input', (e) => this.updateApiKeyValue('llmaggregator', config.id, e.target.value));
+
+                row2.appendChild(urlInput);
+                row2.appendChild(keyInput);
+
+                item.appendChild(row1);
+                item.appendChild(row2);
+                return item;
+            },
+
+            getListContainer(provider) {
+                return document.getElementById(`${provider}-api-keys-list`);
             },
 
             getAddButton(provider) {
-                switch (provider) {
-                    case 'gemini': return elements.addGeminiApiKeyBtn;
-                    case 'deepseek': return elements.addDeepseekApiKeyBtn;
-                    case 'claude': return elements.addClaudeApiKeyBtn;
-                    case 'openai': return elements.addOpenaiApiKeyBtn;
-                    case 'xai': return elements.addXaiApiKeyBtn;
-                    case 'llmaggregator': return elements.addLlmaggregatorApiKeyBtn;
-                    default: return null;
-                }
+                return document.getElementById(`add-${provider}-api-key-btn`);
             },
 
             renderAllApiKeyLists() {
@@ -19686,22 +19454,13 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             },
 
             syncMainApiKeyInput(provider) {
-                if (!state.settings.showMultiApiKeys) {
-                    return;
-                }
+                if (provider === 'llmaggregator' || !state.settings.showMultiApiKeys) return;
                 let mainValue = '';
-                switch (provider) {
-                    case 'gemini': mainValue = elements.geminiApiKeyInput.value.trim(); break;
-                    case 'deepseek': mainValue = elements.deepSeekApiKeyInput.value.trim(); break;
-                    case 'claude': mainValue = elements.claudeApiKeyInput.value.trim(); break;
-                    case 'openai': mainValue = elements.openaiApiKeyInput.value.trim(); break;
-                    case 'xai': mainValue = elements.xaiApiKeyInput.value.trim(); break;
-                    case 'llmaggregator': mainValue = elements.llmAggregatorApiKeyInput.value.trim(); break;
-                }
-
+                const inputElement = document.getElementById(provider === 'gemini' ? 'gemini-api-key' : `${provider}-api-key`);
+                if (inputElement) mainValue = inputElement.value.trim();
+                
                 const keys = this.getApiKeysArray(provider);
                 const activeKey = keys.find(key => key.isActive);
-
                 if (activeKey && activeKey.value !== mainValue) {
                     activeKey.value = mainValue;
                     this.renderApiKeyList(provider);
