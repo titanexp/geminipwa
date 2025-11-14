@@ -8128,8 +8128,8 @@ const paramKeys = [
 ];
 paramKeys.forEach(key => {
     const enabledKey = key + 'Enabled';
-    if (loadedSettings[key] !== undefined && loadedSettings[enabledKey] === undefined) {
-        loadedSettings[enabledKey] = loadedSettings[key] !== null;
+    if (loadedSettings[enabledKey] === undefined) {
+        loadedSettings[enabledKey] = loadedSettings[key] !== null && loadedSettings[key] !== undefined;
     }
 });
 
@@ -10392,8 +10392,8 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
     
     const value = state.settings[paramKey] ?? null;
     const enabledKey = paramKey + 'Enabled';
-    const isEnabled = state.settings[enabledKey] ?? (value !== null);
-
+    const isEnabled = state.settings[enabledKey];
+    
     if (checkbox) {
         checkbox.checked = isEnabled;
     }
@@ -10402,28 +10402,22 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
     if (sliderInput) sliderInput.disabled = !isEnabled;
     if (maxInput) maxInput.disabled = !isEnabled;
     
-    if (value !== null) {
+    if (value !== null && value !== undefined) {
         if (numberInput) numberInput.value = value;
         if (sliderInput) sliderInput.value = value;
     } else {
         if (numberInput) numberInput.value = '';
-        if (sliderInput && sliderInput.min !== undefined) {
-            sliderInput.value = sliderInput.min;
+        if (sliderInput) {
+            const defaultValue = sliderInput.getAttribute('data-default') || sliderInput.min || 0;
+            sliderInput.value = defaultValue;
         }
     }
     
     if (maxInput && sliderInput) {
         const storedMax = storageKey ? state.settings[storageKey] : null;
-        const defaultMax = parseFloat(sliderInput.getAttribute('max')) || 100;
-        const maxVal = storedMax ?? defaultMax;
+        const maxVal = storedMax ?? parseFloat(sliderInput.getAttribute('max')) ?? 100;
         sliderInput.max = maxVal;
-        if (storedMax !== null) {
-            maxInput.value = storedMax;
-        } else if (maxInput.placeholder === "上限指定") {
-            maxInput.value = '';
-        } else {
-            maxInput.value = defaultMax;
-        }
+        if(storedMax !== null) maxInput.value = storedMax;
     }
 };
 
