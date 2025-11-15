@@ -4957,6 +4957,21 @@ body.pastel-yellow-mode .api-key-help-icon {
                             aria-label="LLM Aggregator API バックエンド URL">
                         <div id="llmaggregator-url-error"
                             style="color: red; font-size: 11px; margin-top: -5px; height: 14px;"></div>
+                        <details id="llmaggregator-multi-backends-section" class="hidden" style="margin-top: 10px;">
+                            <summary
+                                style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor: pointer; font-weight: normal;">
+                                複数バックエンドURL管理 (LLM Aggregator)</summary>
+                            <div style="padding-left: 15px; margin-top: 10px;">
+                                <div id="llmaggregator-backends-list" class="api-keys-list"></div>
+                                <div style="margin-top: -5px; display: flex; gap: 5px; align-items: center;">
+                                    <textarea id="llmaggregator-new-backends-input" class="api-key-item-input" placeholder="新しいバックエンドURLを入力 (カンマ区切りで複数可)..." style="flex-grow: 1; margin-bottom: 0; height: 38px; resize: vertical; min-height: 0; padding-top: 10px;"></textarea>
+                                    <button type="button" id="add-llmaggregator-backend-btn" class="add-api-key-btn" style="width: auto; padding: 8px 15px; min-width: 84px;">追加</button>
+                                </div>
+                                <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px; margin-bottom: 15px;">
+                                    ※ カンマ(,)区切りで複数のURLを一括追加できます。
+                                </p>
+                            </div>
+                        </details>
                         <label for="llmaggregator-api-key">APIキー:</label>
                         <input type="password" id="llmaggregator-api-key" placeholder="APIキーを入力"
                             aria-label="LLM Aggregator APIキー">
@@ -6403,6 +6418,13 @@ body.pastel-yellow-mode .api-key-help-icon {
                                                 ※ 複数のAPIキーを使い分けたい場合に使用。
                                             </p>
                                             <label class="checkbox-label">
+                                                <input type="checkbox" id="show-multi-backends-toggle">
+                                                複数バックエンドURL管理機能を使用する (LLM Aggregator)
+                                            </label>
+                                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                                                ※ 複数のLLM Aggregatorバックエンドを使い分けたい場合に使用。
+                                            </p>
+                                            <label class="checkbox-label">
                                                 <input type="checkbox" id="show-proofreading-settings-toggle">
                                                 校正機能を使用する
                                             </label>
@@ -7501,6 +7523,7 @@ appVersionSpan: document.getElementById('app-version'),
             disableAttachmentConfirmationToggle: document.getElementById('disable-attachment-confirmation-toggle'),
             addPrefixOnImportToggle: document.getElementById('add-prefix-on-import-toggle'),
             showMultiApiKeysToggle: document.getElementById('show-multi-api-keys-toggle'),
+            showMultiBackendsToggle: document.getElementById('show-multi-backends-toggle'),
             showProofreadingSettingsToggle: document.getElementById('show-proofreading-settings-toggle'),
             proofreadingSettingsGroup: document.getElementById('settings-group-proofreading'),
             showTopCollapseButtonToggle: document.getElementById('show-top-collapse-button-toggle'),
@@ -7617,6 +7640,9 @@ appVersionSpan: document.getElementById('app-version'),
             addXaiApiKeyBtn: document.getElementById('add-xai-api-key-btn'),
             llmaggregatorApiKeysList: document.getElementById('llmaggregator-api-keys-list'),
             addLlmaggregatorApiKeyBtn: document.getElementById('add-llmaggregator-api-key-btn'),
+            llmaggregatorBackendsList: document.getElementById('llmaggregator-backends-list'),
+            addLlmaggregatorBackendBtn: document.getElementById('add-llmaggregator-backend-btn'),
+            llmaggregatorNewBackendsInput: document.getElementById('llmaggregator-new-backends-input'),
             twinEngineSummaryPromptInput: document.getElementById('twin-engine-summary-prompt'),
             twinEngineApiConfigsList: document.getElementById('twin-engine-api-configs-list'),
             addTwinEngineApiConfigBtn: document.getElementById('add-twin-engine-api-config-btn'),
@@ -7755,6 +7781,8 @@ geminiIncludeThoughts: false,
                 xaiReasoningEffort: 'low',
                 llmAggregatorApiBackend: '',
                 llmAggregatorApiKey: '',
+                llmaggregatorBackends: [],
+                llmaggregatorActiveBackendIndex: -1,
                 llmAggregatorModelName: DEFAULT_LLMAGGREGATOR_MODEL,
                 llmAggregatorAdditionalModels: '',
                 llmAggregatorSystemPrompt: '',
@@ -7840,6 +7868,7 @@ geminiIncludeThoughts: false,
                 disableAttachmentConfirmation: false,
                 addPrefixOnImport: true,
                 showMultiApiKeys: false,
+                showMultiBackends: false,
                 showProofreadingSettings: false,
                 disableSaveSettingsConfirmation: false,
                 autoSaveSettings: false,
@@ -8146,6 +8175,16 @@ settingsUIDetailsOpenStates: {},
                         }
                         if (loadedSettings.hasOwnProperty('expandDeepSeekThoughtsByDefault') && !loadedSettings.hasOwnProperty('deepSeekExpandThoughtsByDefault') && state.settings.hasOwnProperty('deepSeekExpandThoughtsByDefault')) {
                             state.settings.deepSeekExpandThoughtsByDefault = loadedSettings.expandDeepSeekThoughtsByDefault;
+                        }
+                        if (!loadedSettings.llmaggregatorBackends && loadedSettings.llmAggregatorApiBackend) {
+                            state.settings.llmaggregatorBackends = [{
+                                id: `migrated-${Date.now()}`,
+                                label: 'デフォルトURL',
+                                url: loadedSettings.llmAggregatorApiBackend,
+                                isActive: true
+                            }];
+                            state.settings.llmaggregatorActiveBackendIndex = 0;
+                            state.settings.showMultiBackends = true; 
                         }
                         if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                             loadedSettings.webhooks = [{
@@ -10388,6 +10427,10 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 elements.llmAggregatorApiKeyInput.value = state.settings.llmAggregatorApiKey || '';
                 elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
                 elements.llmAggregatorAdditionalModelsTextarea.value = state.settings.llmAggregatorAdditionalModels || '';
+
+                elements.showMultiBackendsToggle.checked = state.settings.showMultiBackends;
+                multiBackendUtils.toggleMultiBackendsVisibility(state.settings.showMultiBackends);
+                multiBackendUtils.renderList();
 
                 multiApiKeyUtils.renderAllApiKeyLists();
                 multiApiKeyUtils.updateMainApiKeyInput('gemini');
@@ -12886,6 +12929,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 llmUrlInput.addEventListener('blur', validateLlmUrl);
 
                 multiApiKeyUtils.initializeMultiApiKeys();
+                multiBackendUtils.initialize();
                 elements.geminiApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('gemini'));
                 elements.deepSeekApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('deepseek'));
                 elements.claudeApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('claude'));
@@ -12894,6 +12938,10 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 elements.llmAggregatorApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('llmaggregator'));
                 elements.showMultiApiKeysToggle.addEventListener('change', (e) => {
                     uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
+                });
+                elements.showMultiBackendsToggle.addEventListener('change', (e) => {
+                    state.settings.showMultiBackends = e.target.checked;
+                    multiBackendUtils.toggleMultiBackendsVisibility(e.target.checked);
                 });
                 twinEngineApiConfigUtils.initialize();
 
@@ -15869,7 +15917,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
 
                 newSettings.llmAggregatorApiBackend = elements.llmAggregatorApiBackendInput.value.trim();
                 newSettings.llmAggregatorModelName = elements.llmAggregatorModelNameSelect.value;
-                newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalModelsTextarea.value.trim();
+
                 newSettings.llmAggregatorSystemPrompt = elements.llmAggregatorSystemPromptDefaultTextarea.value.trim();
                 newSettings.llmAggregatorEnableSystemPromptDefault = elements.llmAggregatorEnableSystemPromptDefaultCheckbox.checked;
                 newSettings.llmAggregatorMaxTokens = getParamValue('llmaggregator-max-tokens', true, 1);
@@ -15887,6 +15935,17 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.llmAggregatorDummyModel = elements.llmAggregatorDummyModelInput.value.trim();
                 newSettings.llmAggregatorEnableDummyModel = elements.llmAggregatorEnableDummyModelCheckbox.checked;
                 newSettings.llmAggregatorConcatDummyModel = elements.llmAggregatorConcatDummyModelCheckbox.checked;
+
+newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalModelsTextarea.value.trim();
+                newSettings.showMultiBackends = elements.showMultiBackendsToggle.checked;
+                if (newSettings.showMultiBackends) {
+                    const activeBackend = multiBackendUtils.getActiveBackend();
+                    newSettings.llmAggregatorApiBackend = activeBackend ? activeBackend.url : '';
+                } else {
+                    newSettings.llmAggregatorApiBackend = elements.llmAggregatorApiBackendInput.value.trim();
+                }
+                newSettings.llmaggregatorBackends = state.settings.llmaggregatorBackends;
+                newSettings.llmaggregatorActiveBackendIndex = state.settings.llmaggregatorActiveBackendIndex;
 
                 newSettings.enterToSend = elements.enterToSendCheckbox.checked;
                 newSettings.autoScrollOnNewMessage = elements.autoScrollOnNewMessageCheckbox.checked;
@@ -18016,7 +18075,12 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
             async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
                 let baseUrl;
                 if (provider === 'llmaggregator') {
-                    baseUrl = state.settings.llmAggregatorApiBackend;
+                    if (state.settings.showMultiBackends) {
+                        const activeBackend = multiBackendUtils.getActiveBackend();
+                        baseUrl = activeBackend ? activeBackend.url : '';
+                    } else {
+                        baseUrl = state.settings.llmAggregatorApiBackend;
+                    }
                     if (!baseUrl) {
                         throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
                     }
@@ -18828,6 +18892,211 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 }
             },
         };
+        const multiBackendUtils = {
+            MAX_BACKENDS: 100,
+
+            initialize() {
+                elements.addLlmaggregatorBackendBtn.addEventListener('click', () => this.addBackend());
+                this.renderList();
+            },
+
+            addBackend() {
+                const inputElement = elements.llmaggregatorNewBackendsInput;
+                if (!inputElement) return;
+                const inputText = inputElement.value.trim();
+                const backends = state.settings.llmaggregatorBackends;
+                
+                const urlsToAdd = inputText.split(',').map(url => url.trim()).filter(url => url !== '');
+
+                if (urlsToAdd.length === 0) {
+                    uiUtils.showCustomAlert('追加するバックエンドURLを入力してください。');
+                    return;
+                }
+
+                if (backends.length + urlsToAdd.length > this.MAX_BACKENDS) {
+                    uiUtils.showCustomAlert(`最大${this.MAX_BACKENDS}個までのバックエンドURLを設定できます。`);
+                    return;
+                }
+
+                const wasEmpty = backends.length === 0;
+
+                urlsToAdd.forEach(urlValue => {
+                    const newBackend = {
+                        id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                        label: `URL ${backends.length + 1}`,
+                        url: urlValue,
+                        isActive: false
+                    };
+                    backends.push(newBackend);
+                });
+
+                if (wasEmpty && backends.length > 0) {
+                    backends[0].isActive = true;
+                    this.setActiveBackendIndex(0);
+                }
+
+                inputElement.value = '';
+                this.renderList();
+                this.updateMainBackendInput();
+            },
+
+            async deleteBackend(backendId) {
+                const backends = state.settings.llmaggregatorBackends;
+                const backendIndex = backends.findIndex(b => b.id === backendId);
+                if (backendIndex === -1) return;
+
+                const backendToDelete = backends[backendIndex];
+                const confirmed = await uiUtils.showCustomConfirm(`バックエンド「${backendToDelete.label}」を削除しますか？`);
+                if (!confirmed) return;
+
+                const wasActive = backendToDelete.isActive;
+                backends.splice(backendIndex, 1);
+
+                if (wasActive && backends.length > 0) {
+                    const newActiveIndex = Math.min(backendIndex, backends.length - 1);
+                    backends[newActiveIndex].isActive = true;
+                    this.setActiveBackendIndex(newActiveIndex);
+                } else if (backends.length === 0) {
+                    this.setActiveBackendIndex(-1);
+                }
+
+                this.renderList();
+                this.updateMainBackendInput();
+            },
+
+            selectBackend(backendId) {
+                const backends = state.settings.llmaggregatorBackends;
+                const selectedIndex = backends.findIndex(b => b.id === backendId);
+                if (selectedIndex === -1) return;
+
+                backends.forEach((backend, index) => {
+                    backend.isActive = index === selectedIndex;
+                });
+
+                this.setActiveBackendIndex(selectedIndex);
+                this.renderList();
+                this.updateMainBackendInput();
+                
+                elements.llmaggregatorBackendsList.dispatchEvent(new Event('change', { bubbles: true }));
+            },
+
+            updateBackendUrl(backendId, newUrl) {
+                const backend = state.settings.llmaggregatorBackends.find(b => b.id === backendId);
+                if (backend) {
+                    backend.url = newUrl.trim();
+                    if (backend.isActive) {
+                        this.updateMainBackendInput();
+                    }
+                }
+            },
+
+            updateBackendLabel(backendId, newLabel) {
+                const backend = state.settings.llmaggregatorBackends.find(b => b.id === backendId);
+                if (backend) {
+                    backend.label = newLabel.trim() || `URL ${state.settings.llmaggregatorBackends.indexOf(backend) + 1}`;
+                }
+            },
+
+            setActiveBackendIndex(index) {
+                state.settings.llmaggregatorActiveBackendIndex = index;
+            },
+
+            getActiveBackend() {
+                const backends = state.settings.llmaggregatorBackends;
+                const activeBackend = backends.find(b => b.isActive);
+                return activeBackend || null;
+            },
+
+            updateMainBackendInput() {
+                if (!state.settings.showMultiBackends) return;
+                const activeBackend = this.getActiveBackend();
+                elements.llmAggregatorApiBackendInput.value = activeBackend ? activeBackend.url : '';
+            },
+
+            renderList() {
+                const backends = state.settings.llmaggregatorBackends;
+                const container = elements.llmaggregatorBackendsList;
+                const addButton = elements.addLlmaggregatorBackendBtn;
+
+                container.innerHTML = '';
+
+                if (backends.length === 0) {
+                    const emptyMsg = document.createElement('p');
+                    emptyMsg.textContent = 'バックエンドURLが設定されていません。';
+                    emptyMsg.style.cssText = 'color: var(--text-secondary); font-size: 13px; text-align: center; margin: 10px 0;';
+                    container.appendChild(emptyMsg);
+                } else {
+                    backends.forEach((backend, index) => {
+                        const item = this.createBackendItem(backend, index);
+                        container.appendChild(item);
+                    });
+                }
+                addButton.disabled = backends.length >= this.MAX_BACKENDS;
+            },
+
+            createBackendItem(backend, index) {
+                const item = document.createElement('div');
+                item.className = `api-key-item ${backend.isActive ? 'active' : ''}`;
+
+                const row1 = document.createElement('div');
+                row1.style.cssText = 'display: flex; gap: 5px;';
+
+                const labelInput = document.createElement('input');
+                labelInput.type = 'text';
+                labelInput.className = 'api-key-item-label';
+                labelInput.value = backend.label;
+                labelInput.placeholder = `URL ${index + 1}`;
+                labelInput.style.marginBottom = '0';
+                labelInput.addEventListener('change', (e) => this.updateBackendLabel(backend.id, e.target.value));
+
+                const urlInput = document.createElement('input');
+                urlInput.type = 'text';
+                urlInput.className = 'api-key-item-input';
+                urlInput.value = backend.url;
+                urlInput.placeholder = 'https://...';
+                urlInput.style.marginBottom = '0';
+                urlInput.addEventListener('input', (e) => this.updateBackendUrl(backend.id, e.target.value));
+
+                const actions = document.createElement('div');
+                actions.className = 'api-key-item-actions';
+
+                const selectBtn = document.createElement('button');
+                selectBtn.className = `api-key-select-btn ${backend.isActive ? 'active' : ''}`;
+                selectBtn.textContent = backend.isActive ? '使用中' : '選択';
+                selectBtn.disabled = backend.isActive;
+                selectBtn.addEventListener('click', () => this.selectBackend(backend.id));
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'api-key-delete-btn';
+                deleteBtn.textContent = '削';
+                deleteBtn.addEventListener('click', () => this.deleteBackend(backend.id));
+
+                actions.appendChild(selectBtn);
+                actions.appendChild(deleteBtn);
+                row1.appendChild(labelInput);
+                row1.appendChild(urlInput);
+                row1.appendChild(actions);
+                item.appendChild(row1);
+                return item;
+            },
+
+            toggleMultiBackendsVisibility(show) {
+                const multiSection = document.getElementById('llmaggregator-multi-backends-section');
+                const singleInput = elements.llmAggregatorApiBackendInput;
+                const singleLabel = document.querySelector('label[for="llmaggregator-api-backend"]');
+                
+                if (multiSection) multiSection.classList.toggle('hidden', !show);
+                if (singleInput) singleInput.classList.toggle('hidden', show);
+                if (singleLabel) singleLabel.classList.toggle('hidden', show);
+
+                if (!show) {
+                    singleInput.value = state.settings.llmAggregatorApiBackend || '';
+                } else {
+                    this.updateMainBackendInput();
+                }
+            }
+        };
+
         const errorRecovery = {
             errorCount: 0,
             errorTimeWindow: 60000,
