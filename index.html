@@ -4966,7 +4966,7 @@ body.pastel-yellow-mode .api-key-help-icon {
                             <div style="padding-left: 15px; margin-top: 10px;">
                                 <div id="llmaggregator-backends-list" class="api-keys-list"></div>
                                 <div style="margin-top: -5px; display: flex; gap: 5px; align-items: center;">
-                                    <textarea id="llmaggregator-new-backends-input" class="api-key-item-input" placeholder="新しいバックエンドURLを入力 (カンマ区切りで複数可)..." style="flex-grow: 1; margin-bottom: 0; height: 38px; resize: vertical; min-height: 0; padding-top: 10px;"></textarea>
+                                    <textarea id="llmaggregator-new-backends-input" class="api-key-item-input" placeholder="例:https://api.openrouter.ai/v1" style="flex-grow: 1; margin-bottom: 0; height: 38px; resize: vertical; min-height: 0; padding-top: 10px;"></textarea>
                                     <button type="button" id="add-llmaggregator-backend-btn" class="add-api-key-btn" style="width: auto; padding: 8px 15px; min-width: 84px;">追加</button>
                                 </div>
                                 <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px; margin-bottom: 15px;">
@@ -6396,13 +6396,7 @@ body.pastel-yellow-mode .api-key-help-icon {
                                                 style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                                                 ※ 複数のAPIキーを使い分けたい場合に使用。
                                             </p>
-                                            <label class="checkbox-label">
-                                                <input type="checkbox" id="show-multi-backends-toggle">
-                                                複数バックエンドURL管理機能を使用する (LLM Aggregator)
-                                            </label>
-                                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                                                ※ 複数のLLM Aggregatorバックエンドを使い分けたい場合に使用。
-                                            </p>
+                                            
                                             <label class="checkbox-label">
                                                 <input type="checkbox" id="show-proofreading-settings-toggle">
                                                 校正機能を使用する
@@ -7517,7 +7511,7 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             disableAttachmentConfirmationToggle: document.getElementById('disable-attachment-confirmation-toggle'),
             addPrefixOnImportToggle: document.getElementById('add-prefix-on-import-toggle'),
             showMultiApiKeysToggle: document.getElementById('show-multi-api-keys-toggle'),
-            showMultiBackendsToggle: document.getElementById('show-multi-backends-toggle'),
+
             showProofreadingSettingsToggle: document.getElementById('show-proofreading-settings-toggle'),
             proofreadingSettingsGroup: document.getElementById('settings-group-proofreading'),
             showTopCollapseButtonToggle: document.getElementById('show-top-collapse-button-toggle'),
@@ -7860,7 +7854,7 @@ geminiIncludeThoughts: false,
                 disableAttachmentConfirmation: false,
                 addPrefixOnImport: true,
                 showMultiApiKeys: false,
-                showMultiBackends: false,
+
                 showProofreadingSettings: false,
                 disableSaveSettingsConfirmation: false,
                 autoSaveSettings: false,
@@ -10437,10 +10431,10 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
                 elements.llmAggregatorAdditionalModelsTextarea.value = state.settings.llmAggregatorAdditionalModels || '';
 
-                elements.showMultiBackendsToggle.checked = state.settings.showMultiBackends;
+                multiBackendUtils.toggleMultiBackendsVisibility(true);
                 elements.showSettingsScrollButtonsToggle.checked = state.settings.showSettingsScrollButtons;
     this.updateSettingsScreenElementVisibility();
-                multiBackendUtils.toggleMultiBackendsVisibility(state.settings.showMultiBackends);
+
                 multiBackendUtils.renderList();
 
                 multiApiKeyUtils.renderAllApiKeyLists();
@@ -12983,10 +12977,6 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 elements.llmAggregatorApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('llmaggregator'));
                 elements.showMultiApiKeysToggle.addEventListener('change', (e) => {
                     uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
-                });
-                elements.showMultiBackendsToggle.addEventListener('change', (e) => {
-                    state.settings.showMultiBackends = e.target.checked;
-                    multiBackendUtils.toggleMultiBackendsVisibility(e.target.checked);
                 });
                 twinEngineApiConfigUtils.initialize();
 
@@ -15990,8 +15980,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.llmAggregatorConcatDummyModel = elements.llmAggregatorConcatDummyModelCheckbox.checked;
 
 newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalModelsTextarea.value.trim();
-                newSettings.showMultiBackends = elements.showMultiBackendsToggle.checked;
-                if (newSettings.showMultiBackends) {
+                if (true) {
                     const activeBackend = multiBackendUtils.getActiveBackend();
                     newSettings.llmAggregatorApiBackend = activeBackend ? activeBackend.url : '';
                 } else {
@@ -18125,15 +18114,11 @@ newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalMode
                     }
                 }
             },
-            async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
+async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
                 let baseUrl;
                 if (provider === 'llmaggregator') {
-                    if (state.settings.showMultiBackends) {
-                        const activeBackend = multiBackendUtils.getActiveBackend();
-                        baseUrl = activeBackend ? activeBackend.url : '';
-                    } else {
-                        baseUrl = state.settings.llmAggregatorApiBackend;
-                    }
+                    const activeBackend = multiBackendUtils.getActiveBackend();
+                    baseUrl = activeBackend ? activeBackend.url : '';
                     if (!baseUrl) {
                         throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
                     }
@@ -20246,3 +20231,4 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
 </body>
 
 </html>
+                                                                   
