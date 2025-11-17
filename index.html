@@ -4975,30 +4975,7 @@ body.pastel-yellow-mode .api-key-help-icon {
                         <label for="llmaggregator-api-key">APIキー:</label>
                         <input type="password" id="llmaggregator-api-key" placeholder="APIキーを入力"
                             aria-label="LLM Aggregator APIキー">
-                        <details id="llmaggregator-multi-api-keys-section" class="hidden" style="margin-top: 10px;">
-                            <summary
-                                style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor: pointer; font-weight: normal;">
-                                複数APIキー管理 (LLM Aggregator)</summary>
-                            <div style="padding-left: 15px; margin-top: 10px;">
-                                <div id="llmaggregator-api-keys-list" class="api-keys-list"></div>
-                                <!-- align-items: flex-start; を削除 -->
-                                <div style="margin-top: -5px; display: flex; gap: 5px; align-items: center;">
-                                    <textarea id="llmaggregator-new-api-keys-input" class="api-key-item-input" placeholder="新しいAPIキーを入力..." style="flex-grow: 1; margin-bottom: 0; height: 38px; resize: vertical; min-height: 0; padding-top: 10px;"></textarea>
-                                    <button type="button" id="add-llmaggregator-api-key-btn" class="add-api-key-btn" style="width: auto; padding: 8px 15px; min-width: 84px;">追加</button>
-                                </div>
-                                <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px; margin-bottom: 15px;">
-                                    ※ カンマ(,)区切りで複数のAPIキーを一括追加<span class="api-key-help-icon" title="一括登録コマンドの使い方">?</span>
-                                </p>
-                                <label class="checkbox-label" style="font-size: 12px; margin-top: -5px;">
-                                <input type="checkbox" class="js-remove-duplicate-api-keys-toggle">
-                                    重複登録されたAPIキーを削除
-                                </label>
-                                <label class="checkbox-label" style="font-size: 12px; margin-top: -5px;">
-                                    <input type="checkbox" class="js-disable-delete-api-key-confirmation-toggle">
-                                    APIキー削除時の確認ダイアログ
-                                </label>
-                            </div>
-                        </details>
+                        
                         <label for="llmaggregator-model-name">モデル名:</label>
                         <select id="llmaggregator-model-name" aria-label="LLM Aggregator モデル名">
                             <optgroup label="Hugging Faceサンプル">
@@ -8296,6 +8273,29 @@ settingsUIDetailsOpenStates: {},
                         }
                         if (state.settings.diceMinValue !== null && state.settings.diceMaxValue !== null && state.settings.diceMinValue > state.settings.diceMaxValue) {
                             state.settings.diceMaxValue = state.settings.diceMinValue;
+                        }
+                        if (loadedSettings.llmaggregatorBackends && loadedSettings.llmaggregatorApiKeys) {
+                            if (loadedSettings.llmaggregatorBackends.every(b => b.apiKeys === undefined)) {
+                                const oldApiKeys = loadedSettings.llmaggregatorApiKeys;
+                                const oldActiveKeyIndex = loadedSettings.llmaggregatorActiveApiKeyIndex;
+    
+                                loadedSettings.llmaggregatorBackends.forEach((backend, index) => {
+                                    if (index === 0) {
+                                        backend.apiKeys = oldApiKeys;
+                                        backend.activeApiKeyIndex = oldActiveKeyIndex;
+                                        if (backend.apiKeys.length > 0 && oldActiveKeyIndex >= 0) {
+                                            backend.apiKeys.forEach((key, keyIndex) => {
+                                                key.isActive = (keyIndex === oldActiveKeyIndex);
+                                            });
+                                        }
+                                    } else {
+                                        backend.apiKeys = [];
+                                        backend.activeApiKeyIndex = -1;
+                                    }
+                                });
+                                delete loadedSettings.llmaggregatorApiKeys;
+                                delete loadedSettings.llmaggregatorActiveApiKeyIndex;
+                            }
                         }
                         if (!['light', 'dark', 'pastel-pink', 'pastel-blue', 'pastel-yellow', 'pastel-purple', 'pastel-rainbow', 'turf'].includes(state.settings.theme)) { // ← ここに 'turf' を追加
                             state.settings.theme = window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -11813,6 +11813,160 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 signal.addEventListener('abort', onAbort, { once: true });
             });
         }
+        const llmAggregatorApiKeyUtils = {
+    MAX_API_KEYS: multiApiKeyUtils.MAX_API_KEYS,
+
+    addApiKey(backendId, inputElement) {
+        const backend = state.settings.llmaggregatorBackends.find(b => b.id === backendId);
+        if (!backend) return;
+
+        const keys = backend.apiKeys || [];
+        const inputText = inputElement.value.trim();
+        const keysToAdd = inputText.split(',').map(k => k.trim()).filter(Boolean);
+
+        if (keysToAdd.length === 0) {
+            uiUtils.showCustomAlert('追加するAPIキーを入力してください。');
+            return;
+        }
+
+        const wasEmpty = keys.length === 0;
+        keysToAdd.forEach(keyValue => {
+            if (keys.length >= this.MAX_API_KEYS) return;
+            const newKey = {
+                id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                label: `キー ${keys.length + 1}`,
+                value: keyValue,
+                isActive: false
+            };
+            keys.push(newKey);
+        });
+
+        backend.apiKeys = keys;
+        if (wasEmpty && keys.length > 0) {
+            keys[0].isActive = true;
+            backend.activeApiKeyIndex = 0;
+        }
+
+        inputElement.value = '';
+        this.renderApiKeyListForBackend(backendId);
+    },
+
+    deleteApiKey(backendId, keyId) {
+        const backend = state.settings.llmaggregatorBackends.find(b => b.id === backendId);
+        if (!backend || !backend.apiKeys) return;
+
+        const keyIndex = backend.apiKeys.findIndex(k => k.id === keyId);
+        if (keyIndex === -1) return;
+
+        const wasActive = backend.apiKeys[keyIndex].isActive;
+        backend.apiKeys.splice(keyIndex, 1);
+
+        if (wasActive && backend.apiKeys.length > 0) {
+            const newActiveIndex = Math.min(keyIndex, backend.apiKeys.length - 1);
+            backend.apiKeys[newActiveIndex].isActive = true;
+            backend.activeApiKeyIndex = newActiveIndex;
+        } else if (backend.apiKeys.length === 0) {
+            backend.activeApiKeyIndex = -1;
+        }
+
+        this.renderApiKeyListForBackend(backendId);
+    },
+
+    selectApiKey(backendId, keyId) {
+        const backend = state.settings.llmaggregatorBackends.find(b => b.id === backendId);
+        if (!backend || !backend.apiKeys) return;
+
+        const selectedIndex = backend.apiKeys.findIndex(k => k.id === keyId);
+        if (selectedIndex === -1) return;
+
+        backend.apiKeys.forEach((key, index) => {
+            key.isActive = (index === selectedIndex);
+        });
+        backend.activeApiKeyIndex = selectedIndex;
+
+        this.renderApiKeyListForBackend(backendId);
+    },
+
+    updateValue(backendId, keyId, newValue) {
+        const backend = state.settings.llmaggregatorBackends.find(b => b.id === backendId);
+        const key = backend?.apiKeys?.find(k => k.id === keyId);
+        if (key) key.value = newValue.trim();
+    },
+
+    updateLabel(backendId, keyId, newLabel) {
+        const backend = state.settings.llmaggregatorBackends.find(b => b.id === backendId);
+        const key = backend?.apiKeys?.find(k => k.id === keyId);
+        if (key) key.label = newLabel.trim() || `キー ${backend.apiKeys.indexOf(key) + 1}`;
+    },
+
+    renderApiKeyListForBackend(backendId) {
+        const backend = state.settings.llmaggregatorBackends.find(b => b.id === backendId);
+        const container = document.querySelector(`.api-keys-list[data-backend-id="${backendId}"]`);
+        if (!container || !backend) return;
+        
+        const keys = backend.apiKeys || [];
+        container.innerHTML = '';
+        
+        if (keys.length === 0) {
+             container.innerHTML = `<p style="color: var(--text-secondary); font-size: 13px; text-align: center; margin: 10px 0;">APIキーが設定されていません。</p>`;
+        } else {
+            keys.forEach((key, index) => {
+                const item = this.createApiKeyItem(backendId, key, index);
+                container.appendChild(item);
+            });
+        }
+
+        const summary = container.closest('details')?.querySelector('summary');
+        if (summary) summary.textContent = `APIキー管理 (${keys.length}件)`;
+    },
+
+    createApiKeyItem(backendId, key, index) {
+        const item = document.createElement('div');
+        item.className = `api-key-item ${key.isActive ? 'active' : ''}`;
+
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.gap = '5px';
+
+        const labelInput = document.createElement('input');
+        labelInput.type = 'text';
+        labelInput.className = 'api-key-item-label';
+        labelInput.value = key.label;
+        labelInput.placeholder = `キー ${index + 1}`;
+        labelInput.style.marginBottom = '0';
+        labelInput.addEventListener('change', (e) => this.updateLabel(backendId, key.id, e.target.value));
+
+        const keyInput = document.createElement('input');
+        keyInput.type = 'password';
+        keyInput.className = 'api-key-item-input';
+        keyInput.value = key.value;
+        keyInput.placeholder = 'APIキー...';
+        keyInput.style.marginBottom = '0';
+        keyInput.addEventListener('input', (e) => this.updateValue(backendId, key.id, e.target.value));
+
+        const actions = document.createElement('div');
+        actions.className = 'api-key-item-actions';
+
+        const selectBtn = document.createElement('button');
+        selectBtn.className = `api-key-select-btn ${key.isActive ? 'active' : ''}`;
+        selectBtn.textContent = key.isActive ? '使用中' : '選択';
+        selectBtn.disabled = key.isActive;
+        selectBtn.addEventListener('click', () => this.selectApiKey(backendId, key.id));
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'api-key-delete-btn';
+        deleteBtn.textContent = '削';
+        deleteBtn.addEventListener('click', () => this.deleteApiKey(backendId, key.id));
+
+        actions.appendChild(selectBtn);
+        actions.appendChild(deleteBtn);
+        row.appendChild(labelInput);
+        row.appendChild(keyInput);
+        row.appendChild(actions);
+        item.appendChild(row);
+        return item;
+    }
+};
         const appLogic = {
 _setupOpacitySlider(inputId, cssVar, defaultValue) {
             const numberInput = document.getElementById(inputId);
@@ -14039,9 +14193,21 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     selectedApiProvider = sourceSessionContext.apiProvider;
                     apiKeyToUse = sourceSessionContext._apiKeyOverride;
                     modelNameToUse = sourceSessionContext._modelNameOverride;
-                } else {
+               } else {
                     selectedApiProvider = state.settings.apiProvider;
-                    if (state.settings.showMultiApiKeys) {
+                    if (selectedApiProvider === 'llmaggregator') {
+                        if (state.settings.showMultiBackends) {
+                            const activeBackend = multiBackendUtils.getActiveBackend();
+                            if (activeBackend && activeBackend.apiKeys && activeBackend.apiKeys.length > 0) {
+                                const activeKey = activeBackend.apiKeys.find(k => k.isActive) || activeBackend.apiKeys[0];
+                                apiKeyToUse = activeKey.value;
+                            } else {
+                                apiKeyToUse = '';
+                            }
+                        } else {
+                             apiKeyToUse = state.settings.llmAggregatorApiKey;
+                        }
+                    } else if (state.settings.showMultiApiKeys) {
                         apiKeyToUse = multiApiKeyUtils.getActiveApiKey(selectedApiProvider);
                     } else {
                         switch (selectedApiProvider) {
@@ -14050,7 +14216,6 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                             case 'claude': apiKeyToUse = state.settings.claudeApiKey; break;
                             case 'openai': apiKeyToUse = state.settings.openaiApiKey; break;
                             case 'xai': apiKeyToUse = state.settings.xaiApiKey; break;
-                            case 'llmaggregator': apiKeyToUse = state.settings.llmAggregatorApiKey; break;
                         }
                     }
                     switch (selectedApiProvider) {
@@ -14062,7 +14227,6 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                         case 'llmaggregator': modelNameToUse = state.settings.llmAggregatorModelName; break;
                     }
                 }
-
                 let text = '';
                 let attachmentsToSend = [];
                 if (isBackgroundProcess) {
@@ -15805,7 +15969,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                     newSettings.claudeApiKey = elements.claudeApiKeyInput.value.trim();
                     newSettings.openaiApiKey = elements.openaiApiKeyInput.value.trim();
                     newSettings.xaiApiKey = elements.xaiApiKeyInput.value.trim();
-                    newSettings.llmAggregatorApiKey = elements.llmAggregatorApiKeyInput.value.trim();
+
                 }
 
                 newSettings.apiProvider = elements.apiProviderSelect.value;
@@ -19033,13 +19197,15 @@ newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalMode
                 }
                 addButton.disabled = backends.length >= this.MAX_BACKENDS;
             },
-
-            createBackendItem(backend, index) {
+createBackendItem(backend, index) {
                 const item = document.createElement('div');
                 item.className = `api-key-item ${backend.isActive ? 'active' : ''}`;
+                item.style.flexDirection = 'column';
+                item.style.alignItems = 'stretch';
+                item.dataset.backendId = backend.id;
 
                 const row1 = document.createElement('div');
-                row1.style.cssText = 'display: flex; gap: 5px;';
+                row1.style.cssText = 'display: flex; gap: 5px; align-items: center;';
 
                 const labelInput = document.createElement('input');
                 labelInput.type = 'text';
@@ -19056,27 +19222,73 @@ newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalMode
                 urlInput.placeholder = 'https://...';
                 urlInput.style.marginBottom = '0';
                 urlInput.addEventListener('input', (e) => this.updateBackendUrl(backend.id, e.target.value));
-
+                
                 const actions = document.createElement('div');
                 actions.className = 'api-key-item-actions';
-
+                
                 const selectBtn = document.createElement('button');
                 selectBtn.className = `api-key-select-btn ${backend.isActive ? 'active' : ''}`;
                 selectBtn.textContent = backend.isActive ? '使用中' : '選択';
                 selectBtn.disabled = backend.isActive;
                 selectBtn.addEventListener('click', () => this.selectBackend(backend.id));
-
+    
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'api-key-delete-btn';
                 deleteBtn.textContent = '削';
                 deleteBtn.addEventListener('click', () => this.deleteBackend(backend.id));
-
+    
                 actions.appendChild(selectBtn);
                 actions.appendChild(deleteBtn);
+    
                 row1.appendChild(labelInput);
                 row1.appendChild(urlInput);
                 row1.appendChild(actions);
+    
+                const details = document.createElement('details');
+                details.style.marginTop = '10px';
+                details.open = backend.isActive;
+    
+                const summary = document.createElement('summary');
+                summary.textContent = `APIキー管理 (${backend.apiKeys?.length || 0}件)`;
+                summary.style.cssText = 'font-size: 13px; color: var(--text-link); cursor: pointer;';
+                details.appendChild(summary);
+    
+                const apiKeyContainer = document.createElement('div');
+                apiKeyContainer.style.paddingLeft = '15px';
+                apiKeyContainer.style.marginTop = '8px';
+                
+                const apiKeyListDiv = document.createElement('div');
+                apiKeyListDiv.className = 'api-keys-list';
+                apiKeyListDiv.dataset.provider = 'llmaggregator';
+                apiKeyListDiv.dataset.backendId = backend.id;
+    
+                const newApiKeyInputContainer = document.createElement('div');
+                newApiKeyInputContainer.style.cssText = 'margin-top: 5px; display: flex; gap: 5px; align-items: center;';
+    
+                const newApiKeyInput = document.createElement('textarea');
+                newApiKeyInput.className = 'api-key-item-input';
+                newApiKeyInput.placeholder = '新しいAPIキーを入力...';
+                newApiKeyInput.style.cssText = 'flex-grow: 1; margin-bottom: 0; height: 38px; resize: vertical; min-height: 0; padding-top: 10px;';
+    
+                const addApiKeyBtn = document.createElement('button');
+                addApiKeyBtn.type = 'button';
+                addApiKeyBtn.className = 'add-api-key-btn';
+                addApiKeyBtn.textContent = '追加';
+                addApiKeyBtn.style.cssText = 'width: auto; padding: 8px 15px; min-width: 84px;';
+                addApiKeyBtn.addEventListener('click', () => llmAggregatorApiKeyUtils.addApiKey(backend.id, newApiKeyInput));
+                
+                newApiKeyInputContainer.appendChild(newApiKeyInput);
+                newApiKeyInputContainer.appendChild(addApiKeyBtn);
+    
+                apiKeyContainer.appendChild(apiKeyListDiv);
+                apiKeyContainer.appendChild(newApiKeyInputContainer);
+                details.appendChild(apiKeyContainer);
+    
                 item.appendChild(row1);
+                item.appendChild(details);
+    
+                llmAggregatorApiKeyUtils.renderApiKeyListForBackend(backend.id);
+    
                 return item;
             },
 
@@ -19312,8 +19524,7 @@ const multiApiKeyUtils = {
                 'd': 'deepseek', 'ds': 'deepseek', 'deepseek': 'deepseek', 'de': 'deepseek',
                 'c': 'claude', 'cl': 'claude', 'claude': 'claude', 'a': 'claude', 'an': 'claude', 'anthropic': 'claude',
                 'o': 'openai', 'op': 'openai', 'openai': 'openai', 'ch': 'openai', 'chatgpt': 'openai',
-                'x': 'xai', 'xa': 'xai', 'xai': 'xai', 'gr': 'xai', 'grok': 'xai',
-                'l': 'llmaggregator', 'la': 'llmaggregator', 'llm': 'llmaggregator'
+                'x': 'xai', 'xa': 'xai', 'xai': 'xai', 'gr': 'xai', 'grok': 'xai'
             },
             
             async handleBatchAddApiKeys(inputText) {
@@ -19340,7 +19551,7 @@ const multiApiKeyUtils = {
                             const keys = this.getApiKeysArray(provider);
 
                             if (state.settings.removeDuplicateApiKeys && keys.some(k => k.value === keyValue)) {
-                                // 重複しているのでスキップ
+                                
                                 continue;
                             }
 
@@ -19380,7 +19591,6 @@ const multiApiKeyUtils = {
                 elements.addClaudeApiKeyBtn.addEventListener('click', () => this.addApiKey('claude'));
                 elements.addOpenaiApiKeyBtn.addEventListener('click', () => this.addApiKey('openai'));
                 elements.addXaiApiKeyBtn.addEventListener('click', () => this.addApiKey('xai'));
-                elements.addLlmaggregatorApiKeyBtn.addEventListener('click', () => this.addApiKey('llmaggregator'));
 
                 this.renderAllApiKeyLists();
             },
@@ -19388,7 +19598,7 @@ const multiApiKeyUtils = {
             async addApiKey(provider) {
                 const inputElement = document.getElementById(`${provider}-new-api-keys-input`);
                 if (!inputElement) return;
-                const inputText = inputElement.value; // .trim() を削除
+                const inputText = inputElement.value; 
 
                 const prefixes = Object.keys(this.providerPrefixMap).join('|');
                 const commandRegex = new RegExp(`(?:^|\\s|,|\\n)(${prefixes}):`, 'i');
@@ -19546,7 +19756,6 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                     case 'claude': return state.settings.claudeApiKeys;
                     case 'openai': return state.settings.openaiApiKeys;
                     case 'xai': return state.settings.xaiApiKeys;
-                    case 'llmaggregator': return state.settings.llmaggregatorApiKeys;
                     default: return [];
                 }
             },
@@ -19558,7 +19767,6 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                     case 'claude': state.settings.claudeActiveApiKeyIndex = index; break;
                     case 'openai': state.settings.openaiActiveApiKeyIndex = index; break;
                     case 'xai': state.settings.xaiActiveApiKeyIndex = index; break;
-                    case 'llmaggregator': state.settings.llmaggregatorActiveApiKeyIndex = index; break;
                 }
             },
 
@@ -19588,9 +19796,6 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                         break;
                     case 'xai':
                         elements.xaiApiKeyInput.value = activeKey;
-                        break;
-                    case 'llmaggregator':
-                        elements.llmAggregatorApiKeyInput.value = activeKey;
                         break;
                 }
             },
@@ -19687,7 +19892,6 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                     case 'claude': return elements.claudeApiKeysList;
                     case 'openai': return elements.openaiApiKeysList;
                     case 'xai': return elements.xaiApiKeysList;
-                    case 'llmaggregator': return elements.llmaggregatorApiKeysList;
                     default: return null;
                 }
             },
@@ -19699,7 +19903,6 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                     case 'claude': return elements.addClaudeApiKeyBtn;
                     case 'openai': return elements.addOpenaiApiKeyBtn;
                     case 'xai': return elements.addXaiApiKeyBtn;
-                    case 'llmaggregator': return elements.addLlmaggregatorApiKeyBtn;
                     default: return null;
                 }
             },
@@ -19710,7 +19913,6 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                 this.renderApiKeyList('claude');
                 this.renderApiKeyList('openai');
                 this.renderApiKeyList('xai');
-                this.renderApiKeyList('llmaggregator');
             },
 
             syncMainApiKeyInput(provider) {
@@ -19724,7 +19926,6 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                     case 'claude': mainValue = elements.claudeApiKeyInput.value.trim(); break;
                     case 'openai': mainValue = elements.openaiApiKeyInput.value.trim(); break;
                     case 'xai': mainValue = elements.xaiApiKeyInput.value.trim(); break;
-                    case 'llmaggregator': mainValue = elements.llmAggregatorApiKeyInput.value.trim(); break;
                 }
 
                 const keys = this.getApiKeysArray(provider);
