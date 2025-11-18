@@ -14079,7 +14079,10 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     modelNameToUse = sourceSessionContext._modelNameOverride;
                 } else {
                     selectedApiProvider = state.settings.apiProvider;
-                    if (state.settings.showMultiApiKeys) {
+                    if (selectedApiProvider === 'llmaggregator') {
+                        const activeBackend = multiBackendUtils.getActiveBackend();
+                        apiKeyToUse = multiBackendUtils.getActiveApiKeyForBackend(activeBackend);
+                    } else if (state.settings.showMultiApiKeys) {
                         apiKeyToUse = multiApiKeyUtils.getActiveApiKey(selectedApiProvider);
                     } else {
                         switch (selectedApiProvider) {
@@ -19553,10 +19556,26 @@ const multiApiKeyUtils = {
                         const provider = this.providerPrefixMap[prefix];
 
                         if (provider && keyValue) {
+                            if (provider === 'llmaggregator') {
+                                const activeBackend = multiBackendUtils.getActiveBackend();
+                                if (activeBackend) {
+                                    const keys = activeBackend.apiKeys || [];
+                                    if (keys.length < multiBackendUtils.MAX_API_KEYS_PER_BACKEND) {
+                                        if (!(state.settings.removeDuplicateApiKeys && keys.some(k => k.value === keyValue))) {
+                                            const newKey = { id: `${Date.now()}-${Math.random()}`, label: `キー ${keys.length + 1}`, value: keyValue, isActive: keys.length === 0 };
+                                            keys.push(newKey);
+                                            activeBackend.apiKeys = keys;
+                                            results.success[provider] = (results.success[provider] || 0) + 1;
+                                        }
+                                    } else {
+                                        results.failed[provider] = (results.failed[provider] || 0) + 1;
+                                    }
+                                }
+                                continue; 
+                            }
                             const keys = this.getApiKeysArray(provider);
 
                             if (state.settings.removeDuplicateApiKeys && keys.some(k => k.value === keyValue)) {
-                                // 重複しているのでスキップ
                                 continue;
                             }
 
