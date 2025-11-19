@@ -8160,43 +8160,27 @@ enableElevation: true,
                             state.settings.deepSeekExpandThoughtsByDefault = loadedSettings.expandDeepSeekThoughtsByDefault;
                         }
                         if (!loadedSettings.llmaggregatorBackends && loadedSettings.llmAggregatorApiBackend) {
-                            const legacyApiKey = loadedSettings.llmAggregatorApiKey || '';
-                            const apiKeysList = [];
-                            let activeIndex = -1;
+                        state.settings.llmaggregatorBackends = [{
+                            id: `migrated-${Date.now()}`,
+                            label: 'デフォルトURL',
+                            url: loadedSettings.llmAggregatorApiBackend,
+                            isActive: true,
+                            apiKeys: [],
+                            activeApiKeyIndex: -1
+                        }];
+                        state.settings.llmaggregatorActiveBackendIndex = 0;
+                        state.settings.showMultiBackends = true;
+                    }
 
-                            if (legacyApiKey) {
-                                apiKeysList.push({
-                                    id: `migrated-key-${Date.now()}`,
-                                    label: 'キー 1',
-                                    value: legacyApiKey,
-                                    isActive: true
-                                });
-                                activeIndex = 0;
-                            }
-
-                            state.settings.llmaggregatorBackends = [{
-                                id: `migrated-${Date.now()}`,
-                                label: 'デフォルトURL',
-                                url: loadedSettings.llmAggregatorApiBackend,
-                                isActive: true,
-                                apiKeys: apiKeysList,
-                                activeApiKeyIndex: activeIndex
-                            }];
-                            
-                            state.settings.llmaggregatorActiveBackendIndex = 0;
-                            state.settings.showMultiBackends = true;
+                    if (loadedSettings.llmaggregatorApiKeys && Array.isArray(loadedSettings.llmaggregatorApiKeys) && state.settings.llmaggregatorBackends.length > 0) {
+                        const firstBackend = state.settings.llmaggregatorBackends[0];
+                        if (!firstBackend.apiKeys || firstBackend.apiKeys.length === 0) {
+                            firstBackend.apiKeys = loadedSettings.llmaggregatorApiKeys;
+                            firstBackend.activeApiKeyIndex = loadedSettings.llmaggregatorActiveApiKeyIndex;
                         }
-                        
-                        if (loadedSettings.llmaggregatorApiKeys && Array.isArray(loadedSettings.llmaggregatorApiKeys) && state.settings.llmaggregatorBackends && state.settings.llmaggregatorBackends.length > 0) {
-                             const firstBackend = state.settings.llmaggregatorBackends[0];
-                             if (!firstBackend.apiKeys || firstBackend.apiKeys.length === 0) {
-                                 firstBackend.apiKeys = loadedSettings.llmaggregatorApiKeys;
-                                 firstBackend.activeApiKeyIndex = loadedSettings.llmaggregatorActiveApiKeyIndex;
-                             }
-                        }
-                        
-                        delete loadedSettings.llmaggregatorApiKeys;
-                        delete loadedSettings.llmaggregatorActiveApiKeyIndex;
+                    }
+                    delete loadedSettings.llmaggregatorApiKeys;
+                    delete loadedSettings.llmaggregatorActiveApiKeyIndex;
 
                     if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                             loadedSettings.webhooks = [{
@@ -10445,7 +10429,8 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
                 elements.llmAggregatorAdditionalModelsTextarea.value = state.settings.llmAggregatorAdditionalModels || '';
 
-                multiBackendUtils.toggleMultiBackendsVisibility(true);
+                const hasBackends = state.settings.llmaggregatorBackends && state.settings.llmaggregatorBackends.length > 0;
+                multiBackendUtils.toggleMultiBackendsVisibility(hasBackends);
                 elements.showSettingsScrollButtonsToggle.checked = state.settings.showSettingsScrollButtons;
     this.updateSettingsScreenElementVisibility();
 
