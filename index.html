@@ -8159,59 +8159,28 @@ enableElevation: true,
                         if (loadedSettings.hasOwnProperty('expandDeepSeekThoughtsByDefault') && !loadedSettings.hasOwnProperty('deepSeekExpandThoughtsByDefault') && state.settings.hasOwnProperty('deepSeekExpandThoughtsByDefault')) {
                             state.settings.deepSeekExpandThoughtsByDefault = loadedSettings.expandDeepSeekThoughtsByDefault;
                         }
-                        // LLM Aggregator の旧設定を新形式へ移行
-                        if (!loadedSettings.llmaggregatorBackends) {
-                            // 古いURLがある場合、または古いAPIキーがある場合は移行対象とする
-                            if (loadedSettings.llmAggregatorApiBackend || loadedSettings.llmAggregatorApiKey) {
-                                const migratedApiKeyList = [];
-                                
-                                // 古い「複数APIキー管理」データがあればそれを優先
-                                if (loadedSettings.llmaggregatorApiKeys && Array.isArray(loadedSettings.llmaggregatorApiKeys) && loadedSettings.llmaggregatorApiKeys.length > 0) {
-                                    migratedApiKeyList.push(...loadedSettings.llmaggregatorApiKeys);
-                                } 
-                                // なければ、単一の古いAPIキーをリストの1つ目として追加
-                                else if (loadedSettings.llmAggregatorApiKey) {
-                                    migratedApiKeyList.push({
-                                        id: `migrated-key-${Date.now()}`,
-                                        label: 'キー 1',
-                                        value: loadedSettings.llmAggregatorApiKey,
-                                        isActive: true
-                                    });
-                                }
+                        if (!loadedSettings.llmaggregatorBackends && loadedSettings.llmAggregatorApiBackend) {
+                        state.settings.llmaggregatorBackends = [{
+                            id: `migrated-${Date.now()}`,
+                            label: 'デフォルトURL',
+                            url: loadedSettings.llmAggregatorApiBackend,
+                            isActive: true,
+                            apiKeys: [],
+                            activeApiKeyIndex: -1
+                        }];
+                        state.settings.llmaggregatorActiveBackendIndex = 0;
+                        state.settings.showMultiBackends = true;
+                    }
 
-                                state.settings.llmaggregatorBackends = [{
-                                    id: `migrated-backend-${Date.now()}`,
-                                    label: 'デフォルトURL',
-                                    url: loadedSettings.llmAggregatorApiBackend || '', // URLがなければ空文字
-                                    isActive: true,
-                                    apiKeys: migratedApiKeyList,
-                                    activeApiKeyIndex: 0 // 最初のキーをアクティブに
-                                }];
-                                state.settings.llmaggregatorActiveBackendIndex = 0;
-                                state.settings.showMultiBackends = true;
-                            }
-                        } else {
-                            // 既に新形式のデータがある場合（通常ロード時）
-                            // ただし、もし古い形式の `llmaggregatorApiKeys` が残骸として残っていた場合の念の為の処理
-                            // (基本的には上のブロックで処理されるため、ここは既存データの整合性チェック程度)
-                            if (loadedSettings.llmaggregatorApiKeys && Array.isArray(loadedSettings.llmaggregatorApiKeys) && state.settings.llmaggregatorBackends.length > 0) {
-                                const firstBackend = state.settings.llmaggregatorBackends[0];
-                                if (!firstBackend.apiKeys || firstBackend.apiKeys.length === 0) {
-                                    firstBackend.apiKeys = loadedSettings.llmaggregatorApiKeys;
-                                    // アクティブインデックスの復元を試みる
-                                    const activeKeyIndex = loadedSettings.llmaggregatorActiveApiKeyIndex;
-                                    if (typeof activeKeyIndex === 'number' && activeKeyIndex >= 0 && activeKeyIndex < firstBackend.apiKeys.length) {
-                                        firstBackend.apiKeys.forEach((k, i) => k.isActive = (i === activeKeyIndex));
-                                    } else if (firstBackend.apiKeys.length > 0) {
-                                        firstBackend.apiKeys[0].isActive = true;
-                                    }
-                                }
-                            }
+                    if (loadedSettings.llmaggregatorApiKeys && Array.isArray(loadedSettings.llmaggregatorApiKeys) && state.settings.llmaggregatorBackends.length > 0) {
+                        const firstBackend = state.settings.llmaggregatorBackends[0];
+                        if (!firstBackend.apiKeys || firstBackend.apiKeys.length === 0) {
+                            firstBackend.apiKeys = loadedSettings.llmaggregatorApiKeys;
+                            firstBackend.activeApiKeyIndex = loadedSettings.llmaggregatorActiveApiKeyIndex;
                         }
-
-                        // 不要になった旧データの削除
-                        delete loadedSettings.llmaggregatorApiKeys;
-                        delete loadedSettings.llmaggregatorActiveApiKeyIndex;
+                    }
+                    delete loadedSettings.llmaggregatorApiKeys;
+                    delete loadedSettings.llmaggregatorActiveApiKeyIndex;
 
                     if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                             loadedSettings.webhooks = [{
@@ -11256,7 +11225,7 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 if (state.settings.llmAggregatorModelName && Array.from(select.options).some(opt => opt.value === state.settings.llmAggregatorModelName)) {
                     select.value = state.settings.llmAggregatorModelName;
                 } else if (select.options.length > 0) {
-                    select.value = defaultModels[0];
+                    select.value = DEFAULT_LLMAGGREGATOR_MODEL;
                     state.settings.llmAggregatorModelName = select.value;
                 }
             },
