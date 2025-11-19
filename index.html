@@ -11467,9 +11467,18 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
             },
             updateApiKeyCycleButtons() {
                 const provider = state.settings.apiProvider;
-                const keys = multiApiKeyUtils.getApiKeysArray(provider);
-                const isEnabled = state.settings.showMultiApiKeys && keys.length > 1;
+                let keys = [];
+                
+                if (provider === 'llmaggregator') {
+                    const activeBackend = multiBackendUtils.getActiveBackend();
+                    if (activeBackend && activeBackend.apiKeys) {
+                        keys = activeBackend.apiKeys;
+                    }
+                } else {
+                    keys = multiApiKeyUtils.getApiKeysArray(provider);
+                }
 
+                const isEnabled = state.settings.showMultiApiKeys && keys.length > 1;
                 const buttons = [elements.headerCycleApiKeyBtn, elements.footerCycleApiKeyBtn];
 
                 buttons.forEach(button => {
@@ -15808,21 +15817,31 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
           
            cycleActiveApiKey() {
                 const provider = state.settings.apiProvider;
-                const keys = multiApiKeyUtils.getApiKeysArray(provider);
 
-                if (!state.settings.showMultiApiKeys || keys.length < 2) {
-                    return;
+                if (provider === 'llmaggregator') {
+                    const activeBackend = multiBackendUtils.getActiveBackend();
+                    if (!activeBackend || !activeBackend.apiKeys || activeBackend.apiKeys.length < 2) return;
+
+                    const keys = activeBackend.apiKeys;
+                    let currentIndex = keys.findIndex(k => k.isActive);
+                    if (currentIndex === -1) currentIndex = 0;
+
+                    const nextIndex = (currentIndex + 1) % keys.length;
+                    const nextKeyId = keys[nextIndex].id;
+
+                    multiBackendUtils.selectApiKeyForBackend(activeBackend.id, nextKeyId);
+                } else {
+                    const keys = multiApiKeyUtils.getApiKeysArray(provider);
+                    if (!state.settings.showMultiApiKeys || keys.length < 2) return;
+
+                    let currentIndex = keys.findIndex(k => k.isActive);
+                    if (currentIndex === -1) currentIndex = 0;
+
+                    const nextIndex = (currentIndex + 1) % keys.length;
+                    const nextKeyId = keys[nextIndex].id;
+
+                    multiApiKeyUtils.selectApiKey(provider, nextKeyId);
                 }
-
-                let currentIndex = keys.findIndex(k => k.isActive);
-                if (currentIndex === -1) {
-                    currentIndex = 0;
-                }
-
-                const nextIndex = (currentIndex + 1) % keys.length;
-                const nextKeyId = keys[nextIndex].id;
-
-                multiApiKeyUtils.selectApiKey(provider, nextKeyId);
             },
            async saveSettings(showNotice = true) {
                 const newSettings = { ...state.settings };
