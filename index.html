@@ -8159,50 +8159,35 @@ enableElevation: true,
                         if (loadedSettings.hasOwnProperty('expandDeepSeekThoughtsByDefault') && !loadedSettings.hasOwnProperty('deepSeekExpandThoughtsByDefault') && state.settings.hasOwnProperty('deepSeekExpandThoughtsByDefault')) {
                             state.settings.deepSeekExpandThoughtsByDefault = loadedSettings.expandDeepSeekThoughtsByDefault;
                         }
-                        // LLM Aggregator: 古いURL/APIキー設定からの移行処理
-                        if (!loadedSettings.llmaggregatorBackends && loadedSettings.llmAggregatorApiBackend) {
-                            // 1. 古い単一APIキーがあれば取得
-                            const legacyApiKey = loadedSettings.llmAggregatorApiKey || '';
-                            const apiKeysList = [];
-                            
-                            // 2. 古いキーがある場合、新しいリスト形式の「キー 1」として追加
-                            if (legacyApiKey) {
-                                apiKeysList.push({
+                        if ((!loadedSettings.llmaggregatorBackends || loadedSettings.llmaggregatorBackends.length === 0) && (loadedSettings.llmAggregatorApiBackend || loadedSettings.llmAggregatorApiKey)) {
+                            const migratedApiKeys = [];
+                            if (loadedSettings.llmAggregatorApiKey) {
+                                migratedApiKeys.push({
                                     id: `migrated-key-${Date.now()}`,
                                     label: 'キー 1',
-                                    value: legacyApiKey,
+                                    value: loadedSettings.llmAggregatorApiKey,
                                     isActive: true
                                 });
+                            } else if (loadedSettings.llmaggregatorApiKeys && Array.isArray(loadedSettings.llmaggregatorApiKeys)) {
+                                migratedApiKeys.push(...loadedSettings.llmaggregatorApiKeys);
                             }
 
-                            // 3. 新しいバックエンド設定オブジェクトを作成
                             state.settings.llmaggregatorBackends = [{
-                                id: `migrated-${Date.now()}`,
+                                id: `migrated-backend-${Date.now()}`,
                                 label: 'デフォルトURL',
-                                url: loadedSettings.llmAggregatorApiBackend,
+                                url: loadedSettings.llmAggregatorApiBackend || '',
                                 isActive: true,
-                                apiKeys: apiKeysList,
-                                activeApiKeyIndex: legacyApiKey ? 0 : -1
+                                apiKeys: migratedApiKeys,
+                                activeApiKeyIndex: 0
                             }];
-                            
                             state.settings.llmaggregatorActiveBackendIndex = 0;
-                            state.settings.showMultiBackends = true; // UIを新形式に切り替え
+                        } else if (loadedSettings.llmaggregatorBackends) {
+                            state.settings.llmaggregatorBackends = loadedSettings.llmaggregatorBackends;
+                            state.settings.llmaggregatorActiveBackendIndex = loadedSettings.llmaggregatorActiveBackendIndex;
                         }
-
-                        // (補完処理) 万が一、開発版などで中途半端なデータ(llmaggregatorApiKeys)が残っていた場合の処理
-                        if (loadedSettings.llmaggregatorApiKeys && Array.isArray(loadedSettings.llmaggregatorApiKeys) && state.settings.llmaggregatorBackends && state.settings.llmaggregatorBackends.length > 0) {
-                             const firstBackend = state.settings.llmaggregatorBackends[0];
-                             // キーが空の場合のみ上書き
-                             if (!firstBackend.apiKeys || firstBackend.apiKeys.length === 0) {
-                                 firstBackend.apiKeys = loadedSettings.llmaggregatorApiKeys;
-                                 firstBackend.activeApiKeyIndex = loadedSettings.llmaggregatorActiveApiKeyIndex;
-                             }
-                        }
+                        if (loadedSettings.llmaggregatorApiKeys) delete loadedSettings.llmaggregatorApiKeys;
+                        if (loadedSettings.llmaggregatorActiveApiKeyIndex) delete loadedSettings.llmaggregatorActiveApiKeyIndex;
                         
-                        // 古いキーは削除
-                        delete loadedSettings.llmaggregatorApiKeys;
-                        delete loadedSettings.llmaggregatorActiveApiKeyIndex;
-
                     if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                             loadedSettings.webhooks = [{
                                 id: 'migrated-' + Date.now(),
@@ -10450,8 +10435,7 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
                 elements.llmAggregatorAdditionalModelsTextarea.value = state.settings.llmAggregatorAdditionalModels || '';
 
-                const hasBackends = state.settings.llmaggregatorBackends && state.settings.llmaggregatorBackends.length > 0;
-                multiBackendUtils.toggleMultiBackendsVisibility(hasBackends);
+                multiBackendUtils.toggleMultiBackendsVisibility(true);
                 elements.showSettingsScrollButtonsToggle.checked = state.settings.showSettingsScrollButtons;
     this.updateSettingsScreenElementVisibility();
 
@@ -11813,7 +11797,7 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 });
             },
             toggleMultiApiKeysVisibility(show) {
-                const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'];
+                const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai'];
 
                 providers.forEach(provider => {
                     const multiKeySection = document.getElementById(`${provider}-multi-api-keys-section`);
