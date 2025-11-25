@@ -2548,6 +2548,12 @@ body.turf-mode {
             background-color: transparent;
         }
 
+        body.compact-settings-mode .settings-group {
+            margin-bottom: 5px;
+        }
+        body.compact-settings-mode .danger-zone {
+            margin-top: 15px;
+        }
         .settings-group {
             margin-bottom: 25px;
             padding: 15px;
@@ -6347,6 +6353,14 @@ body.pastel-yellow-mode .api-key-help-icon {
                                                 style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
                                                 ※ チャット画面のメッセージ間の縦の空白を切り詰めます。
                                             </p>
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="compact-settings-spacing-toggle">
+                                                設定画面の項目間隔を詰める
+                                            </label>
+                                            <p
+                                                style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
+                                                ※ 設定画面の各項目の上下余白を小さくします。
+                                            </p>
                                         </div>
                                     </details>
 
@@ -7012,6 +7026,24 @@ body.pastel-yellow-mode .api-key-help-icon {
                                     ※ 画面共有やスクリーンショット撮影時はオフにすることを推奨します。<br>
                                     ※ オンにすると、すべてのAPIキー入力欄がテキスト形式で表示されます。
                                 </p>
+                                <hr style="margin: 10px 0; border-top: 1px dashed var(--border-secondary);">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="disable-llm-url-whitelist-toggle">
+                                    LLM Aggregator URLのホワイトリスト制限を無効化
+                                </label>
+                                <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 0;">
+                                    ※ オンにすると、任意のドメインをバックエンドURLとして設定できます。<br>
+                                    ※ 未知のサーバーへの送信はセキュリティリスクがあるため、信頼できるURLのみ使用してください。
+                                </p>
+                                <hr style="margin: 10px 0; border-top: 1px dashed var(--border-secondary);">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="disable-auto-update-toggle">
+                                    自動アップデートを禁止する (Service Worker無効化)
+                                </label>
+                                <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 0;">
+                                    ※ オンにすると、キャッシュ機能が停止し、常にサーバーから最新を取得しようとします（オフライン起動不可）。<br>
+                                    ※ オフ（デフォルト）の場合、バックグラウンドで自動更新の準備が行われます。
+                                </p>
                             </div>
                         </details>
                         <hr style="margin: 15px 0;">
@@ -7449,6 +7481,7 @@ footerTapScrollToBottomToggle: document.getElementById('footer-tap-scroll-to-bot
             extendAiBubbleWidthToggle: document.getElementById('extend-ai-bubble-width-toggle'),
             extendUserBubbleWidthToggle: document.getElementById('extend-user-bubble-width-toggle'),
             reduceMessageSpacingToggle: document.getElementById('reduce-message-spacing-toggle'),
+            compactSettingsSpacingToggle: document.getElementById('compact-settings-spacing-toggle'),
             showSessionLinkingSettingsToggle: document.getElementById('show-session-linking-settings-toggle'),
             sessionLinkingSettingsGroup: document.getElementById('settings-group-session-linking'),
             showTwinEngineSettingsToggle: document.getElementById('show-twin-engine-settings-toggle'),
@@ -7627,6 +7660,8 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             disableSaveSettingsConfirmationToggle: document.getElementById('disable-save-settings-confirmation-toggle'),
             autoSaveSettingsToggle: document.getElementById('auto-save-settings-toggle'),
             unmaskApiKeysToggle: document.getElementById('unmask-api-keys-toggle'),
+            disableLlmUrlWhitelistToggle: document.getElementById('disable-llm-url-whitelist-toggle'),
+            disableAutoUpdateToggle: document.getElementById('disable-auto-update-toggle'),
             headerApiProviderToggleBtn: document.getElementById('header-api-provider-toggle-btn'),
             footerApiProviderToggleBtn: document.getElementById('footer-api-provider-toggle-btn'),
             showApiProviderToggleHeaderCheckbox: document.getElementById('show-api-provider-toggle-header'),
@@ -7842,6 +7877,7 @@ footerTapScrollToBottom: false,
                 extendAiBubbleWidth: false,
                 extendUserBubbleWidth: false,
                 reduceMessageSpacing: false,
+                compactSettingsSpacing: false,
                 showSessionLinkingSettings: false,
                 showTwinEngineSettings: false,
                 showChatTitle: true,
@@ -8006,6 +8042,7 @@ enableElevation: true,
         }
 
         function isAllowedAggregatorDomain(urlStr) {
+            if (state.settings.disableLlmUrlWhitelist) return true;
             if (!urlStr) return true;
             try {
                 const url = new URL(urlStr.trim());
@@ -8052,20 +8089,49 @@ enableElevation: true,
                 reader.readAsDataURL(file);
             });
         }
-        function registerServiceWorker() {
-            if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                    navigator.serviceWorker.register('./sw.js')
-                        .then(registration => {
-                            navigator.serviceWorker.addEventListener('message', event => {
-                                if (event.data && event.data.action === 'reloadPage') {
-                                    alert('アプリが更新されました。この表示の後、ページがロードされます。');
-                                    window.location.reload();
-                                }
-                            });
-                        })
-                        .catch(err => { });
+        async function registerServiceWorker() {
+
+            let disableAutoUpdate = false;
+            try {
+                const db = await new Promise((resolve, reject) => {
+                    const req = indexedDB.open(DB_NAME, DB_VERSION);
+                    req.onsuccess = e => resolve(e.target.result);
+                    req.onerror = e => reject(e);
                 });
+                const tx = db.transaction(SETTINGS_STORE, 'readonly');
+                const store = tx.objectStore(SETTINGS_STORE);
+                const req = store.get('disableAutoUpdate');
+                const result = await new Promise(resolve => {
+                    req.onsuccess = e => resolve(e.target.result);
+                    req.onerror = () => resolve(null);
+                });
+                if (result && result.value === true) disableAutoUpdate = true;
+                db.close();
+            } catch (e) {}
+
+            if ('serviceWorker' in navigator) {
+                if (disableAutoUpdate) {
+
+                    navigator.serviceWorker.getRegistrations().then(registrations => {
+                        for (let registration of registrations) {
+                            registration.unregister();
+                        }
+                    });
+                } else {
+                    // 許可設定（デフォルト）なら登録する
+                    window.addEventListener('load', () => {
+                        navigator.serviceWorker.register('./sw.js')
+                            .then(registration => {
+                                navigator.serviceWorker.addEventListener('message', event => {
+                                    if (event.data && event.data.action === 'reloadPage') {
+                                        alert('アプリが更新されました。この表示の後、ページがロードされます。');
+                                        window.location.reload();
+                                    }
+                                });
+                            })
+                            .catch(err => { });
+                    });
+                }
             }
         }
 
@@ -10670,6 +10736,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 elements.extendAiBubbleWidthToggle.checked = state.settings.extendAiBubbleWidth;
                 elements.extendUserBubbleWidthToggle.checked = state.settings.extendUserBubbleWidth;
                 elements.reduceMessageSpacingToggle.checked = state.settings.reduceMessageSpacing;
+                elements.compactSettingsSpacingToggle.checked = state.settings.compactSettingsSpacing;
                 elements.showSessionLinkingSettingsToggle.checked = state.settings.showSessionLinkingSettings;
                 if (elements.sessionLinkingSettingsGroup) {
                     elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !state.settings.showSessionLinkingSettings);
@@ -10765,6 +10832,8 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 elements.autoSaveSettingsToggle.checked = state.settings.autoSaveSettings;
                 elements.unmaskApiKeysToggle.checked = state.settings.unmaskApiKeys || false;
                 this.updateApiKeyInputType();
+                elements.disableLlmUrlWhitelistToggle.checked = state.settings.disableLlmUrlWhitelist || false;
+                elements.disableAutoUpdateToggle.checked = state.settings.disableAutoUpdate || false;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
                 elements.showBottomCollapseButtonToggle.checked = state.settings.showBottomCollapseButton;
                 elements.persistMessageCollapseStateCheckbox.checked = state.settings.persistMessageCollapseState;
@@ -10848,6 +10917,9 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
             },
             applyMessageSpacingSetting() {
                 elements.appContainer.classList.toggle('reduced-message-spacing', state.settings.reduceMessageSpacing);
+            },
+            applyCompactSettingsSpacing() {
+                document.body.classList.toggle('compact-settings-mode', state.settings.compactSettingsSpacing);
             },
             applyAiBubbleWidthSetting() {
                 document.body.classList.toggle('ai-bubble-extended', state.settings.extendAiBubbleWidth);
@@ -12215,10 +12287,11 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     uiUtils.applySidePanelSettingsToUI();
                     uiUtils.applyMinimizeUI();
                     uiUtils.applyAiBubbleWidthSetting();
-                    uiUtils.applyUserBubbleWidthSetting();
-                    uiUtils.applyMessageSpacingSetting();
+                uiUtils.applyUserBubbleWidthSetting();
+                uiUtils.applyMessageSpacingSetting();
+                uiUtils.applyCompactSettingsSpacing();
 
-                    if (state.settings.backgroundImageBlob instanceof Blob) {
+                if (state.settings.backgroundImageBlob instanceof Blob) {
                         uiUtils.revokeExistingObjectUrl();
                         try {
                             state.backgroundImageUrl = URL.createObjectURL(state.settings.backgroundImageBlob);
@@ -12788,6 +12861,10 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     state.settings.reduceMessageSpacing = e.target.checked;
                     uiUtils.applyMessageSpacingSetting();
                 });
+                elements.compactSettingsSpacingToggle.addEventListener('change', (e) => {
+                    state.settings.compactSettingsSpacing = e.target.checked;
+                    uiUtils.applyCompactSettingsSpacing();
+                });
                 elements.showSessionLinkingSettingsToggle.addEventListener('change', (e) => {
                     if (elements.sessionLinkingSettingsGroup) {
                         elements.sessionLinkingSettingsGroup.classList.toggle('hidden', !e.target.checked);
@@ -12905,6 +12982,27 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 elements.unmaskApiKeysToggle.addEventListener('change', () => {
                     state.settings.unmaskApiKeys = elements.unmaskApiKeysToggle.checked;
                     uiUtils.updateApiKeyInputType();
+                });
+                elements.disableLlmUrlWhitelistToggle.addEventListener('change', () => {
+                    state.settings.disableLlmUrlWhitelist = elements.disableLlmUrlWhitelistToggle.checked;
+                    const llmUrlInput = elements.llmAggregatorApiBackendInput;
+                    llmUrlInput.dispatchEvent(new Event('input'));
+                });
+                elements.disableAutoUpdateToggle.addEventListener('change', () => {
+                    state.settings.disableAutoUpdate = elements.disableAutoUpdateToggle.checked;
+                    if (state.settings.disableAutoUpdate) {
+
+                        if ('serviceWorker' in navigator) {
+                            navigator.serviceWorker.getRegistrations().then(registrations => {
+                                for (let registration of registrations) registration.unregister();
+                            });
+                        }
+                    } else {
+
+                        if (confirm("自動アップデートを有効にしました。反映するにはページをリロードする必要があります。今すぐリロードしますか？")) {
+                            window.location.reload();
+                        }
+                    }
                 });
                 const settingsScreenElement = document.getElementById('settings-screen');
                 let autoSaveTimer;
@@ -15998,6 +16096,8 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
                 newSettings.autoSaveSettings = elements.autoSaveSettingsToggle.checked;
                 newSettings.unmaskApiKeys = elements.unmaskApiKeysToggle.checked;
+                newSettings.disableLlmUrlWhitelist = elements.disableLlmUrlWhitelistToggle.checked;
+                newSettings.disableAutoUpdate = elements.disableAutoUpdateToggle.checked;
  elements.settingsScreen.classList.toggle('auto-save-mode', newSettings.autoSaveSettings);
                 if (!newSettings.showMultiApiKeys) {
                     newSettings.apiKey = elements.geminiApiKeyInput.value.trim();
@@ -16160,6 +16260,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 newSettings.extendAiBubbleWidth = elements.extendAiBubbleWidthToggle.checked;
                 newSettings.extendUserBubbleWidth = elements.extendUserBubbleWidthToggle.checked;
                 newSettings.reduceMessageSpacing = elements.reduceMessageSpacingToggle.checked;
+                newSettings.compactSettingsSpacing = elements.compactSettingsSpacingToggle.checked;
                 newSettings.showSessionLinkingSettings = elements.showSessionLinkingSettingsToggle.checked;
                 newSettings.showTwinEngineSettings = elements.showTwinEngineSettingsToggle.checked;
                 newSettings.showChatTitle = elements.showChatTitleToggle.checked;
@@ -16422,6 +16523,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                         defaultSettingsCopy.preventZoom = true;
                         defaultSettingsCopy.minimizeHeaderFooter = false;
                         defaultSettingsCopy.extendAiBubbleWidth = false;
+                        defaultSettingsCopy.compactSettingsSpacing = false;
                         defaultSettingsCopy.showChatTitle = true;
                         defaultSettingsCopy.showNewChatButton = true;
                         defaultSettingsCopy.showDeleteSessionButton = false;
