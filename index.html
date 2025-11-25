@@ -6265,8 +6265,20 @@ body.pastel-yellow-mode .api-key-help-icon {
                                                 Enterキーで送信する
                                             </label>
                                             <label class="checkbox-label">
+                                                <input type="checkbox" id="show-response-timer-toggle">
+                                                応答時間を表示する ("応答中"の代わりに秒数を表示)
+                                            </label>
+                                            <label class="checkbox-label">
                                                 <input type="checkbox" id="auto-scroll-on-new-message">
                                                 メッセージ送受信時に自動スクロールする
+                                            </label>
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="header-tap-scroll-to-top-toggle">
+                                                ヘッダータップで最上部へスクロール
+                                            </label>
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="footer-tap-scroll-to-bottom-toggle">
+                                                フッタータップで最下部へスクロール
                                             </label>
                                             <label class="checkbox-label">
                                                 <input type="checkbox" id="auto-scroll-on-thought">
@@ -6987,6 +6999,21 @@ body.pastel-yellow-mode .api-key-help-icon {
                             style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                             ※ 「設定を保存」ボタンを押さずとも、設定の変更が直ちに適用されます。
                         </p>
+                        <details id="settings-group-security" style="margin-top: 15px; border: 1px solid var(--border-tertiary); border-radius: 5px; background-color: var(--bg-primary);">
+                            <summary style="cursor: pointer; font-size: 13px; padding: 8px; font-weight: bold; color: var(--text-secondary);">
+                                🔒 セキュリティ (APIキー表示)
+                            </summary>
+                            <div style="padding: 10px; padding-top: 5px;">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="unmask-api-keys-toggle">
+                                    APIキーの黒塗りを解除する (常に表示)
+                                </label>
+                                <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 0;">
+                                    ※ 画面共有やスクリーンショット撮影時はオフにすることを推奨します。<br>
+                                    ※ オンにすると、すべてのAPIキー入力欄がテキスト形式で表示されます。
+                                </p>
+                            </div>
+                        </details>
                         <hr style="margin: 15px 0;">
                         <button id="force-recovery-btn" class="orange-button">🔄 強制復旧 (キャッシュクリア&リロード)</button>
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top:5px; margin-bottom: 10px;">
@@ -7404,6 +7431,9 @@ const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
             setThinkingBudgetBtns: document.querySelectorAll('.set-thinking-budget-btn'),
             setClaudeParamBtns: document.querySelectorAll('.set-claude-param-btn'),
             enterToSendCheckbox: document.getElementById('enter-to-send'),
+            showResponseTimerToggle: document.getElementById('show-response-timer-toggle'),
+headerTapScrollToTopToggle: document.getElementById('header-tap-scroll-to-top-toggle'),
+footerTapScrollToBottomToggle: document.getElementById('footer-tap-scroll-to-bottom-toggle'),
             autoScrollOnNewMessageCheckbox: document.getElementById('auto-scroll-on-new-message'),
             autoScrollOnThoughtCheckbox: document.getElementById('auto-scroll-on-thought'),
             historySortOrderSelect: document.getElementById('history-sort-order'),
@@ -7596,6 +7626,7 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             llmAggregatorThoughtsParam: document.getElementById('llmaggregator-thoughts-param'),
             disableSaveSettingsConfirmationToggle: document.getElementById('disable-save-settings-confirmation-toggle'),
             autoSaveSettingsToggle: document.getElementById('auto-save-settings-toggle'),
+            unmaskApiKeysToggle: document.getElementById('unmask-api-keys-toggle'),
             headerApiProviderToggleBtn: document.getElementById('header-api-provider-toggle-btn'),
             footerApiProviderToggleBtn: document.getElementById('footer-api-provider-toggle-btn'),
             showApiProviderToggleHeaderCheckbox: document.getElementById('show-api-provider-toggle-header'),
@@ -7789,6 +7820,9 @@ geminiIncludeThoughts: false,
                 llmAggregatorEnableDummyModel: true,
                 llmAggregatorConcatDummyModel: false,
                 enterToSend: true,
+                showResponseTimer: true,
+                	headerTapScrollToTop: true,
+footerTapScrollToBottom: false,
                 autoScrollOnNewMessage: DEFAULT_AUTO_SCROLL_ON_NEW_MESSAGE,
                 autoScrollOnThought: false,
                 historySortOrder: 'updatedAt',
@@ -7935,6 +7969,8 @@ enableElevation: true,
             userIconUrl: null,
             aiIconUrl: null,
             isSending: false,
+            responseTimerId: null,
+            responseStartTime: 0,
             isSummarizing: false,
             abortController: null,
             partialStreamContent: '',
@@ -10612,6 +10648,9 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 elements.llmAggregatorConcatDummyModelCheckbox.checked = state.settings.llmAggregatorConcatDummyModel;
 
                 elements.enterToSendCheckbox.checked = state.settings.enterToSend;
+elements.headerTapScrollToTopToggle.checked = state.settings.headerTapScrollToTop;
+elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollToBottom;
+                elements.showResponseTimerToggle.checked = state.settings.showResponseTimer;
                 elements.autoScrollOnNewMessageCheckbox.checked = state.settings.autoScrollOnNewMessage;
                 elements.autoScrollOnThoughtCheckbox.checked = state.settings.autoScrollOnThought;
                 elements.historySortOrderSelect.value = state.settings.historySortOrder || 'updatedAt';
@@ -10724,6 +10763,8 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 elements.proofreadingSettingsGroup.classList.toggle('hidden', !state.settings.showProofreadingSettings);
                 elements.disableSaveSettingsConfirmationToggle.checked = state.settings.disableSaveSettingsConfirmation;
                 elements.autoSaveSettingsToggle.checked = state.settings.autoSaveSettings;
+                elements.unmaskApiKeysToggle.checked = state.settings.unmaskApiKeys || false;
+                this.updateApiKeyInputType();
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
                 elements.showBottomCollapseButtonToggle.checked = state.settings.showBottomCollapseButton;
                 elements.persistMessageCollapseStateCheckbox.checked = state.settings.persistMessageCollapseState;
@@ -11357,27 +11398,44 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 this.updateLoadingIndicator();
             },
             updateLoadingIndicator() {
-                if (state.isAiToAiChatProcessing) {
-                    elements.loadingIndicator.textContent = state.aiToAiProcessingMessage;
+                const isProcessing = state.isAiToAiChatProcessing || state.isSummarizingForRetry || state.isProofreading || state.isSummarizing || state.isSending;
+
+                if (isProcessing) {
                     elements.loadingIndicator.classList.remove('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'assertive');
-                } else if (state.isSummarizingForRetry) {
-                    elements.loadingIndicator.textContent = 'リトライ前の履歴を要約中...';
-                    elements.loadingIndicator.classList.remove('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
-                } else if (state.isProofreading) {
-                    elements.loadingIndicator.textContent = '校正中...';
-                    elements.loadingIndicator.classList.remove('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
-                } else if (state.isSummarizing) {
-                    elements.loadingIndicator.textContent = '要約中...';
-                    elements.loadingIndicator.classList.remove('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
-                } else if (state.isSending) {
-                    elements.loadingIndicator.textContent = '応答中';
-                    elements.loadingIndicator.classList.remove('hidden');
-                    elements.loadingIndicator.setAttribute('aria-live', 'polite');
+                    elements.loadingIndicator.setAttribute('aria-live', state.isAiToAiChatProcessing ? 'assertive' : 'polite');
+
+                    let baseText = '応答中';
+                    if (state.isAiToAiChatProcessing) baseText = state.aiToAiProcessingMessage;
+                    else if (state.isSummarizingForRetry) baseText = 'リトライ前の履歴を要約中...';
+                    else if (state.isProofreading) baseText = '校正中...';
+                    else if (state.isSummarizing) baseText = '要約中...';
+
+                    if (state.settings.showResponseTimer) {
+                        if (!state.responseTimerId) {
+                            state.responseStartTime = Date.now();
+                            state.responseTimerId = setInterval(() => {
+                                const now = Date.now();
+                                const elapsed = ((now - state.responseStartTime) / 1000).toFixed(1);
+                                if (state.isSending && !state.isSummarizing && !state.isProofreading && !state.isAiToAiChatProcessing && !state.isSummarizingForRetry) {
+                                    elements.loadingIndicator.textContent = `${elapsed}s`;
+                                } else {
+                                    elements.loadingIndicator.textContent = `${baseText} (${elapsed}s)`;
+                                }
+                            }, 100);
+                            elements.loadingIndicator.textContent = (state.isSending && !state.isSummarizing && !state.isProofreading) ? "0.0s" : `${baseText} (0.0s)`;
+                        }
+                    } else {
+                        if (state.responseTimerId) {
+                            clearInterval(state.responseTimerId);
+                            state.responseTimerId = null;
+                        }
+                        elements.loadingIndicator.textContent = baseText;
+                    }
                 } else {
+                    if (state.responseTimerId) {
+                        clearInterval(state.responseTimerId);
+                        state.responseTimerId = null;
+                    }
                     elements.loadingIndicator.classList.add('hidden');
                     elements.loadingIndicator.removeAttribute('aria-live');
                 }
@@ -11832,6 +11890,24 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                             }
                             singleKeyInput.value = singleKeyValue || '';
                         }
+                    }
+                });
+            },
+            updateApiKeyInputType() {
+                const isUnmasked = state.settings.unmaskApiKeys;
+                const type = isUnmasked ? 'text' : 'password';
+                const mainInputIds = [
+                    'gemini-api-key', 'deepseek-api-key', 'claude-api-key',
+                    'openai-api-key', 'xai-api-key', 'llmaggregator-api-key'
+                ];
+                mainInputIds.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.type = type;
+                });
+                const dynamicInputs = document.querySelectorAll('.api-key-item-input');
+                dynamicInputs.forEach(input => {
+                    if (input.placeholder && input.placeholder.includes('APIキー')) {
+                        input.type = type;
                     }
                 });
             },
@@ -12826,6 +12902,10 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     state.settings.showProofreadingSettings = e.target.checked;
                     elements.proofreadingSettingsGroup.classList.toggle('hidden', !e.target.checked);
                 });
+                elements.unmaskApiKeysToggle.addEventListener('change', () => {
+                    state.settings.unmaskApiKeys = elements.unmaskApiKeysToggle.checked;
+                    uiUtils.updateApiKeyInputType();
+                });
                 const settingsScreenElement = document.getElementById('settings-screen');
                 let autoSaveTimer;
                 const handleSettingsChange = () => {
@@ -12894,6 +12974,30 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 if ('visualViewport' in window) {
                     window.visualViewport.addEventListener('resize', this.updateZoomState.bind(this));
                     window.visualViewport.addEventListener('scroll', this.updateZoomState.bind(this));
+                }
+
+                document.querySelectorAll('.app-header').forEach(header => {
+                    header.addEventListener('click', (e) => {
+                        if (!state.settings.headerTapScrollToTop) return;
+                        if (e.target.tagName === 'BUTTON' || e.target.closest('button') || e.target.tagName === 'INPUT') return;
+                        
+                        const screenId = header.closest('.screen')?.id;
+                        if (screenId === 'chat-screen') this.scrollToTop();
+                        else if (screenId === 'settings-screen') this.scrollToSettingsTop();
+                        else if (screenId === 'history-screen') {
+                            const main = document.querySelector('#history-screen .main-content');
+                            if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
+                        }
+                    });
+                });
+
+                const footer = document.querySelector('.chat-input-area');
+                if (footer) {
+                    footer.addEventListener('click', (e) => {
+                        if (!state.settings.footerTapScrollToBottom) return;
+                        if (e.target.tagName === 'BUTTON' || e.target.closest('button') || e.target.tagName === 'TEXTAREA') return;
+                        if (state.currentScreen === 'chat') this.scrollToBottom();
+                    });
                 }
 
                 window.addEventListener('popstate', this.handlePopState.bind(this));
@@ -15893,6 +15997,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.showProofreadingSettings = elements.showProofreadingSettingsToggle.checked;
                 newSettings.disableSaveSettingsConfirmation = elements.disableSaveSettingsConfirmationToggle.checked;
                 newSettings.autoSaveSettings = elements.autoSaveSettingsToggle.checked;
+                newSettings.unmaskApiKeys = elements.unmaskApiKeysToggle.checked;
  elements.settingsScreen.classList.toggle('auto-save-mode', newSettings.autoSaveSettings);
                 if (!newSettings.showMultiApiKeys) {
                     newSettings.apiKey = elements.geminiApiKeyInput.value.trim();
@@ -16037,6 +16142,9 @@ newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalMode
                 newSettings.llmaggregatorActiveBackendIndex = state.settings.llmaggregatorActiveBackendIndex;
 
                 newSettings.enterToSend = elements.enterToSendCheckbox.checked;
+                newSettings.showResponseTimer = elements.showResponseTimerToggle.checked;
+newSettings.headerTapScrollToTop = elements.headerTapScrollToTopToggle.checked;
+newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.checked;
                 newSettings.autoScrollOnNewMessage = elements.autoScrollOnNewMessageCheckbox.checked;
                 newSettings.autoScrollOnThought = elements.autoScrollOnThoughtCheckbox.checked;
                 newSettings.historySortOrder = elements.historySortOrderSelect.value;
