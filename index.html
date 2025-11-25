@@ -7035,15 +7035,6 @@ body.pastel-yellow-mode .api-key-help-icon {
                                     ※ オンにすると、任意のドメインをバックエンドURLとして設定できます。<br>
                                     ※ 未知のサーバーへの送信はセキュリティリスクがあるため、信頼できるURLのみ使用してください。
                                 </p>
-                                <hr style="margin: 10px 0; border-top: 1px dashed var(--border-secondary);">
-                                <label class="checkbox-label">
-                                    <input type="checkbox" id="disable-auto-update-toggle">
-                                    自動アップデートを禁止する (Service Worker無効化)
-                                </label>
-                                <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 0;">
-                                    ※ オンにすると、キャッシュ機能が停止し、常にサーバーから最新を取得しようとします（オフライン起動不可）。<br>
-                                    ※ オフ（デフォルト）の場合、バックグラウンドで自動更新の準備が行われます。
-                                </p>
                             </div>
                         </details>
                         <hr style="margin: 15px 0;">
@@ -7117,13 +7108,15 @@ body.pastel-yellow-mode .api-key-help-icon {
             <button value="ok" class="dialog-ok-btn">閉じる</button>
         </div>
     </dialog>
-    <dialog id="initFailureDialog" class="custom-dialog">
+        <dialog id="initFailureDialog" class="custom-dialog">
         <p id="initFailureMessage" class="dialog-message"></p>
         <div class="dialog-actions">
+            <button id="initFailureCopyBtn" class="history-action-button" style="margin-right: auto; background-color: var(--bg-button-copy); color: var(--text-light);">コピー</button>
             <button id="initFailureExportBtn" value="export" class="history-action-button gold">全出力</button>
             <button id="initFailureOkBtn" value="ok" class="dialog-ok-btn">OK</button>
         </div>
     </dialog>
+
     <script>
         const DB_NAME = 'GeminiPWA_DB';
         const DB_VERSION = 8;
@@ -7661,7 +7654,6 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             autoSaveSettingsToggle: document.getElementById('auto-save-settings-toggle'),
             unmaskApiKeysToggle: document.getElementById('unmask-api-keys-toggle'),
             disableLlmUrlWhitelistToggle: document.getElementById('disable-llm-url-whitelist-toggle'),
-            disableAutoUpdateToggle: document.getElementById('disable-auto-update-toggle'),
             headerApiProviderToggleBtn: document.getElementById('header-api-provider-toggle-btn'),
             footerApiProviderToggleBtn: document.getElementById('footer-api-provider-toggle-btn'),
             showApiProviderToggleHeaderCheckbox: document.getElementById('show-api-provider-toggle-header'),
@@ -8089,49 +8081,20 @@ enableElevation: true,
                 reader.readAsDataURL(file);
             });
         }
-        async function registerServiceWorker() {
-
-            let disableAutoUpdate = false;
-            try {
-                const db = await new Promise((resolve, reject) => {
-                    const req = indexedDB.open(DB_NAME, DB_VERSION);
-                    req.onsuccess = e => resolve(e.target.result);
-                    req.onerror = e => reject(e);
-                });
-                const tx = db.transaction(SETTINGS_STORE, 'readonly');
-                const store = tx.objectStore(SETTINGS_STORE);
-                const req = store.get('disableAutoUpdate');
-                const result = await new Promise(resolve => {
-                    req.onsuccess = e => resolve(e.target.result);
-                    req.onerror = () => resolve(null);
-                });
-                if (result && result.value === true) disableAutoUpdate = true;
-                db.close();
-            } catch (e) {}
-
+        function registerServiceWorker() {
             if ('serviceWorker' in navigator) {
-                if (disableAutoUpdate) {
-
-                    navigator.serviceWorker.getRegistrations().then(registrations => {
-                        for (let registration of registrations) {
-                            registration.unregister();
-                        }
-                    });
-                } else {
-                    // 許可設定（デフォルト）なら登録する
-                    window.addEventListener('load', () => {
-                        navigator.serviceWorker.register('./sw.js')
-                            .then(registration => {
-                                navigator.serviceWorker.addEventListener('message', event => {
-                                    if (event.data && event.data.action === 'reloadPage') {
-                                        alert('アプリが更新されました。この表示の後、ページがロードされます。');
-                                        window.location.reload();
-                                    }
-                                });
-                            })
-                            .catch(err => { });
-                    });
-                }
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('./sw.js')
+                        .then(registration => {
+                            navigator.serviceWorker.addEventListener('message', event => {
+                                if (event.data && event.data.action === 'reloadPage') {
+                                    alert('アプリが更新されました。この表示の後、ページがロードされます。');
+                                    window.location.reload();
+                                }
+                            });
+                        })
+                        .catch(err => { });
+                });
             }
         }
 
@@ -10833,7 +10796,6 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 elements.unmaskApiKeysToggle.checked = state.settings.unmaskApiKeys || false;
                 this.updateApiKeyInputType();
                 elements.disableLlmUrlWhitelistToggle.checked = state.settings.disableLlmUrlWhitelist || false;
-                elements.disableAutoUpdateToggle.checked = state.settings.disableAutoUpdate || false;
                 elements.showTopCollapseButtonToggle.checked = state.settings.showTopCollapseButton;
                 elements.showBottomCollapseButtonToggle.checked = state.settings.showBottomCollapseButton;
                 elements.persistMessageCollapseStateCheckbox.checked = state.settings.persistMessageCollapseState;
@@ -11644,11 +11606,12 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     }
                 });
             },
-            async showInitializationFailureDialog(message) {
+                        async showInitializationFailureDialog(message) {
                 const dialog = document.getElementById('initFailureDialog');
                 const dialogMessage = document.getElementById('initFailureMessage');
                 const exportBtn = document.getElementById('initFailureExportBtn');
                 const okBtn = document.getElementById('initFailureOkBtn');
+                const copyBtn = document.getElementById('initFailureCopyBtn');
 
                 dialogMessage.textContent = message;
 
@@ -11656,12 +11619,24 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 exportBtn.parentNode.replaceChild(newExportBtn, exportBtn);
                 const newOkBtn = okBtn.cloneNode(true);
                 okBtn.parentNode.replaceChild(newOkBtn, okBtn);
+                const newCopyBtn = copyBtn.cloneNode(true);
+                copyBtn.parentNode.replaceChild(newCopyBtn, copyBtn);
+
+                newCopyBtn.onclick = async () => {
+                    try {
+                        await navigator.clipboard.writeText(message);
+                        const originalText = newCopyBtn.textContent;
+                        newCopyBtn.textContent = '完了';
+                        setTimeout(() => { newCopyBtn.textContent = originalText; }, 1500);
+                    } catch (e) {}
+                };
 
                 newExportBtn.onclick = () => dialog.close('export');
                 newOkBtn.onclick = () => dialog.close('ok');
 
                 return this.showCustomDialog(dialog, newOkBtn);
             },
+
             updateAttachmentBadgeVisibility() {
                 const hasAttachments = state.pendingAttachments.length > 0;
                 elements.attachFileBtn.classList.toggle('has-attachments', hasAttachments);
@@ -12987,22 +12962,6 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     state.settings.disableLlmUrlWhitelist = elements.disableLlmUrlWhitelistToggle.checked;
                     const llmUrlInput = elements.llmAggregatorApiBackendInput;
                     llmUrlInput.dispatchEvent(new Event('input'));
-                });
-                elements.disableAutoUpdateToggle.addEventListener('change', () => {
-                    state.settings.disableAutoUpdate = elements.disableAutoUpdateToggle.checked;
-                    if (state.settings.disableAutoUpdate) {
-
-                        if ('serviceWorker' in navigator) {
-                            navigator.serviceWorker.getRegistrations().then(registrations => {
-                                for (let registration of registrations) registration.unregister();
-                            });
-                        }
-                    } else {
-
-                        if (confirm("自動アップデートを有効にしました。反映するにはページをリロードする必要があります。今すぐリロードしますか？")) {
-                            window.location.reload();
-                        }
-                    }
                 });
                 const settingsScreenElement = document.getElementById('settings-screen');
                 let autoSaveTimer;
@@ -16097,7 +16056,6 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.autoSaveSettings = elements.autoSaveSettingsToggle.checked;
                 newSettings.unmaskApiKeys = elements.unmaskApiKeysToggle.checked;
                 newSettings.disableLlmUrlWhitelist = elements.disableLlmUrlWhitelistToggle.checked;
-                newSettings.disableAutoUpdate = elements.disableAutoUpdateToggle.checked;
  elements.settingsScreen.classList.toggle('auto-save-mode', newSettings.autoSaveSettings);
                 if (!newSettings.showMultiApiKeys) {
                     newSettings.apiKey = elements.geminiApiKeyInput.value.trim();
