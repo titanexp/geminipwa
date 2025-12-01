@@ -6657,8 +6657,12 @@ body.pastel-yellow-mode .api-key-help-icon {
                                         </summary>
                                         <div style="padding-left: 15px; margin-top: 10px; border-left: 1px solid var(--border-secondary); padding-top: 5px;">
                                             <label class="checkbox-label">
-                                                <input type="checkbox" id="show-settings-scroll-buttons-toggle">
-                                                設定パネルにスクロールボタン(🔼/🔽)を表示する
+                                                <input type="checkbox" id="show-settings-scroll-to-top-button-toggle">
+                                                設定パネルに「最上部へ(🔼)」ボタンを表示する
+                                            </label>
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="show-settings-scroll-to-bottom-button-toggle" checked>
+                                                設定パネルに「最下部へ(🔽)」ボタンを表示する
                                             </label>
                                         </div>
                                     </details>
@@ -7501,7 +7505,8 @@ enableElevationHoverToggle: document.getElementById('enable-elevation-hover-togg
 elevationHoverOption: document.getElementById('elevation-hover-option'),
     settingsScrollToTopBtn: document.getElementById('settings-scroll-to-top-btn'),
     settingsScrollToBottomBtn: document.getElementById('settings-scroll-to-bottom-btn'),
-    showSettingsScrollButtonsToggle: document.getElementById('show-settings-scroll-buttons-toggle'),
+    showSettingsScrollToTopButtonToggle: document.getElementById('show-settings-scroll-to-top-button-toggle'),
+    showSettingsScrollToBottomButtonToggle: document.getElementById('show-settings-scroll-to-bottom-button-toggle'),
     appVersionSpan: document.getElementById('app-version'),
             backgroundImageInput: document.getElementById('background-image-input'),
             uploadBackgroundBtn: document.getElementById('upload-background-btn'),
@@ -7950,7 +7955,8 @@ enableToggleButtonTopOpacity: true,
 enableThoughtSummaryOpacity: true,
 enableElevation: true,
                 enableElevationHover: false,
-                showSettingsScrollButtons: true,
+                showSettingsScrollToTopButton: false,
+                showSettingsScrollToBottomButton: true,
                 settingsUIDetailsOpenStates: {},
                 showApiProviderToggleHeader: false,
                 showApiProviderToggleFooter: true,
@@ -8866,9 +8872,8 @@ enableElevation: true,
         // ▲▲▲ ここまで追加 ▲▲▲
         const uiUtils = {
             updateSettingsScreenElementVisibility() {
-                const showScrollButtons = state.settings.showSettingsScrollButtons;
-                elements.settingsScrollToTopBtn.classList.toggle('hidden', !showScrollButtons);
-                elements.settingsScrollToBottomBtn.classList.toggle('hidden', !showScrollButtons);
+                elements.settingsScrollToTopBtn.classList.toggle('hidden', !state.settings.showSettingsScrollToTopButton);
+                elements.settingsScrollToBottomBtn.classList.toggle('hidden', !state.settings.showSettingsScrollToBottomButton);
             },
             _sanitizeAndParseMarkdown(content) {
                 // state.settings.enableImageUrlReplacement と state.settings.imageUrlReplacementBase のチェックを修正
@@ -10508,7 +10513,8 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 elements.llmAggregatorAdditionalModelsTextarea.value = state.settings.llmAggregatorAdditionalModels || '';
 
                 multiBackendUtils.toggleMultiBackendsVisibility(true);
-                elements.showSettingsScrollButtonsToggle.checked = state.settings.showSettingsScrollButtons;
+                elements.showSettingsScrollToTopButtonToggle.checked = state.settings.showSettingsScrollToTopButton;
+                elements.showSettingsScrollToBottomButtonToggle.checked = state.settings.showSettingsScrollToBottomButton;
     this.updateSettingsScreenElementVisibility();
 
                 multiBackendUtils.renderList();
@@ -13092,8 +13098,12 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
     });
     elements.settingsScrollToTopBtn.addEventListener('click', () => this.scrollToSettingsTop());
     elements.settingsScrollToBottomBtn.addEventListener('click', () => this.scrollToSettingsBottom());
-    elements.showSettingsScrollButtonsToggle.addEventListener('change', () => {
-        state.settings.showSettingsScrollButtons = elements.showSettingsScrollButtonsToggle.checked;
+    elements.showSettingsScrollToTopButtonToggle.addEventListener('change', () => {
+        state.settings.showSettingsScrollToTopButton = elements.showSettingsScrollToTopButtonToggle.checked;
+        uiUtils.updateSettingsScreenElementVisibility();
+    });
+    elements.showSettingsScrollToBottomButtonToggle.addEventListener('change', () => {
+        state.settings.showSettingsScrollToBottomButton = elements.showSettingsScrollToBottomButtonToggle.checked;
         uiUtils.updateSettingsScreenElementVisibility();
     });
     document.querySelectorAll('#settings-screen details[id]').forEach(details => {
@@ -16281,8 +16291,12 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 newSettings.toggleButtonBottomTextCollapse = elements.toggleButtonBottomTextCollapseInput.value.trim() || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 newSettings.toggleButtonBottomTextExpand = elements.toggleButtonBottomTextExpandInput.value.trim() || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
                 newSettings.thoughtSummaryOpacity = elements.thoughtSummaryOpacityInput.value === '' ? DEFAULT_THOUGHT_SUMMARY_OPACITY : parseFloat(elements.thoughtSummaryOpacityInput.value);
-                newSettings.enableElevation = elements.enableElevationToggle.checked;
-                newSettings.enableElevationHover = elements.enableElevationHoverToggle.checked;
+                defaultSettingsCopy.enableElevation = true;
+                        defaultSettingsCopy.enableElevationHover = false;
+                        defaultSettingsCopy.showSettingsScrollToTopButton = false;
+                        defaultSettingsCopy.showSettingsScrollToBottomButton = true;
+                newSettings.showSettingsScrollToTopButton = elements.showSettingsScrollToTopButtonToggle.checked;
+                newSettings.showSettingsScrollToBottomButton = elements.showSettingsScrollToBottomButtonToggle.checked;
                 newSettings.showApiProviderToggleHeader = elements.showApiProviderToggleHeaderCheckbox.checked;
                 newSettings.showApiProviderToggleFooter = elements.showApiProviderToggleFooterCheckbox.checked;
                 newSettings.showHeaderCycleApiKeyBtn = elements.showHeaderCycleApiKeyBtnToggle.checked;
