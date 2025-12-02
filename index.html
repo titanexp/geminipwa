@@ -8068,7 +8068,10 @@ enableElevation: true,
             resizeTimer = setTimeout(updateMessageMaxWidthVar, 150);
         });
 
-        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+        const sleep = (ms) => {
+            if (document.hidden) return Promise.resolve();
+            return new Promise(resolve => setTimeout(resolve, ms));
+        };
 
         function formatFileSize(bytes) {
             if (bytes === 0) return '0 Bytes';
@@ -11410,6 +11413,19 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 state.currentScreen = screenName;
             },
             setSendingState(sending) {
+                if (sending) {
+                    if ('wakeLock' in navigator) {
+                        navigator.wakeLock.request('screen').then(lock => {
+                            state.wakeLock = lock;
+                        }).catch(() => {});
+                    }
+                } else {
+                    if (state.wakeLock) {
+                        state.wakeLock.release().then(() => {
+                            state.wakeLock = null;
+                        }).catch(() => {});
+                    }
+                }
                 state.isSending = sending;
                 if (sending) {
                     elements.sendButton.textContent = '止';
