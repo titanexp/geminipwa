@@ -4761,14 +4761,6 @@ body.pastel-yellow-mode .api-key-help-icon {
                             (カンマ区切り):</label>
                         <textarea id="deepseek-additional-models" placeholder="例: custom-model-1,custom-model-2"
                             aria-label="DeepSeek 追加モデル"></textarea>
-                        <label for="deepseek-api-endpoint" style="margin-top:10px;">DeepSeek APIエンドポイント (オプション):</label>
-                        <input type="text" id="deepseek-api-endpoint" placeholder="例: https://api.deepseek.com"
-                            aria-label="DeepSeek APIエンドポイント">
-                        <p
-                            style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                            ※ 空欄の場合はデフォルト (https://api.deepseek.com) を使用し、パスは `/chat/completions` です。
-                            形式的な実装であり、デバッグされておりません。
-                        </p>
                     </div>
                 </details>
 
@@ -7057,6 +7049,13 @@ body.pastel-yellow-mode .api-key-help-icon {
                             ※ ブラウザに保存されている設定や履歴を全て削除。<BR>
                             ！！間違えて押そうとしていないか注意！！
                         </p>
+                        <details style="margin-top: 15px; border-top: 1px dashed var(--border-secondary); padding-top: 10px;">
+                            <summary style="cursor: pointer; font-size: 12px; color: var(--text-secondary);">デバッグ機能</summary>
+                            <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+                                <button id="debug-check-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">全ての項目のチェックボックスをオンにする</button>
+                                <button id="debug-uncheck-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">全ての項目のチェックボックスをオフにする</button>
+                            </div>
+                        </details>
                     </details>
                 </div>
             </main>
@@ -7312,7 +7311,6 @@ const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
             deepSeekModelNameSelect: document.getElementById('deepseek-model-name'),
             deepSeekUserDefinedModelsGroup: document.getElementById('deepseek-user-defined-models-group'),
             deepSeekAdditionalModelsTextarea: document.getElementById('deepseek-additional-models'),
-            deepSeekApiEndpointInput: document.getElementById('deepseek-api-endpoint'),
             claudeSettingsGroup: document.getElementById('claude-settings-group'),
             claudeApiKeyInput: document.getElementById('claude-api-key'),
             claudeModelNameSelect: document.getElementById('claude-model-name'),
@@ -7707,6 +7705,8 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             webhookFormatTextRadio: document.getElementById('webhook-format-text'),
             webhooksList: document.getElementById('webhooks-list'),
             addWebhookBtn: document.getElementById('add-webhook-btn'),
+            debugCheckAllBtn: document.getElementById('debug-check-all-btn'),
+            debugUncheckAllBtn: document.getElementById('debug-uncheck-all-btn'),
         };
 
         const state = {
@@ -7754,7 +7754,6 @@ geminiIncludeThoughts: false,
                 deepSeekApiKey: '',
                 deepSeekModelName: DEFAULT_DEEPSEEK_MODEL,
                 deepSeekAdditionalModels: '',
-                deepSeekApiEndpoint: '',
                 deepSeekSystemPrompt: '',
                 deepSeekEnableSystemPromptDefault: true,
                 deepSeekTemperature: null,
@@ -7874,15 +7873,15 @@ footerTapScrollToBottom: false,
                 extendAiBubbleWidth: false,
                 extendUserBubbleWidth: false,
                 reduceMessageSpacing: false,
-                compactSettingsSpacing: false,
+                compactSettingsSpacing: true,
                 showSessionLinkingSettings: false,
                 showTwinEngineSettings: false,
                 showChatTitle: true,
                 showNewChatButton: true,
                 showDeleteSessionButton: false,
                 showCopySessionButton: false,
-                showScrollToTopButton: true,
-                showScrollToBottomButton: true,
+                showScrollToTopButton: false,
+                showScrollToBottomButton: false,
                 showToggleAllContentButton: false,
                 showBulkHistoryActions: true,
                 showPasteButtonInFooter: false,
@@ -10500,7 +10499,6 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 elements.deepSeekApiKeyInput.value = state.settings.deepSeekApiKey || '';
                 elements.deepSeekModelNameSelect.value = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
                 elements.deepSeekAdditionalModelsTextarea.value = state.settings.deepSeekAdditionalModels || '';
-                elements.deepSeekApiEndpointInput.value = state.settings.deepSeekApiEndpoint || '';
                 elements.claudeApiKeyInput.value = state.settings.claudeApiKey || '';
                 elements.claudeModelNameSelect.value = state.settings.claudeModelName || DEFAULT_CLAUDE_MODEL;
                 elements.claudeAdditionalModelsTextarea.value = state.settings.claudeAdditionalModels || '';
@@ -11413,19 +11411,6 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 state.currentScreen = screenName;
             },
             setSendingState(sending) {
-                if (sending) {
-                    if ('wakeLock' in navigator) {
-                        navigator.wakeLock.request('screen').then(lock => {
-                            state.wakeLock = lock;
-                        }).catch(() => {});
-                    }
-                } else {
-                    if (state.wakeLock) {
-                        state.wakeLock.release().then(() => {
-                            state.wakeLock = null;
-                        }).catch(() => {});
-                    }
-                }
                 state.isSending = sending;
                 if (sending) {
                     elements.sendButton.textContent = '止';
@@ -12005,6 +11990,15 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
             });
         }
         const appLogic = {
+            toggleAllSettingsCheckboxes(checked) {
+                const checkboxes = document.querySelectorAll('#settings-screen input[type="checkbox"]');
+                checkboxes.forEach(cb => {
+                    if (cb.checked !== checked) {
+                        cb.checked = checked;
+                        cb.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                });
+            },
             scrollToSettingsTop() {
                 const mainContent = elements.settingsScreen.querySelector('.main-content');
                 if (mainContent) {
@@ -12521,6 +12515,12 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 elements.updateAppBtn.addEventListener('click', () => this.updateApp());
                 elements.clearDataBtn.addEventListener('click', () => this.confirmClearAllData());
                 elements.clearHistoryBtn.addEventListener('click', () => this.confirmClearAllHistory());
+                if (elements.debugCheckAllBtn) {
+                    elements.debugCheckAllBtn.addEventListener('click', () => this.toggleAllSettingsCheckboxes(true));
+                }
+                if (elements.debugUncheckAllBtn) {
+                    elements.debugUncheckAllBtn.addEventListener('click', () => this.toggleAllSettingsCheckboxes(false));
+                }
                 document.getElementById('force-recovery-btn').addEventListener('click', async () => {
                     const confirmed = await uiUtils.showCustomConfirm(
                         "強制復旧を実行しますか？\n\n" +
@@ -13048,11 +13048,61 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     }
                 }, true);
 
-                elements.chatScreen.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
+                                elements.chatScreen.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
                 elements.chatScreen.addEventListener('touchmove', this.handleTouchMove.bind(this), { passive: false });
                 elements.chatScreen.addEventListener('touchend', this.handleTouchEnd.bind(this));
 
+                let mouseGlobalY = 0;
+                let autoScrollTimer = null;
+
+                const stopAutoScroll = () => {
+                    if (autoScrollTimer) {
+                        clearInterval(autoScrollTimer);
+                        autoScrollTimer = null;
+                        document.body.style.cursor = '';
+                    }
+                };
+
+                window.addEventListener('mousemove', (e) => { mouseGlobalY = e.clientY; });
+
+                window.addEventListener('wheel', (e) => {
+                    if (autoScrollTimer) stopAutoScroll();
+                    const activeScreen = document.querySelector('.screen.active');
+                    if (!activeScreen) return;
+                    const scrollTarget = activeScreen.querySelector('.main-content');
+                    if (!scrollTarget || scrollTarget.contains(e.target)) return;
+                    if (e.target.tagName === 'TEXTAREA' && e.target.scrollHeight > e.target.clientHeight) return;
+                    if (e.target.closest('.api-keys-list')) return;
+                    scrollTarget.scrollTop += e.deltaY;
+                }, { passive: true });
+
+                window.addEventListener('mousedown', (e) => {
+                    if (autoScrollTimer) {
+                        stopAutoScroll();
+                        return;
+                    }
+                    if (e.button !== 1) return;
+
+                    const activeScreen = document.querySelector('.screen.active');
+                    if (!activeScreen) return;
+                    const scrollTarget = activeScreen.querySelector('.main-content');
+                    if (!scrollTarget || scrollTarget.contains(e.target)) return;
+                    if (e.target.tagName === 'TEXTAREA' || e.target.closest('button, input, select, a')) return;
+
+                    e.preventDefault();
+                    const originY = e.clientY;
+                    document.body.style.cursor = 'ns-resize';
+
+                    autoScrollTimer = setInterval(() => {
+                        const delta = mouseGlobalY - originY;
+                        if (Math.abs(delta) > 10) {
+                            scrollTarget.scrollTop += delta * 0.25;
+                        }
+                    }, 16);
+                });
+
                 if ('visualViewport' in window) {
+
                     window.visualViewport.addEventListener('resize', this.updateZoomState.bind(this));
                     window.visualViewport.addEventListener('scroll', this.updateZoomState.bind(this));
                 }
@@ -13251,8 +13301,9 @@ helpIcons.forEach(icon => {
                     }
                 }
             },
-            handleTouchStart(event) {
+                        handleTouchStart(event) {
                 if (!state.settings.enableSwipeNavigation) return;
+                if (event.target.tagName === 'TEXTAREA' || event.target.tagName === 'INPUT') return;
                 if (event.touches.length > 1 || state.isZoomed) {
                     state.touchStartX = 0;
                     state.touchStartY = 0;
@@ -13265,6 +13316,7 @@ helpIcons.forEach(icon => {
                 state.touchEndX = state.touchStartX;
                 state.touchEndY = state.touchStartY;
             },
+
             handleTouchMove(event) {
                 if (!state.settings.enableSwipeNavigation) return;
                 if (!state.touchStartX || event.touches.length > 1 || state.isZoomed) {
@@ -15496,28 +15548,22 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
 
                 catch (error) {
                     const isAbort = error.message === "リクエストがキャンセルされました。" || modelResponseMetadata.finishReason === 'ABORTED';
-
                     const displayErrorMessage = isAbort ? error.message : (error.message || "不明なエラーが発生しました");
 
-                    let partialThoughtContentOnError, partialContentOnError;
-                    partialThoughtContentOnError = state.partialThoughtStreamContent;
-                    partialContentOnError = state.partialStreamContent;
+                    let partialThoughtContentOnError = state.partialThoughtStreamContent;
+                    let partialContentOnError = state.partialStreamContent;
 
                     if (isBackgroundProcess) {
                         throw error;
                     }
 
-                    if ((partialContentOnError || partialContentOnError) && useStreamingForThisCall && modelMessageObjectForStream) {
-                        const finalPartialContent = partialContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
+                    if ((partialContentOnError || partialThoughtContentOnError) && useStreamingForThisCall && modelMessageObjectForStream) {
+                        const suffix = isAbort ? '\n\n(中断)' : '\n\n(通信が切断されました)';
+                        const finalPartialContent = partialContentOnError + suffix;
+                        
                         let finalPartialThoughtValue = null;
-                        if (selectedApiProvider === 'gemini' && partialThoughtContentOnError && contextGeminiIncludeThoughts) {
-                            finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
-                        } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && partialThoughtContentOnError && contextDeepSeekIncludeThoughts) {
-                            finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
-                        } else if (selectedApiProvider === 'claude' && partialThoughtContentOnError && contextClaudeIncludeThoughts) {
-                            finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
-                        } else if (selectedApiProvider === 'xai' && partialThoughtContentOnError && contextXaiIncludeThoughts) {
-                            finalPartialThoughtValue = partialThoughtContentOnError + `\n\n(${isAbort ? '中断されました' : 'エラーが発生しました'})`;
+                        if (partialThoughtContentOnError) {
+                            finalPartialThoughtValue = partialThoughtContentOnError + suffix;
                         }
 
                         const streamingMessageIndex = state.currentMessages.indexOf(modelMessageObjectForStream);
@@ -15525,8 +15571,8 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                             const msgToUpdate = state.currentMessages[streamingMessageIndex];
                             msgToUpdate.content = finalPartialContent;
                             msgToUpdate.timestamp = Date.now();
-                            msgToUpdate.error = true;
-                            msgToUpdate.finishReason = isAbort ? 'ABORTED' : (modelResponseMetadata.finishReason || 'ERROR');
+                            msgToUpdate.error = false;
+                            msgToUpdate.finishReason = 'STOP';
                             msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
                             msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
                             msgToUpdate.generatedByApiProvider = selectedApiProvider;
@@ -15534,11 +15580,11 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                             if (selectedApiProvider === 'gemini') {
                                 msgToUpdate.thoughtSummary = finalPartialThoughtValue;
                                 msgToUpdate.groundingMetadata = currentGroundingMetadata;
-                            } else if (selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') {
+                            } else if ((selectedApiProvider === 'deepseek' || selectedApiProvider === 'llmaggregator') && contextDeepSeekIncludeThoughts) {
                                 msgToUpdate.deepSeekThoughtSummary = finalPartialThoughtValue;
-                            } else if (selectedApiProvider === 'claude') {
+                            } else if (selectedApiProvider === 'claude' && contextClaudeIncludeThoughts) {
                                 msgToUpdate.thoughtSummary = finalPartialThoughtValue;
-                            } else if (selectedApiProvider === 'xai') {
+                            } else if (selectedApiProvider === 'xai' && contextXaiIncludeThoughts) {
                                 msgToUpdate.xaiThoughtSummary = finalPartialThoughtValue;
                             }
 
@@ -16126,7 +16172,6 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
 
                 newSettings.deepSeekModelName = elements.deepSeekModelNameSelect.value;
                 newSettings.deepSeekAdditionalModels = elements.deepSeekAdditionalModelsTextarea.value.trim();
-                newSettings.deepSeekApiEndpoint = elements.deepSeekApiEndpointInput.value.trim();
                 newSettings.deepSeekSystemPrompt = elements.deepSeekSystemPromptDefaultTextarea.value.trim();
                 newSettings.deepSeekEnableSystemPromptDefault = elements.deepSeekEnableSystemPromptDefaultCheckbox.checked;
                 newSettings.deepSeekMaxTokens = getParamValue('deepseek-max-tokens', true, 1);
@@ -16479,7 +16524,6 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                         defaultSettingsCopy.deepSeekApiKey = '';
                         defaultSettingsCopy.deepSeekModelName = DEFAULT_DEEPSEEK_MODEL;
                         defaultSettingsCopy.deepSeekAdditionalModels = '';
-                        defaultSettingsCopy.deepSeekApiEndpoint = '';
                         defaultSettingsCopy.claudeApiKey = '';
                         defaultSettingsCopy.claudeModelName = DEFAULT_CLAUDE_MODEL;
                         defaultSettingsCopy.claudeAdditionalModels = '';
@@ -16516,8 +16560,8 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                         defaultSettingsCopy.showNewChatButton = true;
                         defaultSettingsCopy.showDeleteSessionButton = false;
                         defaultSettingsCopy.showCopySessionButton = false;
-                        defaultSettingsCopy.showScrollToTopButton = true;
-                        defaultSettingsCopy.showScrollToBottomButton = true;
+                        defaultSettingsCopy.showScrollToTopButton = false;
+                        defaultSettingsCopy.showScrollToBottomButton = false;
                         defaultSettingsCopy.showToggleAllContentButton = false;
                         defaultSettingsCopy.showBulkHistoryActions = true;
                         defaultSettingsCopy.showPasteButtonInFooter = false;
@@ -18367,7 +18411,7 @@ async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemIns
                         throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
                     }
                 } else {
-                    baseUrl = state.settings.deepSeekApiEndpoint || DEEPSEEK_API_DEFAULT_BASE_URL;
+                    baseUrl = DEEPSEEK_API_DEFAULT_BASE_URL;
                 }
 
                 if (!apiKey) {
