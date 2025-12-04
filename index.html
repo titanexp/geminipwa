@@ -4464,16 +4464,23 @@ body.pastel-yellow-mode .api-key-help-icon {
         }
 
         body.chmate-scroll-enabled #chmate-scroll-zone {
-            opacity: 1;
+            opacity: 0.3;
             pointer-events: auto;
+            transition: opacity 0.3s ease;
         }
 
-        body.chmate-scroll-enabled .main-content {
+        body.chmate-scroll-enabled #chmate-scroll-zone:hover,
+        body.chmate-scroll-enabled #chmate-scroll-zone.is-dragging,
+        body.chmate-scroll-enabled #chmate-scroll-zone.is-scrolling {
+            opacity: 1;
+        }
+
+        body.chmate-scroll-enabled #chat-screen .main-content {
             scrollbar-width: none;
             -ms-overflow-style: none;
             padding-right: var(--chmate-scroll-width) !important;
         }
-        body.chmate-scroll-enabled .main-content::-webkit-scrollbar {
+        body.chmate-scroll-enabled #chat-screen .main-content::-webkit-scrollbar {
             display: none;
         }
 
@@ -18319,7 +18326,16 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     updateMarkers();
                 };
 
-                mainContent.addEventListener('scroll', updateHandle, { passive: true });
+                let scrollTimeout;
+                const onScroll = () => {
+                    updateHandle();
+                    zone.classList.add('is-scrolling');
+                    clearTimeout(scrollTimeout);
+                    scrollTimeout = setTimeout(() => {
+                        zone.classList.remove('is-scrolling');
+                    }, 1500);
+                };
+                mainContent.addEventListener('scroll', onScroll, { passive: true });
                 window.addEventListener('resize', updateAll);
                 
                 const observer = new MutationObserver(updateAll);
