@@ -4444,33 +4444,6 @@ body.pastel-yellow-mode .api-key-help-icon {
         .thought-summary-content pre {
             font-size: calc(var(--thought-summary-font-size) * var(--chat-ui-scale)) !important;
         }
-
-        #scroll-zone {
-            position: absolute;
-            right: 0;
-            width: 34px;
-            z-index: 90;
-            touch-action: none;
-            opacity: 0;
-            transition: opacity 0.2s ease, background-color 0.2s ease;
-            cursor: pointer;
-        }
-        #scroll-zone.visible { opacity: 1; }
-        #scroll-zone:active, #scroll-zone:hover { background-color: rgba(0, 0, 0, 0.05); }
-        body.dark-mode #scroll-zone:active, body.dark-mode #scroll-zone:hover { background-color: rgba(255, 255, 255, 0.05); }
-        #scroll-thumb {
-            position: absolute;
-            right: 0;
-            width: 6px;
-            min-height: 30px;
-            background-color: var(--bg-button);
-            border-radius: 3px 0 0 3px;
-            opacity: 0.6;
-            pointer-events: none;
-            transition: width 0.1s ease, opacity 0.2s ease;
-        }
-        #scroll-zone:active #scroll-thumb, #scroll-zone:hover #scroll-thumb { width: 12px; opacity: 0.9; }
-        #scroll-zone.hidden { display: none !important; }
     </style>
 
     <script src="marked.js"></script>
@@ -4633,9 +4606,6 @@ body.pastel-yellow-mode .api-key-help-icon {
                 </div>
                 <div id="loading-indicator" class="loading-indicator hidden" aria-live="polite">応答中</div>
             </main>
-            <div id="scroll-zone" class="hidden">
-                <div id="scroll-thumb"></div>
-            </div>
             <footer class="chat-input-area">
                 <button id="footer-api-provider-toggle-btn" class="footer-action-button api-provider-toggle-btn"
                     title="APIプロバイダー切替"></button>
@@ -6492,14 +6462,6 @@ body.pastel-yellow-mode .api-key-help-icon {
                                             </p>
                                             <hr style="margin: 10px 0; border-top: 1px solid var(--border-tertiary);">
                                             <label class="checkbox-label">
-                                                <input type="checkbox" id="show-scroll-zone-toggle">
-                                                画面右端にスクロールゾーンを表示する
-                                            </label>
-                                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 10px;">
-                                                ※ 通常のスクロールバーとは別に、タッチしやすいスクロール領域を表示します。
-                                            </p>
-                                            <hr style="margin: 10px 0; border-top: 1px solid var(--border-tertiary);">
-                                            <label class="checkbox-label">
                                                 <input type="checkbox" id="enable-elevation-toggle">
                                                 UIを立体的にする
                                             </label>
@@ -7444,7 +7406,6 @@ const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
         const DEFAULT_THOUGHT_SUMMARY_OPACITY = 0.65;
         const DEFAULT_THOUGHT_SUMMARY_FONT_SIZE = 13;
         const DEFAULT_TWIN_ENGINE_SUMMARIZE_AFTER_TURNS = 3;
-        const DEFAULT_SHOW_SCROLL_ZONE = true;
 
         const ALLOWED_LLMAGGREGATOR_DOMAINS = [
             'openrouter.ai',
@@ -7899,9 +7860,6 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             addWebhookBtn: document.getElementById('add-webhook-btn'),
             debugCheckAllBtn: document.getElementById('debug-check-all-btn'),
             debugUncheckAllBtn: document.getElementById('debug-uncheck-all-btn'),
-            scrollZone: document.getElementById('scroll-zone'),
-            scrollThumb: document.getElementById('scroll-thumb'),
-            showScrollZoneToggle: document.getElementById('show-scroll-zone-toggle'),
         };
 
         const state = {
@@ -8156,7 +8114,6 @@ enableToggleButtonTopOpacity: true,
 enableThoughtSummaryOpacity: true,
 enableElevation: true,
                 enableElevationHover: false,
-                showScrollZone: DEFAULT_SHOW_SCROLL_ZONE,
                 showSettingsScrollToTopButton: false,
                 showSettingsScrollToBottomButton: true,
                 settingsUIDetailsOpenStates: {},
@@ -8392,9 +8349,6 @@ enableElevation: true,
                         });
                         const defaultSettings = { ...state.settings };
                         state.settings = { ...defaultSettings };
-
-                        if (loadedSettings.hasOwnProperty('showScrollZone')) state.settings.showScrollZone = loadedSettings.showScrollZone;
-                        else state.settings.showScrollZone = DEFAULT_SHOW_SCROLL_ZONE;
 
                         if (loadedSettings.hasOwnProperty('darkMode') && !loadedSettings.hasOwnProperty('theme')) {
                             state.settings.theme = loadedSettings.darkMode === true ? 'dark' : 'light';
@@ -9109,49 +9063,6 @@ enableElevation: true,
         }
         // ▲▲▲ ここまで追加 ▲▲▲
         const uiUtils = {
-            updateScrollZoneLayout() {
-                if (!state.settings.showScrollZone || !elements.scrollZone) return;
-                const headerHeight = elements.chatScreen.querySelector('.app-header').offsetHeight;
-                const footerHeight = elements.chatScreen.querySelector('.chat-input-area').offsetHeight;
-                elements.scrollZone.style.top = `${headerHeight}px`;
-                elements.scrollZone.style.height = `calc(100% - ${headerHeight}px - ${footerHeight}px)`;
-                this.updateScrollThumbPosition();
-            },
-            updateScrollThumbPosition() {
-                if (!state.settings.showScrollZone || !elements.scrollZone) return;
-                const mainContent = elements.chatScreen.querySelector('.main-content');
-                const scrollHeight = mainContent.scrollHeight;
-                const clientHeight = mainContent.clientHeight;
-                const scrollTop = mainContent.scrollTop;
-                if (scrollHeight <= clientHeight) {
-                    elements.scrollZone.classList.remove('visible');
-                    elements.scrollThumb.style.display = 'none';
-                    return;
-                }
-                elements.scrollZone.classList.add('visible');
-                elements.scrollThumb.style.display = 'block';
-                const zoneHeight = elements.scrollZone.clientHeight;
-                let thumbHeight = Math.max(30, (clientHeight / scrollHeight) * zoneHeight);
-                const maxScrollTop = scrollHeight - clientHeight;
-                const maxThumbTop = zoneHeight - thumbHeight;
-                let thumbTop = 0;
-                if (maxScrollTop > 0) thumbTop = (scrollTop / maxScrollTop) * maxThumbTop;
-                elements.scrollThumb.style.height = `${thumbHeight}px`;
-                elements.scrollThumb.style.top = `${thumbTop}px`;
-            },
-            handleScrollZoneInteraction(e) {
-                if (!state.settings.showScrollZone) return;
-                e.preventDefault();
-                const mainContent = elements.chatScreen.querySelector('.main-content');
-                const zoneRect = elements.scrollZone.getBoundingClientRect();
-                const zoneHeight = zoneRect.height;
-                const scrollHeight = mainContent.scrollHeight;
-                const clientHeight = mainContent.clientHeight;
-                let clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
-                const relativeY = clientY - zoneRect.top;
-                let ratio = Math.max(0, Math.min(1, relativeY / zoneHeight));
-                mainContent.scrollTop = ratio * (scrollHeight - clientHeight);
-            },
             updateSettingsScreenElementVisibility() {
                 elements.settingsScrollToTopBtn.classList.toggle('hidden', !state.settings.showSettingsScrollToTopButton);
                 elements.settingsScrollToBottomBtn.classList.toggle('hidden', !state.settings.showSettingsScrollToBottomButton);
@@ -11682,7 +11593,6 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     requestAnimationFrame(() => {
                         this.adjustTextareaHeight();
                         this.updateChatScreenElementVisibility();
-                        this.updateScrollZoneLayout();
                     });
                 } else if (screenName === 'history') {
                     activeScreen = elements.historyScreen;
@@ -12591,9 +12501,6 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 uiUtils.applyUserBubbleWidthSetting();
                 uiUtils.applyMessageSpacingSetting();
                 uiUtils.applyCompactSettingsSpacing();
-                elements.showScrollZoneToggle.checked = state.settings.showScrollZone;
-                elements.scrollZone.classList.toggle('hidden', !state.settings.showScrollZone);
-                if (state.settings.showScrollZone) uiUtils.updateScrollZoneLayout();
 
                 if (state.settings.backgroundImageBlob instanceof Blob) {
                         uiUtils.revokeExistingObjectUrl();
@@ -13503,33 +13410,6 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                         }
                     });
                 });
-
-                elements.showScrollZoneToggle.addEventListener('change', (e) => {
-                    state.settings.showScrollZone = e.target.checked;
-                    elements.scrollZone.classList.toggle('hidden', !e.target.checked);
-                    if (e.target.checked) uiUtils.updateScrollZoneLayout();
-                });
-                const mainContent = elements.chatScreen.querySelector('.main-content');
-                mainContent.addEventListener('scroll', () => {
-                    if (state.settings.showScrollZone) uiUtils.updateScrollThumbPosition();
-                }, { passive: true });
-                window.addEventListener('resize', () => uiUtils.updateScrollZoneLayout());
-                const layoutObserver = new MutationObserver(() => {
-                    if (state.settings.showScrollZone) uiUtils.updateScrollZoneLayout();
-                });
-                layoutObserver.observe(elements.appContainer, { attributes: true, subtree: true, attributeFilter: ['style', 'class'] });
-                elements.userInput.addEventListener('input', () => setTimeout(() => uiUtils.updateScrollZoneLayout(), 50));
-                const zone = elements.scrollZone;
-                const startScroll = (e) => { uiUtils.handleScrollZoneInteraction(e); document.body.style.userSelect = 'none'; };
-                const moveScroll = (e) => { if (e.type === 'mousemove' && e.buttons === 0) return; uiUtils.handleScrollZoneInteraction(e); };
-                const endScroll = () => { document.body.style.userSelect = ''; };
-                zone.addEventListener('mousedown', startScroll);
-                zone.addEventListener('mousemove', moveScroll);
-                document.addEventListener('mouseup', endScroll);
-                zone.addEventListener('touchstart', startScroll, { passive: false });
-                zone.addEventListener('touchmove', moveScroll, { passive: false });
-                zone.addEventListener('touchend', endScroll);
-
                 window.addEventListener('resize', uiUtils.adjustHeaderLayout);
                 uiUtils.adjustHeaderLayout();
 
@@ -16718,7 +16598,6 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 newSettings.toggleButtonBottomTextCollapse = elements.toggleButtonBottomTextCollapseInput.value.trim() || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 newSettings.toggleButtonBottomTextExpand = elements.toggleButtonBottomTextExpandInput.value.trim() || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
                 newSettings.thoughtSummaryOpacity = elements.thoughtSummaryOpacityInput.value === '' ? DEFAULT_THOUGHT_SUMMARY_OPACITY : parseFloat(elements.thoughtSummaryOpacityInput.value);
-                newSettings.showScrollZone = elements.showScrollZoneToggle.checked;
                 newSettings.enableElevation = elements.enableElevationToggle.checked;
                 newSettings.enableElevationHover = elements.enableElevationHoverToggle.checked;
                 newSettings.autoCloseOtherSettings = elements.autoCloseOtherSettingsToggle.checked;
