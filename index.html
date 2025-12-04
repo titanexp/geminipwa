@@ -18,6 +18,7 @@
             --bg-model-message: #e5e5ea;
             --bg-system-message: #f0f8ff;
             --bg-error-message: #ffebee;
+            --chmate-scroll-width: 30px;
             --bg-button: #4a90e2;
             --bg-button-rgb: 74, 144, 226;
             --bg-button-hover: #357abd;
@@ -4450,7 +4451,7 @@ body.pastel-yellow-mode .api-key-help-icon {
             position: absolute;
             top: 0;
             right: 0;
-            width: 30px;
+            width: var(--chmate-scroll-width);
             height: 100%;
             background-color: rgba(0, 0, 0, 0.02);
             z-index: 90;
@@ -4470,6 +4471,7 @@ body.pastel-yellow-mode .api-key-help-icon {
         body.chmate-scroll-enabled .main-content {
             scrollbar-width: none;
             -ms-overflow-style: none;
+            padding-right: var(--chmate-scroll-width) !important;
         }
         body.chmate-scroll-enabled .main-content::-webkit-scrollbar {
             display: none;
@@ -4478,7 +4480,7 @@ body.pastel-yellow-mode .api-key-help-icon {
         #chmate-scroll-handle {
             position: absolute;
             right: 2px;
-            width: 26px;
+            width: calc(var(--chmate-scroll-width) - 4px);
             min-height: 40px;
             background-color: rgba(100, 100, 100, 0.5);
             border-radius: 4px;
@@ -4499,6 +4501,37 @@ body.pastel-yellow-mode .api-key-help-icon {
         }
         body.dark-mode #chmate-scroll-zone:active #chmate-scroll-handle {
             background-color: rgba(200, 200, 200, 0.6);
+        }
+
+        .scroll-marker {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            z-index: 89;
+            cursor: pointer;
+            pointer-events: auto;
+        }
+        .scroll-marker:hover {
+            height: 6px;
+            transform: scaleX(1.2);
+            z-index: 91;
+        }
+        .scroll-marker.user {
+            background-color: rgba(200, 200, 200, 0.6);
+        }
+        .scroll-marker.model {
+            background-color: rgba(50, 50, 50, 0.6);
+        }
+        body.dark-mode .scroll-marker.user {
+            background-color: rgba(255, 255, 255, 0.6);
+        }
+        body.dark-mode .scroll-marker.model {
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+
+        #chmate-scroll-zone.is-dragging .scroll-marker {
+            pointer-events: none;
         }
     </style>
 
@@ -6476,9 +6509,13 @@ body.pastel-yellow-mode .api-key-help-icon {
                                                 <input type="checkbox" id="enable-chmate-scroll-toggle">
                                                 画面右側にスクロールバー(ChMate風)を表示する
                                             </label>
-                                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 5px;">
                                                 ※ 右端をドラッグして高速スクロールできるゾーンを追加します。
                                             </p>
+                                            <div style="margin-left: 20px; margin-bottom: 15px;">
+                                                <label for="chmate-scroll-width-input">スクロールバーの太さ (px):</label>
+                                                <input type="number" id="chmate-scroll-width-input" min="10" max="100" step="1" placeholder="例: 30" style="width: 80px;">
+                                            </div>
                                             <label class="checkbox-label">
                                                 <input type="checkbox" id="extend-ai-bubble-width-toggle">
                                                 AI応答バブルの横幅を拡張する
@@ -7929,6 +7966,7 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             chmateScrollZone: document.getElementById('chmate-scroll-zone'),
             chmateScrollHandle: document.getElementById('chmate-scroll-handle'),
             enableChMateScrollToggle: document.getElementById('enable-chmate-scroll-toggle'),
+            chmateScrollWidthInput: document.getElementById('chmate-scroll-width-input'),
         };
 
         const state = {
@@ -8229,6 +8267,7 @@ enableElevation: true,
                 disableDeleteApiKeyConfirmation: true,
                 removeDuplicateApiKeys: true,
                 enableChMateScroll: true,
+                chmateScrollWidth: 30,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -10976,6 +11015,8 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 }
                 elements.enableChMateScrollToggle.checked = state.settings.enableChMateScroll;
                 document.body.classList.toggle('chmate-scroll-enabled', state.settings.enableChMateScroll);
+                elements.chmateScrollWidthInput.value = state.settings.chmateScrollWidth || 30;
+                document.documentElement.style.setProperty('--chmate-scroll-width', `${state.settings.chmateScrollWidth || 30}px`);
                 elements.extendAiBubbleWidthToggle.checked = state.settings.extendAiBubbleWidth;
                 elements.extendUserBubbleWidthToggle.checked = state.settings.extendUserBubbleWidth;
                                 elements.reduceMessageSpacingToggle.checked = state.settings.reduceMessageSpacing;
@@ -16611,6 +16652,8 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 newSettings.preventZoom = elements.preventZoomToggle.checked;
                 newSettings.minimizeHeaderFooter = document.getElementById('minimize-header-footer-toggle').checked;
                 newSettings.enableChMateScroll = elements.enableChMateScrollToggle.checked;
+                const scrollWidth = parseInt(elements.chmateScrollWidthInput.value, 10);
+                newSettings.chmateScrollWidth = (isNaN(scrollWidth) || scrollWidth < 10) ? 30 : scrollWidth;
                 newSettings.extendAiBubbleWidth = elements.extendAiBubbleWidthToggle.checked;
                                 newSettings.extendUserBubbleWidth = elements.extendUserBubbleWidthToggle.checked;
                                 newSettings.reduceMessageSpacing = elements.reduceMessageSpacingToggle.checked;
@@ -18205,6 +18248,39 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 const zone = elements.chmateScrollZone;
                 const handle = elements.chmateScrollHandle;
 
+                const updateMarkers = () => {
+                    if (!state.settings.enableChMateScroll) return;
+                    
+                    zone.querySelectorAll('.scroll-marker').forEach(el => el.remove());
+
+                    const messages = elements.messageContainer.querySelectorAll('.message');
+                    const contentHeight = mainContent.scrollHeight;
+                    const zoneHeight = zone.clientHeight;
+
+                    if (contentHeight === 0 || zoneHeight === 0) return;
+
+                    messages.forEach(msg => {
+                        const marker = document.createElement('div');
+                        marker.classList.add('scroll-marker');
+                        if (msg.classList.contains('user')) marker.classList.add('user');
+                        else if (msg.classList.contains('model')) marker.classList.add('model');
+                        else return;
+
+                        const relativeTop = (msg.offsetTop / contentHeight) * zoneHeight;
+                        marker.style.top = `${relativeTop}px`;
+
+                        const onMarkerClick = (e) => {
+                            e.stopPropagation(); 
+                            e.preventDefault();
+                            mainContent.scrollTop = msg.offsetTop - 10;
+                        };
+
+                        marker.addEventListener('click', onMarkerClick);
+
+                        zone.appendChild(marker);
+                    });
+                };
+
                 const updateHandle = () => {
                     if (!state.settings.enableChMateScroll) return;
 
@@ -18217,9 +18293,11 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
 
                     if (contentHeight <= viewHeight) {
                         handle.style.display = 'none';
+                        zone.querySelectorAll('.scroll-marker').forEach(el => el.style.display = 'none');
                         return;
                     }
                     handle.style.display = 'block';
+                    zone.querySelectorAll('.scroll-marker').forEach(el => el.style.display = 'block');
 
                     let handleHeight = (viewHeight / contentHeight) * viewHeight;
                     handleHeight = Math.max(handleHeight, 40);
@@ -18236,10 +18314,15 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     handle.style.transform = `translateY(${handleTop}px)`;
                 };
 
+                const updateAll = () => {
+                    updateHandle();
+                    updateMarkers();
+                };
+
                 mainContent.addEventListener('scroll', updateHandle, { passive: true });
-                window.addEventListener('resize', updateHandle);
+                window.addEventListener('resize', updateAll);
                 
-                const observer = new MutationObserver(updateHandle);
+                const observer = new MutationObserver(updateAll);
                 observer.observe(elements.messageContainer, { childList: true, subtree: true, attributes: true });
 
                 let isDragging = false;
@@ -18260,6 +18343,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 const startDrag = (e) => {
                     if (!state.settings.enableChMateScroll) return;
                     isDragging = true;
+                    zone.classList.add('is-dragging');
                     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
                     scrollByZone(clientY);
                     e.preventDefault();
@@ -18274,6 +18358,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
 
                 const endDrag = () => {
                     isDragging = false;
+                    zone.classList.remove('is-dragging');
                 };
 
                 zone.addEventListener('touchstart', startDrag, { passive: false });
@@ -18284,7 +18369,8 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 document.addEventListener('mousemove', doDrag);
                 document.addEventListener('mouseup', endDrag);
 
-                updateHandle();
+                // Initial render delay to ensure layout is ready
+                setTimeout(updateAll, 100);
             },
         };
         const webhookUtils = {
