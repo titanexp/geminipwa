@@ -1896,7 +1896,7 @@ body.turf-mode {
             cursor: pointer;
             z-index: 3;
             opacity: 0.6;
-            transition: opacity 0.2s ease, background-color 0.2s ease;
+            transition: opacity 0.1s ease, background-color 0.1s ease;
             pointer-events: auto;
             min-width: auto;
             white-space: nowrap;
@@ -4470,15 +4470,19 @@ font-size: 1.142em !important;
         }
 
         body.chmate-scroll-enabled #chmate-scroll-zone {
-            opacity: 0.3;
+            opacity: var(--chmate-scroll-opacity, 0.3);
             pointer-events: auto;
             transition: opacity 0.3s ease;
         }
 
-        body.chmate-scroll-enabled #chmate-scroll-zone:hover,
         body.chmate-scroll-enabled #chmate-scroll-zone.is-dragging,
         body.chmate-scroll-enabled #chmate-scroll-zone.is-scrolling {
-            opacity: 1;
+            opacity: var(--chmate-scroll-active-opacity, 1);
+        }
+        @media (hover: hover) {
+            body.chmate-scroll-enabled #chmate-scroll-zone:hover {
+                opacity: var(--chmate-scroll-active-opacity, 1);
+            }
         }
 
         body.chmate-scroll-enabled #chat-screen .main-content {
@@ -7034,6 +7038,22 @@ font-size: 1.142em !important;
                         </div>
 
                         <div class="opacity-slider-container">
+                            <label for="chmate-scroll-opacity">スクロールバーの透明度 (待機時) (0.0-1.0):</label>
+                            <div class="input-slider-wrapper">
+                                <input type="number" id="chmate-scroll-opacity" min="0" max="1" step="0.05" placeholder="例: 0.3" aria-label="スクロールバーの透明度">
+                                <input type="range" id="chmate-scroll-opacity-slider" min="0" max="1" step="0.05">
+                                <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="chmate-scroll-opacity"> ON</label>
+                            </div>
+                        </div>
+                        <div class="opacity-slider-container">
+                            <label for="chmate-scroll-active-opacity">スクロールバーの透明度 (操作時) (0.0-1.0):</label>
+                            <div class="input-slider-wrapper">
+                                <input type="number" id="chmate-scroll-active-opacity" min="0" max="1" step="0.05" placeholder="例: 1.0" aria-label="スクロールバーの操作時透明度">
+                                <input type="range" id="chmate-scroll-active-opacity-slider" min="0" max="1" step="0.05">
+                                <label class="opacity-disable-label"><input type="checkbox" class="opacity-disable-checkbox" data-target-id="chmate-scroll-active-opacity"> ON</label>
+                            </div>
+                        </div>
+                        <div class="opacity-slider-container">
                             <label for="thought-summary-opacity" style="margin-top:10px;">思考プロセス背景の透明度 (0.0-1.0):</label>
                             <div class="input-slider-wrapper">
                                 <input type="number" id="thought-summary-opacity" min="0" max="1" step="0.05" placeholder="例: 0.85" aria-label="思考プロセス背景の透明度">
@@ -7510,7 +7530,8 @@ const PASTEL_RAINBOW_THEME_COLOR = '#ffadad';
         const DEFAULT_MESSAGE_ACTIONS_BACKGROUND_OPACITY = 0.9;
         const DEFAULT_HEADER_FOOTER_OPACITY = 0.35;
         const DEFAULT_CHAT_OVERLAY_OPACITY = 0.7;
-
+        const DEFAULT_CHMATE_SCROLL_OPACITY = 0.3;
+const DEFAULT_CHMATE_SCROLL_ACTIVE_OPACITY = 0.7;
         const DEFAULT_TOGGLE_BUTTON_TOP_WIDTH = 6;
         const DEFAULT_TOGGLE_BUTTON_TOP_HEIGHT = 40;
         const DEFAULT_TOGGLE_BUTTON_TOP_FONT_SIZE = 12;
@@ -8241,6 +8262,8 @@ enableMessageActionsBackgroundOpacity: true,
 enableToggleButtonTopOpacity: true,
 enableThoughtSummaryOpacity: true,
 enableElevation: true,
+enableChmateScrollOpacity: true,
+                enableChmateScrollActiveOpacity: true,
                 enableElevationHover: false,
                 showSettingsScrollToTopButton: false,
                 showSettingsScrollToBottomButton: true,
@@ -10582,6 +10605,9 @@ const getCurrentMermaidTheme = () => {
                 document.documentElement.style.setProperty('--thought-summary-opacity',
                     state.settings.enableThoughtSummaryOpacity ? state.settings.thoughtSummaryOpacity : 1
                 );
+                document.documentElement.style.setProperty('--chmate-scroll-active-opacity',
+                    state.settings.enableChmateScrollActiveOpacity ? state.settings.chmateScrollActiveOpacity : DEFAULT_CHMATE_SCROLL_ACTIVE_OPACITY
+                );
 
                 let headerColor, secondaryColor, userMessageColor, modelMessageColor, overlayBaseColor, tertiaryColorRgbStr;
 
@@ -11067,6 +11093,8 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 elements.messageActionsBackgroundOpacityInput.value = state.settings.messageActionsBackgroundOpacity ?? DEFAULT_MESSAGE_ACTIONS_BACKGROUND_OPACITY;
                 elements.toggleButtonTopOpacityInput.value = state.settings.toggleButtonTopOpacity ?? DEFAULT_TOGGLE_BUTTON_TOP_OPACITY;
                 elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity ?? DEFAULT_THOUGHT_SUMMARY_OPACITY;
+                document.getElementById('chmate-scroll-opacity').value = state.settings.chmateScrollOpacity ?? DEFAULT_CHMATE_SCROLL_OPACITY;
+                document.getElementById('chmate-scroll-active-opacity').value = state.settings.chmateScrollActiveOpacity ?? DEFAULT_CHMATE_SCROLL_ACTIVE_OPACITY;
     elements.enableElevationToggle.checked = state.settings.enableElevation;
     elements.enableElevationHoverToggle.checked = state.settings.enableElevationHover;
     elements.elevationHoverOption.classList.toggle('hidden', !state.settings.enableElevation);
@@ -11148,8 +11176,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 elements.toggleButtonBottomFontSizeInput.value = state.settings.toggleButtonBottomFontSize ?? DEFAULT_TOGGLE_BUTTON_BOTTOM_FONT_SIZE;
                 elements.toggleButtonBottomTextCollapseInput.value = state.settings.toggleButtonBottomTextCollapse || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 elements.toggleButtonBottomTextExpandInput.value = state.settings.toggleButtonBottomTextExpand || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
-                elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity ?? DEFAULT_THOUGHT_SUMMARY_OPACITY;
-                elements.dummyErrorDebugModeCheckbox.checked = state.settings.dummyErrorDebugMode;
+                document.getElementById('chmate-scroll-opacity').value = state.settings.chmateScrollOpacity ?? DEFAULT_CHMATE_SCROLL_OPACITY;
 
                 document.documentElement.style.setProperty('--message-body-font-size', `${state.settings.messageBodyFontSize || DEFAULT_MESSAGE_BODY_FONT_SIZE}px`);
                 document.documentElement.style.setProperty('--code-block-font-size', `${state.settings.codeBlockFontSize || DEFAULT_CODE_BLOCK_FONT_SIZE}px`);
@@ -13070,6 +13097,8 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 this._setupOpacitySlider('header-footer-opacity', '--header-footer-opacity', DEFAULT_HEADER_FOOTER_OPACITY);
                 this._setupOpacitySlider('toggle-button-top-opacity', '--message-toggle-button-top-opacity', DEFAULT_TOGGLE_BUTTON_TOP_OPACITY);
                 this._setupOpacitySlider('thought-summary-opacity', '--thought-summary-opacity', DEFAULT_THOUGHT_SUMMARY_OPACITY);
+                this._setupOpacitySlider('chmate-scroll-opacity', '--chmate-scroll-opacity', DEFAULT_CHMATE_SCROLL_OPACITY);
+                this._setupOpacitySlider('chmate-scroll-active-opacity', '--chmate-scroll-active-opacity', DEFAULT_CHMATE_SCROLL_ACTIVE_OPACITY);
                 this._setupFontSizeSlider('message-body-font-size-input', '--message-body-font-size', DEFAULT_MESSAGE_BODY_FONT_SIZE);
                 this._setupFontSizeSlider('code-block-font-size-input', '--code-block-font-size', DEFAULT_CODE_BLOCK_FONT_SIZE);
                 this._setupFontSizeSlider('thought-summary-font-size', '--thought-summary-font-size', DEFAULT_THOUGHT_SUMMARY_FONT_SIZE);
@@ -16733,6 +16762,10 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 newSettings.toggleButtonBottomTextCollapse = elements.toggleButtonBottomTextCollapseInput.value.trim() || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_COLLAPSE;
                 newSettings.toggleButtonBottomTextExpand = elements.toggleButtonBottomTextExpandInput.value.trim() || DEFAULT_TOGGLE_BUTTON_BOTTOM_TEXT_EXPAND;
                 newSettings.thoughtSummaryOpacity = elements.thoughtSummaryOpacityInput.value === '' ? DEFAULT_THOUGHT_SUMMARY_OPACITY : parseFloat(elements.thoughtSummaryOpacityInput.value);
+                const chmateScrollOpacityInput = document.getElementById('chmate-scroll-opacity');
+                newSettings.chmateScrollOpacity = chmateScrollOpacityInput.value === '' ? DEFAULT_CHMATE_SCROLL_OPACITY : parseFloat(chmateScrollOpacityInput.value);
+                const chmateScrollActiveOpacityInput = document.getElementById('chmate-scroll-active-opacity');
+                newSettings.chmateScrollActiveOpacity = chmateScrollActiveOpacityInput.value === '' ? DEFAULT_CHMATE_SCROLL_ACTIVE_OPACITY : parseFloat(chmateScrollActiveOpacityInput.value);
                 newSettings.enableElevation = elements.enableElevationToggle.checked;
                 newSettings.enableElevationHover = elements.enableElevationHoverToggle.checked;
                 newSettings.autoCloseOtherSettings = elements.autoCloseOtherSettingsToggle.checked;
@@ -18337,7 +18370,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     clearTimeout(scrollTimeout);
                     scrollTimeout = setTimeout(() => {
                         zone.classList.remove('is-scrolling');
-                    }, 1500);
+                    }, 000);
                 };
                 mainContent.addEventListener('scroll', onScroll, { passive: true });
                 window.addEventListener('resize', updateAll);
