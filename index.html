@@ -6535,6 +6535,10 @@ font-size: 1.142em !important;
                                                 <input type="checkbox" id="enable-chmate-scroll-toggle">
                                                 画面右側にスクロールバー(ChMate風)を表示する
                                             </label>
+                                            <label class="checkbox-label" style="margin-left: 20px; font-size: 12px;">
+                                                <input type="checkbox" id="enable-dynamic-scroll-marker-color-toggle">
+                                                マーカーの色を文章量に応じて変化させる
+                                            </label>
                                             <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 5px;">
                                                 ※ 右端をドラッグして高速スクロールできるゾーンを追加します。
                                             </p>
@@ -8014,6 +8018,7 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             chmateScrollZone: document.getElementById('chmate-scroll-zone'),
             chmateScrollHandle: document.getElementById('chmate-scroll-handle'),
             enableChMateScrollToggle: document.getElementById('enable-chmate-scroll-toggle'),
+            enableDynamicScrollMarkerColorToggle: document.getElementById('enable-dynamic-scroll-marker-color-toggle'),
             chmateScrollWidthInput: document.getElementById('chmate-scroll-width-input'),
         };
 
@@ -8319,6 +8324,7 @@ enableChmateScrollOpacity: true,
                 disableDeleteApiKeyConfirmation: true,
                 removeDuplicateApiKeys: true,
                 enableChMateScroll: true,
+                enableDynamicScrollMarkerColor: true,
                 chmateScrollWidth: 30,
             },
             backgroundImageUrl: null,
@@ -11067,6 +11073,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 }
                 elements.enableChMateScrollToggle.checked = state.settings.enableChMateScroll;
                 document.body.classList.toggle('chmate-scroll-enabled', state.settings.enableChMateScroll);
+                elements.enableDynamicScrollMarkerColorToggle.checked = state.settings.enableDynamicScrollMarkerColor;
                 
                 const currentScrollWidth = state.settings.chmateScrollWidth || DEFAULT_CHMATE_SCROLL_WIDTH;
                 elements.chmateScrollWidthInput.value = currentScrollWidth;
@@ -13251,6 +13258,10 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 elements.enableChMateScrollToggle.addEventListener('change', (e) => {
                     state.settings.enableChMateScroll = e.target.checked;
                     document.body.classList.toggle('chmate-scroll-enabled', state.settings.enableChMateScroll);
+                });
+                elements.enableDynamicScrollMarkerColorToggle.addEventListener('change', (e) => {
+                    state.settings.enableDynamicScrollMarkerColor = e.target.checked;
+                    window.dispatchEvent(new Event('resize'));
                 });
                 appLogic.initChMateScroll();
                 elements.extendAiBubbleWidthToggle.addEventListener('change', (e) => {
@@ -16705,6 +16716,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 newSettings.preventZoom = elements.preventZoomToggle.checked;
                 newSettings.minimizeHeaderFooter = document.getElementById('minimize-header-footer-toggle').checked;
                 newSettings.enableChMateScroll = elements.enableChMateScrollToggle.checked;
+                newSettings.enableDynamicScrollMarkerColor = elements.enableDynamicScrollMarkerColorToggle.checked;
                 const scrollWidth = parseInt(elements.chmateScrollWidthInput.value, 10);
                 newSettings.chmateScrollWidth = (isNaN(scrollWidth) || scrollWidth < 10) ? DEFAULT_CHMATE_SCROLL_WIDTH : scrollWidth;
                 newSettings.extendAiBubbleWidth = elements.extendAiBubbleWidthToggle.checked;
@@ -18337,15 +18349,49 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
 
                     if (contentHeight === 0 || zoneHeight === 0) return;
 
+                    const TURF_USER_RGB = "102, 215, 19";
+                    const TURF_MODEL_RGB = "253, 110, 163";
+                    const MAX_INTENSITY_LENGTH = 1000;
+
                     messages.forEach(msg => {
                         const marker = document.createElement('div');
                         marker.classList.add('scroll-marker');
-                        if (msg.classList.contains('user')) marker.classList.add('user');
-                        else if (msg.classList.contains('model')) marker.classList.add('model');
-                        else return;
+                        
+                        let isUser = false;
+                        let isModel = false;
+
+                        if (msg.classList.contains('user')) {
+                            marker.classList.add('user');
+                            isUser = true;
+                        } else if (msg.classList.contains('model')) {
+                            marker.classList.add('model');
+                            isModel = true;
+                        } else {
+                            return;
+                        }
 
                         const relativeTop = (msg.offsetTop / contentHeight) * zoneHeight;
                         marker.style.top = `${relativeTop}px`;
+
+                        if (state.settings.enableDynamicScrollMarkerColor) {
+                            const index = parseInt(msg.dataset.index, 10);
+                            const messageData = state.currentMessages[index];
+                            const contentText = messageData ? (messageData.content || "") : msg.innerText;
+                            const textLength = contentText.length;
+
+                            if (textLength > 0) {
+                                const intensity = Math.min(1, textLength / MAX_INTENSITY_LENGTH);
+                                const alpha = 0.3 + (0.7 * intensity);
+
+                                if (isUser) {
+                                    marker.style.backgroundColor = `rgba(${TURF_USER_RGB}, ${alpha})`;
+                                } else if (isModel) {
+                                    marker.style.backgroundColor = `rgba(${TURF_MODEL_RGB}, ${alpha})`;
+                                }
+                            } else {
+                                marker.style.backgroundColor = ""; 
+                            }
+                        }
 
                         const onMarkerClick = (e) => {
                             e.stopPropagation(); 
