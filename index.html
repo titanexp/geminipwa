@@ -14745,6 +14745,10 @@ helpIcons.forEach(icon => {
                 }
             },
             async handleSend(isRetry = false, retryUserMessageIndex = -1, sourceSessionContext = null, isTopLevelCall = true, retryCount = 0) {
+                if (!sourceSessionContext && isTopLevelCall) {
+                    await this.commitAllOpenEdits();
+                }
+
                 const isBackgroundProcess = !!sourceSessionContext;
 
                 let apiKeyToUse, modelNameToUse, selectedApiProvider;
@@ -16916,6 +16920,27 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 }
             },
 
+            async commitAllOpenEdits() {
+                const editingElements = elements.messageContainer.querySelectorAll('.message.editing');
+                if (editingElements.length === 0) return;
+                let needsDbSave = false;
+                for (const messageElement of editingElements) {
+                    const index = parseInt(messageElement.dataset.index, 10);
+                    const textarea = messageElement.querySelector('.edit-textarea');
+                    if (textarea && state.currentMessages[index]) {
+                        const newContent = textarea.value;
+                        if (state.currentMessages[index].content !== newContent) {
+                            state.currentMessages[index].content = newContent;
+                            uiUtils.updateFinalizedMessageContent(index, newContent);
+                            needsDbSave = true;
+                        }
+                    }
+                    this.finishEditing(messageElement);
+                }
+                state.editingMessageIndex = null;
+                if (needsDbSave) await dbUtils.saveChat();
+            },
+
             async startEditMessage(index, messageElement) {
                 if (state.isSending) {
                     await uiUtils.showCustomAlert("送信中は編集できません。");
@@ -17342,6 +17367,8 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 return -1;
             },
             async retryFromMessage(index) {
+                await this.commitAllOpenEdits();
+
                 if (state.isSending) {
                     await uiUtils.showCustomAlert("送信中です。");
                     return;
