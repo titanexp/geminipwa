@@ -16937,7 +16937,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     }
                     this.finishEditing(messageElement);
                 }
-                state.editingMessageIndex = null;
+
                 if (needsDbSave) await dbUtils.saveChat();
             },
 
@@ -16955,7 +16955,6 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 if (!message) return;
 
                 const rawContent = message.content;
-                state.editingMessageIndex = index;
 
                 const contentDiv = messageElement.querySelector('.message-content');
                 const editArea = messageElement.querySelector('.message-edit-area');
@@ -17070,14 +17069,23 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
 
                 this.uncollapseMessage(index, messageElement);
             },
-            async saveEditMessage(index, messageElement) {
+            async saveEditMessage(originalIndex, messageElement) {
+                // DOM上の位置から最新のインデックスを取得し直す
+                const currentIndex = parseInt(messageElement.dataset.index, 10);
+                // 念のため配列範囲チェック
+                if (isNaN(currentIndex) || !state.currentMessages[currentIndex]) {
+                    // 見つからない場合は強制終了（UIだけ戻す）
+                    this.finishEditing(messageElement);
+                    return;
+                }
+
                 const textarea = messageElement.querySelector('.edit-textarea');
                 if (!textarea) {
-                    this.cancelEditMessage(index, messageElement);
+                    this.cancelEditMessage(currentIndex, messageElement);
                     return;
                 }
                 const newRawContent = textarea.value;
-                const originalMessage = state.currentMessages[index];
+                const originalMessage = state.currentMessages[currentIndex];
 
                 if (newRawContent === originalMessage.content) {
                     this.cancelEditMessage(index, messageElement);
@@ -17220,11 +17228,8 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     editArea.classList.add('hidden');
                     editArea.innerHTML = '';
                 }
+                
 
-                const index = parseInt(messageElement.dataset.index, 10);
-                if (state.editingMessageIndex === index) {
-                    state.editingMessageIndex = null;
-                }
             },
             async copyMessageText(index, buttonElement) {
                 const message = state.currentMessages[index];
