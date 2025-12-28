@@ -8331,8 +8331,7 @@ enableChmateScrollOpacity: true,
             abortController: null,
             partialStreamContent: '',
             partialThoughtStreamContent: '',
-            editingMessageIds: new Set(), // 編集中のメッセージID管理用
-            editingMessageIndex: null, // ※互換性のため残すが、ロジックではIdsを優先使用
+            editingMessageIndex: null,
             touchStartX: 0,
             touchStartY: 0,
             touchEndX: 0,
@@ -8355,7 +8354,6 @@ enableChmateScrollOpacity: true,
             aiToAiProcessingMessage: "AI間会話処理中...",
             isSummarizingForRetry: false,
             isProofreading: false,
-            messageDrafts: new Map(),
         };
 
         const sanitizeText = (text, maxLength = 255) => {
@@ -9422,20 +9420,7 @@ enableChmateScrollOpacity: true,
                         this.appendMessage(msg.role, msg.content, i, false, null, msg.attachments);
                     }
                 }
-
-                // IDベースで編集モードを復元
-                if (state.messageDrafts && state.messageDrafts.size > 0) {
-                    state.currentMessages.forEach((msg, idx) => {
-                        if (msg._internalId && state.messageDrafts.has(msg._internalId)) {
-                            const msgEl = elements.messageContainer.querySelector(`.message[data-index="${idx}"]`);
-                            if (msgEl) {
-                                appLogic.startEditMessage(idx, msgEl);
-                            }
-                        }
-                    });
-                }
-
-                if (maintainScroll && oldScrollTop !== null) {
+if (maintainScroll && oldScrollTop !== null) {
                 requestAnimationFrame(() => {
 
                     mainContent.scrollTop = oldScrollTop;
@@ -9443,11 +9428,6 @@ enableChmateScrollOpacity: true,
             }
             },
             appendMessage(role, content, index, isStreamingPlaceholder = false, cascadeInfo = null, attachments = null) {
-                // メッセージに一時IDがなければ付与する（インデックスずれ対策）
-                if (state.currentMessages[index] && !state.currentMessages[index]._internalId) {
-                    state.currentMessages[index]._internalId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-                }
-
                 const messageDiv = document.createElement('div');
                 messageDiv.classList.add('message', role);
                 messageDiv.dataset.index = index;
@@ -14422,8 +14402,6 @@ helpIcons.forEach(icon => {
                         uiUtils.updateToggleAllContentButton();
                         state.messageCollapsedStates.clear();
                         state.thoughtSummaryOpenStates.clear();
-                        if (state.messageDrafts) state.messageDrafts.clear();
-                        state.editingMessageIds.clear();
                         if (state.settings.persistMessageCollapseState && chat.collapsedStates) {
                             Object.entries(chat.collapsedStates).forEach(([idx, isCollapsed]) => {
                                 state.messageCollapsedStates.set(parseInt(idx, 10), isCollapsed);
@@ -14934,11 +14912,7 @@ helpIcons.forEach(icon => {
                 }
 
                 let currentContextSessionId = isBackgroundProcess ? sourceSessionContext.sessionId : state.currentChatId;
-                let currentContextMessages = isBackgroundProcess ? [...sourceSessionContext.messages] : state.currentMessages.map((msg) => {
-                    return (msg._internalId && state.messageDrafts && state.messageDrafts.has(msg._internalId)) 
-                        ? { ...msg, content: state.messageDrafts.get(msg._internalId) } 
-                        : msg;
-                });
+                let currentContextMessages = isBackgroundProcess ? [...sourceSessionContext.messages] : [...state.currentMessages];
                 let currentContextSystemPrompt = '';
 
                 if (isBackgroundProcess) {
@@ -16947,20 +16921,16 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     await uiUtils.showCustomAlert("送信中は編集できません。");
                     return;
                 }
-                const message = state.currentMessages[index];
-                if (!message) return;
-                
-                const msgId = message._internalId;
-                if (!msgId) return;
-
-                if (state.editingMessageIds.has(msgId)) {
+                if (state.editingMessageIndex === index) {
                     messageElement.querySelector('.edit-textarea')?.focus();
                     return;
                 }
 
+                const message = state.currentMessages[index];
+                if (!message) return;
+
                 const rawContent = message.content;
-                state.editingMessageIds.add(msgId);
-                state.editingMessageIndex = index; // 互換性のため更新
+                state.editingMessageIndex = index;
 
                 const contentDiv = messageElement.querySelector('.message-content');
                 const editArea = messageElement.querySelector('.message-edit-area');
@@ -16978,20 +16948,11 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 }
                 messageElement.style.width = `calc(var(--message-max-width) + ${horizontalPadding}px + 17px)`;
 
-                const msgId = message._internalId;
                 const textarea = document.createElement('textarea');
-                textarea.value = (msgId && state.messageDrafts.has(msgId)) ? state.messageDrafts.get(msgId) : rawContent;
-                
-                if (msgId && !state.messageDrafts.has(msgId)) {
-                    state.messageDrafts.set(msgId, rawContent);
-                }
-
+                textarea.value = rawContent;
                 textarea.classList.add('edit-textarea');
                 textarea.rows = 3;
-                textarea.addEventListener('input', () => {
-                    uiUtils.adjustTextareaHeight(textarea, 400);
-                    if (msgId) state.messageDrafts.set(msgId, textarea.value);
-                });
+                textarea.oninput = () => uiUtils.adjustTextareaHeight(textarea, 400);
 
                 const actionsDiv = document.createElement('div');
                 actionsDiv.classList.add('message-edit-actions');
@@ -17192,9 +17153,6 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     }
                 }
 
-                if (originalMessage._internalId) {
-                    state.messageDrafts.delete(originalMessage._internalId);
-                }
                 this.finishEditing(messageElement);
 
                 const isFirstUserMessage = (index === state.currentMessages.findIndex(m => m.role === 'user'));
@@ -17213,10 +17171,6 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 }
             },
             cancelEditMessage(index, messageElement = null) {
-                const msg = state.currentMessages[index];
-                if (msg && msg._internalId) {
-                    state.messageDrafts.delete(msg._internalId);
-                }
                 if (!messageElement) {
                     messageElement = elements.messageContainer.querySelector(`.message[data-index="${index}"]`);
                 }
@@ -17243,11 +17197,6 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 }
 
                 const index = parseInt(messageElement.dataset.index, 10);
-                const msg = state.currentMessages[index];
-                if (msg && msg._internalId) {
-                    state.editingMessageIds.delete(msg._internalId);
-                }
-                // 互換性維持: もし最後に編集したものがこれならnullに戻す
                 if (state.editingMessageIndex === index) {
                     state.editingMessageIndex = null;
                 }
@@ -17327,16 +17276,10 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     const originalFirstUserMsgIndex = state.currentMessages.findIndex(m => m.role === 'user');
 
                     indicesToDelete.sort((a, b) => b - a).forEach(idx => {
-                        const msg = state.currentMessages[idx];
-                        if (msg && msg._internalId) {
-                            state.messageDrafts.delete(msg._internalId);
-                        }
                         state.currentMessages.splice(idx, 1);
                         state.messageCollapsedStates.delete(idx);
                         state.thoughtSummaryOpenStates.delete(idx);
                     });
-
-                    // ID管理のためインデックス補正ロジックは不要
 
                     const oldCollapsedStates = new Map(state.messageCollapsedStates);
                     state.messageCollapsedStates.clear();
@@ -17474,10 +17417,6 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                         for (let i = deleteStartIndex; i < state.currentMessages.length; i++) {
                             state.messageCollapsedStates.delete(i);
                             state.thoughtSummaryOpenStates.delete(i);
-                            const msg = state.currentMessages[i];
-                            if (msg && msg._internalId) {
-                                state.messageDrafts.delete(msg._internalId);
-                            }
                         }
                         state.currentMessages.splice(deleteStartIndex);
                     }
