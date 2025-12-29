@@ -4553,6 +4553,16 @@ font-size: 1.142em !important;
         #chmate-scroll-zone.is-dragging .scroll-marker {
             pointer-events: none;
         }
+
+        .history-item { position: relative; z-index: 1; }
+        .history-item-details, .history-item-bottom-row { position: relative; z-index: 2; text-shadow: 0 0 5px var(--bg-primary); }
+        .history-item-preview-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; display: flex; align-items: center; padding: 0 10px; overflow: hidden; }
+        .history-item-preview-layer.align-right { justify-content: flex-end; }
+        .history-item-preview-layer.align-left { justify-content: flex-start; }
+        .history-preview-bubble { padding: 6px 12px; border-radius: 12px; font-size: 11px; max-width: 85%; white-space: nowrap; overflow: hidden; opacity: 0.25; box-shadow: 0 1px 2px rgba(0,0,0,0.1); color: var(--text-primary); }
+        .history-item-preview-layer.align-right .history-preview-bubble { -webkit-mask-image: linear-gradient(to right, transparent 0%, black 20%); mask-image: linear-gradient(to right, transparent 0%, black 20%); background-color: var(--bg-user-message); border-bottom-right-radius: 2px; }
+        .history-item-preview-layer.align-left .history-preview-bubble { -webkit-mask-image: linear-gradient(to left, transparent 0%, black 20%); mask-image: linear-gradient(to left, transparent 0%, black 20%); background-color: var(--bg-model-message); border-bottom-left-radius: 2px; }
+        body.dark-mode .history-item-preview-layer .history-preview-bubble { opacity: 0.3; }
     </style>
 
     <script src="marked.js"></script>
@@ -6715,6 +6725,11 @@ font-size: 1.142em !important;
                                         <div
                                             style="padding-left: 15px; margin-top: 10px; border-left: 1px solid var(--border-secondary); padding-top: 5px;">
                                             <label class="checkbox-label">
+                                                <input type="checkbox" id="show-history-preview-bubble-toggle">
+                                                履歴リストの背景に会話内容をうっすら表示する
+                                            </label>
+                                            <hr style="margin: 5px 0; border-top: 1px solid var(--border-tertiary);">
+                                            <label class="checkbox-label">
                                                 <input type="checkbox" id="show-bulk-history-actions-toggle">
                                                 履歴画面に「全出力」「全取込」ボタンを表示する
                                             </label>
@@ -8020,6 +8035,7 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             enableChMateScrollToggle: document.getElementById('enable-chmate-scroll-toggle'),
             enableDynamicScrollMarkerColorToggle: document.getElementById('enable-dynamic-scroll-marker-color-toggle'),
             chmateScrollWidthInput: document.getElementById('chmate-scroll-width-input'),
+            showHistoryPreviewBubbleToggle: document.getElementById('show-history-preview-bubble-toggle'),
         };
 
         const state = {
@@ -8326,6 +8342,7 @@ enableChmateScrollOpacity: true,
                 enableChMateScroll: true,
                 enableDynamicScrollMarkerColor: true,
                 chmateScrollWidth: 30,
+                showHistoryPreviewBubble: true,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -10287,6 +10304,26 @@ const getCurrentMermaidTheme = () => {
                             const li = elements.historyItemTemplate.cloneNode(true);
                             li.classList.remove('js-history-item-template');
                             li.dataset.chatId = chat.id;
+
+                            if (state.settings.showHistoryPreviewBubble && chat.messages && chat.messages.length > 0) {
+                                const lastMsg = chat.messages[chat.messages.length - 1];
+                                if (lastMsg && (lastMsg.role === 'user' || lastMsg.role === 'model')) {
+                                    const previewLayer = document.createElement('div');
+                                    previewLayer.classList.add('history-item-preview-layer', lastMsg.role === 'user' ? 'align-right' : 'align-left');
+                                    const bubble = document.createElement('div');
+                                    bubble.classList.add('history-preview-bubble');
+                                    let previewText = lastMsg.content;
+                                    if (!previewText && lastMsg.attachments && lastMsg.attachments.length > 0) {
+                                        previewText = `[添付ファイル: ${lastMsg.attachments[0].name} 他]`;
+                                    } else if (!previewText) {
+                                        previewText = "(空のメッセージ)";
+                                    }
+                                    if (previewText.length > 100) previewText = previewText.substring(0, 100) + "...";
+                                    bubble.textContent = previewText;
+                                    previewLayer.appendChild(bubble);
+                                    li.insertBefore(previewLayer, li.firstChild);
+                                }
+                            }
 
                             const titleText = chat.title || `履歴 ${chat.id}`;
                             const titleEl = li.querySelector('.history-item-title');
@@ -13094,10 +13131,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     state.settings.showToggleAllContentButton = elements.showToggleAllContentButtonToggle.checked;
                     uiUtils.updateChatScreenElementVisibility();
                 });
-                elements.showBulkHistoryActionsToggle.addEventListener('change', () => {
-                    state.settings.showBulkHistoryActions = elements.showBulkHistoryActionsToggle.checked;
-                    uiUtils.updateHistoryHeaderButtonVisibility();
-                });
+
                 elements.showPasteButtonInFooterToggle.addEventListener('change', () => {
                     state.settings.showPasteButtonInFooter = elements.showPasteButtonInFooterToggle.checked;
                     uiUtils.updateChatScreenElementVisibility();
@@ -13203,6 +13237,11 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 elements.showBulkHistoryActionsToggle.addEventListener('change', () => {
                     state.settings.showBulkHistoryActions = elements.showBulkHistoryActionsToggle.checked;
                     uiUtils.updateHistoryHeaderButtonVisibility();
+                });
+                elements.showHistoryPreviewBubbleToggle.checked = state.settings.showHistoryPreviewBubble;
+                elements.showHistoryPreviewBubbleToggle.addEventListener('change', () => {
+                    state.settings.showHistoryPreviewBubble = elements.showHistoryPreviewBubbleToggle.checked;
+                    uiUtils.renderHistoryList();
                 });
                 elements.messageBubbleOpacityInput.addEventListener('input', () => {
                     const opacity = parseFloat(elements.messageBubbleOpacityInput.value);
@@ -16642,6 +16681,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 newSettings.showScrollToBottomButton = elements.showScrollToBottomButtonToggle.checked;
                 newSettings.showToggleAllContentButton = elements.showToggleAllContentButtonToggle.checked;
                 newSettings.showBulkHistoryActions = elements.showBulkHistoryActionsToggle.checked;
+                newSettings.showHistoryPreviewBubble = elements.showHistoryPreviewBubbleToggle.checked;
                 newSettings.showPasteButtonInFooter = elements.showPasteButtonInFooterToggle.checked;
                 newSettings.showPasteButtonInEdit = elements.showPasteButtonInEditToggle.checked;
                 newSettings.showDiceButton = elements.showDiceButtonToggle.checked;
