@@ -8435,36 +8435,49 @@ enableChmateScrollOpacity: true,
             }
         }
 
-        const dbUtils = {
-            openDB() {
-                return new Promise((resolve, reject) => {
-                    if (state.db) {
-                        resolve(state.db);
-                        return;
+const dbUtils = {
+            _initPromise: null,
+
+            async openDB() {
+                if (state.db) {
+                    try {
+                        const tx = state.db.transaction([SETTINGS_STORE], 'readonly');
+                        tx.abort();
+                        return state.db;
+                    } catch (e) {
+                        state.db = null;
                     }
+                }
+
+                if (this._initPromise) return this._initPromise;
+
+                this._initPromise = new Promise((resolve, reject) => {
                     const request = indexedDB.open(DB_NAME, DB_VERSION);
-                    request.onerror = (event) => reject(`IndexedDBエラー: ${event.target.error}`);
+
+                    request.onerror = (event) => {
+                        this._initPromise = null;
+                        reject(`IndexedDBエラー: ${event.target.error}`);
+                    };
+
                     request.onsuccess = (event) => {
                         state.db = event.target.result;
                         state.db.onclose = () => {
                             state.db = null;
                         };
                         state.db.onversionchange = () => {
-                            if (state.db) {
-                                state.db.close();
-                                state.db = null;
-                            }
+                            if (state.db) { state.db.close(); state.db = null; }
                             uiUtils.showCustomAlert("アプリの新しいバージョンが利用可能です。データを保護するため、ページをリロードしてください。")
                                 .then(() => window.location.reload());
                         };
                         state.db.onerror = (event) => {
                             console.error(`IndexedDBの予期せぬエラー: ${event.target.error}`);
                         };
+                        this._initPromise = null;
                         resolve(state.db);
                     };
+
                     request.onupgradeneeded = (event) => {
                         const db = event.target.result;
-                        const transaction = event.target.transaction;
                         if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
                             db.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
                         }
@@ -8472,9 +8485,7 @@ enableChmateScrollOpacity: true,
                         if (!db.objectStoreNames.contains(CHATS_STORE)) {
                             chatStore = db.createObjectStore(CHATS_STORE, { keyPath: 'id', autoIncrement: true });
                         } else {
-                            if (transaction) {
-                                try { chatStore = transaction.objectStore(CHATS_STORE); } catch (e) { return; }
-                            }
+                            chatStore = event.target.transaction.objectStore(CHATS_STORE);
                         }
                         if (chatStore && !chatStore.indexNames.contains(CHAT_UPDATEDAT_INDEX)) {
                             chatStore.createIndex(CHAT_UPDATEDAT_INDEX, 'updatedAt', { unique: false });
@@ -8484,12 +8495,20 @@ enableChmateScrollOpacity: true,
                         }
                     };
                 });
+                return this._initPromise;
             },
+
             _getStore(storeName, mode = 'readonly') {
                 if (!state.db) throw new Error("データベースが開かれていません");
-                const transaction = state.db.transaction([storeName], mode);
-                return transaction.objectStore(storeName);
+                try {
+                    const transaction = state.db.transaction([storeName], mode);
+                    return transaction.objectStore(storeName);
+                } catch (e) {
+                    state.db = null;
+                    throw new Error("データベース接続エラーが発生しました。もう一度操作してください。");
+                }
             },
+
             async saveSetting(key, value) {
                 await this.openDB();
                 return new Promise((resolve, reject) => {
@@ -8499,313 +8518,142 @@ enableChmateScrollOpacity: true,
                         request.onsuccess = () => resolve();
                         request.onerror = (event) => reject(`設定 ${key} の保存エラー: ${event.target.error}`);
                     } catch (error) {
-                        reject(`設定 ${key} 保存のためのストアアクセスエラー: ${error}`);
+                        reject(error);
                     }
                 });
             },
+
             async loadSettings() {
                 await this.openDB();
                 return new Promise((resolve, reject) => {
-                    const store = this._getStore(SETTINGS_STORE);
-                    const request = store.getAll();
-                    request.onsuccess = (event) => {
-                        const settingsArray = event.target.result;
-                        const loadedSettings = {};
-                        settingsArray.forEach(item => {
-                            loadedSettings[item.key] = item.value;
-                        });
-                        const defaultSettings = { ...state.settings };
-                        state.settings = { ...defaultSettings };
+                    try {
+                        const store = this._getStore(SETTINGS_STORE);
+                        const request = store.getAll();
+                        request.onsuccess = (event) => {
+                            const settingsArray = event.target.result;
+                            const loadedSettings = {};
+                            settingsArray.forEach(item => { loadedSettings[item.key] = item.value; });
 
-                        if (loadedSettings.hasOwnProperty('darkMode') && !loadedSettings.hasOwnProperty('theme')) {
-                            state.settings.theme = loadedSettings.darkMode === true ? 'dark' : 'light';
-                        }
+                            const defaultSettings = { ...state.settings };
+                            state.settings = { ...defaultSettings };
 
-                        const oldGlobalParams = ['temperature', 'maxTokens', 'topP', 'presencePenalty', 'frequencyPenalty', 'systemPrompt', 'enableSystemPromptDefault'];
-                        const oldGlobalAdvanced = ['streamingOutput', 'streamingSpeed', 'dummyUser', 'enableDummyUser', 'dummyModel', 'enableDummyModel', 'concatDummyModel'];
-                        const providerPrefixes = ['gemini', 'deepSeek', 'claude', 'openai', 'xai', 'llmaggregator'];
+                            if (loadedSettings.hasOwnProperty('darkMode') && !loadedSettings.hasOwnProperty('theme')) {
+                                state.settings.theme = loadedSettings.darkMode === true ? 'dark' : 'light';
+                            }
 
-                        oldGlobalParams.forEach(param => {
-                            if (loadedSettings.hasOwnProperty(param)) {
-                                providerPrefixes.forEach(prefix => {
-                                    const newKey = prefix + param.charAt(0).toUpperCase() + param.slice(1);
-                                    if (state.settings.hasOwnProperty(newKey) && !loadedSettings.hasOwnProperty(newKey)) {
-                                        state.settings[newKey] = loadedSettings[param];
-                                    }
+                            const oldGlobalParams = ['temperature', 'maxTokens', 'topP', 'presencePenalty', 'frequencyPenalty', 'systemPrompt', 'enableSystemPromptDefault'];
+                            const oldGlobalAdvanced = ['streamingOutput', 'streamingSpeed', 'dummyUser', 'enableDummyUser', 'dummyModel', 'enableDummyModel', 'concatDummyModel'];
+                            const providerPrefixes = ['gemini', 'deepSeek', 'claude', 'openai', 'xai', 'llmaggregator'];
+
+                            oldGlobalParams.forEach(param => {
+                                if (loadedSettings.hasOwnProperty(param)) {
+                                    providerPrefixes.forEach(prefix => {
+                                        const newKey = prefix + param.charAt(0).toUpperCase() + param.slice(1);
+                                        if (state.settings.hasOwnProperty(newKey) && !loadedSettings.hasOwnProperty(newKey)) {
+                                            state.settings[newKey] = loadedSettings[param];
+                                        }
+                                    });
+                                }
+                            });
+                            oldGlobalAdvanced.forEach(advParam => {
+                                if (loadedSettings.hasOwnProperty(advParam)) {
+                                    providerPrefixes.forEach(prefix => {
+                                        const newKey = prefix + advParam.charAt(0).toUpperCase() + advParam.slice(1);
+                                        if (state.settings.hasOwnProperty(newKey) && !loadedSettings.hasOwnProperty(newKey)) {
+                                            state.settings[newKey] = loadedSettings[advParam];
+                                        }
+                                    });
+                                }
+                            });
+
+                            if (loadedSettings.hasOwnProperty('includeThoughts') && !loadedSettings.hasOwnProperty('geminiIncludeThoughts')) state.settings.geminiIncludeThoughts = loadedSettings.includeThoughts;
+                            if (loadedSettings.hasOwnProperty('expandThoughtsByDefault') && !loadedSettings.hasOwnProperty('geminiExpandThoughtsByDefault')) state.settings.geminiExpandThoughtsByDefault = loadedSettings.expandThoughtsByDefault;
+                            if (loadedSettings.hasOwnProperty('pseudoStreaming') && !loadedSettings.hasOwnProperty('geminiPseudoStreaming')) state.settings.geminiPseudoStreaming = loadedSettings.pseudoStreaming;
+                            if (loadedSettings.hasOwnProperty('enableGrounding') && !loadedSettings.hasOwnProperty('geminiEnableGrounding')) state.settings.geminiEnableGrounding = loadedSettings.enableGrounding;
+                            if (loadedSettings.hasOwnProperty('includeDeepSeekThoughts') && !loadedSettings.hasOwnProperty('deepSeekIncludeDeepSeekThoughts')) state.settings.deepSeekIncludeDeepSeekThoughts = loadedSettings.includeDeepSeekThoughts;
+                            if (loadedSettings.hasOwnProperty('expandDeepSeekThoughtsByDefault') && !loadedSettings.hasOwnProperty('deepSeekExpandThoughtsByDefault')) state.settings.deepSeekExpandThoughtsByDefault = loadedSettings.expandDeepSeekThoughtsByDefault;
+
+                            let backends = loadedSettings.llmaggregatorBackends || [];
+                            if (backends.length === 0 && loadedSettings.llmAggregatorApiBackend) {
+                                backends.push({
+                                    id: `migrated-backend-${Date.now()}`,
+                                    label: 'デフォルトURL',
+                                    url: loadedSettings.llmAggregatorApiBackend,
+                                    isActive: true,
+                                    apiKeys: [],
+                                    activeApiKeyIndex: -1
                                 });
                             }
-                        });
-                        oldGlobalAdvanced.forEach(advParam => {
-                            if (loadedSettings.hasOwnProperty(advParam)) {
-                                providerPrefixes.forEach(prefix => {
-                                    const newKey = prefix + advParam.charAt(0).toUpperCase() + advParam.slice(1);
-                                    if (state.settings.hasOwnProperty(newKey) && !loadedSettings.hasOwnProperty(newKey)) {
-                                        state.settings[newKey] = loadedSettings[advParam];
-                                    }
-                                });
-                            }
-                        });
-                        if (loadedSettings.hasOwnProperty('includeThoughts') && !loadedSettings.hasOwnProperty('geminiIncludeThoughts') && state.settings.hasOwnProperty('geminiIncludeThoughts')) {
-                            state.settings.geminiIncludeThoughts = loadedSettings.includeThoughts;
-                        }
-                        if (loadedSettings.hasOwnProperty('expandThoughtsByDefault') && !loadedSettings.hasOwnProperty('geminiExpandThoughtsByDefault') && state.settings.hasOwnProperty('geminiExpandThoughtsByDefault')) {
-                            state.settings.geminiExpandThoughtsByDefault = loadedSettings.expandThoughtsByDefault;
-                        }
-                        if (loadedSettings.hasOwnProperty('pseudoStreaming') && !loadedSettings.hasOwnProperty('geminiPseudoStreaming') && state.settings.hasOwnProperty('geminiPseudoStreaming')) {
-                            state.settings.geminiPseudoStreaming = loadedSettings.pseudoStreaming;
-                        }
-                        if (loadedSettings.hasOwnProperty('enableGrounding') && !loadedSettings.hasOwnProperty('geminiEnableGrounding') && state.settings.hasOwnProperty('geminiEnableGrounding')) {
-                            state.settings.geminiEnableGrounding = loadedSettings.enableGrounding;
-                        }
-                        if (loadedSettings.hasOwnProperty('includeDeepSeekThoughts') && !loadedSettings.hasOwnProperty('deepSeekIncludeDeepSeekThoughts') && state.settings.hasOwnProperty('deepSeekIncludeDeepSeekThoughts')) {
-                            state.settings.deepSeekIncludeDeepSeekThoughts = loadedSettings.includeDeepSeekThoughts;
-                        }
-                        if (loadedSettings.hasOwnProperty('expandDeepSeekThoughtsByDefault') && !loadedSettings.hasOwnProperty('deepSeekExpandThoughtsByDefault') && state.settings.hasOwnProperty('deepSeekExpandThoughtsByDefault')) {
-                            state.settings.deepSeekExpandThoughtsByDefault = loadedSettings.expandDeepSeekThoughtsByDefault;
-                        }
-                        let backends = loadedSettings.llmaggregatorBackends || [];
-
-                    if (backends.length === 0 && loadedSettings.llmAggregatorApiBackend) {
-                        backends.push({
-                            id: `migrated-backend-${Date.now()}`,
-                            label: 'デフォルトURL',
-                            url: loadedSettings.llmAggregatorApiBackend,
-                            isActive: true,
-                            apiKeys: [],
-                            activeApiKeyIndex: -1
-                        });
-                    }
-
-                    if (backends.length > 0) {
-                        const firstBackend = backends[0];
-                        if ((!firstBackend.apiKeys || firstBackend.apiKeys.length === 0) && loadedSettings.llmAggregatorApiKey) {
-                            firstBackend.apiKeys = [{
-                                id: `rescued-key-${Date.now()}`,
-                                label: 'キー 1',
-                                value: loadedSettings.llmAggregatorApiKey,
-                                isActive: true
-                            }];
-                            firstBackend.activeApiKeyIndex = 0;
-                        }
-                    }
-
-                    state.settings.llmaggregatorBackends = backends;
-                    state.settings.llmaggregatorActiveBackendIndex = (backends.length > 0) ? 0 : -1;
-
-                    if (loadedSettings.llmaggregatorApiKeys) delete loadedSettings.llmaggregatorApiKeys;
-                    if (loadedSettings.llmaggregatorActiveApiKeyIndex) delete loadedSettings.llmaggregatorActiveApiKeyIndex;
-
-                    if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
-                            loadedSettings.webhooks = [{
-                                id: 'migrated-' + Date.now(),
-                                label: '以前の設定',
-                                url: loadedSettings.webhookUrl,
-                                enabled: loadedSettings.enableWebhookNotification,
-                                format: loadedSettings.webhookFormat || 'json'
-                            }];
-                            delete loadedSettings.webhookUrl;
-                            delete loadedSettings.webhookFormat;
-                        }
-                        for (const key in loadedSettings) {
-                            if (key === 'darkMode') continue;
-                            if (key === 'memoWidth') continue;
-                            if (key === 'showCollapseButtons') continue;
-
-                            if (key in defaultSettings) {
-                                const loadedValue = loadedSettings[key];
-                                const defaultValue = defaultSettings[key];
-
-                                if (key === 'backgroundImageBlob' || key === 'userIconBlob' || key === 'aiIconBlob') {
-                                    if (loadedValue instanceof Blob) {
-                                        state.settings[key] = loadedValue;
-                                    } else {
-                                        state.settings[key] = null;
-                                    }
-} else if (key === 'theme') {
-                                    if (['light', 'dark', 'pastel-pink', 'pastel-blue', 'pastel-yellow', 'pastel-purple', 'pastel-rainbow', 'turf'].includes(loadedValue)) {
-                                        state.settings[key] = loadedValue;
-                                    } else {
-                                        state.settings[key] = defaultValue;
-                                    }
-                                } else if (key === 'apiProvider' || key === 'twinEngineProvider') {
-                                    if (['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator', 'dummy'].includes(loadedValue)) {
-                                        state.settings[key] = loadedValue;
-                                    } else {
-                                        state.settings[key] = defaultValue;
-                                    }
-                                } else if (typeof defaultValue === 'boolean') {
-                                    state.settings[key] = loadedValue === true;
-                                } else if (key === 'toggleButtonTopFontSize' || key === 'toggleButtonBottomFontSize' || key === 'toggleButtonTopWidth' || key === 'toggleButtonTopHeight') {
-                                    let num = parseInt(loadedValue, 10);
-                                    if (isNaN(num)) {
-                                        state.settings[key] = defaultValue;
-                                    } else {
-                                        if (key === 'toggleButtonTopFontSize' && (num < 1 || num > 50)) num = defaultValue;
-                                        if (key === 'toggleButtonBottomFontSize' && (num < 1 || num > 34)) num = defaultValue;
-                                        if ((key === 'toggleButtonTopWidth' || key === 'toggleButtonTopHeight') && (num < 1 || num > 100)) num = defaultValue;
-                                        state.settings[key] = num;
-                                    }
-                                } else if (key === 'toggleButtonTopTextCollapse' || key === 'toggleButtonTopTextExpand' ||
-                                    key === 'toggleButtonBottomTextCollapse' || key === 'toggleButtonBottomTextExpand') {
-                                    state.settings[key] = typeof loadedValue === 'string' && loadedValue.trim() !== '' ? loadedValue : defaultValue;
-                                } else if (key === 'apiProviderCycle' && typeof loadedValue === 'object' && loadedValue !== null) {
-                                    state.settings.apiProviderCycle.gemini = loadedValue.gemini === true;
-                                    state.settings.apiProviderCycle.deepseek = loadedValue.deepseek === true;
-                                    state.settings.apiProviderCycle.claude = loadedValue.claude === true;
-                                    state.settings.apiProviderCycle.openai = loadedValue.openai === true;
-                                    state.settings.apiProviderCycle.xai = loadedValue.xai === true;
-                                    state.settings.apiProviderCycle.llmaggregator = loadedValue.llmaggregator === true;
-                                } else if (key === 'proofreadingApiConfigs' && Array.isArray(loadedValue)) {
-                                    state.settings.proofreadingApiConfigs = loadedValue;
-                                } else if (key === 'activeProofreadingConfigId' && typeof loadedValue === 'string') {
-                                    state.settings.activeProofreadingConfigId = loadedValue;
-                                } else if (typeof defaultValue === 'number' || defaultValue === null) {
-                                    let num;
-                                    if (key.toLowerCase().includes('temperature') || key.toLowerCase().includes('topp') || key.toLowerCase().includes('penalty') ||
-                                        key.toLowerCase().includes('opacity') || key.toLowerCase().includes('fontsize') || key.toLowerCase().includes('offsety') ||
-                                        key.toLowerCase().includes('iconsize')) {
-                                        num = parseFloat(loadedValue);
-                                    } else {
-                                        num = parseInt(loadedValue, 10);
-                                    }
-                                    if (isNaN(num)) {
-                                        if ((key.toLowerCase().includes('temperature') || key.toLowerCase().includes('maxtokens') || key.toLowerCase().includes('topk') || key.toLowerCase().includes('topp') ||
-                                            key.toLowerCase().includes('penalty') || key.toLowerCase().includes('budget') ||
-                                            key.toLowerCase().includes('opacity') || key.toLowerCase().includes('fontsize') || key.toLowerCase().includes('iconsize') ||
-                                            key.includes('Scale') ||
-                                            key === 'diceMinValue' || key === 'diceMaxValue'
-                                        ) && (loadedValue === null || loadedValue === '')) {
-                                            state.settings[key] = null;
-                                        } else {
-                                            state.settings[key] = defaultValue;
-                                        }
-                                    } else {
-                                        if (key.toLowerCase().includes('temperature') || key.toLowerCase().includes('topp') || key.toLowerCase().includes('penalty') ||
-                                            key.toLowerCase().includes('opacity') || key.toLowerCase().includes('fontsize') || key.toLowerCase().includes('offsety') ||
-                                            key.toLowerCase().includes('iconsize') || key.includes('Scale')) {
-                                            num = parseFloat(loadedValue);
-                                        }
-                                        if (key.toLowerCase().includes('temperature') && (num < 0 || num > 2)) num = defaultValue;
-                                        if (key.toLowerCase().includes('maxtokens') && num < 1) num = defaultValue;
-                                        if (key.toLowerCase().includes('topk') && num < 1) num = defaultValue;
-                                        if (key.toLowerCase().includes('topp') && (num < 0 || num > 1)) num = defaultValue;
-                                        if (key.toLowerCase().includes('streamingspeed') && num < 0) num = defaultValue;
-                                        if (key.toLowerCase().includes('penalty') && (num < -2.0 || num >= 2.0)) num = defaultValue;
-                                        if (key.toLowerCase().includes('budget') && (num < 0 || !Number.isInteger(num))) num = defaultValue;
-                                        if (key.toLowerCase().includes('opacity') && (num < 0 || num > 1)) num = defaultValue;
-                                        if (key === 'messageIconSize' && (num < 1 || num > 300)) num = defaultValue;
-                                        if (key === 'messageIconOffsetY' && (num < -200 || num > 200)) num = defaultValue;
-                                        if (key === 'iconNameFontSize' && (num < 1 || num > 46)) num = defaultValue;
-                                        if (key === 'iconNameOffsetY' && (num < -200 || num > 200)) num = defaultValue;
-                                        if ((key === 'messageBodyFontSize' || key === 'codeBlockFontSize' || key === 'thoughtSummaryFontSize') && (num < 1 || num > 100)) num = defaultValue;
-                                        if (key === 'diceMinValue' && num < 0) num = defaultValue;
-                                        if (key === 'diceMaxValue' && num < 0) num = defaultValue;
-                                        state.settings[key] = num;
-                                    }
-                                } else if (typeof defaultValue === 'string') {
-                                    state.settings[key] = typeof loadedValue === 'string' ? loadedValue : defaultValue;
-                                } else {
-                                    state.settings[key] = loadedValue;
+                            if (backends.length > 0) {
+                                const firstBackend = backends[0];
+                                if ((!firstBackend.apiKeys || firstBackend.apiKeys.length === 0) && loadedSettings.llmAggregatorApiKey) {
+                                    firstBackend.apiKeys = [{
+                                        id: `rescued-key-${Date.now()}`,
+                                        label: 'キー 1',
+                                        value: loadedSettings.llmAggregatorApiKey,
+                                        isActive: true
+                                    }];
+                                    firstBackend.activeApiKeyIndex = 0;
                                 }
                             }
-                        }
-                        if (state.settings.diceMinValue !== null && state.settings.diceMaxValue !== null && state.settings.diceMinValue > state.settings.diceMaxValue) {
-                            state.settings.diceMaxValue = state.settings.diceMinValue;
-                        }
-                        if (!['light', 'dark', 'pastel-pink', 'pastel-blue', 'pastel-yellow', 'pastel-purple', 'pastel-rainbow', 'turf'].includes(state.settings.theme)) { // ← ここに 'turf' を追加
-                            state.settings.theme = window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-                        }
-                        if (state.settings.thoughtSummaryOpacity === undefined || state.settings.thoughtSummaryOpacity === null || isNaN(parseFloat(state.settings.thoughtSummaryOpacity))) {
-                            state.settings.thoughtSummaryOpacity = DEFAULT_THOUGHT_SUMMARY_OPACITY;
-                        }
-                        if (typeof loadedSettings.settingsUIDetailsOpenStates === 'object' && loadedSettings.settingsUIDetailsOpenStates !== null) {
-                            state.settings.settingsUIDetailsOpenStates = loadedSettings.settingsUIDetailsOpenStates;
-                            
-                            if (state.settings.autoCloseOtherSettings) {
-                    const otherSettingsGroup = document.getElementById('settings-group-other');
-                    if (otherSettingsGroup) {
-                        const detailsElements = otherSettingsGroup.querySelectorAll('details');
-                        detailsElements.forEach(el => {
-                            if (el.id) {
-                                state.settings.settingsUIDetailsOpenStates[el.id] = false;
-                            }
-                        });
-                    }
-                }
-                        } else {
-                            state.settings.settingsUIDetailsOpenStates = {
-                                'gemini-settings-group': true,
-                                'gemini-params-group': true,
-                                'gemini-advanced-group': true,
-                                'deepseek-settings-group': true,
+                            state.settings.llmaggregatorBackends = backends;
+                            state.settings.llmaggregatorActiveBackendIndex = (backends.length > 0) ? 0 : -1;
 
-                                'deepseek-params-group': true,
-                                'deepseek-advanced-group': true,
-                                'claude-settings-group': true,
-                                'claude-params-group': true,
-                                'claude-advanced-group': true,
-                                'openai-settings-group': true,
-                                'openai-params-group': true,
-                                'openai-advanced-group': true,
-                                'xai-settings-group': true,
-                                'xai-params-group': true,
-                                'xai-advanced-group': true,
-                                'llmaggregator-settings-group': true,
-                                'llmaggregator-params-group': true,
-                                'llmaggregator-advanced-group': true,
-                            };
-                        }
-
-                        if ((!loadedSettings.twinEngineApiConfigs || loadedSettings.twinEngineApiConfigs.length === 0) && loadedSettings.twinEngineProvider) {
-                            const provider = loadedSettings.twinEngineProvider;
-                            let apiKey = '';
-                            let modelName = '';
-
-                            switch (provider) {
-                                case 'gemini':
-                                    apiKey = loadedSettings.twinEngineGeminiApiKey || '';
-                                    modelName = loadedSettings.twinEngineGeminiModelName || DEFAULT_MODEL;
-                                    break;
-                                case 'deepseek':
-                                    apiKey = loadedSettings.twinEngineDeepseekApiKey || '';
-                                    modelName = loadedSettings.twinEngineDeepseekModelName || DEFAULT_DEEPSEEK_MODEL;
-                                    break;
-                                case 'claude':
-                                    apiKey = loadedSettings.twinEngineClaudeApiKey || '';
-                                    modelName = loadedSettings.twinEngineClaudeModelName || DEFAULT_CLAUDE_MODEL;
-                                    break;
-                                case 'openai':
-                                    apiKey = loadedSettings.twinEngineOpenaiApiKey || '';
-                                    modelName = loadedSettings.twinEngineOpenaiModelName || DEFAULT_OPENAI_MODEL;
-                                    break;
-                                case 'xai':
-                                    apiKey = loadedSettings.twinEngineXaiApiKey || '';
-                                    modelName = loadedSettings.twinEngineXaiModelName || DEFAULT_XAI_MODEL;
-                                    break;
-                                case 'llmaggregator':
-                                    apiKey = loadedSettings.twinEngineLlmaggregatorApiKey || '';
-                                    modelName = loadedSettings.twinEngineLlmaggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
-                                    break;
+                            if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
+                                loadedSettings.webhooks = [{
+                                    id: 'migrated-' + Date.now(),
+                                    label: '以前の設定',
+                                    url: loadedSettings.webhookUrl,
+                                    enabled: loadedSettings.enableWebhookNotification,
+                                    format: loadedSettings.webhookFormat || 'json'
+                                }];
                             }
 
-                            if (provider !== 'dummy') {
-                                const oldConfig = {
-                                    id: `migrated-${Date.now()}`,
-                                    label: `移行した設定 (${provider})`,
-                                    provider: provider,
-                                    apiKey: apiKey,
-                                    modelName: modelName,
-                                };
-                                state.settings.twinEngineApiConfigs = [oldConfig];
-                                state.settings.twinEngineActiveConfigId = oldConfig.id;
-                            }
-                        } else if (loadedSettings.twinEngineApiConfigs) {
-                            state.settings.twinEngineApiConfigs = loadedSettings.twinEngineApiConfigs;
-                            state.settings.twinEngineActiveConfigId = loadedSettings.twinEngineActiveConfigId;
-                        }
+                            for (const key in loadedSettings) {
+                                if (key === 'darkMode' || key === 'memoWidth' || key === 'showCollapseButtons') continue;
+                                if (key in defaultSettings) {
+                                    const loadedValue = loadedSettings[key];
+                                    const defaultValue = defaultSettings[key];
 
-                        if (loadedSettings.hasOwnProperty('proofreadingModelName')) {
-                            if (!state.settings.proofreadingApiConfigs || state.settings.proofreadingApiConfigs.length === 0) {
+                                    if (key === 'backgroundImageBlob' || key === 'userIconBlob' || key === 'aiIconBlob') {
+                                        state.settings[key] = (loadedValue instanceof Blob) ? loadedValue : null;
+                                    } else if (typeof defaultValue === 'boolean') {
+                                        state.settings[key] = loadedValue === true;
+                                    } else if (typeof defaultValue === 'number' || defaultValue === null) {
+                                        let num = parseFloat(loadedValue);
+                                        if (isNaN(num)) {
+                                            state.settings[key] = defaultValue;
+                                        } else {
+                                            state.settings[key] = num;
+                                        }
+                                    } else {
+                                        state.settings[key] = loadedValue;
+                                    }
+                                }
+                            }
+
+                            if ((!loadedSettings.twinEngineApiConfigs || loadedSettings.twinEngineApiConfigs.length === 0) && loadedSettings.twinEngineProvider) {
+                                const provider = loadedSettings.twinEngineProvider;
+                                if (provider !== 'dummy') {
+                                    let apiKey = '', modelName = '';
+                                    if (provider === 'gemini') { apiKey = loadedSettings.twinEngineGeminiApiKey; modelName = loadedSettings.twinEngineGeminiModelName; }
+                                    else if (provider === 'deepseek') { apiKey = loadedSettings.twinEngineDeepseekApiKey; modelName = loadedSettings.twinEngineDeepseekModelName; }
+                                    const oldConfig = {
+                                        id: `migrated-${Date.now()}`,
+                                        label: `移行した設定 (${provider})`,
+                                        provider: provider,
+                                        apiKey: apiKey || '',
+                                        modelName: modelName || '',
+                                    };
+                                    state.settings.twinEngineApiConfigs = [oldConfig];
+                                    state.settings.twinEngineActiveConfigId = oldConfig.id;
+                                }
+                            } else if (loadedSettings.twinEngineApiConfigs) {
+                                state.settings.twinEngineApiConfigs = loadedSettings.twinEngineApiConfigs;
+                                state.settings.twinEngineActiveConfigId = loadedSettings.twinEngineActiveConfigId;
+                            }
+
+                            if (loadedSettings.hasOwnProperty('proofreadingModelName') && (!state.settings.proofreadingApiConfigs || state.settings.proofreadingApiConfigs.length === 0)) {
                                 const oldConfig = {
                                     id: `migrated-proofreading-${Date.now()}`,
                                     label: '（移行された設定）',
@@ -8818,209 +8666,220 @@ enableChmateScrollOpacity: true,
                                 state.settings.proofreadingApiConfigs = [oldConfig];
                                 state.settings.activeProofreadingConfigId = oldConfig.id;
                             }
-                            delete state.settings.proofreadingModelName;
-                            delete state.settings.proofreadingSystemInstruction;
-                        }
 
-                        resolve(state.settings);
-                    };
-                    request.onerror = (event) => reject(`設定読み込みエラー: ${event.target.error}`);
+                            resolve(state.settings);
+                        };
+                        request.onerror = (event) => reject(`設定読み込みエラー: ${event.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
                 });
             },
+
             async saveChat(optionalTitle = null) {
                 await this.openDB();
                 if ((!state.currentMessages || state.currentMessages.length === 0)) {
                     return Promise.resolve(state.currentChatId);
                 }
                 return new Promise((resolve, reject) => {
-                    const store = this._getStore(CHATS_STORE, 'readwrite');
-                    const now = Date.now();
-                    const messagesToSave = state.currentMessages.map(msg => ({
-                        role: msg.role, content: msg.content, timestamp: msg.timestamp,
-                        thoughtSummary: msg.thoughtSummary || null,
-                        deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
-                        xaiThoughtSummary: msg.xaiThoughtSummary || null,
-                        generatedByApiProvider: msg.generatedByApiProvider || null,
-                        ...(msg.finishReason && { finishReason: msg.finishReason }),
-                        ...(msg.safetyRatings && { safetyRatings: msg.safetyRatings }),
-                        ...(msg.error && { error: msg.error }),
-                        ...(msg.isCascaded !== undefined && { isCascaded: msg.isCascaded }),
-                        ...(msg.isSelected !== undefined && { isSelected: msg.isSelected }),
-                        ...(msg.siblingGroupId !== undefined && { siblingGroupId: msg.siblingGroupId }),
-                        ...(msg.groundingMetadata && { groundingMetadata: msg.groundingMetadata }),
-                        ...(msg.attachments && msg.attachments.length > 0 && { attachments: msg.attachments }),
-                        ...(msg.usageMetadata && { usageMetadata: msg.usageMetadata }),
-                        ...(msg.thoughtSummaryOpen !== undefined && { thoughtSummaryOpen: msg.thoughtSummaryOpen }),
-                    }));
-                    const determineTitleAndSave = (existingChatData = null) => {
-                        let title;
-                        if (optionalTitle !== null) {
-                            title = optionalTitle;
-                        } else if (existingChatData && existingChatData.title) {
-                            title = existingChatData.title;
-                        } else {
-                            const firstUserMessage = state.currentMessages.find(m => m.role === 'user');
-                            title = firstUserMessage ? firstUserMessage.content.substring(0, 50) : "無題のチャット";
-                        }
-                        const chatIdForOperation = existingChatData ? existingChatData.id : state.currentChatId;
-                        const chatData = {
-                            messages: messagesToSave,
-                            updatedAt: now, createdAt: existingChatData ? existingChatData.createdAt : now,
-                            title: title,
-                        };
-                        if (state.settings.persistMessageCollapseState) {
-                            chatData.collapsedStates = Object.fromEntries(state.messageCollapsedStates);
-                        } else if (existingChatData && existingChatData.collapsedStates) {
-                            chatData.collapsedStates = undefined;
-                        }
+                    try {
+                        const store = this._getStore(CHATS_STORE, 'readwrite');
+                        const now = Date.now();
 
-                        if (chatIdForOperation) {
-                            chatData.id = chatIdForOperation;
-                        }
-                        const request = store.put(chatData);
-                        request.onsuccess = (event) => {
-                            const savedId = event.target.result;
-                            if (!state.currentChatId && savedId) {
-                                state.currentChatId = savedId;
+                        const messagesToSave = state.currentMessages.map(msg => ({
+                            role: msg.role, content: msg.content, timestamp: msg.timestamp,
+                            thoughtSummary: msg.thoughtSummary || null,
+                            deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
+                            xaiThoughtSummary: msg.xaiThoughtSummary || null,
+                            generatedByApiProvider: msg.generatedByApiProvider || null,
+                            finishReason: msg.finishReason, safetyRatings: msg.safetyRatings, error: msg.error,
+                            isCascaded: msg.isCascaded, isSelected: msg.isSelected, siblingGroupId: msg.siblingGroupId,
+                            groundingMetadata: msg.groundingMetadata, attachments: msg.attachments,
+                            usageMetadata: msg.usageMetadata, thoughtSummaryOpen: msg.thoughtSummaryOpen
+                        }));
+
+                        const executeSave = (chatIdToUse, existingData) => {
+                            let title = optionalTitle;
+                            if (title === null) {
+                                if (existingData && existingData.title) title = existingData.title;
+                                else {
+                                    const firstUserMessage = state.currentMessages.find(m => m.role === 'user');
+                                    title = firstUserMessage ? firstUserMessage.content.substring(0, 50) : "無題のチャット";
+                                }
                             }
-                            if ((state.currentChatId || savedId) === (chatIdForOperation || savedId)) {
-                                uiUtils.updateChatTitle(chatData.title);
+
+                            const chatData = {
+                                messages: messagesToSave,
+                                updatedAt: now,
+                                createdAt: existingData ? existingData.createdAt : now,
+                                title: title,
+                            };
+
+                            if (state.settings.persistMessageCollapseState) {
+                                chatData.collapsedStates = Object.fromEntries(state.messageCollapsedStates);
                             }
-                            resolve(state.currentChatId || savedId);
+
+                            if (chatIdToUse) {
+                                chatData.id = chatIdToUse;
+                            }
+
+                            const putRequest = store.put(chatData);
+                            putRequest.onsuccess = (event) => {
+                                const savedId = event.target.result;
+                                if (!state.currentChatId && savedId) {
+                                    state.currentChatId = savedId;
+                                }
+                                if ((state.currentChatId || savedId) === (chatIdToUse || savedId)) {
+                                    uiUtils.updateChatTitle(chatData.title);
+                                }
+                                resolve(state.currentChatId || savedId);
+                            };
+                            putRequest.onerror = (e) => reject(`チャット保存putエラー: ${e.target.error}`);
                         };
-                        request.onerror = (event) => reject(`チャット保存putエラー: ${event.target.error.name} - ${event.target.error.message}`);
-                    };
-                    if (state.currentChatId) {
-                        const getRequest = store.get(state.currentChatId);
-                        getRequest.onsuccess = (event) => {
-                            const existingChat = event.target.result;
-                            if (!existingChat) {
+
+                        if (state.currentChatId) {
+                            const getRequest = store.get(state.currentChatId);
+                            getRequest.onsuccess = (e) => {
+                                const existing = e.target.result;
+                                if (!existing) {
+                                    state.currentChatId = null;
+                                    executeSave(null, null);
+                                } else {
+                                    executeSave(state.currentChatId, existing);
+                                }
+                            };
+                            getRequest.onerror = () => {
                                 state.currentChatId = null;
-                                determineTitleAndSave(null);
-                            } else {
-                                determineTitleAndSave(existingChat);
-                            }
-                        };
-                        getRequest.onerror = (event) => {
-                            state.currentChatId = null;
-                            determineTitleAndSave(null);
-                        };
-                    } else {
-                        determineTitleAndSave(null);
+                                executeSave(null, null);
+                            };
+                        } else {
+                            executeSave(null, null);
+                        }
+                    } catch (error) {
+                        reject(error);
                     }
-                    store.transaction.onerror = (event) => reject(`チャット保存トランザクション失敗: ${event.target.error.name} - ${event.target.error.message}`);
                 });
             },
+
             async updateChatTitleDb(id, newTitle) {
                 await this.openDB();
                 return new Promise((resolve, reject) => {
-                    const store = this._getStore(CHATS_STORE, 'readwrite');
-                    const getRequest = store.get(id);
-                    getRequest.onsuccess = (event) => {
-                        const chatData = event.target.result;
-                        if (chatData) {
-                            chatData.title = newTitle;
-                            chatData.updatedAt = Date.now();
-                            const putRequest = store.put(chatData);
-                            putRequest.onerror = (event) => reject(`タイトル更新エラー: ${event.target.error}`);
-                        } else {
-                            reject(`チャットが見つかりません: ${id}`);
-                        }
-                    };
-                    getRequest.onerror = (event) => reject(`タイトル更新用チャット取得エラー: ${event.target.error}`);
-                    store.transaction.onerror = (event) => reject(`タイトル更新トランザクション失敗: ${event.target.error}`);
+                    try {
+                        const store = this._getStore(CHATS_STORE, 'readwrite');
+                        const getRequest = store.get(id);
+                        getRequest.onsuccess = (event) => {
+                            const chatData = event.target.result;
+                            if (chatData) {
+                                chatData.title = newTitle;
+                                chatData.updatedAt = Date.now();
+                                const putRequest = store.put(chatData);
+                                putRequest.onsuccess = () => resolve();
+                                putRequest.onerror = (e) => reject(`タイトル更新putエラー: ${e.target.error}`);
+                            } else {
+                                reject(`チャットが見つかりません: ${id}`);
+                            }
+                        };
+                        getRequest.onerror = (e) => reject(`タイトル更新取得エラー: ${e.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
                 });
             },
+
             async getChat(id) {
                 await this.openDB();
                 return new Promise((resolve, reject) => {
-                    const store = this._getStore(CHATS_STORE);
-                    const request = store.get(id);
-                    request.onsuccess = (event) => resolve(event.target.result);
-                    request.onerror = (event) => reject(`チャット ${id} 取得エラー: ${event.target.error}`);
+                    try {
+                        const store = this._getStore(CHATS_STORE);
+                        const request = store.get(id);
+                        request.onsuccess = (event) => resolve(event.target.result);
+                        request.onerror = (event) => reject(`チャット取得エラー: ${event.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
                 });
             },
+
             async getAllChats(sortBy = 'updatedAt') {
                 await this.openDB();
                 return new Promise((resolve, reject) => {
-                    const store = this._getStore(CHATS_STORE);
-                    const indexName = sortBy === 'createdAt' ? CHAT_CREATEDAT_INDEX : CHAT_UPDATEDAT_INDEX;
-                    if (!store.indexNames.contains(indexName)) {
-                        const getAllRequest = store.getAll();
-                        getAllRequest.onsuccess = (event) => resolve(event.target.result.reverse());
-                        getAllRequest.onerror = (event) => reject(`全チャット取得エラー(フォールバック): ${event.target.error}`);
-                        return;
-                    }
-                    const index = store.index(indexName);
-                    const request = index.openCursor(null, 'prev');
-                    const chats = [];
-                    request.onsuccess = (event) => {
-                        const cursor = event.target.result;
-                        if (cursor) {
-                            chats.push(cursor.value);
-                            cursor.continue();
-                        } else {
-                            resolve(chats);
+                    try {
+                        const store = this._getStore(CHATS_STORE);
+                        const indexName = sortBy === 'createdAt' ? CHAT_CREATEDAT_INDEX : CHAT_UPDATEDAT_INDEX;
+
+                        if (!store.indexNames.contains(indexName)) {
+                            const getAllRequest = store.getAll();
+                            getAllRequest.onsuccess = (event) => resolve(event.target.result.reverse());
+                            getAllRequest.onerror = (e) => reject(e.target.error);
+                            return;
                         }
-                    };
-                    request.onerror = (event) => reject(`全チャット取得エラー (${sortBy}順): ${event.target.error}`);
+
+                        const index = store.index(indexName);
+                        const request = index.openCursor(null, 'prev');
+                        const chats = [];
+                        request.onsuccess = (event) => {
+                            const cursor = event.target.result;
+                            if (cursor) {
+                                chats.push(cursor.value);
+                                cursor.continue();
+                            } else {
+                                resolve(chats);
+                            }
+                        };
+                        request.onerror = (event) => reject(`一覧取得エラー: ${event.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
                 });
             },
+
             async deleteChat(id) {
                 await this.openDB();
                 return new Promise((resolve, reject) => {
-                    const store = this._getStore(CHATS_STORE, 'readwrite');
-                    const request = store.delete(id);
-                    request.onsuccess = () => resolve();
-                    request.onerror = (event) => reject(`チャット ${id} 削除エラー: ${event.target.error}`);
+                    try {
+                        const store = this._getStore(CHATS_STORE, 'readwrite');
+                        const request = store.delete(id);
+                        request.onsuccess = () => resolve();
+                        request.onerror = (event) => reject(`チャット削除エラー: ${event.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
                 });
             },
+
             async clearAllData() {
                 await this.openDB();
                 return new Promise((resolve, reject) => {
-                    const transaction = state.db.transaction([SETTINGS_STORE, CHATS_STORE], 'readwrite');
-                    let storesCleared = 0;
-                    const totalStores = 2;
+                    try {
+                        const transaction = state.db.transaction([SETTINGS_STORE, CHATS_STORE], 'readwrite');
+                        const settingsStore = transaction.objectStore(SETTINGS_STORE);
+                        const chatsStore = transaction.objectStore(CHATS_STORE);
 
-                    const onComplete = () => {
-                        if (++storesCleared === totalStores) {
-                            resolve();
-                        }
-                    };
-                    const onError = (storeName, event) => reject(`${storeName} クリアエラー: ${event.target.error}`);
+                        transaction.oncomplete = () => resolve();
+                        transaction.onerror = (e) => reject(`データ全消去エラー: ${e.target.error}`);
 
-                    const settingsStore = transaction.objectStore(SETTINGS_STORE);
-                    const chatsStore = transaction.objectStore(CHATS_STORE);
-
-                    const clearSettingsReq = settingsStore.clear();
-                    const clearChatsReq = chatsStore.clear();
-
-                    clearSettingsReq.onsuccess = onComplete;
-                    clearSettingsReq.onerror = (e) => onError(SETTINGS_STORE, e);
-                    clearChatsReq.onsuccess = onComplete;
-                    clearChatsReq.onerror = (e) => onError(CHATS_STORE, e);
-                    transaction.onerror = (event) => reject(`データクリアトランザクション失敗: ${event.target.error}`);
+                        settingsStore.clear();
+                        chatsStore.clear();
+                    } catch (error) {
+                        reject(error);
+                    }
                 });
             },
+
             async clearAllChatsStore() {
                 await this.openDB();
                 return new Promise((resolve, reject) => {
-                    const transaction = state.db.transaction([CHATS_STORE], 'readwrite');
-                    const chatsStore = transaction.objectStore(CHATS_STORE);
-                    const clearChatsReq = chatsStore.clear();
-
-                    clearChatsReq.onsuccess = () => resolve();
-                    clearChatsReq.onerror = (e) => reject(`CHATS_STORE クリアエラー: ${e.target.error}`);
-                    transaction.onerror = (event) => reject(`チャット履歴クリアトランザクション失敗: ${event.target.error}`);
+                    try {
+                        const store = this._getStore(CHATS_STORE, 'readwrite');
+                        const request = store.clear();
+                        request.onsuccess = () => resolve();
+                        request.onerror = (e) => reject(`履歴全消去エラー: ${e.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
                 });
             }
         };
-        // ▼▼▼ ここから追加 ▼▼▼
-        /**
-         * カタカナをひらがなに変換する
-         * @param {string} str - 変換元の文字列
-         * @returns {string} 変換後の文字列
-         */
         function katakanaToHiragana(str) {
             if (typeof str !== 'string') return '';
             return str.replace(/[\u30a1-\u30f6]/g, function (match) {
@@ -9028,11 +8887,6 @@ enableChmateScrollOpacity: true,
             });
         }
 
-        /**
-          * ローマ字をカタカナに変換する（簡易版・大文字対応）
-         * @param {string} str - 変換元の文字列
-         * @returns {string} 変換後の文字列
-         */
         function romajiToKatakana(str) {
             if (typeof str !== 'string') return '';
             const romajiMap = {
