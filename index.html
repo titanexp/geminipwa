@@ -9384,10 +9384,9 @@ enableChmateScrollOpacity: true,
                 });
                 return cleanHtml;
             },
-            renderChatMessages(maintainScroll = false) {
+            renderChatMessages(maintainScroll = false, forceUpdate = false) {
                 const mainContent = elements.chatScreen.querySelector('.main-content');
                 const oldScrollTop = maintainScroll ? mainContent.scrollTop : null;
-                const oldScrollHeight = maintainScroll ? mainContent.scrollHeight : null;
 
                 if (state.editingMessageIndex !== null) {
                     const messageElement = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`);
@@ -9395,43 +9394,70 @@ enableChmateScrollOpacity: true,
                     else state.editingMessageIndex = null;
                 }
 
-                elements.messageContainer.innerHTML = '';
+                const existingNodes = Array.from(elements.messageContainer.querySelectorAll('.message'));
+                let startRenderIndex = existingNodes.length;
+
+                if (forceUpdate || state.currentMessages.length !== existingNodes.length) {
+                    startRenderIndex = 0;
+                } else {
+                    if (existingNodes.length > 0) {
+                        const lastNodeIndex = parseInt(existingNodes[existingNodes.length - 1].dataset.index, 10);
+                        if (lastNodeIndex !== existingNodes.length - 1) {
+                            startRenderIndex = 0;
+                        }
+                    }
+                }
+
+                if (startRenderIndex < existingNodes.length) {
+                    for (let i = startRenderIndex; i < existingNodes.length; i++) {
+                        existingNodes[i].remove();
+                    }
+                }
+
                 let currentSiblingGroupId = null;
                 let siblingsInGroup = [];
                 let siblingIndex = 0;
 
                 for (let i = 0; i < state.currentMessages.length; i++) {
                     const msg = state.currentMessages[i];
+                    let cascadeInfo = null;
+
                     if (msg.role === 'model' && msg.isCascaded && msg.siblingGroupId) {
                         if (msg.siblingGroupId !== currentSiblingGroupId) {
                             currentSiblingGroupId = msg.siblingGroupId;
                             siblingsInGroup = state.currentMessages.filter(m => m.role === 'model' && m.isCascaded && m.siblingGroupId === currentSiblingGroupId);
-                            siblingIndex = 0;
                         }
                         const currentIndexInGroup = siblingsInGroup.findIndex(m => m === msg);
                         if (currentIndexInGroup !== -1) {
                             siblingIndex = currentIndexInGroup + 1;
                         }
-
-                        if (msg.isSelected) {
-                            this.appendMessage(msg.role, msg.content, i, false, {
-                                currentIndex: siblingIndex,
-                                total: siblingsInGroup.length,
-                                siblingGroupId: currentSiblingGroupId
-                            }, msg.attachments);
-                        }
+                        cascadeInfo = {
+                            currentIndex: siblingIndex,
+                            total: siblingsInGroup.length,
+                            siblingGroupId: currentSiblingGroupId
+                        };
                     } else {
                         currentSiblingGroupId = null;
-                        siblingsInGroup = [];
+                    }
+
+                    if (i < startRenderIndex) {
+                        continue;
+                    }
+
+                    if (msg.role === 'model' && msg.isCascaded && msg.siblingGroupId) {
+                        if (msg.isSelected) {
+                            this.appendMessage(msg.role, msg.content, i, false, cascadeInfo, msg.attachments);
+                        }
+                    } else {
                         this.appendMessage(msg.role, msg.content, i, false, null, msg.attachments);
                     }
                 }
-if (maintainScroll && oldScrollTop !== null) {
-                requestAnimationFrame(() => {
 
-                    mainContent.scrollTop = oldScrollTop;
-                });
-            }
+                if (maintainScroll && oldScrollTop !== null) {
+                    requestAnimationFrame(() => {
+                        mainContent.scrollTop = oldScrollTop;
+                    });
+                }
             },
             appendMessage(role, content, index, isStreamingPlaceholder = false, cascadeInfo = null, attachments = null) {
                 const messageDiv = document.createElement('div');
@@ -13015,7 +13041,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
 
                 elements.showUserIconToggle.addEventListener('change', () => {
                     state.settings.showUserIcon = elements.showUserIconToggle.checked;
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 });
                 elements.uploadUserIconBtn.addEventListener('click', () => elements.userIconInput.click());
                 elements.userIconInput.addEventListener('change', (event) => {
@@ -13026,12 +13052,12 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 elements.deleteUserIconBtn.addEventListener('click', () => this.confirmDeleteIcon('user'));
                 elements.showUserNameToggle.addEventListener('change', () => {
                     state.settings.showUserName = elements.showUserNameToggle.checked;
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 });
 
                 elements.showAiIconToggle.addEventListener('change', () => {
                     state.settings.showAiIcon = elements.showAiIconToggle.checked;
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 });
                 elements.uploadAiIconBtn.addEventListener('click', () => elements.aiIconInput.click());
                 elements.aiIconInput.addEventListener('change', (event) => {
@@ -13042,7 +13068,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 elements.deleteAiIconBtn.addEventListener('click', () => this.confirmDeleteIcon('ai'));
                 elements.showAiNameToggle.addEventListener('change', () => {
                     state.settings.showAiName = elements.showAiNameToggle.checked;
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 });
                 elements.iconNameFontSizeInput.addEventListener('input', () => {
                     const newSize = parseInt(elements.iconNameFontSizeInput.value, 10);
@@ -13083,42 +13109,42 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 elements.userNameBubbleToggle.addEventListener('change', () => {
                     state.settings.showUserNameBubble = elements.userNameBubbleToggle.checked;
                     uiUtils.applySidePanelSettingsToUI();
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 });
                 elements.userNameBubbleUseThemeColorToggle.addEventListener('change', () => {
                     state.settings.userNameBubbleUseThemeColor = elements.userNameBubbleUseThemeColorToggle.checked;
                     uiUtils.applySidePanelSettingsToUI();
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 });
                 elements.userNameBubbleColorInput.addEventListener('input', () => {
                     state.settings.userNameBubbleColor = elements.userNameBubbleColorInput.value.trim() || DEFAULT_USER_NAME_BUBBLE_COLOR;
                     uiUtils.applySidePanelSettingsToUI();
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 });
                 elements.userNameBubbleOpacityInput.addEventListener('input', () => {
                     state.settings.userNameBubbleOpacity = elements.userNameBubbleOpacityInput.value === '' ? DEFAULT_USER_NAME_BUBBLE_OPACITY : parseFloat(elements.userNameBubbleOpacityInput.value);
                     uiUtils.applySidePanelSettingsToUI();
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 });
                 elements.aiNameBubbleToggle.addEventListener('change', () => {
                     state.settings.showAiNameBubble = elements.aiNameBubbleToggle.checked;
                     uiUtils.applySidePanelSettingsToUI();
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 });
                 elements.aiNameBubbleUseThemeColorToggle.addEventListener('change', () => {
                     state.settings.aiNameBubbleUseThemeColor = elements.aiNameBubbleUseThemeColorToggle.checked;
                     uiUtils.applySidePanelSettingsToUI();
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 });
                 elements.aiNameBubbleColorInput.addEventListener('input', () => {
                     state.settings.aiNameBubbleColor = elements.aiNameBubbleColorInput.value.trim() || DEFAULT_AI_NAME_BUBBLE_COLOR;
                     uiUtils.applySidePanelSettingsToUI();
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 });
                 elements.aiNameBubbleOpacityInput.addEventListener('input', () => {
                     state.settings.aiNameBubbleOpacity = elements.aiNameBubbleOpacityInput.value === '' ? DEFAULT_AI_NAME_BUBBLE_OPACITY : parseFloat(elements.aiNameBubbleOpacityInput.value);
                     uiUtils.applySidePanelSettingsToUI();
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 });
 
                 this._setupOpacitySlider('message-bubble-opacity', '--message-bubble-opacity', DEFAULT_MESSAGE_BUBBLE_OPACITY);
@@ -16450,7 +16476,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                         state.aiIconUrl = URL.createObjectURL(blob);
                     }
                     uiUtils.updateIconSettingsUI();
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 } catch (error) {
                     await uiUtils.showCustomAlert(`${type === 'user' ? 'ユーザー' : 'AI'}アイコンの処理エラー: ${error}`);
                 }
@@ -16476,7 +16502,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                         await dbUtils.saveSetting('aiIconBlob', null);
                     }
                     uiUtils.updateIconSettingsUI();
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
                 } catch (error) {
                     await uiUtils.showCustomAlert(`${type === 'user' ? 'ユーザー' : 'AI'}アイコンの削除エラー: ${error}`);
                 }
@@ -17361,7 +17387,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                         }
                     });
 
-                    uiUtils.renderChatMessages(true);
+                    uiUtils.renderChatMessages(true, true);
 
                     const newFirstUserMsgIndex = state.currentMessages.findIndex(m => m.role === 'user');
                     let requiresTitleUpdate = indicesToDelete.includes(originalFirstUserMsgIndex);
@@ -17545,7 +17571,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     newlySelectedMessage.isSelected = true;
                     const newlySelectedIndex = siblingsWithIndices[targetSiblingIndexInGroup].originalIndex;
 
-                    uiUtils.renderChatMessages();
+                    uiUtils.renderChatMessages(true, true);
 
                     requestAnimationFrame(() => {
                         const newlySelectedElement = elements.messageContainer.querySelector(`.message[data-index="${newlySelectedIndex}"]`);
