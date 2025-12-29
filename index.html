@@ -9313,7 +9313,7 @@ const dbUtils = {
                     });
                 }
             },
-            appendMessage(role, content, index, isStreamingPlaceholder = false, cascadeInfo = null, attachments = null) {
+appendMessage(role, content, index, isStreamingPlaceholder = false, cascadeInfo = null, attachments = null) {
                 const messageDiv = document.createElement('div');
                 messageDiv.classList.add('message', role);
                 messageDiv.dataset.index = index;
@@ -9546,12 +9546,12 @@ const dbUtils = {
                 } else {
                     try {
                         if (role === 'model' && !isStreamingPlaceholder && typeof marked !== 'undefined') {
-                            const safeHtml = this._sanitizeAndParseMarkdown(content || '');
+                            const safeHtml = uiUtils._sanitizeAndParseMarkdown(content || '');
                             contentDiv.innerHTML = safeHtml;
-                            this.processInteractivePlaceholders(contentDiv);
-                            this.processInteractiveTitles(contentDiv);
-                            this.addCopyButtonsToCodeBlocks(contentDiv, false);
-                            this.addImageClickListeners(contentDiv);
+                            uiUtils.processInteractivePlaceholders(contentDiv);
+                            uiUtils.processInteractiveTitles(contentDiv);
+                            uiUtils.addCopyButtonsToCodeBlocks(contentDiv, false);
+                            uiUtils.addImageClickListeners(contentDiv);
                         } else if (role === 'user') {
                             const pre = document.createElement('pre'); pre.textContent = content; contentDiv.appendChild(pre);
                         } else if (role === 'error') {
@@ -9573,7 +9573,7 @@ const dbUtils = {
                     citationDetailsDiv.id = `streaming-citations-${index}`;
                 }
                 messageDiv.appendChild(citationDetailsDiv);
-                this.renderCitations(messageData, citationDetailsDiv);
+                uiUtils.renderCitations(messageData, citationDetailsDiv);
 
                 const editArea = document.createElement('div');
                 editArea.classList.add('message-edit-area', 'hidden');
@@ -9588,7 +9588,6 @@ const dbUtils = {
                     prevButton.title = '前の応答';
                     prevButton.classList.add('cascade-prev-btn');
                     prevButton.disabled = cascadeInfo.currentIndex <= 1;
-                    prevButton.onclick = () => appLogic.navigateCascade(index, 'prev');
                     cascadeControlsDiv.appendChild(prevButton);
 
                     const indicatorSpan = document.createElement('span');
@@ -9601,14 +9600,12 @@ const dbUtils = {
                     nextButton.title = '次の応答';
                     nextButton.classList.add('cascade-next-btn');
                     nextButton.disabled = cascadeInfo.currentIndex >= cascadeInfo.total;
-                    nextButton.onclick = () => appLogic.navigateCascade(index, 'next');
                     cascadeControlsDiv.appendChild(nextButton);
 
                     const deleteCascadeButton = document.createElement('button');
                     deleteCascadeButton.textContent = '✕';
                     deleteCascadeButton.title = 'この応答を削除';
                     deleteCascadeButton.classList.add('cascade-delete-btn');
-                    deleteCascadeButton.onclick = () => appLogic.confirmDeleteCascadeResponse(index);
                     cascadeControlsDiv.appendChild(deleteCascadeButton);
 
                     messageDiv.appendChild(cascadeControlsDiv);
@@ -9636,22 +9633,16 @@ const dbUtils = {
 
                     const editButton = document.createElement('button');
                     editButton.textContent = '編集'; editButton.title = 'メッセージを編集'; editButton.classList.add('js-edit-btn');
-                    editButton.onclick = () => appLogic.startEditMessage(index, messageDiv);
                     actionsDiv.appendChild(editButton);
 
                     const deleteButton = document.createElement('button');
                     deleteButton.textContent = '削除'; deleteButton.title = 'この会話ターンを削除'; deleteButton.classList.add('js-delete-btn');
-                    deleteButton.onclick = () => appLogic.deleteMessage(index);
                     actionsDiv.appendChild(deleteButton);
 
                     const copyButton = document.createElement('button');
                     copyButton.textContent = 'コピー';
                     copyButton.title = 'テキストをコピー';
                     copyButton.classList.add('js-copy-btn');
-                    copyButton.onclick = (event) => {
-                        event.stopPropagation();
-                        appLogic.copyMessageText(index, copyButton);
-                    };
                     actionsDiv.appendChild(copyButton);
 
                     if (role === 'user' || role === 'model') {
@@ -9659,10 +9650,6 @@ const dbUtils = {
                         retryButton.textContent = 'リトライ';
                         retryButton.title = 'このメッセージから再生成';
                         retryButton.classList.add('js-retry-btn');
-                        retryButton.onclick = () => {
-                            const userIndexForRetry = (role === 'model' && index > 0) ? appLogic.findPreviousUserIndex(index) : index;
-                            if (userIndexForRetry !== -1) appLogic.retryFromMessage(userIndexForRetry);
-                        };
                         actionsDiv.appendChild(retryButton);
                     }
 
@@ -13323,10 +13310,48 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 }, true);
 
                 elements.messageContainer.addEventListener('click', (event) => {
-                    const clickedMessage = event.target.closest('.message');
-                    if (event.target.closest('.message-actions button, .message-cascade-controls button, .message-toggle-button, .interactive-title-content, .code-copy-button, a[href="#"], .thought-summary-details summary, .attachment-actions button, .add-more-attachments-btn')) {
+                    const target = event.target;
+                    const button = target.closest('button');
+                    const clickedMessage = target.closest('.message');
+
+                    if (button && clickedMessage) {
+                        const index = parseInt(clickedMessage.dataset.index, 10);
+
+                        if (button.classList.contains('cascade-prev-btn')) {
+                            appLogic.navigateCascade(index, 'prev'); return;
+                        }
+                        if (button.classList.contains('cascade-next-btn')) {
+                            appLogic.navigateCascade(index, 'next'); return;
+                        }
+                        if (button.classList.contains('cascade-delete-btn')) {
+                            appLogic.confirmDeleteCascadeResponse(index); return;
+                        }
+
+                        if (button.classList.contains('message-toggle-button')) {
+                            uiUtils.toggleMessageCollapse(index); return;
+                        }
+
+                        if (button.classList.contains('js-edit-btn')) {
+                            appLogic.startEditMessage(index, clickedMessage); return;
+                        }
+                        if (button.classList.contains('js-delete-btn')) {
+                            appLogic.deleteMessage(index); return;
+                        }
+                        if (button.classList.contains('js-copy-btn')) {
+                            appLogic.copyMessageText(index, button); return;
+                        }
+                        if (button.classList.contains('js-retry-btn')) {
+                            const role = clickedMessage.classList.contains('model') ? 'model' : 'user';
+                            const userIndexForRetry = (role === 'model' && index > 0) ? appLogic.findPreviousUserIndex(index) : index;
+                            if (userIndexForRetry !== -1) appLogic.retryFromMessage(userIndexForRetry);
+                            return;
+                        }
+                    }
+
+                    if (target.closest('.interactive-title-content, .code-copy-button, a[href="#"], .thought-summary-details summary, .attachment-actions button, .add-more-attachments-btn')) {
                         return;
                     }
+
                     if (clickedMessage) {
                         const currentlyShown = elements.messageContainer.querySelector('.message.show-actions');
                         if (currentlyShown && currentlyShown !== clickedMessage) {
