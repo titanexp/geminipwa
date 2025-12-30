@@ -4586,13 +4586,12 @@ font-size: 1.142em !important;
         body.immersive-mode #chat-screen .main-content {
             height: 100%;
             padding-top: var(--header-height, 50px);
-            padding-bottom: calc(var(--footer-height, 60px) + 10px); 
+            padding-bottom: calc(var(--footer-height, 60px) + 30px); 
             box-sizing: border-box;
         }
         body.immersive-mode #chmate-scroll-zone {
             top: var(--header-height, 50px) !important;
-            bottom: var(--footer-height, 60px) !important;
-            height: auto !important;
+            height: calc(100% - var(--header-height, 50px) - var(--footer-height, 60px)) !important;
         }
     </style>
 
@@ -18322,7 +18321,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
 
                 dialog.showModal();
             },
-            initChMateScroll() {
+initChMateScroll() {
                 const mainContent = elements.chatScreen.querySelector('.main-content');
                 const zone = elements.chmateScrollZone;
                 const handle = elements.chmateScrollHandle;
@@ -18397,11 +18396,17 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 const updateHandle = () => {
                     if (!state.settings.enableChMateScroll) return;
 
-                    zone.style.top = `${mainContent.offsetTop}px`;
-                    zone.style.height = `${mainContent.offsetHeight}px`;
+                    if (!document.body.classList.contains('immersive-mode')) {
+                        zone.style.top = `${mainContent.offsetTop}px`;
+                        zone.style.height = `${mainContent.offsetHeight}px`;
+                    } else {
+                        zone.style.removeProperty('top');
+                        zone.style.removeProperty('height');
+                    }
 
                     const contentHeight = mainContent.scrollHeight;
                     const viewHeight = mainContent.clientHeight;
+                    const zoneHeight = zone.clientHeight;
                     const scrollTop = mainContent.scrollTop;
 
                     if (contentHeight <= viewHeight) {
@@ -18412,11 +18417,11 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     handle.style.display = 'block';
                     zone.querySelectorAll('.scroll-marker').forEach(el => el.style.display = 'block');
 
-                    let handleHeight = (viewHeight / contentHeight) * viewHeight;
+                    let handleHeight = (viewHeight / contentHeight) * zoneHeight;
                     handleHeight = Math.max(handleHeight, 40);
                     
                     const maxScrollTop = contentHeight - viewHeight;
-                    const maxHandleTop = viewHeight - handleHeight;
+                    const maxHandleTop = zoneHeight - handleHeight;
                     
                     let handleTop = 0;
                     if (maxScrollTop > 0) {
@@ -18439,7 +18444,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     clearTimeout(scrollTimeout);
                     scrollTimeout = setTimeout(() => {
                         zone.classList.remove('is-scrolling');
-                    }, 000);
+                    }, 1000);
                 };
                 mainContent.addEventListener('scroll', onScroll, { passive: true });
                 window.addEventListener('resize', updateAll);
@@ -18452,11 +18457,12 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 const scrollByZone = (clientY) => {
                     const rect = zone.getBoundingClientRect();
                     const relativeY = clientY - rect.top;
+                    const zoneHeight = zone.clientHeight;
                     
-                    const viewHeight = mainContent.clientHeight;
                     const contentHeight = mainContent.scrollHeight;
+                    const viewHeight = mainContent.clientHeight;
                     
-                    const percentage = Math.min(Math.max(relativeY / viewHeight, 0), 1);
+                    const percentage = Math.min(Math.max(relativeY / zoneHeight, 0), 1);
                     const targetScrollTop = percentage * (contentHeight - viewHeight);
                     
                     mainContent.scrollTop = targetScrollTop;
@@ -18491,7 +18497,6 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 document.addEventListener('mousemove', doDrag);
                 document.addEventListener('mouseup', endDrag);
 
-                // Initial render delay to ensure layout is ready
                 setTimeout(updateAll, 100);
             },
             updateImmersiveLayout() {
