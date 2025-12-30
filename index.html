@@ -4562,10 +4562,21 @@ font-size: 1.142em !important;
         .history-item-preview-layer.align-right .history-preview-bubble { justify-content: flex-end; text-align: right; background: linear-gradient(to left, var(--bg-user-message), transparent 90%); }
         .history-item-preview-layer.align-left .history-preview-bubble { justify-content: flex-start; text-align: left; background: linear-gradient(to right, var(--bg-model-message), transparent 90%); }
         body.dark-mode .history-preview-bubble { opacity: 0.25; }
-        body.overscroll-padding-enabled #chat-screen .main-content { padding-top: 55px !important; }
-        body.overscroll-padding-enabled #chat-screen .message-container { padding-bottom: 80px !important; }
-        body.overscroll-padding-enabled.minimized-ui #chat-screen .main-content { padding-top: 35px !important; }
-        body.overscroll-padding-enabled.minimized-ui #chat-screen .message-container { padding-bottom: 50px !important; }
+        body.transparent-ui-mode #chat-screen .app-header {
+            position: absolute; top: 0; left: 0; right: 0; z-index: 10;
+            backdrop-filter: blur(5px);
+            border-bottom: none;
+        }
+        body.transparent-ui-mode #chat-screen .chat-input-area {
+            position: absolute; bottom: 0; left: 0; right: 0; z-index: 10;
+            backdrop-filter: blur(5px);
+            border-top: none;
+        }
+        body.transparent-ui-mode #chat-screen .main-content {
+            height: 100%;
+            padding-top: var(--header-height, 60px);
+            padding-bottom: var(--footer-height, 80px);
+        }
     </style>
 
     <script src="marked.js"></script>
@@ -6537,8 +6548,8 @@ font-size: 1.142em !important;
                                         <div
                                             style="padding-left: 15px; margin-top: 10px; border-left: 1px solid var(--border-secondary); padding-top: 5px;">
                                             <label class="checkbox-label">
-                                                <input type="checkbox" id="enable-overscroll-padding-toggle">
-                                                チャットの上下に余白を追加する（ヘッダー/フッター対策）
+                                                <input type="checkbox" id="enable-transparent-ui-toggle">
+                                                メッセージをヘッダー/フッターの裏側まで表示する
                                             </label>
                                             <label class="checkbox-label">
                                                 <input type="checkbox" id="minimize-header-footer-toggle">
@@ -7797,6 +7808,7 @@ footerTapScrollToBottomToggle: document.getElementById('footer-tap-scroll-to-bot
             enableSessionLinkingCheckbox: document.getElementById('enable-session-linking'),
             swipeNavigationToggle: document.getElementById('swipe-navigation-toggle'),
             preventZoomToggle: document.getElementById('prevent-zoom-toggle'),
+            enableTransparentUiToggle: document.getElementById('enable-transparent-ui-toggle'),
             minimizeHeaderFooterToggle: document.getElementById('minimize-header-footer-toggle'),
             extendAiBubbleWidthToggle: document.getElementById('extend-ai-bubble-width-toggle'),
             extendUserBubbleWidthToggle: document.getElementById('extend-user-bubble-width-toggle'),
@@ -8043,7 +8055,6 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             enableDynamicScrollMarkerColorToggle: document.getElementById('enable-dynamic-scroll-marker-color-toggle'),
             chmateScrollWidthInput: document.getElementById('chmate-scroll-width-input'),
             showHistoryPreviewBubbleToggle: document.getElementById('show-history-preview-bubble-toggle'),
-            enableOverscrollPaddingToggle: document.getElementById('enable-overscroll-padding-toggle'),
         };
 
         const state = {
@@ -8351,7 +8362,7 @@ enableChmateScrollOpacity: true,
                 enableDynamicScrollMarkerColor: true,
                 chmateScrollWidth: 30,
                 showHistoryPreviewBubble: true,
-                enableOverscrollPadding: true,
+                enableTransparentUi: true,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -10980,6 +10991,15 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 document.getElementById('history-ui-scale-input-slider').value = state.settings.historyUiScale || 1.0;
                 elements.swipeNavigationToggle.checked = state.settings.enableSwipeNavigation;
                 elements.preventZoomToggle.checked = state.settings.preventZoom;
+                elements.enableTransparentUiToggle.checked = state.settings.enableTransparentUi;
+                document.body.classList.toggle('transparent-ui-mode', state.settings.enableTransparentUi);
+                elements.enableTransparentUiToggle.addEventListener('change', (e) => {
+                    state.settings.enableTransparentUi = e.target.checked;
+                    document.body.classList.toggle('transparent-ui-mode', state.settings.enableTransparentUi);
+                    uiUtils.adjustHeaderLayout();
+                    uiUtils.adjustTextareaHeight();
+                });
+
                 elements.minimizeHeaderFooterToggle.checked = state.settings.minimizeHeaderFooter;
                 if (state.settings.enableChMateScroll === undefined) {
                     state.settings.enableChMateScroll = true;
@@ -11322,6 +11342,11 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
             adjustHeaderLayout() {
                 const header = elements.chatScreen.querySelector('.app-header');
                 if (!header) return;
+
+                if (state.settings.enableTransparentUi) {
+                    const headerHeight = header.offsetHeight;
+                    document.documentElement.style.setProperty('--header-height', `${headerHeight}px`);
+                }
 
                 const allButtons = Array.from(header.querySelectorAll('button:not(#goto-history-btn):not(#goto-settings-btn)'));
                 allButtons.forEach(btn => btn.classList.remove('layout-hidden'));
@@ -11779,6 +11804,14 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 textarea.style.height = 'auto';
                 const scrollHeight = textarea.scrollHeight;
                 textarea.style.height = Math.min(scrollHeight, maxHeight) + 'px';
+
+                if (state.settings.enableTransparentUi) {
+                    const footer = document.querySelector('.chat-input-area');
+                    if (footer) {
+                        const footerHeight = footer.offsetHeight;
+                        document.documentElement.style.setProperty('--footer-height', `${footerHeight}px`);
+                    }
+                }
 
                 if (textarea === elements.userInput && !state.isSending) {
                     const isInputEmpty = textarea.value.trim() === '';
@@ -13172,12 +13205,6 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 elements.enableDynamicScrollMarkerColorToggle.addEventListener('change', (e) => {
                     state.settings.enableDynamicScrollMarkerColor = e.target.checked;
                     window.dispatchEvent(new Event('resize'));
-                });
-                elements.enableOverscrollPaddingToggle.checked = state.settings.enableOverscrollPadding;
-                document.body.classList.toggle('overscroll-padding-enabled', state.settings.enableOverscrollPadding);
-                elements.enableOverscrollPaddingToggle.addEventListener('change', (e) => {
-                    state.settings.enableOverscrollPadding = e.target.checked;
-                    document.body.classList.toggle('overscroll-padding-enabled', e.target.checked);
                 });
                 appLogic.initChMateScroll();
                 elements.extendAiBubbleWidthToggle.addEventListener('change', (e) => {
@@ -16678,7 +16705,6 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 newSettings.enableDynamicScrollMarkerColor = elements.enableDynamicScrollMarkerColorToggle.checked;
                 const scrollWidth = parseInt(elements.chmateScrollWidthInput.value, 10);
                 newSettings.chmateScrollWidth = (isNaN(scrollWidth) || scrollWidth < 10) ? DEFAULT_CHMATE_SCROLL_WIDTH : scrollWidth;
-                newSettings.enableOverscrollPadding = elements.enableOverscrollPaddingToggle.checked;
                 newSettings.extendAiBubbleWidth = elements.extendAiBubbleWidthToggle.checked;
                                 newSettings.extendUserBubbleWidth = elements.extendUserBubbleWidthToggle.checked;
                                 newSettings.reduceMessageSpacing = elements.reduceMessageSpacingToggle.checked;
