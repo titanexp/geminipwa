@@ -4589,6 +4589,13 @@ font-size: 1.142em !important;
             padding-bottom: calc(var(--footer-height, 60px) + 30px); 
             box-sizing: border-box;
         }
+        body.immersive-mode #history-screen .main-content,
+        body.immersive-mode #settings-screen .main-content {
+            height: 100%;
+            padding-top: var(--header-height, 50px);
+            padding-bottom: 20px;
+            box-sizing: border-box;
+        }
         body.immersive-mode #chmate-scroll-zone {
             top: var(--header-height, 50px) !important;
             height: calc(100% - var(--header-height, 50px) - var(--footer-height, 60px)) !important;
@@ -11728,6 +11735,10 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     if (activeScreen) {
                         activeScreen.inert = false;
                         activeScreen.classList.add('active');
+
+                        if (state.settings.enableImmersiveScrolling) {
+                            appLogic.updateImmersiveLayout();
+                        }
                     }
                 });
                 state.currentScreen = screenName;
@@ -18506,15 +18517,20 @@ initChMateScroll() {
                         elements.chmateScrollZone.style.removeProperty('top');
                         elements.chmateScrollZone.style.removeProperty('height');
                     }
+                    if (this.layoutObserver) {
+                        this.layoutObserver.disconnect();
+                        this.layoutObserver = null;
+                    }
                     return;
                 }
 
                 document.body.classList.add('immersive-mode');
 
-                const header = elements.chatScreen.querySelector('.app-header');
-                const footer = elements.chatScreen.querySelector('.chat-input-area');
-
                 const updateHeights = () => {
+                    const activeScreen = document.querySelector('.screen.active');
+                    const header = activeScreen ? activeScreen.querySelector('.app-header') : null;
+                    const footer = elements.chatScreen.querySelector('.chat-input-area');
+
                     const headerHeight = header ? header.offsetHeight : 50;
                     const footerHeight = footer ? footer.offsetHeight : 60;
                     
@@ -18530,7 +18546,8 @@ initChMateScroll() {
                     this.layoutObserver = new ResizeObserver(() => {
                         requestAnimationFrame(updateHeights);
                     });
-                    if (header) this.layoutObserver.observe(header);
+                    document.querySelectorAll('.app-header').forEach(el => this.layoutObserver.observe(el));
+                    const footer = elements.chatScreen.querySelector('.chat-input-area');
                     if (footer) this.layoutObserver.observe(footer);
                 }
                 
