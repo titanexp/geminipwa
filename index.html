@@ -4562,37 +4562,11 @@ font-size: 1.142em !important;
         .history-item-preview-layer.align-right .history-preview-bubble { justify-content: flex-end; text-align: right; background: linear-gradient(to left, var(--bg-user-message), transparent 90%); }
         .history-item-preview-layer.align-left .history-preview-bubble { justify-content: flex-start; text-align: left; background: linear-gradient(to right, var(--bg-model-message), transparent 90%); }
         body.dark-mode .history-preview-bubble { opacity: 0.25; }
-        body.transparent-header-footer #chat-screen {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-            overflow: hidden;
-        }
-        body.transparent-header-footer #chat-screen .app-header {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 10;
-            backdrop-filter: none;
-        }
-        body.transparent-header-footer #chat-screen .chat-input-area {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            z-index: 10;
-            backdrop-filter: none;
-        }
-        body.transparent-header-footer #chat-screen .main-content {
-            height: 100%;
-            padding-top: 60px;
-            padding-bottom: 70px;
-        }
-        body.transparent-header-footer .app-container.minimized-ui #chat-screen .main-content {
-            padding-top: 40px;
-            padding-bottom: 50px;
-        }
+
+        body.full-height-content-mode #chat-screen { display: block; }
+        body.full-height-content-mode #chat-screen .app-header { position: absolute; top: 0; left: 0; width: 100%; }
+        body.full-height-content-mode #chat-screen .chat-input-area { position: absolute; bottom: 0; left: 0; width: 100%; }
+        body.full-height-content-mode #chat-screen .main-content { height: 100%; padding-top: var(--header-height, 50px); padding-bottom: var(--footer-height, 60px); }
     </style>
 
     <script src="marked.js"></script>
@@ -6564,6 +6538,10 @@ font-size: 1.142em !important;
                                         <div
                                             style="padding-left: 15px; margin-top: 10px; border-left: 1px solid var(--border-secondary); padding-top: 5px;">
                                             <label class="checkbox-label">
+                                                <input type="checkbox" id="enable-full-height-content-toggle">
+                                                メッセージ表示領域を画面一杯に拡張する (ヘッダー/フッター透過)
+                                            </label>
+                                            <label class="checkbox-label">
                                                 <input type="checkbox" id="minimize-header-footer-toggle">
                                                 ヘッダー/フッターの縦幅を最小化する
                                             </label>
@@ -6571,10 +6549,6 @@ font-size: 1.142em !important;
                                                 style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
                                                 ※ 表示領域を最大化します。画面が小型の端末向け。
                                             </p>
-                                            <label class="checkbox-label">
-                                                <input type="checkbox" id="transparent-header-footer-toggle">
-                                                メッセージをヘッダー/フッターの下に潜り込ませる
-                                            </label>
                                             <label class="checkbox-label">
                                                 <input type="checkbox" id="enable-chmate-scroll-toggle">
                                                 画面右側にスクロールバー(ChMate風)を表示する
@@ -7827,8 +7801,9 @@ footerTapScrollToBottomToggle: document.getElementById('footer-tap-scroll-to-bot
             minimizeHeaderFooterToggle: document.getElementById('minimize-header-footer-toggle'),
             extendAiBubbleWidthToggle: document.getElementById('extend-ai-bubble-width-toggle'),
             extendUserBubbleWidthToggle: document.getElementById('extend-user-bubble-width-toggle'),
-                        reduceMessageSpacingToggle: document.getElementById('reduce-message-spacing-toggle'),
-                        compactSettingsSpacingToggle: document.getElementById('compact-settings-spacing-toggle'),
+            enableFullHeightContentToggle: document.getElementById('enable-full-height-content-toggle'),
+            reduceMessageSpacingToggle: document.getElementById('reduce-message-spacing-toggle'),
+            compactSettingsSpacingToggle: document.getElementById('compact-settings-spacing-toggle'),
             slimSettingsHeadersToggle: document.getElementById('slim-settings-headers-toggle'),
             flatSettingsDesignToggle: document.getElementById('flat-settings-design-toggle'),
             showSessionLinkingSettingsToggle: document.getElementById('show-session-linking-settings-toggle'),
@@ -8070,7 +8045,6 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             enableDynamicScrollMarkerColorToggle: document.getElementById('enable-dynamic-scroll-marker-color-toggle'),
             chmateScrollWidthInput: document.getElementById('chmate-scroll-width-input'),
             showHistoryPreviewBubbleToggle: document.getElementById('show-history-preview-bubble-toggle'),
-            transparentHeaderFooterToggle: document.getElementById('transparent-header-footer-toggle'),
         };
 
         const state = {
@@ -8240,6 +8214,7 @@ footerTapScrollToBottom: false,
                                 reduceMessageSpacing: false,
                 compactSettingsSpacing: false,
                 slimSettingsHeaders: true,
+                enableFullHeightContent: true,
                 flatSettingsDesign: false,
 
                 showSessionLinkingSettings: false,
@@ -8378,7 +8353,6 @@ enableChmateScrollOpacity: true,
                 enableDynamicScrollMarkerColor: true,
                 chmateScrollWidth: 30,
                 showHistoryPreviewBubble: true,
-                enableTransparentHeaderFooter: true,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -11008,8 +10982,6 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 elements.swipeNavigationToggle.checked = state.settings.enableSwipeNavigation;
                 elements.preventZoomToggle.checked = state.settings.preventZoom;
                 elements.minimizeHeaderFooterToggle.checked = state.settings.minimizeHeaderFooter;
-                elements.transparentHeaderFooterToggle.checked = state.settings.enableTransparentHeaderFooter;
-                document.body.classList.toggle('transparent-header-footer', state.settings.enableTransparentHeaderFooter);
                 if (state.settings.enableChMateScroll === undefined) {
                     state.settings.enableChMateScroll = true;
                 }
@@ -13194,11 +13166,6 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     state.settings.minimizeHeaderFooter = e.target.checked;
                     uiUtils.applyMinimizeUI();
                 });
-                elements.transparentHeaderFooterToggle.addEventListener('change', (e) => {
-                    state.settings.enableTransparentHeaderFooter = e.target.checked;
-                    document.body.classList.toggle('transparent-header-footer', state.settings.enableTransparentHeaderFooter);
-                    window.dispatchEvent(new Event('resize'));
-                });
                 elements.enableChMateScrollToggle.addEventListener('change', (e) => {
                     state.settings.enableChMateScroll = e.target.checked;
                     document.body.classList.toggle('chmate-scroll-enabled', state.settings.enableChMateScroll);
@@ -13216,6 +13183,38 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     state.settings.extendUserBubbleWidth = e.target.checked;
                     uiUtils.applyUserBubbleWidthSetting();
                 });
+                
+                elements.enableFullHeightContentToggle.checked = state.settings.enableFullHeightContent;
+                const updateFullHeightMode = () => {
+                    const isEnabled = state.settings.enableFullHeightContent;
+                    document.body.classList.toggle('full-height-content-mode', isEnabled);
+                    
+                    if (appLogic.headerFooterResizeObserver) {
+                        appLogic.headerFooterResizeObserver.disconnect();
+                        appLogic.headerFooterResizeObserver = null;
+                    }
+
+                    if (isEnabled) {
+                        const updateVars = () => {
+                            const header = elements.chatScreen.querySelector('.app-header');
+                            const footer = elements.chatScreen.querySelector('.chat-input-area');
+                            if (header) document.documentElement.style.setProperty('--header-height', `${header.offsetHeight}px`);
+                            if (footer) document.documentElement.style.setProperty('--footer-height', `${footer.offsetHeight}px`);
+                        };
+                        appLogic.headerFooterResizeObserver = new ResizeObserver(updateVars);
+                        const header = elements.chatScreen.querySelector('.app-header');
+                        const footer = elements.chatScreen.querySelector('.chat-input-area');
+                        if (header) appLogic.headerFooterResizeObserver.observe(header);
+                        if (footer) appLogic.headerFooterResizeObserver.observe(footer);
+                        updateVars();
+                    }
+                };
+                elements.enableFullHeightContentToggle.addEventListener('change', (e) => {
+                    state.settings.enableFullHeightContent = e.target.checked;
+                    updateFullHeightMode();
+                });
+                updateFullHeightMode();
+
                 elements.reduceMessageSpacingToggle.addEventListener('change', (e) => {
                     state.settings.reduceMessageSpacing = e.target.checked;
                     uiUtils.applyMessageSpacingSetting();
@@ -16702,14 +16701,14 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 newSettings.enableSwipeNavigation = elements.swipeNavigationToggle.checked;
                 newSettings.preventZoom = elements.preventZoomToggle.checked;
                 newSettings.minimizeHeaderFooter = document.getElementById('minimize-header-footer-toggle').checked;
-                newSettings.enableTransparentHeaderFooter = elements.transparentHeaderFooterToggle.checked;
                 newSettings.enableChMateScroll = elements.enableChMateScrollToggle.checked;
                 newSettings.enableDynamicScrollMarkerColor = elements.enableDynamicScrollMarkerColorToggle.checked;
                 const scrollWidth = parseInt(elements.chmateScrollWidthInput.value, 10);
                 newSettings.chmateScrollWidth = (isNaN(scrollWidth) || scrollWidth < 10) ? DEFAULT_CHMATE_SCROLL_WIDTH : scrollWidth;
                 newSettings.extendAiBubbleWidth = elements.extendAiBubbleWidthToggle.checked;
                                 newSettings.extendUserBubbleWidth = elements.extendUserBubbleWidthToggle.checked;
-                                newSettings.reduceMessageSpacing = elements.reduceMessageSpacingToggle.checked;
+                newSettings.enableFullHeightContent = elements.enableFullHeightContentToggle.checked;
+                newSettings.reduceMessageSpacing = elements.reduceMessageSpacingToggle.checked;
                 newSettings.compactSettingsSpacing = elements.compactSettingsSpacingToggle.checked;
                 newSettings.slimSettingsHeaders = elements.slimSettingsHeadersToggle.checked;
                 newSettings.flatSettingsDesign = elements.flatSettingsDesignToggle.checked;
