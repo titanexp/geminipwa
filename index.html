@@ -7414,6 +7414,7 @@ font-size: 1.142em !important;
                             <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
                                 <button id="debug-check-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">全ての項目のチェックボックスをオンにする</button>
                                 <button id="debug-uncheck-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">全ての項目のチェックボックスをオフにする</button>
+                                <button id="copy-source-code-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1; background-color: var(--bg-button-copy);">ソースコードをコピー</button>
                             </div>
                         </details>
                     </details>
@@ -8075,6 +8076,7 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             addWebhookBtn: document.getElementById('add-webhook-btn'),
             debugCheckAllBtn: document.getElementById('debug-check-all-btn'),
             debugUncheckAllBtn: document.getElementById('debug-uncheck-all-btn'),
+            copySourceCodeBtn: document.getElementById('copy-source-code-btn'),
             chmateScrollZone: document.getElementById('chmate-scroll-zone'),
             chmateScrollHandle: document.getElementById('chmate-scroll-handle'),
             enableChMateScrollToggle: document.getElementById('enable-chmate-scroll-toggle'),
@@ -12878,6 +12880,31 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 }
                 if (elements.debugUncheckAllBtn) {
                     elements.debugUncheckAllBtn.addEventListener('click', () => this.toggleAllSettingsCheckboxes(false));
+                }
+                if (elements.copySourceCodeBtn) {
+                    elements.copySourceCodeBtn.addEventListener('click', async () => {
+                        const btn = elements.copySourceCodeBtn;
+                        const originalText = btn.textContent;
+                        btn.disabled = true;
+                        btn.textContent = "取得中...";
+                        try {
+                            const response = await fetch(window.location.href);
+                            const text = await response.text();
+                            await navigator.clipboard.writeText(text);
+                            btn.textContent = "コピー完了";
+                        } catch (e) {
+                            try {
+                                await navigator.clipboard.writeText("<!DOCTYPE html>\n" + document.documentElement.outerHTML);
+                                btn.textContent = "DOMコピー完了";
+                            } catch (err) {
+                                btn.textContent = "失敗";
+                            }
+                        }
+                        setTimeout(() => {
+                            btn.textContent = originalText;
+                            btn.disabled = false;
+                        }, 2000);
+                    });
                 }
                 document.getElementById('force-recovery-btn').addEventListener('click', async () => {
                     const confirmed = await uiUtils.showCustomConfirm(
