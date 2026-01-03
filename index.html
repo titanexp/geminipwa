@@ -7414,7 +7414,6 @@ font-size: 1.142em !important;
                             <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
                                 <button id="debug-check-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">全ての項目のチェックボックスをオンにする</button>
                                 <button id="debug-uncheck-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">全ての項目のチェックボックスをオフにする</button>
-<button id="debug-copy-source-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1; background-color: var(--bg-button-copy);">ソースコードをコピー</button>
                             </div>
                         </details>
                     </details>
@@ -8076,7 +8075,6 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             addWebhookBtn: document.getElementById('add-webhook-btn'),
             debugCheckAllBtn: document.getElementById('debug-check-all-btn'),
             debugUncheckAllBtn: document.getElementById('debug-uncheck-all-btn'),
-            debugCopySourceBtn: document.getElementById('debug-copy-source-btn'),
             chmateScrollZone: document.getElementById('chmate-scroll-zone'),
             chmateScrollHandle: document.getElementById('chmate-scroll-handle'),
             enableChMateScrollToggle: document.getElementById('enable-chmate-scroll-toggle'),
@@ -12331,39 +12329,6 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     }
                 });
             },
-            async copyAppSourceCode() {
-                const btn = elements.debugCopySourceBtn;
-                const originalText = btn.textContent;
-                btn.textContent = "取得中...";
-                btn.disabled = true;
-
-                try {
-                    const response = await fetch(window.location.href, { cache: 'no-store' });
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    
-                    const sourceText = await response.text();
-                    await navigator.clipboard.writeText(sourceText);
-                    
-                    btn.textContent = "コピー完了!";
-                    await uiUtils.showCustomAlert(`ソースコード (${formatFileSize(sourceText.length)}) をコピーしました。`);
-                } catch (error) {
-                    console.error("Source copy failed:", error);
-                    try {
-                        const fallbackSource = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
-                        await navigator.clipboard.writeText(fallbackSource);
-                        btn.textContent = "DOMコピー(Fallback)";
-                        await uiUtils.showCustomAlert("ファイルの直接取得に失敗したため、現在のDOM状態をコピーしました。\n※チャット履歴などが含まれている可能性があります。");
-                    } catch (e) {
-                        btn.textContent = "失敗";
-                        await uiUtils.showCustomAlert("ソースコードのコピーに失敗しました。");
-                    }
-                } finally {
-                    setTimeout(() => {
-                        btn.textContent = originalText;
-                        btn.disabled = false;
-                    }, 2000);
-                }
-            },
             scrollToSettingsTop() {
                 const mainContent = elements.settingsScreen.querySelector('.main-content');
                 if (mainContent) {
@@ -12913,9 +12878,6 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 }
                 if (elements.debugUncheckAllBtn) {
                     elements.debugUncheckAllBtn.addEventListener('click', () => this.toggleAllSettingsCheckboxes(false));
-                }
-                if (elements.debugCopySourceBtn) {
-                    elements.debugCopySourceBtn.addEventListener('click', () => this.copyAppSourceCode());
                 }
                 document.getElementById('force-recovery-btn').addEventListener('click', async () => {
                     const confirmed = await uiUtils.showCustomConfirm(
