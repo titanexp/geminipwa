@@ -8447,7 +8447,6 @@ enableChmateScrollOpacity: true,
             aiToAiProcessingMessage: "AI間会話処理中...",
             isSummarizingForRetry: false,
             isProofreading: false,
-            lastRenderTime: 0,
         };
 
         const sanitizeText = (text, maxLength = 255) => {
@@ -9326,81 +9325,8 @@ const dbUtils = {
                 });
                 return cleanHtml;
             },
-            renderChatMessages(maintainScroll = false, forceUpdate = false) {
+            renderChatMessages(maintainScroll = false) {
                 const mainContent = elements.chatScreen.querySelector('.main-content');
-                const oldScrollTop = maintainScroll ? mainContent.scrollTop : null;
-
-                if (state.editingMessageIndex !== null) {
-                    const messageElement = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`);
-                    if (messageElement) appLogic.cancelEditMessage(state.editingMessageIndex, messageElement);
-                    else state.editingMessageIndex = null;
-                }
-
-                const existingNodes = Array.from(elements.messageContainer.querySelectorAll('.message'));
-                let startRenderIndex = existingNodes.length;
-
-                if (forceUpdate || state.currentMessages.length !== existingNodes.length) {
-                    startRenderIndex = 0;
-                } else {
-                    if (existingNodes.length > 0) {
-                        const lastNodeIndex = parseInt(existingNodes[existingNodes.length - 1].dataset.index, 10);
-                        if (lastNodeIndex !== existingNodes.length - 1) {
-                            startRenderIndex = 0;
-                        }
-                    }
-                }
-
-                if (startRenderIndex < existingNodes.length) {
-                    for (let i = startRenderIndex; i < existingNodes.length; i++) {
-                        existingNodes[i].remove();
-                    }
-                }
-
-                let currentSiblingGroupId = null;
-                let siblingsInGroup = [];
-                let siblingIndex = 0;
-
-                for (let i = 0; i < state.currentMessages.length; i++) {
-                    const msg = state.currentMessages[i];
-                    let cascadeInfo = null;
-
-                    if (msg.role === 'model' && msg.isCascaded && msg.siblingGroupId) {
-                        if (msg.siblingGroupId !== currentSiblingGroupId) {
-                            currentSiblingGroupId = msg.siblingGroupId;
-                            siblingsInGroup = state.currentMessages.filter(m => m.role === 'model' && m.isCascaded && m.siblingGroupId === currentSiblingGroupId);
-                        }
-                        const currentIndexInGroup = siblingsInGroup.findIndex(m => m === msg);
-                        if (currentIndexInGroup !== -1) {
-                            siblingIndex = currentIndexInGroup + 1;
-                        }
-                        cascadeInfo = {
-                            currentIndex: siblingIndex,
-                            total: siblingsInGroup.length,
-                            siblingGroupId: currentSiblingGroupId
-                        };
-                    } else {
-                        currentSiblingGroupId = null;
-                    }
-
-                    if (i < startRenderIndex) {
-                        continue;
-                    }
-
-                    if (msg.role === 'model' && msg.isCascaded && msg.siblingGroupId) {
-                        if (msg.isSelected) {
-                            this.appendMessage(msg.role, msg.content, i, false, cascadeInfo, msg.attachments);
-                        }
-                    } else {
-                        this.appendMessage(msg.role, msg.content, i, false, null, msg.attachments);
-                    }
-                }
-
-                if (maintainScroll && oldScrollTop !== null) {
-                    requestAnimationFrame(() => {
-                        mainContent.scrollTop = oldScrollTop;
-                    });
-                }
-            },
 appendMessage(role, content, index, isStreamingPlaceholder = false, cascadeInfo = null, attachments = null) {
                 const messageDiv = document.createElement('div');
                 messageDiv.classList.add('message', role);
@@ -10137,12 +10063,6 @@ const getCurrentMermaidTheme = () => {
                 preElement.parentNode.replaceChild(container, preElement);
             },
             async updateStreamingMessage(index, newCharOrChunk, isThoughtSummary = false) {
-                const now = Date.now();
-                if (state.lastRenderTime && (now - state.lastRenderTime < 50)) {
-                    return;
-                }
-                state.lastRenderTime = now;
-
                 const messageDiv = document.getElementById(`streaming-message-${index}`);
                 if (!messageDiv || typeof marked === 'undefined') return;
 
@@ -13090,7 +13010,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 elements.userNameBubbleOpacityInput.addEventListener('input', () => {
                     state.settings.userNameBubbleOpacity = elements.userNameBubbleOpacityInput.value === '' ? DEFAULT_USER_NAME_BUBBLE_OPACITY : parseFloat(elements.userNameBubbleOpacityInput.value);
                     uiUtils.applySidePanelSettingsToUI();
-                    uiUtils.renderChatMessages(true, true);
+                    uiUtils.renderChatMessages(true);
                 });
                 elements.aiNameBubbleToggle.addEventListener('change', () => {
                     state.settings.showAiNameBubble = elements.aiNameBubbleToggle.checked;
@@ -16492,7 +16412,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                         state.aiIconUrl = URL.createObjectURL(blob);
                     }
                     uiUtils.updateIconSettingsUI();
-                    uiUtils.renderChatMessages(true, true);
+                    uiUtils.renderChatMessages(true);
                 } catch (error) {
                     await uiUtils.showCustomAlert(`${type === 'user' ? 'ユーザー' : 'AI'}アイコンの処理エラー: ${error}`);
                 }
@@ -16518,7 +16438,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                         await dbUtils.saveSetting('aiIconBlob', null);
                     }
                     uiUtils.updateIconSettingsUI();
-                    uiUtils.renderChatMessages(true, true);
+                    uiUtils.renderChatMessages(true);
                 } catch (error) {
                     await uiUtils.showCustomAlert(`${type === 'user' ? 'ユーザー' : 'AI'}アイコンの削除エラー: ${error}`);
                 }
@@ -17406,7 +17326,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                         }
                     });
 
-                    uiUtils.renderChatMessages(true, true);
+                    uiUtils.renderChatMessages(true);
 
                     const newFirstUserMsgIndex = state.currentMessages.findIndex(m => m.role === 'user');
                     let requiresTitleUpdate = indicesToDelete.includes(originalFirstUserMsgIndex);
@@ -17590,7 +17510,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     newlySelectedMessage.isSelected = true;
                     const newlySelectedIndex = siblingsWithIndices[targetSiblingIndexInGroup].originalIndex;
 
-                    uiUtils.renderChatMessages(true, true);
+                    uiUtils.renderChatMessages();
 
                     requestAnimationFrame(() => {
                         const newlySelectedElement = elements.messageContainer.querySelector(`.message[data-index="${newlySelectedIndex}"]`);
