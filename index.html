@@ -4783,8 +4783,8 @@ font-size: 1.142em !important;
                 </div>
                 <div id="loading-indicator" class="loading-indicator hidden" aria-live="polite">応答中</div>
             </main>
-            <div class="chmate-scroll-zone">
-                <div class="chmate-scroll-handle"></div>
+            <div id="chmate-scroll-zone">
+                <div id="chmate-scroll-handle"></div>
             </div>
             <footer class="chat-input-area">
                 <button id="footer-api-provider-toggle-btn" class="footer-action-button api-provider-toggle-btn"
@@ -4844,9 +4844,6 @@ font-size: 1.142em !important;
                 <p id="no-history-message" class="hidden"
                     style="text-align: center; color: var(--text-secondary); margin-top: 20px;">チャット履歴はありません。</p>
             </main>
-            <div class="chmate-scroll-zone">
-                <div class="chmate-scroll-handle"></div>
-            </div>
         </div>
 
         <div id="settings-screen" class="screen">
@@ -7451,9 +7448,6 @@ font-size: 1.142em !important;
                     </details>
                 </div>
             </main>
-            <div class="chmate-scroll-zone">
-                <div class="chmate-scroll-handle"></div>
-            </div>
         </div>
     </div>
 
@@ -8117,10 +8111,9 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             enableDynamicScrollMarkerColorToggle: document.getElementById('enable-dynamic-scroll-marker-color-toggle'),
             chmateScrollWidthInput: document.getElementById('chmate-scroll-width-input'),
             showHistoryPreviewBubbleToggle: document.getElementById('show-history-preview-bubble-toggle'),
-            showHistoryPreviewBubble: true,
-                stripedHistoryList: true,
-                chmateObserverDelay: 500,
-            },
+            stripedHistoryListToggle: document.getElementById('striped-history-list-toggle'),
+            chmateObserverDelayInput: document.getElementById('chmate-observer-delay'),
+        };
 
         const state = {
             db: null,
@@ -8429,6 +8422,7 @@ enableChmateScrollOpacity: true,
                 chmateScrollWidth: 30,
                 showHistoryPreviewBubble: true,
                 stripedHistoryList: true,
+                chmateObserverDelay: 250,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -13134,7 +13128,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 this._setupFontSizeSlider('code-block-font-size-input', '--code-block-font-size', DEFAULT_CODE_BLOCK_FONT_SIZE);
                 this._setupFontSizeSlider('thought-summary-font-size', '--thought-summary-font-size', DEFAULT_THOUGHT_SUMMARY_FONT_SIZE);
                 this._setupFontSizeSlider('chmate-scroll-width-input', '--chmate-scroll-width', DEFAULT_CHMATE_SCROLL_WIDTH);
-                
+
                 const delayVal = state.settings.chmateObserverDelay || 500;
                 elements.chmateObserverDelayInput.value = delayVal;
                 document.getElementById('chmate-observer-delay-slider').value = delayVal;
@@ -16797,7 +16791,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 newSettings.showBulkHistoryActions = elements.showBulkHistoryActionsToggle.checked;
                 newSettings.showHistoryPreviewBubble = elements.showHistoryPreviewBubbleToggle.checked;
                 newSettings.stripedHistoryList = elements.stripedHistoryListToggle.checked;
-                newSettings.chmateObserverDelay = parseInt(elements.chmateObserverDelayInput.value, 10) || 500;
+                newSettings.chmateObserverDelay = parseInt(elements.chmateObserverDelayInput.value, 10) || 250;
                 newSettings.showPasteButtonInFooter = elements.showPasteButtonInFooterToggle.checked;
                 newSettings.showPasteButtonInEdit = elements.showPasteButtonInEditToggle.checked;
                 newSettings.showDiceButton = elements.showDiceButtonToggle.checked;
@@ -18528,7 +18522,7 @@ initChMateScroll() {
                     observerTimeout = setTimeout(() => {
                         updateAll();
                         observerTimeout = null;
-                    }, state.isSending ? (state.settings.chmateObserverDelay || 500) : 50);
+                    }, state.isSending ? (state.settings.chmateObserverDelay || 250) : 50);
                 });
                 observer.observe(elements.messageContainer, { childList: true, subtree: true, attributes: true });
 
@@ -18570,7 +18564,15 @@ initChMateScroll() {
                 };
 
                 zone.addEventListener('touchstart', startDrag, { passive: false });
-                zone.addEv
+                zone.addEventListener('touchmove', doDrag, { passive: false });
+                zone.addEventListener('touchend', endDrag);
+                
+                zone.addEventListener('mousedown', startDrag);
+                document.addEventListener('mousemove', doDrag);
+                document.addEventListener('mouseup', endDrag);
+
+                setTimeout(updateAll, 100);
+            },
 updateImmersiveLayout() {
                 if (!state.settings.enableImmersiveScrolling) {
                     document.body.classList.remove('immersive-mode');
