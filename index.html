@@ -18395,187 +18395,189 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 dialog.showModal();
             },
 initChMateScroll() {
-                const screens = [
-                    { id: 'chat-screen', hasMarkers: true },
-                    { id: 'history-screen', hasMarkers: false },
-                    { id: 'settings-screen', hasMarkers: false }
-                ];
+                const mainContent = elements.chatScreen.querySelector('.main-content');
+                const zone = elements.chmateScrollZone;
+                const handle = elements.chmateScrollHandle;
 
-                screens.forEach(screenInfo => {
-                    const screenEl = document.getElementById(screenInfo.id);
-                    if (!screenEl) return;
+                const updateMarkers = () => {
+                    if (!state.settings.enableChMateScroll) return;
+                    
+                    zone.querySelectorAll('.scroll-marker').forEach(el => el.remove());
 
-                    const mainContent = screenEl.querySelector('.main-content');
-                    const zone = screenEl.querySelector('.chmate-scroll-zone');
-                    const handle = zone ? zone.querySelector('.chmate-scroll-handle') : null;
+                    const messages = elements.messageContainer.querySelectorAll('.message');
+                    const contentHeight = mainContent.scrollHeight;
+                    const zoneHeight = zone.clientHeight;
 
-                    if (!mainContent || !zone || !handle) return;
+                    if (contentHeight === 0 || zoneHeight === 0) return;
 
-                    const updateMarkers = () => {
-                        if (!screenInfo.hasMarkers || !state.settings.enableChMateScroll) return;
+                    const TURF_USER_RGB = "102, 215, 19";
+                    const TURF_MODEL_RGB = "253, 110, 163";
+                    const MAX_INTENSITY_LENGTH = 1000;
+
+                    messages.forEach(msg => {
+                        const marker = document.createElement('div');
+                        marker.classList.add('scroll-marker');
                         
-                        zone.querySelectorAll('.scroll-marker').forEach(el => el.remove());
-                        const messages = elements.messageContainer.querySelectorAll('.message');
-                        const contentHeight = mainContent.scrollHeight;
-                        const zoneHeight = zone.clientHeight;
+                        let isUser = false;
+                        let isModel = false;
 
-                        if (contentHeight === 0 || zoneHeight === 0) return;
-
-                        const TURF_USER_RGB = "102, 215, 19";
-                        const TURF_MODEL_RGB = "253, 110, 163";
-                        const MAX_INTENSITY_LENGTH = 1000;
-
-                        messages.forEach(msg => {
-                            if (msg.offsetParent === null) return;
-
-                            const marker = document.createElement('div');
-                            marker.classList.add('scroll-marker');
-                            let isUser = false, isModel = false;
-
-                            if (msg.classList.contains('user')) {
-                                marker.classList.add('user'); isUser = true;
-                            } else if (msg.classList.contains('model')) {
-                                marker.classList.add('model'); isModel = true;
-                            } else return;
-
-                            const relativeTop = (msg.offsetTop / contentHeight) * zoneHeight;
-                            marker.style.top = `${relativeTop}px`;
-
-                            if (state.settings.enableDynamicScrollMarkerColor) {
-                                const index = parseInt(msg.dataset.index, 10);
-                                const messageData = state.currentMessages[index];
-                                const contentText = messageData ? (messageData.content || "") : msg.innerText;
-                                const textLength = contentText.length;
-                                if (textLength > 0) {
-                                    const intensity = Math.min(1, textLength / MAX_INTENSITY_LENGTH);
-                                    const alpha = 0.3 + (0.7 * intensity);
-                                    if (isUser) marker.style.backgroundColor = `rgba(${TURF_USER_RGB}, ${alpha})`;
-                                    else if (isModel) marker.style.backgroundColor = `rgba(${TURF_MODEL_RGB}, ${alpha})`;
-                                } else {
-                                    marker.style.backgroundColor = ""; 
-                                }
-                            }
-                            marker.addEventListener('click', (e) => {
-                                e.stopPropagation(); e.preventDefault();
-                                mainContent.scrollTop = msg.offsetTop - 10;
-                            });
-                            zone.appendChild(marker);
-                        });
-                    };
-
-                    const updateHandle = () => {
-                        if (!state.settings.enableChMateScroll) {
-                            zone.style.display = 'none';
-                            return;
-                        }
-                        zone.style.display = 'block';
-
-                        if (!document.body.classList.contains('immersive-mode')) {
-                            zone.style.top = `${mainContent.offsetTop}px`;
-                            zone.style.height = `${mainContent.offsetHeight}px`;
+                        if (msg.classList.contains('user')) {
+                            marker.classList.add('user');
+                            isUser = true;
+                        } else if (msg.classList.contains('model')) {
+                            marker.classList.add('model');
+                            isModel = true;
                         } else {
-                            zone.style.removeProperty('top');
-                            zone.style.removeProperty('height');
-                        }
-
-                        const contentHeight = mainContent.scrollHeight;
-                        const viewHeight = mainContent.clientHeight;
-                        const zoneHeight = zone.clientHeight;
-                        const scrollTop = mainContent.scrollTop;
-
-                        if (contentHeight <= viewHeight) {
-                            handle.style.display = 'none';
-                            if (screenInfo.hasMarkers) zone.querySelectorAll('.scroll-marker').forEach(el => el.style.display = 'none');
                             return;
                         }
-                        handle.style.display = 'block';
-                        if (screenInfo.hasMarkers) zone.querySelectorAll('.scroll-marker').forEach(el => el.style.display = 'block');
 
-                        let handleHeight = (viewHeight / contentHeight) * zoneHeight;
-                        handleHeight = Math.max(handleHeight, 40);
-                        
-                        const maxScrollTop = contentHeight - viewHeight;
-                        const maxHandleTop = zoneHeight - handleHeight;
-                        let handleTop = 0;
-                        if (maxScrollTop > 0) {
-                            handleTop = (scrollTop / maxScrollTop) * maxHandleTop;
+                        const relativeTop = (msg.offsetTop / contentHeight) * zoneHeight;
+                        marker.style.top = `${relativeTop}px`;
+
+                        if (state.settings.enableDynamicScrollMarkerColor) {
+                            const index = parseInt(msg.dataset.index, 10);
+                            const messageData = state.currentMessages[index];
+                            const contentText = messageData ? (messageData.content || "") : msg.innerText;
+                            const textLength = contentText.length;
+
+                            if (textLength > 0) {
+                                const intensity = Math.min(1, textLength / MAX_INTENSITY_LENGTH);
+                                const alpha = 0.3 + (0.7 * intensity);
+
+                                if (isUser) {
+                                    marker.style.backgroundColor = `rgba(${TURF_USER_RGB}, ${alpha})`;
+                                } else if (isModel) {
+                                    marker.style.backgroundColor = `rgba(${TURF_MODEL_RGB}, ${alpha})`;
+                                }
+                            } else {
+                                marker.style.backgroundColor = ""; 
+                            }
                         }
 
-                        handle.style.height = `${handleHeight}px`;
-                        handle.style.transform = `translateY(${handleTop}px)`;
-                    };
+                        const onMarkerClick = (e) => {
+                            e.stopPropagation(); 
+                            e.preventDefault();
+                            mainContent.scrollTop = msg.offsetTop - 10;
+                        };
 
-                    const updateAll = () => {
-                        updateHandle();
-                        if (screenInfo.hasMarkers) updateMarkers();
-                    };
+                        marker.addEventListener('click', onMarkerClick);
 
-                    mainContent.addEventListener('scroll', () => {
-                        updateHandle();
-                        zone.classList.add('is-scrolling');
-                        clearTimeout(screenEl._scrollTimeout);
-                        screenEl._scrollTimeout = setTimeout(() => zone.classList.remove('is-scrolling'), 1000);
-                    }, { passive: true });
-
-                    window.addEventListener('resize', updateAll);
-
-                    let observerTimeout;
-                    const observer = new MutationObserver(() => {
-                        if (observerTimeout) return;
-                        const delay = (state.isSending && screenInfo.id === 'chat-screen') 
-                            ? (state.settings.chmateObserverDelay || 500) 
-                            : 50;
-                        
-                        observerTimeout = setTimeout(() => {
-                            updateAll();
-                            observerTimeout = null;
-                        }, delay);
+                        zone.appendChild(marker);
                     });
-                    observer.observe(mainContent, { childList: true, subtree: true, attributes: true });
+                };
 
-                    let isDragging = false;
-                    const scrollByZone = (clientY) => {
-                        const rect = zone.getBoundingClientRect();
-                        const relativeY = clientY - rect.top;
-                        const zoneHeight = zone.clientHeight;
-                        const contentHeight = mainContent.scrollHeight;
-                        const viewHeight = mainContent.clientHeight;
-                        const percentage = Math.min(Math.max(relativeY / zoneHeight, 0), 1);
-                        mainContent.scrollTop = percentage * (contentHeight - viewHeight);
-                    };
+                const updateHandle = () => {
+                    if (!state.settings.enableChMateScroll) return;
 
-                    const startDrag = (e) => {
-                        if (!state.settings.enableChMateScroll) return;
-                        isDragging = true;
-                        zone.classList.add('is-dragging');
-                        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                        scrollByZone(clientY);
-                        e.preventDefault();
-                    };
-                    const doDrag = (e) => {
-                        if (!isDragging) return;
-                        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                        scrollByZone(clientY);
-                        e.preventDefault();
-                    };
-                    const endDrag = () => {
-                        isDragging = false;
-                        zone.classList.remove('is-dragging');
-                    };
+                    if (!document.body.classList.contains('immersive-mode')) {
+                        zone.style.top = `${mainContent.offsetTop}px`;
+                        zone.style.height = `${mainContent.offsetHeight}px`;
+                    } else {
+                        zone.style.removeProperty('top');
+                        zone.style.removeProperty('height');
+                    }
 
-                    zone.addEventListener('touchstart', startDrag, { passive: false });
-                    zone.addEventListener('touchmove', doDrag, { passive: false });
-                    zone.addEventListener('touchend', endDrag);
-                    zone.addEventListener('mousedown', startDrag);
-                    document.addEventListener('mousemove', (e) => { if(isDragging) doDrag(e); });
-                    document.addEventListener('mouseup', (e) => { if(isDragging) endDrag(); });
+                    const contentHeight = mainContent.scrollHeight;
+                    const viewHeight = mainContent.clientHeight;
+                    const zoneHeight = zone.clientHeight;
+                    const scrollTop = mainContent.scrollTop;
 
-                    setTimeout(updateAll, 100);
-                });
+                    if (contentHeight <= viewHeight) {
+                        handle.style.display = 'none';
+                        zone.querySelectorAll('.scroll-marker').forEach(el => el.style.display = 'none');
+                        return;
+                    }
+                    handle.style.display = 'block';
+                    zone.querySelectorAll('.scroll-marker').forEach(el => el.style.display = 'block');
+
+                    let handleHeight = (viewHeight / contentHeight) * zoneHeight;
+                    handleHeight = Math.max(handleHeight, 40);
+                    
+                    const maxScrollTop = contentHeight - viewHeight;
+                    const maxHandleTop = zoneHeight - handleHeight;
+                    
+                    let handleTop = 0;
+                    if (maxScrollTop > 0) {
+                        handleTop = (scrollTop / maxScrollTop) * maxHandleTop;
+                    }
+
+                    handle.style.height = `${handleHeight}px`;
+                    handle.style.transform = `translateY(${handleTop}px)`;
+                };
+
+                const updateAll = () => {
+                    updateHandle();
+                    updateMarkers();
+                };
+
+                let scrollTimeout;
+                const onScroll = () => {
+                    updateHandle();
+                    zone.classList.add('is-scrolling');
+                    clearTimeout(scrollTimeout);
+                    scrollTimeout = setTimeout(() => {
+                        zone.classList.remove('is-scrolling');
+                    }, 000);
+                };
+                mainContent.addEventListener('scroll', onScroll, { passive: true });
+                window.addEventListener('resize', updateAll);
                 
-                elements.enableChMateScrollToggle.addEventListener('change', () => {
-                    window.dispatchEvent(new Event('resize'));
+                let observerTimeout;
+                const observer = new MutationObserver(() => {
+                    if (observerTimeout) return;
+                    observerTimeout = setTimeout(() => {
+                        updateAll();
+                        observerTimeout = null;
+                    }, state.isSending ? (state.settings.chmateObserverDelay || 500) : 50);
                 });
+                observer.observe(elements.messageContainer, { childList: true, subtree: true, attributes: true });
+
+                let isDragging = false;
+
+                const scrollByZone = (clientY) => {
+                    const rect = zone.getBoundingClientRect();
+                    const relativeY = clientY - rect.top;
+                    const zoneHeight = zone.clientHeight;
+                    
+                    const contentHeight = mainContent.scrollHeight;
+                    const viewHeight = mainContent.clientHeight;
+                    
+                    const percentage = Math.min(Math.max(relativeY / zoneHeight, 0), 1);
+                    const targetScrollTop = percentage * (contentHeight - viewHeight);
+                    
+                    mainContent.scrollTop = targetScrollTop;
+                };
+
+                const startDrag = (e) => {
+                    if (!state.settings.enableChMateScroll) return;
+                    isDragging = true;
+                    zone.classList.add('is-dragging');
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    scrollByZone(clientY);
+                    e.preventDefault();
+                };
+
+                const doDrag = (e) => {
+                    if (!isDragging) return;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    scrollByZone(clientY);
+                    e.preventDefault();
+                };
+
+                const endDrag = () => {
+                    isDragging = false;
+                    zone.classList.remove('is-dragging');
+                };
+
+                zone.addEventListener('touchstart', startDrag, { passive: false });
+                zone.addEventListener('touchmove', doDrag, { passive: false });
+                zone.addEventListener('touchend', endDrag);
+                
+                zone.addEventListener('mousedown', startDrag);
+                document.addEventListener('mousemove', doDrag);
+                document.addEventListener('mouseup', endDrag);
+
+                setTimeout(updateAll, 100);
             },
 updateImmersiveLayout() {
                 if (!state.settings.enableImmersiveScrolling) {
