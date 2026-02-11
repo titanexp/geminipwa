@@ -11899,6 +11899,10 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     return;
                 }
 
+
+                const chatMain = elements.chatScreen.querySelector('.main-content');
+                const isChatAtBottom = screenName === 'chat' && (chatMain.scrollHeight - chatMain.scrollTop - chatMain.clientHeight < 50);
+
                 const allScreens = [elements.chatScreen, elements.historyScreen, elements.settingsScreen];
                 let activeScreen = null;
 
@@ -11948,7 +11952,14 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
 
                         if (state.settings.enableImmersiveScrolling) {
                             appLogic.updateImmersiveLayout();
-                            setTimeout(() => appLogic.updateImmersiveLayout(), 305);
+                            setTimeout(() => {
+                                appLogic.updateImmersiveLayout();
+                                // ▼追加: イマーシブモードかつ最下部にいた場合は、遷移完了後にスクロール位置を修正
+                                if (screenName === 'chat' && isChatAtBottom) {
+                                    this.scrollToBottom();
+                                }
+                                // ▲ここまで
+                            }, 305);
                         }
                     }
                 });
@@ -14007,10 +14018,6 @@ helpIcons.forEach(icon => {
             },
             handleTouchEnd(event) {
                 if (!state.settings.enableSwipeNavigation) {
-                    this.resetSwipeState();
-                    return;
-                }
-                if (window.getSelection().toString().length > 0) {
                     this.resetSwipeState();
                     return;
                 }
