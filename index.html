@@ -11899,9 +11899,10 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     return;
                 }
 
-
+                // チャット画面へ戻る際、現在最下部にいるかを判定しておく
                 const chatMain = elements.chatScreen.querySelector('.main-content');
-                const isChatAtBottom = screenName === 'chat' && (chatMain.scrollHeight - chatMain.scrollTop - chatMain.clientHeight < 50);
+                // 判定を少し緩くして(100px)、キーボード開閉等のズレも許容する
+                const isChatAtBottom = screenName === 'chat' && (chatMain.scrollHeight - chatMain.scrollTop - chatMain.clientHeight < 100);
 
                 const allScreens = [elements.chatScreen, elements.historyScreen, elements.settingsScreen];
                 let activeScreen = null;
@@ -11952,13 +11953,17 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
 
                         if (state.settings.enableImmersiveScrolling) {
                             appLogic.updateImmersiveLayout();
+
+                            if (screenName === 'chat' && isChatAtBottom) {
+                                chatMain.scrollTop = chatMain.scrollHeight;
+                            }
+
                             setTimeout(() => {
                                 appLogic.updateImmersiveLayout();
-                                // ▼追加: イマーシブモードかつ最下部にいた場合は、遷移完了後にスクロール位置を修正
+
                                 if (screenName === 'chat' && isChatAtBottom) {
-                                    this.scrollToBottom();
+                                    chatMain.scrollTop = chatMain.scrollHeight;
                                 }
-                                // ▲ここまで
                             }, 305);
                         }
                     }
