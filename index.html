@@ -4621,6 +4621,71 @@ font-size: 1.142em !important;
             top: var(--header-height, 50px) !important;
             height: calc(100% - var(--header-height, 50px) - var(--footer-height, 60px)) !important;
         }
+
+        #settings-cryscroller-scroll-zone {
+            position: absolute;
+            top: 50px;
+            right: 0;
+            width: var(--cryscroller-scroll-width);
+            height: calc(100% - 50px);
+            background-color: rgba(0, 0, 0, 0.02);
+            z-index: 90;
+            touch-action: none;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease, background-color 0.2s ease;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body.settings-cryscroller-scroll-enabled #settings-cryscroller-scroll-zone {
+            opacity: var(--cryscroller-scroll-opacity, 0.3);
+            pointer-events: auto;
+            transition: opacity 0.3s ease;
+        }
+        body.settings-cryscroller-scroll-enabled #settings-cryscroller-scroll-zone.is-dragging,
+        body.settings-cryscroller-scroll-enabled #settings-cryscroller-scroll-zone.is-scrolling {
+            opacity: var(--cryscroller-scroll-active-opacity, 1);
+        }
+        @media (hover: hover) {
+            body.settings-cryscroller-scroll-enabled #settings-cryscroller-scroll-zone:hover {
+                opacity: var(--cryscroller-scroll-active-opacity, 1);
+            }
+        }
+        #settings-cryscroller-scroll-handle {
+            position: absolute;
+            right: 2px;
+            width: calc(var(--cryscroller-scroll-width) - 4px);
+            min-height: 40px;
+            background-color: rgba(100, 100, 100, 0.5);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s ease, height 0.1s ease;
+        }
+        #settings-cryscroller-scroll-zone:active #settings-cryscroller-scroll-handle,
+        #settings-cryscroller-scroll-zone:hover #settings-cryscroller-scroll-handle {
+            background-color: rgba(100, 100, 100, 0.7);
+        }
+        body.dark-mode #settings-cryscroller-scroll-zone {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+        body.dark-mode #settings-cryscroller-scroll-handle {
+            background-color: rgba(200, 200, 200, 0.4);
+        }
+        body.dark-mode #settings-cryscroller-scroll-zone:active #settings-cryscroller-scroll-handle {
+            background-color: rgba(200, 200, 200, 0.6);
+        }
+        body.settings-cryscroller-scroll-enabled #settings-screen .main-content {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            padding-right: var(--cryscroller-scroll-width) !important;
+        }
+        body.settings-cryscroller-scroll-enabled #settings-screen .main-content::-webkit-scrollbar {
+            display: none;
+        }
+        body.immersive-mode #settings-cryscroller-scroll-zone {
+            top: var(--header-height, 50px) !important;
+            height: calc(100% - var(--header-height, 50px)) !important;
+        }
     </style>
 
     <script src="marked.js"></script>
@@ -4847,6 +4912,9 @@ font-size: 1.142em !important;
         </div>
 
         <div id="settings-screen" class="screen">
+            <div id="settings-cryscroller-scroll-zone">
+                <div id="settings-cryscroller-scroll-handle"></div>
+            </div>
             <header class="app-header">
                 <button id="back-to-chat-from-settings" class="header-button" aria-label="チャットへ戻る">＜</button>
                 <h1>設定</h1>
@@ -6603,6 +6671,10 @@ font-size: 1.142em !important;
                                                 <input type="checkbox" id="enable-cryscroller-scroll-toggle">
                                                 画面右側にスクロールバー(Cryscroller風)を表示する
                                             </label>
+                                            <label class="checkbox-label" style="margin-left: 20px; font-size: 12px;">
+                                                <input type="checkbox" id="enable-settings-cryscroller-scroll-toggle">
+                                                設定パネルにも表示する
+                                            </label>
                                             <label class="checkbox-label">
                                                 <input type="checkbox" id="enable-immersive-scrolling-toggle">
                                                 メッセージをヘッダー/フッターの裏まで表示する
@@ -8113,6 +8185,9 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             showHistoryPreviewBubbleToggle: document.getElementById('show-history-preview-bubble-toggle'),
             stripedHistoryListToggle: document.getElementById('striped-history-list-toggle'),
             cryscrollerObserverDelayInput: document.getElementById('cryscroller-observer-delay'),
+            settingsCryscrollerScrollZone: document.getElementById('settings-cryscroller-scroll-zone'),
+            settingsCryscrollerScrollHandle: document.getElementById('settings-cryscroller-scroll-handle'),
+            enableSettingsCryscrollerScrollToggle: document.getElementById('enable-settings-cryscroller-scroll-toggle'),
         };
 
         const state = {
@@ -8423,6 +8498,7 @@ enableChmateScrollOpacity: true,
                 showHistoryPreviewBubble: true,
                 stripedHistoryList: true,
                 cryscrollerObserverDelay: 500,
+                enableSettingsCryscrollerScroll: true,
             },
             backgroundImageUrl: null,
             userIconUrl: null,
@@ -11057,6 +11133,11 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 }
                 elements.enableCryscrollerScrollToggle.checked = state.settings.enableCryscrollerScroll;
                 document.body.classList.toggle('cryscroller-scroll-enabled', state.settings.enableCryscrollerScroll);
+                
+                elements.enableSettingsCryscrollerScrollToggle.checked = state.settings.enableSettingsCryscrollerScroll;
+                document.body.classList.toggle('settings-cryscroller-scroll-enabled', state.settings.enableSettingsCryscrollerScroll);
+                if (state.settings.enableSettingsCryscrollerScroll) { window.dispatchEvent(new Event('resize')); }
+
                 elements.enableImmersiveScrollingToggle.checked = state.settings.enableImmersiveScrolling;
                 appLogic.updateImmersiveLayout();
                 elements.enableDynamicScrollMarkerColorToggle.checked = state.settings.enableDynamicScrollMarkerColor;
@@ -13266,6 +13347,12 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     window.dispatchEvent(new Event('resize'));
                 });
                 appLogic.initCryscrollerScroll();
+                elements.enableSettingsCryscrollerScrollToggle.addEventListener('change', (e) => {
+                    state.settings.enableSettingsCryscrollerScroll = e.target.checked;
+                    document.body.classList.toggle('settings-cryscroller-scroll-enabled', state.settings.enableSettingsCryscrollerScroll);
+                    window.dispatchEvent(new Event('resize'));
+                });
+                appLogic.initSettingsCryscrollerScroll();
                 elements.extendAiBubbleWidthToggle.addEventListener('change', (e) => {
                     state.settings.extendAiBubbleWidth = e.target.checked;
                     uiUtils.applyAiBubbleWidthSetting();
@@ -16846,6 +16933,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 newSettings.cryscrollerScrollOpacity = cryscrollerScrollOpacityInput.value === '' ? DEFAULT_CHMATE_SCROLL_OPACITY : parseFloat(cryscrollerScrollOpacityInput.value);
                 const cryscrollerScrollActiveOpacityInput = document.getElementById('cryscroller-scroll-active-opacity');
                 newSettings.cryscrollerScrollActiveOpacity = cryscrollerScrollActiveOpacityInput.value === '' ? DEFAULT_CHMATE_SCROLL_ACTIVE_OPACITY : parseFloat(cryscrollerScrollActiveOpacityInput.value);
+                newSettings.enableSettingsCryscrollerScroll = elements.enableSettingsCryscrollerScrollToggle.checked;
                 newSettings.enableElevation = elements.enableElevationToggle.checked;
                 newSettings.enableElevationHover = elements.enableElevationHoverToggle.checked;
                 newSettings.autoCloseOtherSettings = elements.autoCloseOtherSettingsToggle.checked;
@@ -18573,7 +18661,98 @@ initCryscrollerScroll() {
 
                 setTimeout(updateAll, 100);
             },
-updateImmersiveLayout() {
+            initSettingsCryscrollerScroll() {
+                const mainContent = elements.settingsScreen.querySelector('.main-content');
+                const zone = elements.settingsCryscrollerScrollZone;
+                const handle = elements.settingsCryscrollerScrollHandle;
+                const updateHandle = () => {
+                    if (!state.settings.enableSettingsCryscrollerScroll) return;
+                    if (!document.body.classList.contains('immersive-mode')) {
+                        const headerHeight = elements.settingsScreen.querySelector('.app-header').offsetHeight;
+                        zone.style.top = `${headerHeight}px`;
+                        zone.style.height = `calc(100% - ${headerHeight}px)`;
+                    } else {
+                        zone.style.removeProperty('top');
+                        zone.style.removeProperty('height');
+                    }
+                    const contentHeight = mainContent.scrollHeight;
+                    const viewHeight = mainContent.clientHeight;
+                    const zoneHeight = zone.clientHeight;
+                    const scrollTop = mainContent.scrollTop;
+                    if (contentHeight <= viewHeight) {
+                        handle.style.display = 'none';
+                        return;
+                    }
+                    handle.style.display = 'block';
+                    let handleHeight = (viewHeight / contentHeight) * zoneHeight;
+                    handleHeight = Math.max(handleHeight, 40);
+                    const maxScrollTop = contentHeight - viewHeight;
+                    const maxHandleTop = zoneHeight - handleHeight;
+                    let handleTop = 0;
+                    if (maxScrollTop > 0) {
+                        handleTop = (scrollTop / maxScrollTop) * maxHandleTop;
+                    }
+                    handle.style.height = `${handleHeight}px`;
+                    handle.style.transform = `translateY(${handleTop}px)`;
+                };
+                let scrollTimeout;
+                const onScroll = () => {
+                    updateHandle();
+                    zone.classList.add('is-scrolling');
+                    clearTimeout(scrollTimeout);
+                    scrollTimeout = setTimeout(() => {
+                        zone.classList.remove('is-scrolling');
+                    }, 1000);
+                };
+                mainContent.addEventListener('scroll', onScroll, { passive: true });
+                window.addEventListener('resize', updateHandle);
+                let observerTimeout;
+                const observer = new MutationObserver(() => {
+                    if (observerTimeout) return;
+                    observerTimeout = setTimeout(() => {
+                        updateHandle();
+                        observerTimeout = null;
+                    }, 100);
+                });
+                observer.observe(mainContent, { childList: true, subtree: true, attributes: true });
+                let isDragging = false;
+                const scrollByZone = (clientY) => {
+                    const rect = zone.getBoundingClientRect();
+                    const relativeY = clientY - rect.top;
+                    const zoneHeight = zone.clientHeight;
+                    const contentHeight = mainContent.scrollHeight;
+                    const viewHeight = mainContent.clientHeight;
+                    const percentage = Math.min(Math.max(relativeY / zoneHeight, 0), 1);
+                    const targetScrollTop = percentage * (contentHeight - viewHeight);
+                    mainContent.scrollTop = targetScrollTop;
+                };
+                const startDrag = (e) => {
+                    if (!state.settings.enableSettingsCryscrollerScroll) return;
+                    isDragging = true;
+                    zone.classList.add('is-dragging');
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    scrollByZone(clientY);
+                    e.preventDefault();
+                };
+                const doDrag = (e) => {
+                    if (!isDragging) return;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    scrollByZone(clientY);
+                    e.preventDefault();
+                };
+                const endDrag = () => {
+                    isDragging = false;
+                    zone.classList.remove('is-dragging');
+                };
+                zone.addEventListener('touchstart', startDrag, { passive: false });
+                zone.addEventListener('touchmove', doDrag, { passive: false });
+                zone.addEventListener('touchend', endDrag);
+                zone.addEventListener('mousedown', startDrag);
+                document.addEventListener('mousemove', doDrag);
+                document.addEventListener('mouseup', endDrag);
+                setTimeout(updateHandle, 500);
+            },
+            updateImmersiveLayout() {
                 if (!state.settings.enableImmersiveScrolling) {
                     document.body.classList.remove('immersive-mode');
                     if (elements.cryscrollerScrollZone) {
