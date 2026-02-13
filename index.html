@@ -9504,44 +9504,26 @@ const dbUtils = {
                 });
                 return cleanHtml;
             },
-renderChatMessages(maintainScroll = false, forceUpdate = false) {
+renderChatMessages(maintainScroll = false) {
                 const mainContent = elements.chatScreen.querySelector('.main-content');
                 const oldScrollTop = maintainScroll ? mainContent.scrollTop : null;
 
+                // 編集中のメッセージがあればキャンセル処理
                 if (state.editingMessageIndex !== null) {
                     const messageElement = elements.messageContainer.querySelector(`.message[data-index="${state.editingMessageIndex}"]`);
                     if (messageElement) appLogic.cancelEditMessage(state.editingMessageIndex, messageElement);
                     else state.editingMessageIndex = null;
                 }
 
-                const existingNodes = elements.messageContainer.children;
-                let startRenderIndex = existingNodes.length;
-
-                if (forceUpdate || state.currentMessages.length !== existingNodes.length) {
-                    startRenderIndex = 0;
-                } else {
-                    if (existingNodes.length > 0) {
-                        const lastNodeIndex = parseInt(existingNodes[existingNodes.length - 1].dataset.index, 10);
-                        if (lastNodeIndex !== existingNodes.length - 1) {
-                            startRenderIndex = 0;
-                        }
-                    }
-                }
-
-                if (startRenderIndex === 0) {
-                    elements.messageContainer.innerHTML = '';
-                } else {
-                    const nodesArray = Array.from(existingNodes);
-                    for (let i = startRenderIndex; i < nodesArray.length; i++) {
-                        nodesArray[i].remove();
-                    }
-                }
+                // ★ここが修正ポイント：既存の内容を一度すべて消去してリセットします（元の仕様）
+                elements.messageContainer.innerHTML = '';
 
                 let currentSiblingGroupId = null;
                 let siblingsInGroup = [];
                 let siblingIndex = 0;
 
                 const fragment = document.createDocumentFragment();
+
 
                 for (let i = 0; i < state.currentMessages.length; i++) {
                     const msg = state.currentMessages[i];
@@ -9565,9 +9547,6 @@ renderChatMessages(maintainScroll = false, forceUpdate = false) {
                         currentSiblingGroupId = null;
                     }
 
-                    if (i < startRenderIndex) {
-                        continue;
-                    }
 
                     if (msg.role === 'model' && msg.isCascaded && msg.siblingGroupId) {
                         if (msg.isSelected) {
@@ -9580,13 +9559,14 @@ renderChatMessages(maintainScroll = false, forceUpdate = false) {
 
                 elements.messageContainer.appendChild(fragment);
 
+
                 if (maintainScroll && oldScrollTop !== null) {
                     requestAnimationFrame(() => {
                         mainContent.scrollTop = oldScrollTop;
                     });
                 }
             },
-            appendMessage(role, content, index, isStreamingPlaceholder = false, cascadeInfo = null, attachments = null, targetContainer = null) {
+appendMessage(role, content, index, isStreamingPlaceholder = false, cascadeInfo = null, attachments = null) {
                 const messageDiv = document.createElement('div');
                 messageDiv.classList.add('message', role);
                 messageDiv.dataset.index = index;
@@ -9897,7 +9877,11 @@ renderChatMessages(maintainScroll = false, forceUpdate = false) {
                         const bottomTitle = isCurrentlyCollapsed ? 'メッセージを展開' : 'メッセージを折りたたむ';
                         toggleButtonBottom.title = bottomTitle;
                         toggleButtonBottom.setAttribute('aria-label', bottomTitle);
-                        actionsDiv.appendChild(toggleButtonBottom);
+                        if (actionsDiv.firstChild) {
+                            actionsDiv.insertBefore(toggleButtonBottom, actionsDiv.firstChild);
+                        } else {
+                            actionsDiv.appendChild(toggleButtonBottom);
+                        }
                     }
 
                     const editButton = document.createElement('button');
@@ -9947,12 +9931,7 @@ renderChatMessages(maintainScroll = false, forceUpdate = false) {
                 if (isStreamingPlaceholder) {
                     messageDiv.id = `streaming-message-${index}`;
                 }
-
-                if (targetContainer) {
-                    targetContainer.appendChild(messageDiv);
-                } else {
-                    elements.messageContainer.appendChild(messageDiv);
-                }
+                elements.messageContainer.appendChild(messageDiv);
             },
             updateMemoStackHeightSettingsVisibility() {
                 const showMemoBtn = elements.showMemoButtonToggle.checked;
