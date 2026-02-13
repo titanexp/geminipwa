@@ -9504,7 +9504,7 @@ const dbUtils = {
                 });
                 return cleanHtml;
             },
-            renderChatMessages(maintainScroll = false, forceUpdate = false) {
+renderChatMessages(maintainScroll = false, forceUpdate = false) {
                 const mainContent = elements.chatScreen.querySelector('.main-content');
                 const oldScrollTop = maintainScroll ? mainContent.scrollTop : null;
 
@@ -9514,7 +9514,7 @@ const dbUtils = {
                     else state.editingMessageIndex = null;
                 }
 
-                const existingNodes = Array.from(elements.messageContainer.querySelectorAll('.message'));
+                const existingNodes = elements.messageContainer.children;
                 let startRenderIndex = existingNodes.length;
 
                 if (forceUpdate || state.currentMessages.length !== existingNodes.length) {
@@ -9528,15 +9528,20 @@ const dbUtils = {
                     }
                 }
 
-                if (startRenderIndex < existingNodes.length) {
-                    for (let i = startRenderIndex; i < existingNodes.length; i++) {
-                        existingNodes[i].remove();
+                if (startRenderIndex === 0) {
+                    elements.messageContainer.innerHTML = '';
+                } else {
+                    const nodesArray = Array.from(existingNodes);
+                    for (let i = startRenderIndex; i < nodesArray.length; i++) {
+                        nodesArray[i].remove();
                     }
                 }
 
                 let currentSiblingGroupId = null;
                 let siblingsInGroup = [];
                 let siblingIndex = 0;
+
+                const fragment = document.createDocumentFragment();
 
                 for (let i = 0; i < state.currentMessages.length; i++) {
                     const msg = state.currentMessages[i];
@@ -9566,12 +9571,14 @@ const dbUtils = {
 
                     if (msg.role === 'model' && msg.isCascaded && msg.siblingGroupId) {
                         if (msg.isSelected) {
-                            this.appendMessage(msg.role, msg.content, i, false, cascadeInfo, msg.attachments);
+                            this.appendMessage(msg.role, msg.content, i, false, cascadeInfo, msg.attachments, fragment);
                         }
                     } else {
-                        this.appendMessage(msg.role, msg.content, i, false, null, msg.attachments);
+                        this.appendMessage(msg.role, msg.content, i, false, null, msg.attachments, fragment);
                     }
                 }
+
+                elements.messageContainer.appendChild(fragment);
 
                 if (maintainScroll && oldScrollTop !== null) {
                     requestAnimationFrame(() => {
@@ -9579,7 +9586,7 @@ const dbUtils = {
                     });
                 }
             },
-appendMessage(role, content, index, isStreamingPlaceholder = false, cascadeInfo = null, attachments = null) {
+            appendMessage(role, content, index, isStreamingPlaceholder = false, cascadeInfo = null, attachments = null, targetContainer = null) {
                 const messageDiv = document.createElement('div');
                 messageDiv.classList.add('message', role);
                 messageDiv.dataset.index = index;
@@ -9890,11 +9897,7 @@ appendMessage(role, content, index, isStreamingPlaceholder = false, cascadeInfo 
                         const bottomTitle = isCurrentlyCollapsed ? 'メッセージを展開' : 'メッセージを折りたたむ';
                         toggleButtonBottom.title = bottomTitle;
                         toggleButtonBottom.setAttribute('aria-label', bottomTitle);
-                        if (actionsDiv.firstChild) {
-                            actionsDiv.insertBefore(toggleButtonBottom, actionsDiv.firstChild);
-                        } else {
-                            actionsDiv.appendChild(toggleButtonBottom);
-                        }
+                        actionsDiv.appendChild(toggleButtonBottom);
                     }
 
                     const editButton = document.createElement('button');
@@ -9944,7 +9947,12 @@ appendMessage(role, content, index, isStreamingPlaceholder = false, cascadeInfo 
                 if (isStreamingPlaceholder) {
                     messageDiv.id = `streaming-message-${index}`;
                 }
-                elements.messageContainer.appendChild(messageDiv);
+
+                if (targetContainer) {
+                    targetContainer.appendChild(messageDiv);
+                } else {
+                    elements.messageContainer.appendChild(messageDiv);
+                }
             },
             updateMemoStackHeightSettingsVisibility() {
                 const showMemoBtn = elements.showMemoButtonToggle.checked;
@@ -11888,7 +11896,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 document.documentElement.style.setProperty('--settings-ui-scale', state.settings.settingsUiScale || 1.0);
                 document.documentElement.style.setProperty('--history-ui-scale', state.settings.historyUiScale || 1.0);
             },
-showScreen(screenName, fromPopState = false) {
+            showScreen(screenName, fromPopState = false) {
                 if (state.isMemoVisible && screenName !== 'chat') {
                     elements.memoArea.classList.add('hidden');
                     state.isMemoVisible = false;
@@ -11908,8 +11916,10 @@ showScreen(screenName, fromPopState = false) {
                     return;
                 }
 
+                // チャット画面へ戻る際、現在最下部にいるかを判定しておく
                 const chatMain = elements.chatScreen.querySelector('.main-content');
-                const isChatAtBottom = screenName === 'chat' && (chatMain.scrollHeight - chatMain.scrollTop - chatMain.clientHeight < 150);
+                // 判定を少し緩くして(100px)、キーボード開閉等のズレも許容する
+                const isChatAtBottom = screenName === 'chat' && (chatMain.scrollHeight - chatMain.scrollTop - chatMain.clientHeight < 100);
 
                 const allScreens = [elements.chatScreen, elements.historyScreen, elements.settingsScreen];
                 let activeScreen = null;
@@ -11932,8 +11942,10 @@ showScreen(screenName, fromPopState = false) {
                     elements.chatScreen.style.transform = 'translateX(0)';
                     elements.historyScreen.style.transform = 'translateX(-100%)';
                     elements.settingsScreen.style.transform = 'translateX(100%)';
-                    this.adjustTextareaHeight();
-                    this.updateChatScreenElementVisibility();
+                    requestAnimationFrame(() => {
+                        this.adjustTextareaHeight();
+                        this.updateChatScreenElementVisibility();
+                    });
                 } else if (screenName === 'history') {
                     activeScreen = elements.historyScreen;
                     elements.chatScreen.style.transform = 'translateX(100%)';
@@ -11957,15 +11969,19 @@ showScreen(screenName, fromPopState = false) {
                         activeScreen.classList.add('active');
 
                         if (state.settings.enableImmersiveScrolling) {
+                            appLogic.updateImmersiveLayout();
+
                             if (screenName === 'chat' && isChatAtBottom) {
                                 chatMain.scrollTop = chatMain.scrollHeight;
                             }
+
                             setTimeout(() => {
                                 appLogic.updateImmersiveLayout();
+
                                 if (screenName === 'chat' && isChatAtBottom) {
                                     chatMain.scrollTop = chatMain.scrollHeight;
                                 }
-                            }, 320);
+                            }, 305);
                         }
                     }
                 });
