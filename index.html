@@ -21675,6 +21675,81 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
 
         appLogic.initializeApp();
     </script>
+    <!-- デバッグ用パフォーマンスモニター -->
+<script>
+(function() {
+    // スタイル定義
+    const style = document.createElement('style');
+    style.textContent = `
+        #debug-perf-monitor {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 99999;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 10px;
+            padding: 4px;
+            pointer-events: none; /* クリックを透過させる */
+            line-height: 1.2;
+            white-space: pre;
+            border-bottom-right-radius: 4px;
+        }
+    `;
+    document.head.appendChild(style);
+
+    // 表示用要素の作成
+    const monitor = document.createElement('div');
+    monitor.id = 'debug-perf-monitor';
+    document.body.appendChild(monitor);
+
+    let lastTime = performance.now();
+    let frameCount = 0;
+    let fps = 0;
+
+    function updateMetrics() {
+        const now = performance.now();
+        frameCount++;
+
+        if (now - lastTime >= 1000) {
+            fps = frameCount;
+            frameCount = 0;
+            lastTime = now;
+
+            // メモリ情報の取得 (Chrome/Edge系のみ対応)
+            let memoryInfo = 'N/A';
+            if (performance.memory) {
+                const used = (performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(1);
+                const total = (performance.memory.totalJSHeapSize / 1024 / 1024).toFixed(1);
+                const limit = (performance.memory.jsHeapSizeLimit / 1024 / 1024).toFixed(1);
+                memoryInfo = `${used} / ${total} MB`;
+            }
+
+            // DOM要素数のカウント
+            const domNodes = document.getElementsByTagName('*').length;
+
+            // 画面への描画
+            monitor.textContent = 
+`FPS: ${fps}
+MEM: ${memoryInfo}
+DOM: ${domNodes} nodes`;
+
+            // 警告色（FPSが30以下、またはDOMが3000以上で赤くする）
+            if (fps < 30 || domNodes > 3000) {
+                monitor.style.color = '#ff4444';
+            } else {
+                monitor.style.color = '#0f0';
+            }
+        }
+
+        requestAnimationFrame(updateMetrics);
+    }
+
+    updateMetrics();
+})();
+</script>
+
 </body>
 
 </html>
