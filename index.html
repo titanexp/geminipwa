@@ -9370,19 +9370,18 @@ const dbUtils = {
             return input; // 完全一致もFuzzy Searchもヒットしなかった場合は元の入力を返す
         }
         // ▲▲▲ ここまで追加 ▲▲▲
-                        const performanceMonitor = {
+                const performanceMonitor = {
             rafId: null,
             element: null,
             frameCount: 0,
             lastTime: performance.now(),
-            maxMemory: 0,
-            storageUsage: '---',
-            
             toggle(show) {
-                if (show) this.start();
-                else this.stop();
+                if (show) {
+                    this.start();
+                } else {
+                    this.stop();
+                }
             },
-            
             start() {
                 if (this.rafId) return;
                 if (!this.element) {
@@ -9392,11 +9391,9 @@ const dbUtils = {
                 }
                 this.element.style.display = 'block';
                 this.frameCount = 0;
-                this.maxMemory = 0;
                 this.lastTime = performance.now();
                 this.loop();
             },
-            
             stop() {
                 if (this.rafId) {
                     cancelAnimationFrame(this.rafId);
@@ -9407,67 +9404,30 @@ const dbUtils = {
                     this.element = null;
                 }
             },
-            
             loop() {
                 const now = performance.now();
                 this.frameCount++;
-                
-                // 1フレームにかかった時間（CPU負荷の目安）
-                // ※描画ごとの瞬時値だと早すぎて読めないため、1秒間の平均を出す計算に使用
-                const elapsed = now - this.lastTime;
-
-                // 1秒(1000ms)ごとに表示を更新
-                if (elapsed >= 1000) {
-                    const fps = Math.round((this.frameCount * 1000) / elapsed);
-                    
-                    // 1フレームあたりの平均処理時間 (ms)
-                    // これが 16.6ms 以下なら快適。50msを超えるとCPU/GPUが限界。
-                    const frameTime = (elapsed / this.frameCount).toFixed(1);
-                    
-                    // メモリ
+                if (now >= this.lastTime + 1000) {
+                    const fps = Math.round((this.frameCount * 1000) / (now - this.lastTime));
                     let memoryInfo = '';
                     if (performance.memory) {
-                        const usedJS = performance.memory.usedJSHeapSize / 1048576;
-                        if (usedJS > this.maxMemory) this.maxMemory = usedJS;
-                        const totalJS = performance.memory.totalJSHeapSize / 1048576;
-                        memoryInfo = `\nMem: ${usedJS.toFixed(0)}/${totalJS.toFixed(0)} MB (Peak:${this.maxMemory.toFixed(0)})`;
+                        const usedJS = (performance.memory.usedJSHeapSize / 1048576).toFixed(1);
+                        const totalJS = (performance.memory.totalJSHeapSize / 1048576).toFixed(1);
+                        memoryInfo = `\nMem: ${usedJS} / ${totalJS} MB`;
                     }
-
-                    // DOM & メッセージ数
                     const domCount = document.getElementsByTagName('*').length;
-                    const msgCount = (typeof state !== 'undefined' && state.currentMessages) ? state.currentMessages.length : 0;
-
-                    // ストレージ (5回に1回更新)
-                    if (this.frameCount > 0 && this.frameCount % 5 === 0 && navigator.storage && navigator.storage.estimate) {
-                        navigator.storage.estimate().then(estimate => {
-                            if (estimate.usage && estimate.quota) {
-                                const usageMB = (estimate.usage / 1048576).toFixed(0);
-                                const percent = ((estimate.usage / estimate.quota) * 100).toFixed(1);
-                                this.storageUsage = `${usageMB}MB (${percent}%)`;
-                            }
-                        }).catch(() => {});
-                    }
-
                     if (this.element) {
-                        // 負荷が高いとき(30ms超え)は文字色を赤くして警告する装飾
-                        const color = frameTime > 30 ? '#ff5555' : '#00ff00';
-                        this.element.style.color = color;
-
-                        this.element.textContent = 
-                            `FPS: ${fps} (${frameTime}ms)` +
-                            `${memoryInfo}` +
-                            `\nDOM: ${domCount} / Msgs: ${msgCount}` + 
-                            `\nStorage: ${this.storageUsage}`;
+                        this.element.textContent = `FPS: ${fps}${memoryInfo}\nDOM: ${domCount}`;
                     }
-
                     this.lastTime = now;
                     this.frameCount = 0;
                 }
-
                 this.rafId = requestAnimationFrame(this.loop.bind(this));
             }
         };
 
+        const uiUtils = {
+            updateSettingsScreenElementVisibility() {
 
                 elements.settingsScrollToTopBtn.classList.toggle('hidden', !state.settings.showSettingsScrollToTopButton);
                 elements.settingsScrollToBottomBtn.classList.toggle('hidden', !state.settings.showSettingsScrollToBottomButton);
