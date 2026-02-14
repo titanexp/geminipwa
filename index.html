@@ -4771,11 +4771,28 @@ font-size: 1.142em !important;
         body.history-cryscroller-scroll-enabled #history-screen .main-content::-webkit-scrollbar {
             display: none;
         }
-        body.immersive-mode #history-cryscroller-scroll-zone {
+                body.immersive-mode #history-cryscroller-scroll-zone {
             top: var(--header-height, 50px) !important;
             height: calc(100% - var(--header-height, 50px)) !important;
         }
+
+        #performance-monitor-display {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 10000;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: #00ff00;
+            padding: 4px 8px;
+            font-family: monospace;
+            font-size: 11px;
+            pointer-events: none;
+            border-bottom-right-radius: 5px;
+            line-height: 1.2;
+            white-space: pre;
+        }
     </style>
+
 
     <script src="marked.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
@@ -7603,7 +7620,12 @@ font-size: 1.142em !important;
                             <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
                                 <button id="debug-check-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">全ての項目のチェックボックスをオンにする</button>
                                 <button id="debug-uncheck-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">全ての項目のチェックボックスをオフにする</button>
+                                
                             </div>
+                            <label class="checkbox-label" style="margin-top: 15px;">
+                                <input type="checkbox" id="show-performance-monitor-toggle">
+                                パフォーマンスモニターを表示
+                            </label>
                             <div class="font-slider-container" style="margin-top: 15px; border-top: 1px dashed var(--border-secondary); padding-top: 10px;">
                                 <label for="cryscroller-observer-delay">スクロールバー描画遅延 (ms):</label>
                                 <div class="input-slider-wrapper">
@@ -8285,9 +8307,11 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             settingsCryscrollerScrollHandle: document.getElementById('settings-cryscroller-scroll-handle'),
             enableSettingsCryscrollerScrollToggle: document.getElementById('enable-settings-cryscroller-scroll-toggle'),
             historyCryscrollerScrollZone: document.getElementById('history-cryscroller-scroll-zone'),
-            historyCryscrollerScrollHandle: document.getElementById('history-cryscroller-scroll-handle'),
+                        historyCryscrollerScrollHandle: document.getElementById('history-cryscroller-scroll-handle'),
             enableHistoryCryscrollerScrollToggle: document.getElementById('enable-history-cryscroller-scroll-toggle'),
+            showPerformanceMonitorToggle: document.getElementById('show-performance-monitor-toggle'),
         };
+
 
         const state = {
             db: null,
@@ -8596,10 +8620,12 @@ enableCryscrollerScrollOpacity: true,
                 cryscrollerScrollWidth: 30,
                 showHistoryPreviewBubble: true,
                 stripedHistoryList: true,
-                cryscrollerObserverDelay: 500,
+                                cryscrollerObserverDelay: 500,
                 enableSettingsCryscrollerScroll: false,
                 enableHistoryCryscrollerScroll: true,
+                showPerformanceMonitor: false,
             },
+
             backgroundImageUrl: null,
             userIconUrl: null,
             aiIconUrl: null,
@@ -9344,8 +9370,65 @@ const dbUtils = {
             return input; // 完全一致もFuzzy Searchもヒットしなかった場合は元の入力を返す
         }
         // ▲▲▲ ここまで追加 ▲▲▲
+                const performanceMonitor = {
+            rafId: null,
+            element: null,
+            frameCount: 0,
+            lastTime: performance.now(),
+            toggle(show) {
+                if (show) {
+                    this.start();
+                } else {
+                    this.stop();
+                }
+            },
+            start() {
+                if (this.rafId) return;
+                if (!this.element) {
+                    this.element = document.createElement('div');
+                    this.element.id = 'performance-monitor-display';
+                    document.body.appendChild(this.element);
+                }
+                this.element.style.display = 'block';
+                this.frameCount = 0;
+                this.lastTime = performance.now();
+                this.loop();
+            },
+            stop() {
+                if (this.rafId) {
+                    cancelAnimationFrame(this.rafId);
+                    this.rafId = null;
+                }
+                if (this.element) {
+                    this.element.remove();
+                    this.element = null;
+                }
+            },
+            loop() {
+                const now = performance.now();
+                this.frameCount++;
+                if (now >= this.lastTime + 1000) {
+                    const fps = Math.round((this.frameCount * 1000) / (now - this.lastTime));
+                    let memoryInfo = '';
+                    if (performance.memory) {
+                        const usedJS = (performance.memory.usedJSHeapSize / 1048576).toFixed(1);
+                        const totalJS = (performance.memory.totalJSHeapSize / 1048576).toFixed(1);
+                        memoryInfo = `\nMem: ${usedJS} / ${totalJS} MB`;
+                    }
+                    const domCount = document.getElementsByTagName('*').length;
+                    if (this.element) {
+                        this.element.textContent = `FPS: ${fps}${memoryInfo}\nDOM: ${domCount}`;
+                    }
+                    this.lastTime = now;
+                    this.frameCount = 0;
+                }
+                this.rafId = requestAnimationFrame(this.loop.bind(this));
+            }
+        };
+
         const uiUtils = {
             updateSettingsScreenElementVisibility() {
+
                 elements.settingsScrollToTopBtn.classList.toggle('hidden', !state.settings.showSettingsScrollToTopButton);
                 elements.settingsScrollToBottomBtn.classList.toggle('hidden', !state.settings.showSettingsScrollToBottomButton);
             },
@@ -11225,11 +11308,15 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 document.body.classList.toggle('settings-cryscroller-scroll-enabled', state.settings.enableSettingsCryscrollerScroll);
                 if (state.settings.enableSettingsCryscrollerScroll) { window.dispatchEvent(new Event('resize')); }
 
-                elements.enableHistoryCryscrollerScrollToggle.checked = state.settings.enableHistoryCryscrollerScroll;
+                                elements.enableHistoryCryscrollerScrollToggle.checked = state.settings.enableHistoryCryscrollerScroll;
                 document.body.classList.toggle('history-cryscroller-scroll-enabled', state.settings.enableHistoryCryscrollerScroll);
                 if (state.settings.enableHistoryCryscrollerScroll) { window.dispatchEvent(new Event('resize')); }
 
+                elements.showPerformanceMonitorToggle.checked = state.settings.showPerformanceMonitor;
+                performanceMonitor.toggle(state.settings.showPerformanceMonitor);
+
                 elements.enableImmersiveScrollingToggle.checked = state.settings.enableImmersiveScrolling;
+
                 appLogic.updateImmersiveLayout();
                 elements.enableDynamicScrollMarkerColorToggle.checked = state.settings.enableDynamicScrollMarkerColor;
                 
@@ -11907,7 +11994,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 // 判定を少し緩くして(100px)、キーボード開閉等のズレも許容する
                 const isChatAtBottom = screenName === 'chat' && (chatMain.scrollHeight - chatMain.scrollTop - chatMain.clientHeight < 100);
 
-                                                                const allScreens = [elements.chatScreen, elements.historyScreen, elements.settingsScreen];
+                                                const allScreens = [elements.chatScreen, elements.historyScreen, elements.settingsScreen];
                 let activeScreen = null;
 
                 if (!fromPopState) {
@@ -11922,7 +12009,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     screen.classList.remove('active');
                     screen.classList.remove('dormant');
                     screen.inert = true;
-                    void screen.offsetWidth; // アニメーション強制のためのリフロー
+                    void screen.offsetWidth;
                 });
 
                 if (screenName === 'chat') {
@@ -11930,34 +12017,22 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     elements.chatScreen.style.transform = 'translateX(0)';
                     elements.historyScreen.style.transform = 'translateX(-100%)';
                     elements.settingsScreen.style.transform = 'translateX(100%)';
-                    
-                    // ★遅延実行: アニメーション開始を優先させる
-                    setTimeout(() => {
+                    requestAnimationFrame(() => {
                         this.adjustTextareaHeight();
                         this.updateChatScreenElementVisibility();
-                    }, 10);
-
+                    });
                 } else if (screenName === 'history') {
                     activeScreen = elements.historyScreen;
                     elements.chatScreen.style.transform = 'translateX(100%)';
                     elements.historyScreen.style.transform = 'translateX(0)';
                     elements.settingsScreen.style.transform = 'translateX(200%)';
-                    
-                    // ★遅延実行: アニメーション開始を優先させる
-                    setTimeout(() => {
-                        this.renderHistoryList();
-                    }, 10);
-
+                    this.renderHistoryList();
                 } else if (screenName === 'settings') {
                     activeScreen = elements.settingsScreen;
                     elements.chatScreen.style.transform = 'translateX(-100%)';
                     elements.historyScreen.style.transform = 'translateX(-200%)';
                     elements.settingsScreen.style.transform = 'translateX(0)';
-                    
-                    // ★遅延実行: アニメーション開始を優先させる
-                    setTimeout(() => {
-                        this.applySettingsToUI();
-                    }, 10);
+                    this.applySettingsToUI();
                 }
 
                 requestAnimationFrame(() => {
@@ -11993,7 +12068,6 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     }, 350);
                 });
                 state.currentScreen = screenName;
-
 
 
             },
@@ -13484,12 +13558,17 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     window.dispatchEvent(new Event('resize'));
                 });
                 appLogic.initSettingsCryscrollerScroll();
-                elements.enableHistoryCryscrollerScrollToggle.addEventListener('change', (e) => {
+                                elements.enableHistoryCryscrollerScrollToggle.addEventListener('change', (e) => {
                     state.settings.enableHistoryCryscrollerScroll = e.target.checked;
                     document.body.classList.toggle('history-cryscroller-scroll-enabled', state.settings.enableHistoryCryscrollerScroll);
                     window.dispatchEvent(new Event('resize'));
                 });
+                elements.showPerformanceMonitorToggle.addEventListener('change', (e) => {
+                    state.settings.showPerformanceMonitor = e.target.checked;
+                    performanceMonitor.toggle(e.target.checked);
+                });
                 appLogic.initHistoryCryscrollerScroll();
+
                 elements.extendAiBubbleWidthToggle.addEventListener('change', (e) => {
                     state.settings.extendAiBubbleWidth = e.target.checked;
                     uiUtils.applyAiBubbleWidthSetting();
