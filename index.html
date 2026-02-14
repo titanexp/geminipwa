@@ -1294,7 +1294,7 @@ body.turf-mode {
             touch-action: pan-y;
         }
 
-        .screen {
+                .screen {
             position: absolute;
             top: 0;
             left: 0;
@@ -1305,12 +1305,19 @@ body.turf-mode {
             transition: transform 0.3s ease-in-out;
             background-color: var(--bg-primary);
             z-index: 0;
+            content-visibility: auto;
+            contain-intrinsic-size: 1px 5000px;
+        }
+
+        .screen.dormant {
+            display: none !important;
         }
 
         .screen.active {
             transform: translateX(0);
             z-index: 1;
         }
+
 
         #chat-screen {
             transform: translateX(0);
@@ -11900,7 +11907,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 // 判定を少し緩くして(100px)、キーボード開閉等のズレも許容する
                 const isChatAtBottom = screenName === 'chat' && (chatMain.scrollHeight - chatMain.scrollTop - chatMain.clientHeight < 100);
 
-                const allScreens = [elements.chatScreen, elements.historyScreen, elements.settingsScreen];
+                                const allScreens = [elements.chatScreen, elements.historyScreen, elements.settingsScreen];
                 let activeScreen = null;
 
                 if (!fromPopState) {
@@ -11913,6 +11920,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
 
                 allScreens.forEach(screen => {
                     screen.classList.remove('active');
+                    screen.classList.remove('dormant');
                     screen.inert = true;
                 });
 
@@ -11963,8 +11971,16 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                             }, 305);
                         }
                     }
+                    setTimeout(() => {
+                        allScreens.forEach(screen => {
+                            if (!screen.classList.contains('active')) {
+                                screen.classList.add('dormant');
+                            }
+                        });
+                    }, 350);
                 });
                 state.currentScreen = screenName;
+
             },
                         setSendingState(sending) {
                 state.isSending = sending;
