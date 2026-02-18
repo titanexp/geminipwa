@@ -7673,6 +7673,8 @@ font-size: 1.142em !important;
                             <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
                                 <button id="debug-check-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">全ての項目のチェックボックスをオンにする</button>
                                 <button id="debug-uncheck-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">全ての項目のチェックボックスをオフにする</button>
+                                <button id="debug-expand-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">項目を全展開</button>
+                                <button id="debug-collapse-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">項目を全閉じる</button>
                             </div>
                             <div class="font-slider-container" style="margin-top: 15px; border-top: 1px dashed var(--border-secondary); padding-top: 10px;">
                                 <label for="cryscroller-observer-delay">スクロールバー描画遅延 (ms):</label>
@@ -8340,9 +8342,12 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             webhookFormatTextRadio: document.getElementById('webhook-format-text'),
             webhooksList: document.getElementById('webhooks-list'),
             addWebhookBtn: document.getElementById('add-webhook-btn'),
-            debugCheckAllBtn: document.getElementById('debug-check-all-btn'),
+                        debugCheckAllBtn: document.getElementById('debug-check-all-btn'),
             debugUncheckAllBtn: document.getElementById('debug-uncheck-all-btn'),
+            debugExpandAllBtn: document.getElementById('debug-expand-all-btn'),
+            debugCollapseAllBtn: document.getElementById('debug-collapse-all-btn'),
             cryscrollerScrollZone: document.getElementById('cryscroller-scroll-zone'),
+
             cryscrollerScrollHandle: document.getElementById('cryscroller-scroll-handle'),
             enableCryscrollerScrollToggle: document.getElementById('enable-cryscroller-scroll-toggle'),
             enableImmersiveScrollingToggle: document.getElementById('enable-immersive-scrolling-toggle'),
@@ -8516,10 +8521,10 @@ deepSeekModelName: DEFAULT_DEEPSEEK_MODEL,
 footerTapScrollToBottom: false,
                 autoScrollOnNewMessage: DEFAULT_AUTO_SCROLL_ON_NEW_MESSAGE,
                 autoScrollOnThought: false,
-                                                historySortOrder: 'updatedAt',
+                                                                                historySortOrder: 'updatedAt',
                 theme: 'light',
                 backgroundImageBlob: null,
-                historyBackgroundImageBlob: null, 
+                historyBackgroundImageBlob: null,
                 settingsBackgroundImageBlob: null,
                 fontFamily: '',
 
@@ -8975,9 +8980,10 @@ const dbUtils = {
                                     const loadedValue = loadedSettings[key];
                                     const defaultValue = defaultSettings[key];
 
-                                                                        if (key === 'backgroundImageBlob' || key === 'userIconBlob' || key === 'aiIconBlob' || key === 'historyBackgroundImageBlob' || key === 'settingsBackgroundImageBlob') {
+                                                                                                            if (['backgroundImageBlob', 'userIconBlob', 'aiIconBlob', 'historyBackgroundImageBlob', 'settingsBackgroundImageBlob'].includes(key)) {
                                         state.settings[key] = (loadedValue instanceof Blob) ? loadedValue : null;
                                     } else if (typeof defaultValue === 'boolean') {
+
 
                                         state.settings[key] = loadedValue === true;
                                     } else if (typeof defaultValue === 'number' || defaultValue === null) {
@@ -13251,10 +13257,31 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 if (elements.debugCheckAllBtn) {
                     elements.debugCheckAllBtn.addEventListener('click', () => this.toggleAllSettingsCheckboxes(true));
                 }
-                if (elements.debugUncheckAllBtn) {
+                                if (elements.debugUncheckAllBtn) {
                     elements.debugUncheckAllBtn.addEventListener('click', () => this.toggleAllSettingsCheckboxes(false));
                 }
+                if (elements.debugExpandAllBtn) {
+                    elements.debugExpandAllBtn.addEventListener('click', () => {
+                        document.querySelectorAll('#settings-screen details').forEach(el => {
+                            el.open = true;
+                            if (el.id) state.settings.settingsUIDetailsOpenStates[el.id] = true;
+                        });
+                    });
+                }
+                if (elements.debugCollapseAllBtn) {
+                    elements.debugCollapseAllBtn.addEventListener('click', () => {
+
+                        const parentDetails = elements.debugCollapseAllBtn.closest('details');
+                        document.querySelectorAll('#settings-screen details').forEach(el => {
+                            if (el !== parentDetails) {
+                                el.open = false;
+                                if (el.id) state.settings.settingsUIDetailsOpenStates[el.id] = false;
+                            }
+                        });
+                    });
+                }
                 document.getElementById('force-recovery-btn').addEventListener('click', async () => {
+
                     const confirmed = await uiUtils.showCustomConfirm(
                         "強制復旧を実行しますか？\n\n" +
                         "この操作により：\n" +
