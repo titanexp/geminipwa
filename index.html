@@ -13364,10 +13364,10 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     uiUtils.updateTwinEngineModeButton();
                 });
 
-                                const handleBgUpload = (file, type) => {
+                                const handleBgUpload = async (file, type) => {
                     if (!file) return;
                     if (file.size > MAX_FILE_SIZE) {
-                        uiUtils.showCustomAlert(`ファイルサイズが大きすぎます (${formatFileSize(file.size)})。${formatFileSize(MAX_FILE_SIZE)}以下にしてください。`);
+                        await uiUtils.showCustomAlert(`ファイルサイズが大きすぎます (${formatFileSize(file.size)})。${formatFileSize(MAX_FILE_SIZE)}以下にしてください。`);
                         return;
                     }
                     const objectUrl = URL.createObjectURL(file);
@@ -13376,16 +13376,19 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                         state.backgroundImageUrl = objectUrl;
                         state.settings.backgroundImageBlob = file;
                         document.documentElement.style.setProperty('--chat-background-image', `url(${objectUrl})`);
+                        await dbUtils.saveSetting('backgroundImageBlob', file);
                     } else if (type === 'history') {
                         if (state.historyBackgroundImageUrl) URL.revokeObjectURL(state.historyBackgroundImageUrl);
                         state.historyBackgroundImageUrl = objectUrl;
                         state.settings.historyBackgroundImageBlob = file;
                         document.documentElement.style.setProperty('--history-background-image', `url(${objectUrl})`);
+                        await dbUtils.saveSetting('historyBackgroundImageBlob', file);
                     } else if (type === 'settings') {
                         if (state.settingsBackgroundImageUrl) URL.revokeObjectURL(state.settingsBackgroundImageUrl);
                         state.settingsBackgroundImageUrl = objectUrl;
                         state.settings.settingsBackgroundImageBlob = file;
                         document.documentElement.style.setProperty('--settings-background-image', `url(${objectUrl})`);
+                        await dbUtils.saveSetting('settingsBackgroundImageBlob', file);
                     }
                     uiUtils.updateBackgroundSettingsUI();
                     if (state.settings.autoSaveSettings) this.saveSettings(false);
@@ -13399,16 +13402,19 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                             state.backgroundImageUrl = null;
                             state.settings.backgroundImageBlob = null;
                             document.documentElement.style.setProperty('--chat-background-image', 'none');
+                            await dbUtils.saveSetting('backgroundImageBlob', null);
                         } else if (type === 'history') {
                             if (state.historyBackgroundImageUrl) URL.revokeObjectURL(state.historyBackgroundImageUrl);
                             state.historyBackgroundImageUrl = null;
                             state.settings.historyBackgroundImageBlob = null;
                             document.documentElement.style.setProperty('--history-background-image', 'none');
+                            await dbUtils.saveSetting('historyBackgroundImageBlob', null);
                         } else if (type === 'settings') {
                             if (state.settingsBackgroundImageUrl) URL.revokeObjectURL(state.settingsBackgroundImageUrl);
                             state.settingsBackgroundImageUrl = null;
                             state.settings.settingsBackgroundImageBlob = null;
                             document.documentElement.style.setProperty('--settings-background-image', 'none');
+                            await dbUtils.saveSetting('settingsBackgroundImageBlob', null);
                         }
                         uiUtils.updateBackgroundSettingsUI();
                         if (state.settings.autoSaveSettings) this.saveSettings(false);
@@ -17372,7 +17378,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 try {
                     const oldSortOrder = state.settings.historySortOrder;
                     
-                    const { backgroundImageBlob, userIconBlob, aiIconBlob, ...settingsToSave } = newSettings;
+                    const { backgroundImageBlob, historyBackgroundImageBlob, settingsBackgroundImageBlob, userIconBlob, aiIconBlob, ...settingsToSave } = newSettings;
                     
                     const promises = Object.entries(settingsToSave).map(([key, value]) =>
                         dbUtils.saveSetting(key, value)
