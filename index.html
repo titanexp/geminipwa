@@ -3002,8 +3002,8 @@ body.turf-mode {
             display: block;
             max-width: 100%;
             height: auto;
-            margin: 1px 0;
-            border-radius: 1px;
+            margin: 8px 0;
+            border-radius: 6px;
             border: 1px solid var(--border-secondary);
             box-shadow: 0 1px 2px var(--shadow-primary);
             cursor: pointer;
@@ -3935,23 +3935,29 @@ body.turf-mode {
             margin-right: 10px;
         }
 
+        #imagePreviewDialog {
+            padding: 10px;
+            max-width: 95vw;
+            width: fit-content;
+        }
+
         #imagePreviewDialog .dialog-content {
             padding: 0;
             margin: 0;
-            max-height: 80vh;
+            max-height: 85vh;
             overflow: auto;
             text-align: center;
         }
 
         #imagePreviewDialog img {
             max-width: 100%;
-            max-height: 75vh;
+            max-height: 80vh;
             display: block;
             margin: 0 auto;
         }
 
         #imagePreviewDialog .dialog-actions {
-            margin-top: 15px;
+            margin-top: 10px;
         }
 
         .api-keys-list {
@@ -12647,9 +12653,23 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                         const dialog = elements.imagePreviewDialog;
                         const dialogImg = dialog.querySelector('img');
                         const okBtn = dialog.querySelector('.dialog-ok-btn');
+                        const downloadBtn = dialog.querySelector('#download-preview-image-btn');
 
                         dialogImg.src = newImg.src;
                         dialogImg.alt = newImg.alt || '画像プレビュー';
+
+                        if (downloadBtn) {
+                            downloadBtn.onclick = () => {
+                                const a = document.createElement('a');
+                                a.href = newImg.src;
+                                const match = newImg.src.match(/data:image\/([a-zA-Z0-9]+);base64/);
+                                const ext = match ? match[1] : 'jpeg';
+                                a.download = `generated_image_${Date.now()}.${ext}`;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                            };
+                        }
 
                         okBtn.onclick = () => dialog.close();
                         dialog.showModal();
@@ -15956,16 +15976,18 @@ helpIcons.forEach(icon => {
                         }
                     }
                 }
-                const apiMessages = messagesToProcess
+const apiMessages = messagesToProcess
                     .filter(msg => {
                         if (msg.role === 'user') return true;
                         if (msg.role === 'model') return !msg.isCascaded || (msg.isCascaded && msg.isSelected);
                         return false;
                     })
                     .map(msg => {
-                        const parts = [];
+                        const parts =[];
                         if (msg.content && msg.content.trim() !== '') {
-                            parts.push({ text: msg.content });
+                            const base64ImageRegex = /!\[.*?\]\(data:image\/[^;]+;base64,[a-zA-Z0-9+/=]+\)/g;
+                            const contentToSend = msg.content.replace(base64ImageRegex, '\n[生成された画像]\n');
+                            parts.push({ text: contentToSend });
                         }
                         if (msg.role === 'user' && msg.attachments && msg.attachments.length > 0) {
                             msg.attachments.forEach(att => {
