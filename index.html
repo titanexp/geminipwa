@@ -5172,8 +5172,13 @@ font-size: 1.142em !important;
                         </details>
                         <label for="gemini-model-name">モデル名:</label>
                         <select id="gemini-model-name" aria-label="モデル名">
+                            <optgroup label="画像生成 (Nano Banana)">
+                                <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
+                                <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
+                                <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                            </optgroup>
                             <optgroup label="無料">
-                                <option value="gemini-2.0-flash">gemini-2.0-flash</option
+                                <option value="gemini-2.0-flash">gemini-2.0-flash</option>
                                 <option value="gemini-2.5-flash">gemini-2.5-flash</option>
                                 <option value="gemini-flash-latest">gemini-flash-latest</option>
                             </optgroup>
@@ -6267,6 +6272,29 @@ font-size: 1.142em !important;
                             ※チェック時、モデル応答の先頭に上記ダミーModelの内容を付与。
                         </p>
                         <hr style="margin: 15px 0;">
+                        <details id="settings-group-gemini-image-gen" style="margin-bottom: 15px;">
+                            <summary style="cursor: pointer; font-weight: normal; font-size: 14px; color: var(--text-link); margin-bottom: 10px; list-style: revert;">画像生成設定 (Nano Banana)</summary>
+                            <div style="padding-left: 15px;">
+                                <label class="checkbox-label"><input type="checkbox" id="gemini-enable-image-generation">画像生成モードを有効にする</label>
+                                <label for="gemini-image-aspect-ratio">アスペクト比:</label>
+                                <select id="gemini-image-aspect-ratio" aria-label="画像アスペクト比">
+                                    <option value="">デフォルト</option>
+                                    <option value="1:1">1:1</option>
+                                    <option value="3:4">3:4</option>
+                                    <option value="4:3">4:3</option>
+                                    <option value="9:16">9:16</option>
+                                    <option value="16:9">16:9</option>
+                                </select>
+                                <label for="gemini-image-resolution">解像度:</label>
+                                <select id="gemini-image-resolution" aria-label="画像解像度">
+                                    <option value="">デフォルト</option>
+                                    <option value="512">512</option>
+                                    <option value="1024">1024 (1K)</option>
+                                    <option value="2048">2048 (2K)</option>
+                                    <option value="4096">4096 (4K)</option>
+                                </select>
+                            </div>
+                        </details>
                         <label class="checkbox-label">
                             <input type="checkbox" id="gemini-streaming-output">
                             ストリーミング出力を使用する
@@ -7804,6 +7832,12 @@ font-size: 1.142em !important;
         const DUPLICATE_SUFFIX = ' (コピー)';
         const IMPORT_PREFIX = '(取込) ';
 
+        const IMAGE_GENERATION_MODELS =['gemini-2.5-flash-image', 'gemini-3.1-flash-image-preview', 'gemini-3-pro-image-preview'];
+        function isImageGenerationModel(modelName) {
+            if (!modelName) return false;
+            return IMAGE_GENERATION_MODELS.some(m => modelName.includes(m));
+        }
+
         const LIGHT_THEME_COLOR = '#4a90e2';
         const DARK_THEME_COLOR = '#007aff';
         const PASTEL_PINK_THEME_COLOR = '#ff8fab';
@@ -8000,6 +8034,9 @@ deepSeekModelNameSelect: document.getElementById('deepseek-model-name'),
             geminiConcatDummyModelCheckbox: document.getElementById('gemini-concat-dummy-model'),
             geminiPseudoStreamingCheckbox: document.getElementById('gemini-pseudo-streaming'),
             geminiEnableGroundingToggle: document.getElementById('gemini-enable-grounding-toggle'),
+            geminiEnableImageGenerationToggle: document.getElementById('gemini-enable-image-generation'),
+            geminiImageAspectRatioSelect: document.getElementById('gemini-image-aspect-ratio'),
+            geminiImageResolutionSelect: document.getElementById('gemini-image-resolution'),
 
             deepSeekSystemPromptDefaultTextarea: document.getElementById('deepseek-system-prompt-default'),
             deepSeekEnableSystemPromptDefaultCheckbox: document.getElementById('deepseek-enable-system-prompt-default'),
@@ -8407,6 +8444,9 @@ geminiIncludeThoughts: false,
                 geminiConcatDummyModel: false,
                 geminiPseudoStreaming: false,
                 geminiEnableGrounding: false,
+                geminiEnableImageGeneration: false,
+                geminiImageAspectRatio: '',
+                geminiImageResolution: '',
                 // ▼ここから追加▼
                 enableImageUrlReplacement: false, // デフォルトは無効
                 imageUrlReplacementBase: '',      // ベースURLは空
@@ -11210,6 +11250,9 @@ elements.deepSeekModelNameSelect.value = state.settings.deepSeekModelName || DEF
                 elements.geminiConcatDummyModelCheckbox.checked = state.settings.geminiConcatDummyModel;
                 elements.geminiPseudoStreamingCheckbox.checked = state.settings.geminiPseudoStreaming;
                 elements.geminiEnableGroundingToggle.checked = state.settings.geminiEnableGrounding;
+                elements.geminiEnableImageGenerationToggle.checked = state.settings.geminiEnableImageGeneration;
+                elements.geminiImageAspectRatioSelect.value = state.settings.geminiImageAspectRatio || '';
+                elements.geminiImageResolutionSelect.value = state.settings.geminiImageResolution || '';
                 elements.enableImageUrlReplacementCheckbox.checked = state.settings.enableImageUrlReplacement;
                 elements.imageUrlReplacementBaseInput.value = state.settings.imageUrlReplacementBase || '';
                 elements.imageUrlReplacementOptionsDiv.classList.toggle('hidden', !state.settings.enableImageUrlReplacement);
@@ -15983,6 +16026,14 @@ helpIcons.forEach(icon => {
                 let useStreamingForThisCall = isBackgroundProcess ? false : contextStreamingOutput;
                 let usePseudoForThisCall = isBackgroundProcess ? false : (selectedApiProvider === 'gemini' && contextGeminiPseudoStreaming);
 
+                if (selectedApiProvider === 'gemini') {
+                    const isImageGenModel = isImageGenerationModel(modelNameToUse);
+                    if (state.settings.geminiEnableImageGeneration || isImageGenModel) {
+                        useStreamingForThisCall = false;
+                        usePseudoForThisCall = false;
+                    }
+                }
+
                 let modelMessageObjectForStream = null;
 
                 try {
@@ -16304,8 +16355,15 @@ helpIcons.forEach(icon => {
                             if (candidate) {
                                 finalMetadata = { finishReason: candidate.finishReason, safetyRatings: candidate.safetyRatings };
                                 candidate.content?.parts?.forEach(part => {
-                                    if (part.thought === true && contextGeminiIncludeThoughts) finalThoughtSummary += (part.text || "") + "\n\n";
-                                    else if (part.thought !== true) rawContentFromApi += (part.text || "") + "\n\n";
+                                    if (part.thought === true && contextGeminiIncludeThoughts) {
+                                        finalThoughtSummary += (part.text || "") + "\n\n";
+                                    } else if (part.text && part.thought !== true) {
+                                        rawContentFromApi += (part.text || "") + "\n\n";
+                                    } else if (part.inlineData) {
+                                        const mimeType = part.inlineData.mimeType || 'image/jpeg';
+                                        const base64Data = part.inlineData.data;
+                                        rawContentFromApi += `\n\n![image](data:${mimeType};base64,${base64Data})\n\n`;
+                                    }
                                 });
                                 finalThoughtSummary = finalThoughtSummary.trim();
                                 rawContentFromApi = rawContentFromApi.trim();
@@ -17084,6 +17142,9 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.geminiConcatDummyModel = elements.geminiConcatDummyModelCheckbox.checked;
                 newSettings.geminiPseudoStreaming = elements.geminiPseudoStreamingCheckbox.checked;
                 newSettings.geminiEnableGrounding = elements.geminiEnableGroundingToggle.checked;
+                newSettings.geminiEnableImageGeneration = elements.geminiEnableImageGenerationToggle.checked;
+                newSettings.geminiImageAspectRatio = elements.geminiImageAspectRatioSelect.value;
+                newSettings.geminiImageResolution = elements.geminiImageResolutionSelect.value;
 
 newSettings.deepSeekApiEndpoint = elements.deepSeekApiEndpointInput.value.trim();
 newSettings.deepSeekModelName = elements.deepSeekModelNameSelect.value;
@@ -19372,6 +19433,13 @@ initCryscrollerScroll() {
                 state.abortController = new AbortController();
                 const { signal } = state.abortController;
 
+                const isImageGenModel = isImageGenerationModel(model);
+                const enableImageGen = state.settings.geminiEnableImageGeneration || isImageGenModel;
+                if (enableImageGen) {
+                    useStreaming = false;
+                    usePseudo = false;
+                }
+
                 let endpointMethod = useStreaming
                     ? (usePseudo ? 'generateContent?alt=sse&' : 'streamGenerateContent?alt=sse&')
                     : 'generateContent?';
@@ -19379,6 +19447,14 @@ initCryscrollerScroll() {
                 const endpoint = `${baseUrl}${model}:${endpointMethod}key=${apiKey}`;
 
                 const finalGenerationConfig = { ...generationConfig };
+                if (enableImageGen) {
+                    finalGenerationConfig.responseModalities =["TEXT", "IMAGE"];
+                    const imageConfig = {};
+                    if (state.settings.geminiImageAspectRatio) imageConfig.aspectRatio = state.settings.geminiImageAspectRatio;
+                    if (state.settings.geminiImageResolution) imageConfig.imageSize = parseInt(state.settings.geminiImageResolution, 10);
+                    if (Object.keys(imageConfig).length > 0) finalGenerationConfig.imageConfig = imageConfig;
+                }
+
                 if (state.settings.geminiThinkingBudget !== null || state.settings.geminiIncludeThoughts) {
                     finalGenerationConfig.thinkingConfig = finalGenerationConfig.thinkingConfig || {};
                     if (state.settings.geminiThinkingBudget !== null && Number.isInteger(state.settings.geminiThinkingBudget) && state.settings.geminiThinkingBudget >= 0) {
@@ -19548,6 +19624,10 @@ initCryscrollerScroll() {
                                         } else {
                                             contentText = (contentText || '') + part.text;
                                         }
+                                    } else if (part.inlineData) {
+                                        const mimeType = part.inlineData.mimeType || 'image/jpeg';
+                                        const base64Data = part.inlineData.data;
+                                        contentText = (contentText || '') + `\n\n![image](data:${mimeType};base64,${base64Data})\n\n`;
                                     }
                                 });
                             }
