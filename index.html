@@ -6284,20 +6284,43 @@ font-size: 1.142em !important;
                                 <label class="checkbox-label"><input type="checkbox" id="gemini-enable-image-generation">画像生成モードを有効にする</label>
                                 <label for="gemini-image-aspect-ratio">アスペクト比:</label>
                                 <select id="gemini-image-aspect-ratio" aria-label="画像アスペクト比">
-                                    <option value="">デフォルト</option>
-                                    <option value="1:1">1:1</option>
-                                    <option value="3:4">3:4</option>
-                                    <option value="4:3">4:3</option>
-                                    <option value="9:16">9:16</option>
-                                    <option value="16:9">16:9</option>
+                                    <option value="">指定なし (デフォルト)</option>
+                                    <optgroup label="正方形">
+                                        <option value="1:1">1:1 (正方形)</option>
+                                    </optgroup>
+                                    <optgroup label="横長 (Landscape)">
+                                        <option value="3:2">3:2</option>
+                                        <option value="4:3">4:3</option>
+                                        <option value="5:4">5:4</option>
+                                        <option value="16:9">16:9 (ワイド)</option>
+                                        <option value="21:9">21:9 (ウルトラワイド)</option>
+                                        <option value="4:1">4:1 (パノラマ) ※3.1 Flash</option>
+                                        <option value="8:1">8:1 (超横長) ※3.1 Flash</option>
+                                    </optgroup>
+                                    <optgroup label="縦長 (Portrait)">
+                                        <option value="2:3">2:3</option>
+                                        <option value="3:4">3:4</option>
+                                        <option value="4:5">4:5</option>
+                                        <option value="9:16">9:16 (縦長)</option>
+                                        <option value="1:4">1:4 (縦パノラマ) ※3.1 Flash</option>
+                                        <option value="1:8">1:8 (超縦長) ※3.1 Flash</option>
+                                    </optgroup>
                                 </select>
                                 <label for="gemini-image-resolution">解像度:</label>
                                 <select id="gemini-image-resolution" aria-label="画像解像度">
-                                    <option value="">デフォルト</option>
-                                    <option value="512">512</option>
-                                    <option value="1024">1024 (1K)</option>
-                                    <option value="2048">2048 (2K)</option>
-                                    <option value="4096">4096 (4K)</option>
+                                    <option value="">指定なし (デフォルト: 1K)</option>
+                                    <option value="512">512×512 (0.5K) ※3.1 Flashのみ</option>
+                                    <option value="1K">1024×1024 (1K)</option>
+                                    <option value="2K">2048×2048 (2K)</option>
+                                    <option value="4K">4096×4096 (4K)</option>
+                                </select>
+                                <label for="gemini-image-count">生成枚数:</label>
+                                <select id="gemini-image-count" aria-label="生成枚数">
+                                    <option value="">指定なし (デフォルト: 1)</option>
+                                    <option value="1">1枚</option>
+                                    <option value="2">2枚</option>
+                                    <option value="3">3枚</option>
+                                    <option value="4">4枚</option>
                                 </select>
                             </div>
                         </details>
@@ -8047,6 +8070,7 @@ deepSeekModelNameSelect: document.getElementById('deepseek-model-name'),
             geminiEnableImageGenerationToggle: document.getElementById('gemini-enable-image-generation'),
             geminiImageAspectRatioSelect: document.getElementById('gemini-image-aspect-ratio'),
             geminiImageResolutionSelect: document.getElementById('gemini-image-resolution'),
+            geminiImageCountSelect: document.getElementById('gemini-image-count'),
 
             deepSeekSystemPromptDefaultTextarea: document.getElementById('deepseek-system-prompt-default'),
             deepSeekEnableSystemPromptDefaultCheckbox: document.getElementById('deepseek-enable-system-prompt-default'),
@@ -8458,6 +8482,7 @@ geminiIncludeThoughts: false,
                 geminiEnableImageGeneration: false,
                 geminiImageAspectRatio: '',
                 geminiImageResolution: '',
+                geminiImageCount: '',
                 // ▼ここから追加▼
                 enableImageUrlReplacement: false, // デフォルトは無効
                 imageUrlReplacementBase: '',      // ベースURLは空
@@ -11264,6 +11289,7 @@ elements.deepSeekModelNameSelect.value = state.settings.deepSeekModelName || DEF
                 elements.geminiEnableImageGenerationToggle.checked = state.settings.geminiEnableImageGeneration;
                 elements.geminiImageAspectRatioSelect.value = state.settings.geminiImageAspectRatio || '';
                 elements.geminiImageResolutionSelect.value = state.settings.geminiImageResolution || '';
+                elements.geminiImageCountSelect.value = state.settings.geminiImageCount || '';
                 elements.enableImageUrlReplacementCheckbox.checked = state.settings.enableImageUrlReplacement;
                 elements.imageUrlReplacementBaseInput.value = state.settings.imageUrlReplacementBase || '';
                 elements.imageUrlReplacementOptionsDiv.classList.toggle('hidden', !state.settings.enableImageUrlReplacement);
@@ -17181,6 +17207,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.geminiEnableImageGeneration = elements.geminiEnableImageGenerationToggle.checked;
                 newSettings.geminiImageAspectRatio = elements.geminiImageAspectRatioSelect.value;
                 newSettings.geminiImageResolution = elements.geminiImageResolutionSelect.value;
+                newSettings.geminiImageCount = elements.geminiImageCountSelect.value;
 
 newSettings.deepSeekApiEndpoint = elements.deepSeekApiEndpointInput.value.trim();
 newSettings.deepSeekModelName = elements.deepSeekModelNameSelect.value;
@@ -19533,10 +19560,11 @@ initCryscrollerScroll() {
 
                 const finalGenerationConfig = { ...generationConfig };
                 if (enableImageGen) {
-                    finalGenerationConfig.responseModalities =["TEXT", "IMAGE"];
+                    finalGenerationConfig.responseModalities = ["TEXT", "IMAGE"];
                     const imageConfig = {};
                     if (state.settings.geminiImageAspectRatio) imageConfig.aspectRatio = state.settings.geminiImageAspectRatio;
-                    if (state.settings.geminiImageResolution) imageConfig.imageSize = parseInt(state.settings.geminiImageResolution, 10);
+                    if (state.settings.geminiImageResolution) imageConfig.imageSize = state.settings.geminiImageResolution;
+                    if (state.settings.geminiImageCount) imageConfig.numberOfImages = parseInt(state.settings.geminiImageCount, 10);
                     if (Object.keys(imageConfig).length > 0) finalGenerationConfig.imageConfig = imageConfig;
                 }
 
