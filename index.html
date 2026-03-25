@@ -5186,10 +5186,10 @@ font-size: 1.142em !important;
                                 <option value="gemini-3-pro-preview">gemini-3-pro-preview</option>
                                 <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
                             </optgroup>
-                            <optgroup label="画像生成 (Nano Banana)">
-                                <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
-                                <option value="gemini-3.1-flash-image-preview">gemini-3.1-flash-image-preview</option>
-                                <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+                            <optgroup label="画像生成">
+                                <option value="gemini-2.5-flash-image">Nano Banana (gemini-2.5-flash-image)</option>
+                                <option value="gemini-3.1-flash-image-preview">Nano Banana 2 (gemini-3.1-flash-image-preview)</option>
+                                <option value="gemini-3-pro-image-preview">Nano Banana Pro (gemini-3-pro-image-preview)</option>
                             </optgroup>
                         </select>
                         <details style="margin-top: 10px;">
@@ -7692,6 +7692,10 @@ font-size: 1.142em !important;
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top:5px; margin-bottom: 10px;">
                             ※ ブラウザに保存されているチャット履歴を全て削除します。設定は保持されます。<BR>
                         </p>
+                        <button id="clear-generated-images-btn" class="orange-button">生成された画像を一括削除</button>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top:5px; margin-bottom: 10px;">
+                            ※ チャット履歴から「AIによって生成された画像データ」のみを削除し、テキストやあなたが添付した画像は残します。データベースの容量節約に有効です。
+                        </p>
                         <button id="clear-data-btn">⚠⚠⚠全データクリア (履歴と設定)⚠⚠⚠</button>
                         <p style="font-size: 11px; color: var(--text-secondary); margin-top:5px; margin-bottom: 10px;">
                             ※ ブラウザに保存されている設定や履歴を全て削除。<BR>
@@ -8199,6 +8203,7 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             updateAppBtn: document.getElementById('update-app-btn'),
             clearDataBtn: document.getElementById('clear-data-btn'),
             clearHistoryBtn: document.getElementById('clear-history-btn'),
+            clearGeneratedImagesBtn: document.getElementById('clear-generated-images-btn'),
             importHistoryBtn: document.getElementById('import-history-btn'),
             importHistoryInput: document.getElementById('import-history-input'),
             exportAllSessionsBtn: document.getElementById('export-all-sessions-btn'),
@@ -13298,6 +13303,7 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 elements.updateAppBtn.addEventListener('click', () => this.updateApp());
                 elements.clearDataBtn.addEventListener('click', () => this.confirmClearAllData());
                 elements.clearHistoryBtn.addEventListener('click', () => this.confirmClearAllHistory());
+                elements.clearGeneratedImagesBtn.addEventListener('click', () => this.confirmClearGeneratedImages());
                 if (elements.debugCheckAllBtn) {
                     elements.debugCheckAllBtn.addEventListener('click', () => this.toggleAllSettingsCheckboxes(true));
                 }
@@ -17505,6 +17511,55 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                         window.location.reload();
                     } catch (error) {
                         await uiUtils.showCustomAlert(`チャット履歴の削除中にエラーが発生しました: ${error}`);
+                    }
+                }
+            },
+
+            async confirmClearGeneratedImages() {
+                const confirmed = await uiUtils.showCustomConfirm("すべてのチャット履歴から、AIによって生成された画像データのみを削除しますか？\n（テキストの会話や、あなたが添付したファイルは保持されます）\n\nこの操作は元に戻せません。");
+                if (confirmed) {
+                    try {
+                        uiUtils.setLoadingIndicatorText("画像データを削除中...");
+                        await this.clearGeneratedImages();
+                        await uiUtils.showCustomAlert("生成された画像の削除が完了しました。");
+                        if (state.currentChatId) {
+                            await this.loadChat(state.currentChatId); // 現在開いているチャットのUIを更新
+                        }
+                    } catch (error) {
+                        await uiUtils.showCustomAlert(`画像データの削除中にエラーが発生しました: ${error}`);
+                    } finally {
+                        uiUtils.updateLoadingIndicator();
+                    }
+                }
+            },
+
+            async clearGeneratedImages() {
+                await dbUtils.openDB();
+                const chats = await dbUtils.getAllChats();
+                const base64ImageRegex = /!\[.*?\]\(data:image\/[^;]+;base64,[a-zA-Z0-9+/=]+\)/g;
+
+                for (const chat of chats) {
+                    let chatUpdated = false;
+                    if (chat.messages) {
+                        chat.messages.forEach(msg => {
+                            if (msg.role === 'model' && msg.content) {
+                                const originalContent = msg.content;
+                                // AIが生成したBase64画像をプレースホルダーテキストに置換
+                                const newContent = msg.content.replace(base64ImageRegex, '\n*(生成された画像は削除されました)*\n');
+                                if (originalContent !== newContent) {
+                                    msg.content = newContent.trim();
+                                    chatUpdated = true;
+                                }
+                            }
+                        });
+                    }
+                    if (chatUpdated) {
+                        await new Promise((resolve, reject) => {
+                            const store = dbUtils._getStore(CHATS_STORE, 'readwrite');
+                            const request = store.put(chat);
+                            request.onsuccess = () => resolve();
+                            request.onerror = (e) => reject(e.target.error);
+                        });
                     }
                 }
             },
