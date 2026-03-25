@@ -1328,6 +1328,26 @@ body.turf-mode {
             transform: translateX(-100%);
         }
 
+        #image-gen-screen {
+            transform: translateX(100%);
+            background-image: var(--chat-background-image);
+            background-size: cover;
+            background-position: center center;
+            background-repeat: no-repeat;
+        }
+        #image-gen-screen::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(var(--overlay-base-rgb), var(--chat-overlay-alpha));
+            z-index: 0;
+            pointer-events: none;
+        }
+        #image-gen-screen .app-header { z-index: 2; }
+        #image-gen-screen .main-content { z-index: 1; background-color: transparent; overflow-y: auto; touch-action: pan-y; }
+        #image-gen-screen .chat-input-area { z-index: 2; background-color: rgba(var(--bg-secondary-rgb, 240, 242, 245), var(--header-footer-opacity, 1)); }
+        #image-gen-send-btn.sending { background-color: #ffc107 !important; color: #333 !important; }
+
         #settings-screen {
             transform: translateX(100%);
         }
@@ -4938,6 +4958,7 @@ font-size: 1.142em !important;
 
                 <button id="delete-session-btn" class="action-button-in-header" title="現在のチャットを削除">削</button>
                 <button id="copy-session-btn" class="action-button-in-header" title="チャット全体をコピー">コ</button>
+                <button id="goto-image-gen-btn" class="header-button hidden" aria-label="画像生成へ" title="画像生成画面へ">🎨</button>
                 <button id="header-api-provider-toggle-btn" class="header-button api-provider-toggle-btn"
                     title="APIプロバイダー切替"></button>
                 <button id="header-cycle-api-key-btn" class="header-button api-provider-toggle-btn" title="APIキー切替" style="font-weight: bold;"></button>
@@ -5012,6 +5033,46 @@ font-size: 1.142em !important;
                 <button id="attach-file-btn" title="ファイルを添付" class="footer-action-button">+<span
                         class="attachment-badge"></span></button>
                 <button id="send-button" title="送信">送</button>
+            </footer>
+        </div>
+
+        <div id="image-gen-screen" class="screen">
+            <header class="app-header">
+                <button id="back-to-chat-from-image-gen" class="header-button" aria-label="チャットへ戻る">💬</button>
+                <h1 id="image-gen-title">🎨 画像生成</h1>
+                <div style="flex-grow: 1;"></div>
+                <button id="image-gen-new-btn" class="new-chat-button" title="新規画像生成">新</button>
+                <select id="image-gen-model-select" style="max-width: 160px; font-size: 12px; padding: 4px 6px; margin: 0 5px; border-radius: 4px; background-color: var(--bg-input); color: var(--text-primary);">
+                    <option value="gemini-2.5-flash-image">Flash Image</option>
+                    <option value="gemini-3.1-flash-image-preview">Flash Image 2</option>
+                    <option value="gemini-3-pro-image-preview">Pro Image</option>
+                </select>
+            </header>
+            <main class="main-content">
+                <div id="image-gen-message-container" class="message-container"></div>
+            </main>
+            <footer class="chat-input-area image-gen-input-area" style="flex-wrap: wrap;">
+                <div class="image-gen-options" style="display: flex; gap: 6px; width: 100%; margin-bottom: 4px;">
+                    <select id="image-gen-quick-aspect" title="アスペクト比" style="width: auto; min-width: 60px; font-size: 12px; padding: 4px; margin: 0; background-color: var(--bg-input); color: var(--text-primary);">
+                        <option value="">アスペクト比(自動)</option>
+                        <option value="1:1">1:1</option>
+                        <option value="16:9">16:9</option>
+                        <option value="9:16">9:16</option>
+                        <option value="4:3">4:3</option>
+                        <option value="3:4">3:4</option>
+                    </select>
+                    <select id="image-gen-quick-resolution" title="解像度" style="width: auto; min-width: 60px; font-size: 12px; padding: 4px; margin: 0; background-color: var(--bg-input); color: var(--text-primary);">
+                        <option value="">解像度(自動)</option>
+                        <option value="512">0.5K</option>
+                        <option value="1K">1K</option>
+                        <option value="2K">2K</option>
+                        <option value="4K">4K</option>
+                    </select>
+                </div>
+                <div style="display: flex; width: 100%; gap: 10px;">
+                    <textarea id="image-gen-input" placeholder="生成したい画像を説明..." rows="1" aria-label="画像生成プロンプト" style="flex-grow: 1; min-height: 40px; height: 40px; resize: none; margin: 0;"></textarea>
+                    <button id="image-gen-send-btn" title="生成" style="height: 40px; width: 40px; padding: 0; font-size: 18px; font-weight: bold; flex-shrink: 0; background-color: #ff6b35; color: #fff;">🎨</button>
+                </div>
             </footer>
         </div>
 
@@ -7121,6 +7182,10 @@ font-size: 1.142em !important;
                                                 <input type="checkbox" id="show-copy-session-button-toggle">
                                                 「全コピー」ボタンを表示する（「コ」ボタン）
                                             </label>
+                                            <label class="checkbox-label">
+                                                <input type="checkbox" id="show-image-gen-button-toggle">
+                                                「画像生成(🎨)」ボタンを表示する
+                                            </label>
                                             <hr style="margin: 10px 0; border-top: 1px solid var(--border-tertiary);">
                                             <label class="checkbox-label">
                                                 <input type="checkbox" id="show-api-provider-toggle-header">
@@ -8442,6 +8507,17 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             uploadSettingsBgBtn: document.getElementById('upload-settings-bg-btn'),
             settingsBgThumbnail: document.getElementById('settings-bg-thumbnail'),
             deleteSettingsBgBtn: document.getElementById('delete-settings-bg-btn'),
+            imageGenScreen: document.getElementById('image-gen-screen'),
+            gotoImageGenBtn: document.getElementById('goto-image-gen-btn'),
+            backToChatFromImageGenBtn: document.getElementById('back-to-chat-from-image-gen'),
+            imageGenMessageContainer: document.getElementById('image-gen-message-container'),
+            imageGenInput: document.getElementById('image-gen-input'),
+            imageGenSendBtn: document.getElementById('image-gen-send-btn'),
+            imageGenModelSelect: document.getElementById('image-gen-model-select'),
+            imageGenQuickAspect: document.getElementById('image-gen-quick-aspect'),
+            imageGenQuickResolution: document.getElementById('image-gen-quick-resolution'),
+            imageGenNewBtn: document.getElementById('image-gen-new-btn'),
+            showImageGenButtonToggle: document.getElementById('show-image-gen-button-toggle'),
         };
 
 
@@ -8627,6 +8703,7 @@ footerTapScrollToBottom: false,
 
                 showChatTitle: true,
                 showNewChatButton: true,
+                showImageGenButton: false,
                 showDeleteSessionButton: false,
                 showCopySessionButton: false,
                showScrollToTopButton: false,
@@ -8801,6 +8878,8 @@ enableCryscrollerScrollOpacity: true,
             aiToAiProcessingMessage: "AI間会話処理中...",
             isSummarizingForRetry: false,
             isProofreading: false,
+            imageGenMessages:[],
+            imageGenIsSending: false,
         };
 
         const sanitizeText = (text, maxLength = 255) => {
@@ -11457,6 +11536,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 }
                 elements.showChatTitleToggle.checked = state.settings.showChatTitle;
                 elements.showNewChatButtonToggle.checked = state.settings.showNewChatButton;
+                elements.showImageGenButtonToggle.checked = state.settings.showImageGenButton;
                 elements.showDeleteSessionButtonToggle.checked = state.settings.showDeleteSessionButton;
                 elements.showCopySessionButtonToggle.checked = state.settings.showCopySessionButton;
                 elements.showScrollToTopButtonToggle.checked = state.settings.showScrollToTopButton;
@@ -11710,6 +11790,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     const toggleableButtons = [
                         { id: '#show-chat-title-toggle', element: elements.chatTitle },
                         { id: '#show-new-chat-button-toggle', element: elements.newChatBtn },
+                       { id: '#show-image-gen-button-toggle', element: elements.gotoImageGenBtn },
                         { id: '#show-delete-session-button-toggle', element: elements.deleteSessionBtn },
                         { id: '#show-copy-session-button-toggle', element: elements.copySessionBtn },
                         { id: '#show-api-provider-toggle-header', element: elements.headerApiProviderToggleBtn },
@@ -12105,7 +12186,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 // 判定を少し緩くして(100px)、キーボード開閉等のズレも許容する
                 const isChatAtBottom = screenName === 'chat' && (chatMain.scrollHeight - chatMain.scrollTop - chatMain.clientHeight < 100);
 
-                                                const allScreens = [elements.chatScreen, elements.historyScreen, elements.settingsScreen];
+   const allScreens = [elements.chatScreen, elements.historyScreen, elements.settingsScreen, elements.imageGenScreen];
                 let activeScreen = null;
 
                 if (!fromPopState) {
@@ -12128,6 +12209,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     elements.chatScreen.style.transform = 'translateX(0)';
                     elements.historyScreen.style.transform = 'translateX(-100%)';
                     elements.settingsScreen.style.transform = 'translateX(100%)';
+                    elements.imageGenScreen.style.transform = 'translateX(100%)';
                     requestAnimationFrame(() => {
                         this.adjustTextareaHeight();
                         this.updateChatScreenElementVisibility();
@@ -12143,7 +12225,14 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     elements.chatScreen.style.transform = 'translateX(-100%)';
                     elements.historyScreen.style.transform = 'translateX(-200%)';
                     elements.settingsScreen.style.transform = 'translateX(0)';
+                    elements.imageGenScreen.style.transform = 'translateX(100%)';
                     this.applySettingsToUI();
+                } else if (screenName === 'imageGen') {
+                    activeScreen = elements.imageGenScreen;
+                    elements.chatScreen.style.transform = 'translateX(-100%)';
+                    elements.historyScreen.style.transform = 'translateX(-200%)';
+                    elements.settingsScreen.style.transform = 'translateX(-100%)';
+                    elements.imageGenScreen.style.transform = 'translateX(0)';
                 }
 
                 requestAnimationFrame(() => {
@@ -13281,6 +13370,23 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
             setupEventListeners() {
                 elements.gotoHistoryBtn.addEventListener('click', () => uiUtils.showScreen('history'));
                 elements.gotoSettingsBtn.addEventListener('click', () => uiUtils.showScreen('settings'));
+                
+                elements.gotoImageGenBtn.addEventListener('click', () => uiUtils.showScreen('imageGen'));
+                elements.backToChatFromImageGenBtn.addEventListener('click', () => uiUtils.showScreen('chat'));
+                elements.imageGenNewBtn.addEventListener('click', () => appLogic.startNewImageGenChat());
+                elements.imageGenSendBtn.addEventListener('click', () => {
+                    if (!state.imageGenIsSending) appLogic.handleImageGenSend();
+                });
+                elements.imageGenInput.addEventListener('input', () => {
+                    elements.imageGenInput.style.height = 'auto';
+                    elements.imageGenInput.style.height = Math.min(elements.imageGenInput.scrollHeight, 120) + 'px';
+                });
+                elements.imageGenInput.addEventListener('keypress', (e) => {
+                    if (state.settings.enterToSend && e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (!state.imageGenIsSending) appLogic.handleImageGenSend();
+                    }
+                });
                 elements.backToChatFromHistoryBtn.addEventListener('click', () => history.back());
                 elements.backToChatFromSettingsBtn.addEventListener('click', () => history.back());
                 elements.toggleMemoBtn.addEventListener('click', () => this.toggleMemo());
@@ -13760,6 +13866,10 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     state.settings.showToggleAllContentButton = elements.showToggleAllContentButtonToggle.checked;
                     uiUtils.updateChatScreenElementVisibility();
                 });
+                elements.showImageGenButtonToggle.addEventListener('change', () => {
+                    state.settings.showImageGenButton = elements.showImageGenButtonToggle.checked;
+                    uiUtils.updateChatScreenElementVisibility();
+                });
 
                 elements.showPasteButtonInFooterToggle.addEventListener('change', () => {
                     state.settings.showPasteButtonInFooter = elements.showPasteButtonInFooterToggle.checked;
@@ -13877,6 +13987,10 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 });
                 elements.showToggleAllContentButtonToggle.addEventListener('change', () => {
                     state.settings.showToggleAllContentButton = elements.showToggleAllContentButtonToggle.checked;
+                    uiUtils.updateChatScreenElementVisibility();
+                });
+                elements.showImageGenButtonToggle.addEventListener('change', () => {
+                    state.settings.showImageGenButton = elements.showImageGenButtonToggle.checked;
                     uiUtils.updateChatScreenElementVisibility();
                 });
                 elements.showBulkHistoryActionsToggle.addEventListener('change', () => {
@@ -14965,6 +15079,96 @@ helpIcons.forEach(icon => {
                 uiUtils.updateAttachmentBadgeVisibility();
                 if (state.settings.autoScrollOnNewMessage) {
                     uiUtils.scrollToBottom();
+                }
+            },
+            startNewImageGenChat() {
+                state.imageGenMessages =[];
+                elements.imageGenMessageContainer.innerHTML = '';
+                elements.imageGenInput.value = '';
+                elements.imageGenInput.style.height = '40px';
+            },
+            appendImageGenMessage(role, content) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('message', role);
+                const contentDiv = document.createElement('div');
+                contentDiv.classList.add('message-content');
+                if (role === 'model' && typeof marked !== 'undefined') {
+                    contentDiv.innerHTML = uiUtils._sanitizeAndParseMarkdown(content || '');
+                    uiUtils.addImageClickListeners(contentDiv);
+                } else {
+                    const pre = document.createElement('pre');
+                    pre.textContent = content;
+                    contentDiv.appendChild(pre);
+                }
+                messageDiv.appendChild(contentDiv);
+                elements.imageGenMessageContainer.appendChild(messageDiv);
+                
+                requestAnimationFrame(() => {
+                    const mainContent = elements.imageGenScreen.querySelector('.main-content');
+                    if (mainContent) mainContent.scrollTop = mainContent.scrollHeight;
+                });
+            },
+            async handleImageGenSend() {
+                const text = elements.imageGenInput.value.trim();
+                if (!text || state.imageGenIsSending) return;
+
+                state.imageGenIsSending = true;
+                elements.imageGenSendBtn.textContent = '止';
+                elements.imageGenSendBtn.classList.add('sending');
+
+                state.imageGenMessages.push({ role: 'user', content: text });
+                this.appendImageGenMessage('user', text);
+                elements.imageGenInput.value = '';
+                elements.imageGenInput.style.height = '40px';
+
+                const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('gemini') : state.settings.apiKey;
+                if (!apiKey) {
+                    this.appendImageGenMessage('error', 'Gemini APIキーが設定されていません。');
+                    state.imageGenIsSending = false;
+                    elements.imageGenSendBtn.textContent = '🎨';
+                    elements.imageGenSendBtn.classList.remove('sending');
+                    return;
+                }
+
+                const model = elements.imageGenModelSelect.value;
+                const aspect = elements.imageGenQuickAspect.value;
+                const resolution = elements.imageGenQuickResolution.value;
+
+                const apiMessages = state.imageGenMessages.map(m => ({ role: m.role, parts: [{ text: m.content }] }));
+                
+                const generationConfig = { responseModalities: ["TEXT", "IMAGE"] };
+                const imageConfig = {};
+                if (aspect) imageConfig.aspectRatio = aspect;
+                if (resolution) imageConfig.resolution = resolution;
+                if (Object.keys(imageConfig).length > 0) generationConfig.imageConfig = imageConfig;
+                
+                try {
+                    const response = await apiUtils.callGeminiApi(apiKey, model, apiMessages, generationConfig, null, false, false, false);
+                    const data = await response.json();
+                    let responseContent = '';
+                    const candidate = data.candidates?.[0];
+
+                    if (candidate?.content?.parts) {
+                        candidate.content.parts.forEach(part => {
+                            if (part.text) responseContent += part.text + '\n\n';
+                            else if (part.inlineData) {
+                                responseContent += `![画像](data:${part.inlineData.mimeType};base64,${part.inlineData.data})\n\n`;
+                            }
+                        });
+                        responseContent = responseContent.trim();
+                    } else {
+                        responseContent = '(画像の生成に失敗しました)';
+                    }
+                    
+                    state.imageGenMessages.push({ role: 'model', content: responseContent });
+                    this.appendImageGenMessage('model', responseContent);
+
+                } catch (error) {
+                    this.appendImageGenMessage('error', error.message || 'エラーが発生しました。');
+                } finally {
+                    state.imageGenIsSending = false;
+                    elements.imageGenSendBtn.textContent = '🎨';
+                    elements.imageGenSendBtn.classList.remove('sending');
                 }
             },
             async loadChat(id) {
@@ -17348,6 +17552,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
 
                 newSettings.showChatTitle = elements.showChatTitleToggle.checked;
                 newSettings.showNewChatButton = elements.showNewChatButtonToggle.checked;
+                newSettings.showImageGenButton = elements.showImageGenButtonToggle.checked;
                 newSettings.showDeleteSessionButton = elements.showDeleteSessionButtonToggle.checked;
                 newSettings.showCopySessionButton = elements.showCopySessionButtonToggle.checked;
                 newSettings.showScrollToTopButton = elements.showScrollToTopButtonToggle.checked;
