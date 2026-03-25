@@ -1329,11 +1329,19 @@ body.turf-mode {
         }
 
         #image-gen-screen {
-            transform: translateX(100%);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateX(0) !important;
+            transition: opacity 0.3s ease, visibility 0.3s ease !important;
+            z-index: 50 !important;
             background-image: var(--chat-background-image);
             background-size: cover;
             background-position: center center;
             background-repeat: no-repeat;
+        }
+        #image-gen-screen.active {
+            opacity: 1;
+            visibility: visible;
         }
         #image-gen-screen::before {
             content: '';
@@ -5038,6 +5046,7 @@ font-size: 1.142em !important;
 
         <div id="image-gen-screen" class="screen">
             <header class="app-header">
+                <button id="goto-history-from-image-gen-btn" class="header-button" aria-label="履歴一覧へ">☰</button>
                 <button id="back-to-chat-from-image-gen" class="header-button" aria-label="チャットへ戻る">💬</button>
                 <h1 id="image-gen-title">🎨 画像生成</h1>
                 <div style="flex-grow: 1;"></div>
@@ -5047,6 +5056,7 @@ font-size: 1.142em !important;
                     <option value="gemini-3.1-flash-image-preview">Nano Banana 2</option>
                     <option value="gemini-3-pro-image-preview">Nano Banana Pro</option>
                 </select>
+                <button id="goto-settings-from-image-gen-btn" class="header-button" aria-label="設定へ" style="order: 99; margin-left: 5px;">⚙</button>
             </header>
             <main class="main-content">
                 <div id="image-gen-message-container" class="message-container"></div>
@@ -5071,6 +5081,7 @@ font-size: 1.142em !important;
                 </div>
                 <div style="display: flex; width: 100%; gap: 10px;">
                     <textarea id="image-gen-input" placeholder="生成したい画像を説明..." rows="1" aria-label="画像生成プロンプト" style="flex-grow: 1; min-height: 40px; height: 40px; resize: none; margin: 0;"></textarea>
+                    <button id="image-gen-attach-file-btn" title="ファイルを添付" class="footer-action-button" style="position: relative;">+<span class="attachment-badge"></span></button>
                     <button id="image-gen-send-btn" title="生成" style="height: 40px; width: 40px; padding: 0; font-size: 18px; font-weight: bold; flex-shrink: 0; background-color: #ff6b35; color: #fff;">🎨</button>
                 </div>
             </footer>
@@ -8518,6 +8529,9 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             imageGenQuickResolution: document.getElementById('image-gen-quick-resolution'),
             imageGenNewBtn: document.getElementById('image-gen-new-btn'),
             showImageGenButtonToggle: document.getElementById('show-image-gen-button-toggle'),
+            gotoHistoryFromImageGenBtn: document.getElementById('goto-history-from-image-gen-btn'),
+            gotoSettingsFromImageGenBtn: document.getElementById('goto-settings-from-image-gen-btn'),
+            imageGenAttachFileBtn: document.getElementById('image-gen-attach-file-btn'),
         };
 
 
@@ -12209,7 +12223,6 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     elements.chatScreen.style.transform = 'translateX(0)';
                     elements.historyScreen.style.transform = 'translateX(-100%)';
                     elements.settingsScreen.style.transform = 'translateX(100%)';
-                    elements.imageGenScreen.style.transform = 'translateX(100%)';
                     requestAnimationFrame(() => {
                         this.adjustTextareaHeight();
                         this.updateChatScreenElementVisibility();
@@ -12225,14 +12238,12 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     elements.chatScreen.style.transform = 'translateX(-100%)';
                     elements.historyScreen.style.transform = 'translateX(-200%)';
                     elements.settingsScreen.style.transform = 'translateX(0)';
-                    elements.imageGenScreen.style.transform = 'translateX(100%)';
                     this.applySettingsToUI();
                 } else if (screenName === 'imageGen') {
                     activeScreen = elements.imageGenScreen;
-                    elements.chatScreen.style.transform = 'translateX(-100%)';
-                    elements.historyScreen.style.transform = 'translateX(-200%)';
-                    elements.settingsScreen.style.transform = 'translateX(-100%)';
-                    elements.imageGenScreen.style.transform = 'translateX(0)';
+                    elements.chatScreen.style.transform = 'translateX(0)';
+                    elements.historyScreen.style.transform = 'translateX(-100%)';
+                    elements.settingsScreen.style.transform = 'translateX(100%)';
                 }
 
                 if (screenName === 'imageGen') {
@@ -12510,6 +12521,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
             updateAttachmentBadgeVisibility() {
                 const hasAttachments = state.pendingAttachments.length > 0;
                 elements.attachFileBtn.classList.toggle('has-attachments', hasAttachments);
+                if (elements.imageGenAttachFileBtn) elements.imageGenAttachFileBtn.classList.toggle('has-attachments', hasAttachments);
                 if (!state.isSending) {
                     const isDummyProvider = state.settings.apiProvider === 'dummy';
                     if (isDummyProvider) {
@@ -13380,6 +13392,9 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 
                 elements.gotoImageGenBtn.addEventListener('click', () => uiUtils.showScreen('imageGen'));
                 elements.backToChatFromImageGenBtn.addEventListener('click', () => uiUtils.showScreen('chat'));
+                elements.gotoHistoryFromImageGenBtn.addEventListener('click', () => uiUtils.showScreen('history'));
+                elements.gotoSettingsFromImageGenBtn.addEventListener('click', () => uiUtils.showScreen('settings'));
+                elements.imageGenAttachFileBtn.addEventListener('click', () => uiUtils.showFileUploadDialog());
                 elements.imageGenNewBtn.addEventListener('click', () => appLogic.startNewImageGenChat());
                 elements.imageGenSendBtn.addEventListener('click', () => {
                     if (!state.imageGenIsSending) appLogic.handleImageGenSend();
@@ -15094,11 +15109,17 @@ helpIcons.forEach(icon => {
                 elements.imageGenInput.value = '';
                 elements.imageGenInput.style.height = '40px';
             },
-            appendImageGenMessage(role, content) {
+            appendImageGenMessage(role, content, attachments = null) {
                 const messageDiv = document.createElement('div');
                 messageDiv.classList.add('message', role);
                 const contentDiv = document.createElement('div');
                 contentDiv.classList.add('message-content');
+                if (attachments && attachments.length > 0) {
+                    const attachInfo = document.createElement('div');
+                    attachInfo.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin-bottom: 5px;';
+                    attachInfo.textContent = `[添付ファイル: ${attachments.map(a => a.name).join(', ')}]`;
+                    contentDiv.appendChild(attachInfo);
+                }
                 if (role === 'model' && typeof marked !== 'undefined') {
                     contentDiv.innerHTML = uiUtils._sanitizeAndParseMarkdown(content || '');
                     uiUtils.addImageClickListeners(contentDiv);
@@ -15117,16 +15138,19 @@ helpIcons.forEach(icon => {
             },
             async handleImageGenSend() {
                 const text = elements.imageGenInput.value.trim();
-                if (!text || state.imageGenIsSending) return;
+                const attachmentsToSend = [...state.pendingAttachments];
+                if ((!text && attachmentsToSend.length === 0) || state.imageGenIsSending) return;
 
                 state.imageGenIsSending = true;
                 elements.imageGenSendBtn.textContent = '止';
                 elements.imageGenSendBtn.classList.add('sending');
 
-                state.imageGenMessages.push({ role: 'user', content: text });
-                this.appendImageGenMessage('user', text);
+                state.imageGenMessages.push({ role: 'user', content: text, attachments: attachmentsToSend });
+                this.appendImageGenMessage('user', text, attachmentsToSend);
                 elements.imageGenInput.value = '';
                 elements.imageGenInput.style.height = '40px';
+                state.pendingAttachments =[];
+                uiUtils.updateAttachmentBadgeVisibility();
 
                 const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('gemini') : state.settings.apiKey;
                 if (!apiKey) {
@@ -15141,7 +15165,17 @@ helpIcons.forEach(icon => {
                 const aspect = elements.imageGenQuickAspect.value;
                 const resolution = elements.imageGenQuickResolution.value;
 
-                const apiMessages = state.imageGenMessages.map(m => ({ role: m.role, parts: [{ text: m.content }] }));
+                const apiMessages = state.imageGenMessages.map(m => {
+                    const parts =[];
+                    if (m.content) parts.push({ text: m.content });
+                    if (m.attachments && m.attachments.length > 0) {
+                        m.attachments.forEach(att => {
+                            if (att.textData) parts.push({ text: att.textData });
+                            else if (att.base64Data) parts.push({ inlineData: { mimeType: att.mimeType, data: att.base64Data } });
+                        });
+                    }
+                    return { role: m.role, parts: parts.length > 0 ? parts : [{ text: '' }] };
+                });
                 
                 const generationConfig = { responseModalities: ["TEXT", "IMAGE"] };
                 const imageConfig = {};
