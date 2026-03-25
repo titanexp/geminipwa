@@ -5061,29 +5061,25 @@ font-size: 1.142em !important;
             <main class="main-content">
                 <div id="image-gen-message-container" class="message-container"></div>
             </main>
-            <footer class="chat-input-area image-gen-input-area" style="flex-wrap: wrap;">
-                <div class="image-gen-options" style="display: flex; gap: 6px; width: 100%; margin-bottom: 4px;">
-                    <select id="image-gen-quick-aspect" title="アスペクト比" style="width: auto; min-width: 60px; font-size: 12px; padding: 4px; margin: 0; background-color: var(--bg-input); color: var(--text-primary);">
-                        <option value="">アスペクト比(自動)</option>
-                        <option value="1:1">1:1</option>
-                        <option value="16:9">16:9</option>
-                        <option value="9:16">9:16</option>
-                        <option value="4:3">4:3</option>
-                        <option value="3:4">3:4</option>
-                    </select>
-                    <select id="image-gen-quick-resolution" title="解像度" style="width: auto; min-width: 60px; font-size: 12px; padding: 4px; margin: 0; background-color: var(--bg-input); color: var(--text-primary);">
-                        <option value="">解像度(自動)</option>
-                        <option value="512">0.5K</option>
-                        <option value="1K">1K</option>
-                        <option value="2K">2K</option>
-                        <option value="4K">4K</option>
-                    </select>
-                </div>
-                <div style="display: flex; width: 100%; gap: 10px;">
-                    <textarea id="image-gen-input" placeholder="生成したい画像を説明..." rows="1" aria-label="画像生成プロンプト" style="flex-grow: 1; min-height: 40px; height: 40px; resize: none; margin: 0;"></textarea>
-                    <button id="image-gen-attach-file-btn" title="ファイルを添付" class="footer-action-button" style="position: relative;">+<span class="attachment-badge"></span></button>
-                    <button id="image-gen-send-btn" title="生成" style="height: 40px; width: 40px; padding: 0; font-size: 18px; font-weight: bold; flex-shrink: 0; background-color: #ff6b35; color: #fff;">🎨</button>
-                </div>
+            <footer class="chat-input-area image-gen-input-area" style="gap: 5px; padding: 10px 8px;">
+                <select id="image-gen-quick-aspect" title="アスペクト比" style="height: 40px; width: auto; font-size: 12px; padding: 0 4px; margin: 0; background-color: var(--bg-input); color: var(--text-primary); border-radius: 5px; border: 1px solid var(--border-primary);">
+                    <option value="">比率</option>
+                    <option value="1:1">1:1</option>
+                    <option value="16:9">16:9</option>
+                    <option value="9:16">9:16</option>
+                    <option value="4:3">4:3</option>
+                    <option value="3:4">3:4</option>
+                </select>
+                <select id="image-gen-quick-resolution" title="解像度" style="height: 40px; width: auto; font-size: 12px; padding: 0 4px; margin: 0; background-color: var(--bg-input); color: var(--text-primary); border-radius: 5px; border: 1px solid var(--border-primary);">
+                    <option value="">解像度</option>
+                    <option value="512">0.5K</option>
+                    <option value="1K">1K</option>
+                    <option value="2K">2K</option>
+                    <option value="4K">4K</option>
+                </select>
+                <textarea id="image-gen-input" placeholder="画像を説明..." rows="1" aria-label="画像生成プロンプト" style="flex-grow: 1; min-width: 0; min-height: 40px; height: 40px; resize: none; margin: 0; box-sizing: border-box;"></textarea>
+                <button id="image-gen-attach-file-btn" title="ファイルを添付" class="footer-action-button" style="position: relative; width: 36px; height: 40px; margin: 0; flex-shrink: 0;">+<span class="attachment-badge"></span></button>
+                <button id="image-gen-send-btn" title="生成" style="height: 40px; width: 36px; padding: 0; font-size: 16px; font-weight: bold; flex-shrink: 0; background-color: #ff6b35; color: #fff; margin: 0; border-radius: 5px; border: none;">🎨</button>
             </footer>
         </div>
 
@@ -14195,10 +14191,46 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 }, true);
                 document.body.addEventListener('click', (event) => {
                     if (!elements.messageContainer.contains(event.target) &&
+                        !elements.imageGenMessageContainer.contains(event.target) &&
                         !elements.memoArea.contains(event.target) &&
                         !elements.clipboardStackArea.contains(event.target) &&
                         !event.target.closest('.custom-dialog')) {
-                        const currentlyShown = elements.messageContainer.querySelector('.message.show-actions');
+                        const currentlyShown = document.querySelectorAll('.message.show-actions');
+                        currentlyShown.forEach(el => el.classList.remove('show-actions'));
+                    }
+                }, true);
+
+                elements.imageGenMessageContainer.addEventListener('click', (event) => {
+                    const target = event.target;
+                    const button = target.closest('button');
+                    const clickedMessage = target.closest('.message');
+
+                    if (button && clickedMessage) {
+                        const index = parseInt(clickedMessage.dataset.index, 10);
+                        if (button.classList.contains('js-image-gen-delete-btn')) {
+                            appLogic.deleteImageGenMessage(index); 
+                            return;
+                        }
+                        if (button.classList.contains('js-image-gen-copy-btn')) {
+                            appLogic.copyImageGenMessageText(index, button); 
+                            return;
+                        }
+                    }
+                    
+                    if (target.closest('.interactive-title-content, .code-copy-button, a[href="#"], .attachment-actions button')) {
+                        return;
+                    }
+
+                    if (clickedMessage) {
+                        const currentlyShown = elements.imageGenMessageContainer.querySelector('.message.show-actions');
+                        if (currentlyShown && currentlyShown !== clickedMessage) {
+                            currentlyShown.classList.remove('show-actions');
+                        }
+                        if (!clickedMessage.classList.contains('editing')) {
+                            clickedMessage.classList.toggle('show-actions');
+                        }
+                    } else {
+                        const currentlyShown = elements.imageGenMessageContainer.querySelector('.message.show-actions');
                         if (currentlyShown) {
                             currentlyShown.classList.remove('show-actions');
                         }
@@ -15109,9 +15141,10 @@ helpIcons.forEach(icon => {
                 elements.imageGenInput.value = '';
                 elements.imageGenInput.style.height = '40px';
             },
-            appendImageGenMessage(role, content, attachments = null) {
+            appendImageGenMessage(role, content, index, attachments = null) {
                 const messageDiv = document.createElement('div');
                 messageDiv.classList.add('message', role);
+                messageDiv.dataset.index = index;
                 const contentDiv = document.createElement('div');
                 contentDiv.classList.add('message-content');
                 if (attachments && attachments.length > 0) {
@@ -15129,12 +15162,86 @@ helpIcons.forEach(icon => {
                     contentDiv.appendChild(pre);
                 }
                 messageDiv.appendChild(contentDiv);
+                
+                if (role !== 'error') {
+                    const actionsDiv = document.createElement('div');
+                    actionsDiv.classList.add('message-actions');
+
+                    const deleteButton = document.createElement('button');
+                    deleteButton.textContent = '削除'; 
+                    deleteButton.title = 'このメッセージを削除'; 
+                    deleteButton.classList.add('js-image-gen-delete-btn');
+                    actionsDiv.appendChild(deleteButton);
+
+                    const copyButton = document.createElement('button');
+                    copyButton.textContent = 'コピー';
+                    copyButton.title = 'テキストをコピー';
+                    copyButton.classList.add('js-image-gen-copy-btn');
+                    actionsDiv.appendChild(copyButton);
+
+                    messageDiv.appendChild(actionsDiv);
+                }
+                
                 elements.imageGenMessageContainer.appendChild(messageDiv);
                 
                 requestAnimationFrame(() => {
                     const mainContent = elements.imageGenScreen.querySelector('.main-content');
                     if (mainContent) mainContent.scrollTop = mainContent.scrollHeight;
                 });
+            },
+            renderImageGenMessages() {
+                elements.imageGenMessageContainer.innerHTML = '';
+                state.imageGenMessages.forEach((msg, index) => {
+                    this.appendImageGenMessage(msg.role, msg.content, index, msg.attachments);
+                });
+            },
+            async deleteImageGenMessage(index) {
+                if (state.imageGenIsSending) {
+                    await uiUtils.showCustomAlert("送信中は削除できません。");
+                    return;
+                }
+                if (index < 0 || index >= state.imageGenMessages.length) return;
+
+                let confirmedDelete = true;
+                if (!state.settings.disableDeleteMessageConfirmation) {
+                    confirmedDelete = await uiUtils.showCustomConfirm("このメッセージを削除しますか？");
+                }
+
+                if (confirmedDelete) {
+                    state.imageGenMessages.splice(index, 1);
+                    this.renderImageGenMessages();
+                }
+            },
+            async copyImageGenMessageText(index, buttonElement) {
+                const message = state.imageGenMessages[index];
+                if (!message) return;
+
+                let textToCopy = message.content;
+                if (!textToCopy && message.role === 'user' && message.attachments && message.attachments.length > 0) {
+                    textToCopy = `[添付ファイル: ${message.attachments.map(a => a.name).join(', ')}]`;
+                } else if (!textToCopy) {
+                    textToCopy = "";
+                }
+
+                try {
+                    await navigator.clipboard.writeText(textToCopy);
+                    const originalText = buttonElement.textContent;
+                    buttonElement.textContent = '完了！';
+                    buttonElement.disabled = true;
+                    setTimeout(() => {
+                        buttonElement.textContent = originalText;
+                        buttonElement.disabled = false;
+                    }, 1500);
+                } catch (err) {
+                    await uiUtils.showCustomAlert("コピーに失敗しました。");
+                    const originalText = buttonElement.textContent;
+                    buttonElement.textContent = '失敗';
+                    buttonElement.disabled = true;
+                    setTimeout(() => {
+                        buttonElement.textContent = originalText;
+                        buttonElement.disabled = false;
+                    }, 2000);
+                }
             },
             async handleImageGenSend() {
                 const text = elements.imageGenInput.value.trim();
@@ -15146,7 +15253,7 @@ helpIcons.forEach(icon => {
                 elements.imageGenSendBtn.classList.add('sending');
 
                 state.imageGenMessages.push({ role: 'user', content: text, attachments: attachmentsToSend });
-                this.appendImageGenMessage('user', text, attachmentsToSend);
+                this.appendImageGenMessage('user', text, state.imageGenMessages.length - 1, attachmentsToSend);
                 elements.imageGenInput.value = '';
                 elements.imageGenInput.style.height = '40px';
                 state.pendingAttachments =[];
@@ -15154,7 +15261,7 @@ helpIcons.forEach(icon => {
 
                 const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('gemini') : state.settings.apiKey;
                 if (!apiKey) {
-                    this.appendImageGenMessage('error', 'Gemini APIキーが設定されていません。');
+                    this.appendImageGenMessage('error', 'Gemini APIキーが設定されていません。', -1);
                     state.imageGenIsSending = false;
                     elements.imageGenSendBtn.textContent = '🎨';
                     elements.imageGenSendBtn.classList.remove('sending');
@@ -15166,6 +15273,7 @@ helpIcons.forEach(icon => {
                 const resolution = elements.imageGenQuickResolution.value;
 
                 const apiMessages = state.imageGenMessages.map(m => {
+                    if (m.role === 'error') return null;
                     const parts =[];
                     if (m.content) parts.push({ text: m.content });
                     if (m.attachments && m.attachments.length > 0) {
@@ -15175,7 +15283,7 @@ helpIcons.forEach(icon => {
                         });
                     }
                     return { role: m.role, parts: parts.length > 0 ? parts : [{ text: '' }] };
-                });
+                }).filter(m => m !== null);
                 
                 const generationConfig = { responseModalities: ["TEXT", "IMAGE"] };
                 const imageConfig = {};
@@ -15202,10 +15310,12 @@ helpIcons.forEach(icon => {
                     }
                     
                     state.imageGenMessages.push({ role: 'model', content: responseContent });
-                    this.appendImageGenMessage('model', responseContent);
+                    this.appendImageGenMessage('model', responseContent, state.imageGenMessages.length - 1);
 
                 } catch (error) {
-                    this.appendImageGenMessage('error', error.message || 'エラーが発生しました。');
+                    const errorMsg = error.message || 'エラーが発生しました。';
+                    state.imageGenMessages.push({ role: 'error', content: errorMsg });
+                    this.appendImageGenMessage('error', errorMsg, state.imageGenMessages.length - 1);
                 } finally {
                     state.imageGenIsSending = false;
                     elements.imageGenSendBtn.textContent = '🎨';
