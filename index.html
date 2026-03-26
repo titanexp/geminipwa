@@ -4936,6 +4936,130 @@ font-size: 1.142em !important;
             top: var(--header-height, 50px) !important;
             height: calc(100% - var(--header-height, 50px)) !important;
         }
+
+        #perf-monitor-panel {
+            position: fixed;
+            bottom: 70px;
+            left: 10px;
+            width: 280px;
+            background-color: rgba(0, 0, 0, 0.85);
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 9999;
+            pointer-events: auto;
+            user-select: none;
+            -webkit-user-select: none;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            transition: opacity 0.3s ease;
+            line-height: 1.6;
+            max-height: 60vh;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0, 255, 0, 0.3) transparent;
+        }
+        #perf-monitor-panel.minimized {
+            width: auto;
+            min-width: 80px;
+            padding: 6px 10px;
+        }
+        #perf-monitor-panel.minimized .perf-body { display: none; }
+        #perf-monitor-panel .perf-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(0, 255, 0, 0.3);
+            cursor: move;
+        }
+        #perf-monitor-panel.minimized .perf-header {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        #perf-monitor-panel .perf-header span {
+            font-weight: bold;
+            font-size: 12px;
+            color: #0f0;
+        }
+        #perf-monitor-panel .perf-header button {
+            background: none;
+            border: 1px solid rgba(0, 255, 0, 0.4);
+            color: #0f0;
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            cursor: pointer;
+            min-width: auto;
+            line-height: 1.4;
+            box-shadow: none;
+        }
+        #perf-monitor-panel .perf-header button:hover { background-color: rgba(0, 255, 0, 0.15); }
+        #perf-monitor-panel .perf-section {
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px dashed rgba(0, 255, 0, 0.15);
+        }
+        #perf-monitor-panel .perf-section:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        #perf-monitor-panel .perf-label {
+            color: #8f8;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+        #perf-monitor-panel .perf-value {
+            color: #0f0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #perf-monitor-panel .perf-bar-container {
+            height: 4px;
+            background-color: rgba(0, 255, 0, 0.15);
+            border-radius: 2px;
+            margin-top: 2px;
+            overflow: hidden;
+        }
+        #perf-monitor-panel .perf-bar {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.3s ease, background-color 0.3s ease;
+        }
+        #perf-monitor-panel .perf-bar.low { background-color: #0f0; }
+        #perf-monitor-panel .perf-bar.mid { background-color: #ff0; }
+        #perf-monitor-panel .perf-bar.high { background-color: #f60; }
+        #perf-monitor-panel .perf-bar.critical { background-color: #f00; }
+        #perf-monitor-panel .perf-fps-graph {
+            height: 30px;
+            display: flex;
+            align-items: flex-end;
+            gap: 1px;
+            margin-top: 4px;
+            background-color: rgba(0, 255, 0, 0.05);
+            border-radius: 3px;
+            padding: 2px;
+            overflow: hidden;
+        }
+        #perf-monitor-panel .perf-fps-bar {
+            flex: 1;
+            min-width: 2px;
+            background-color: #0f0;
+            border-radius: 1px 1px 0 0;
+            transition: height 0.1s ease;
+        }
+        #perf-monitor-panel .perf-fps-bar.warn { background-color: #ff0; }
+        #perf-monitor-panel .perf-fps-bar.bad { background-color: #f00; }
+        body.dark-mode #perf-monitor-panel { background-color: rgba(0, 0, 0, 0.9); }
     </style>
 
     <script src="marked.js"></script>
@@ -5027,10 +5151,31 @@ font-size: 1.142em !important;
                 } catch (e) { }
 
                 await clearAllCachesAndReload();
-            }
-        })();
-    </script>
-    <div class="app-container">
+        }
+    })();
+</script>
+<div id="perf-monitor-panel" class="hidden">
+    <div class="perf-header">
+        <span>📊 PERF MONITOR</span>
+        <div style="display:flex;gap:4px;">
+            <button id="perf-minimize-btn" title="最小化">_</button>
+            <button id="perf-close-btn" title="閉じる">✕</button>
+        </div>
+    </div>
+    <div class="perf-body">
+        <div class="perf-section"><div class="perf-label">FPS</div><div class="perf-value" id="perf-fps">-- fps</div><div class="perf-fps-graph" id="perf-fps-graph"></div></div>
+        <div class="perf-section"><div class="perf-label">MEMORY (JS Heap)</div><div class="perf-value" id="perf-memory">N/A</div><div class="perf-bar-container"><div class="perf-bar low" id="perf-memory-bar" style="width:0%"></div></div></div>
+        <div class="perf-section"><div class="perf-label">DOM NODES</div><div class="perf-value" id="perf-dom">--</div><div class="perf-bar-container"><div class="perf-bar low" id="perf-dom-bar" style="width:0%"></div></div></div>
+        <div class="perf-section"><div class="perf-label">MESSAGES</div><div class="perf-value" id="perf-messages">--</div></div>
+        <div class="perf-section"><div class="perf-label">FRAME TIME</div><div class="perf-value" id="perf-frametime">-- ms</div><div class="perf-bar-container"><div class="perf-bar low" id="perf-frametime-bar" style="width:0%"></div></div></div>
+        <div class="perf-section"><div class="perf-label">LONG TASKS (>50ms)</div><div class="perf-value" id="perf-longtasks">0</div></div>
+        <div class="perf-section"><div class="perf-label">LAYOUT SHIFTS</div><div class="perf-value" id="perf-cls">0.000</div></div>
+        <div class="perf-section"><div class="perf-label">NETWORK</div><div class="perf-value" id="perf-network">--</div></div>
+        <div class="perf-section"><div class="perf-label">INDEXEDDB OPS</div><div class="perf-value" id="perf-idb">--</div></div>
+        <div class="perf-section"><div class="perf-label">UPTIME</div><div class="perf-value" id="perf-uptime">0s</div></div>
+    </div>
+</div>
+<div class="app-container">
 
         <div id="chat-screen" class="screen active">
             <header class="app-header">
@@ -8025,6 +8170,14 @@ font-size: 1.142em !important;
                                 <button id="debug-expand-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">項目を全展開</button>
                                 <button id="debug-collapse-all-btn" class="settings-action-button" style="font-size: 12px; flex-grow: 1;">項目を全閉じる</button>
                             </div>
+                            <hr style="margin: 10px 0; border-top: 1px dashed var(--border-secondary);">
+                            <label class="checkbox-label" style="font-size: 12px;">
+                                <input type="checkbox" id="enable-perf-monitor-toggle">
+                                パフォーマンス監視パネルを表示する
+                            </label>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 5px;">
+                                ※ FPS、メモリ使用量、DOM要素数、描画タイミング等をリアルタイム表示します。
+                            </p>
                             <div class="font-slider-container" style="margin-top: 15px; border-top: 1px dashed var(--border-secondary); padding-top: 10px;">
                                 <label for="cryscroller-observer-delay">スクロールバー描画遅延 (ms):</label>
                                 <div class="input-slider-wrapper">
@@ -9094,6 +9247,7 @@ enableCryscrollerScrollOpacity: true,
                 cryscrollerObserverDelay: 500,
                 enableSettingsCryscrollerScroll: true,
                 enableHistoryCryscrollerScroll: true,
+                enablePerfMonitor: false,
 
                         },
             backgroundImageUrl: null,
@@ -12152,6 +12306,16 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 removeDuplicateCheckboxes.forEach(checkbox => {
                     checkbox.checked = state.settings.removeDuplicateApiKeys;
                 });
+
+                const perfToggle = document.getElementById('enable-perf-monitor-toggle');
+                if (perfToggle) {
+                    perfToggle.checked = state.settings.enablePerfMonitor;
+                    if (state.settings.enablePerfMonitor) {
+                        perfMonitor.start();
+                    } else {
+                        perfMonitor.stop();
+                    }
+                }
             },
             applyMinimizeUI() {
                 elements.appContainer.classList.toggle('minimized-ui', state.settings.minimizeHeaderFooter);
@@ -18347,6 +18511,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
 
                 newSettings.enableSettingsCryscrollerScroll = elements.enableSettingsCryscrollerScrollToggle.checked;
                 newSettings.enableHistoryCryscrollerScroll = elements.enableHistoryCryscrollerScrollToggle.checked;
+                newSettings.enablePerfMonitor = document.getElementById('enable-perf-monitor-toggle')?.checked || false;
                 newSettings.enableContentVisibility = elements.enableContentVisibilityToggle.checked;
                 newSettings.enableElevation = elements.enableElevationToggle.checked;
                 newSettings.enableElevationHover = elements.enableElevationHoverToggle.checked;
@@ -23206,16 +23371,261 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                     case 'xai': return DEFAULT_XAI_MODEL;
                     case 'llmaggregator': return DEFAULT_LLMAGGREGATOR_MODEL;
                     default: return '';
+            }
+        },
+    };
+
+    const perfMonitor = {
+        _enabled: false, _intervalId: null, _rafId: null, _fpsHistory: [], _maxFpsHistory: 60,
+        _frameCount: 0, _lastFpsTime: 0, _lastFrameTime: 0, _longTaskCount: 0, _clsValue: 0,
+        _longTaskObserver: null, _clsObserver: null, _idbOpsCount: 0, _startTime: Date.now(),
+        _isDragging: false, _dragOffsetX: 0, _dragOffsetY: 0,
+        get panel() { return document.getElementById('perf-monitor-panel'); },
+        get toggle() { return document.getElementById('enable-perf-monitor-toggle'); },
+
+        init() {
+            if (this.toggle) {
+                this.toggle.checked = false;
+                this.toggle.addEventListener('change', () => {
+                    if (this.toggle.checked) this.start();
+                    else this.stop();
+                });
+            }
+            const closeBtn = document.getElementById('perf-close-btn');
+            if (closeBtn) closeBtn.addEventListener('click', () => { this.stop(); if (this.toggle) this.toggle.checked = false; });
+            const minimizeBtn = document.getElementById('perf-minimize-btn');
+            if (minimizeBtn) minimizeBtn.addEventListener('click', () => {
+                if (this.panel) {
+                    this.panel.classList.toggle('minimized');
+                    minimizeBtn.textContent = this.panel.classList.contains('minimized') ? '□' : '_';
                 }
-            },
-        };
+            });
+            this._initDrag();
+            this._patchIdbOps();
+        },
 
-        errorRecovery.init();
+        _initDrag() {
+            const panel = this.panel;
+            if (!panel) return;
+            const header = panel.querySelector('.perf-header');
+            if (!header) return;
+            const onStart = (e) => {
+                if (e.target.tagName === 'BUTTON') return;
+                this._isDragging = true;
+                const rect = panel.getBoundingClientRect();
+                this._dragOffsetX = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+                this._dragOffsetY = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+                panel.style.transition = 'none';
+                e.preventDefault();
+            };
+            const onMove = (e) => {
+                if (!this._isDragging) return;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                let newLeft = Math.max(0, Math.min(clientX - this._dragOffsetX, window.innerWidth - panel.offsetWidth));
+                let newTop = Math.max(0, Math.min(clientY - this._dragOffsetY, window.innerHeight - panel.offsetHeight));
+                panel.style.left = newLeft + 'px';
+                panel.style.top = newTop + 'px';
+                panel.style.bottom = 'auto';
+                panel.style.right = 'auto';
+                e.preventDefault();
+            };
+            const onEnd = () => { this._isDragging = false; panel.style.transition = ''; };
+            header.addEventListener('mousedown', onStart);
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onEnd);
+            header.addEventListener('touchstart', onStart, { passive: false });
+            document.addEventListener('touchmove', onMove, { passive: false });
+            document.addEventListener('touchend', onEnd);
+        },
 
-        window.errorRecovery = errorRecovery;
+        _patchIdbOps() {
+            const originalSaveSetting = dbUtils.saveSetting.bind(dbUtils);
+            dbUtils.saveSetting = async (...args) => { this._idbOpsCount++; return originalSaveSetting(...args); };
+            const originalSaveChat = dbUtils.saveChat.bind(dbUtils);
+            dbUtils.saveChat = async (...args) => { this._idbOpsCount++; return originalSaveChat(...args); };
+        },
 
-        appLogic.initializeApp();
-    </script>
+        start() {
+            if (this._enabled) return;
+            this._enabled = true;
+            this._startTime = Date.now();
+            this._longTaskCount = 0; this._clsValue = 0; this._idbOpsCount = 0;
+            this._fpsHistory = []; this._frameCount = 0; this._lastFpsTime = performance.now();
+            if (this.panel) {
+                this.panel.classList.remove('hidden', 'minimized');
+                const minBtn = document.getElementById('perf-minimize-btn');
+                if (minBtn) minBtn.textContent = '_';
+            }
+            this._initFpsGraph();
+            this._startFpsCounter();
+            this._startObservers();
+            this._intervalId = setInterval(() => this._update(), 1000);
+            this._update();
+        },
+
+        stop() {
+            this._enabled = false;
+            if (this.panel) this.panel.classList.add('hidden');
+            if (this._intervalId) { clearInterval(this._intervalId); this._intervalId = null; }
+            if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
+            if (this._longTaskObserver) { this._longTaskObserver.disconnect(); this._longTaskObserver = null; }
+            if (this._clsObserver) { this._clsObserver.disconnect(); this._clsObserver = null; }
+        },
+
+        _initFpsGraph() {
+            const graph = document.getElementById('perf-fps-graph');
+            if (!graph) return;
+            graph.innerHTML = '';
+            for (let i = 0; i < this._maxFpsHistory; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'perf-fps-bar';
+                bar.style.height = '0%';
+                graph.appendChild(bar);
+            }
+        },
+
+        _startFpsCounter() {
+            let lastTime = performance.now();
+            const tick = (now) => {
+                if (!this._enabled) return;
+                this._lastFrameTime = now - lastTime;
+                lastTime = now;
+                this._frameCount++;
+                const elapsed = now - this._lastFpsTime;
+                if (elapsed >= 1000) {
+                    const fps = Math.round((this._frameCount * 1000) / elapsed);
+                    this._fpsHistory.push(fps);
+                    if (this._fpsHistory.length > this._maxFpsHistory) this._fpsHistory.shift();
+                    this._frameCount = 0;
+                    this._lastFpsTime = now;
+                    this._updateFpsDisplay(fps);
+                }
+                this._rafId = requestAnimationFrame(tick);
+            };
+            this._rafId = requestAnimationFrame(tick);
+        },
+
+        _startObservers() {
+            if (typeof PerformanceObserver !== 'undefined') {
+                try {
+                    this._longTaskObserver = new PerformanceObserver((list) => { this._longTaskCount += list.getEntries().length; });
+                    this._longTaskObserver.observe({ entryTypes: ['longtask'] });
+                } catch (e) {}
+                try {
+                    this._clsObserver = new PerformanceObserver((list) => {
+                        for (const entry of list.getEntries()) { if (!entry.hadRecentInput) this._clsValue += entry.value; }
+                    });
+                    this._clsObserver.observe({ entryTypes: ['layout-shift'] });
+                } catch (e) {}
+            }
+        },
+
+        _updateFpsDisplay(fps) {
+            const el = document.getElementById('perf-fps');
+            if (el) {
+                el.textContent = `${fps} fps`;
+                el.style.color = fps >= 50 ? '#0f0' : fps >= 30 ? '#ff0' : '#f00';
+            }
+            const graph = document.getElementById('perf-fps-graph');
+            if (graph) {
+                const bars = graph.children;
+                const startIdx = Math.max(0, this._fpsHistory.length - this._maxFpsHistory);
+                for (let i = 0; i < bars.length; i++) {
+                    const histIdx = startIdx + i;
+                    if (histIdx < this._fpsHistory.length) {
+                        const fpsVal = this._fpsHistory[histIdx];
+                        bars[i].style.height = Math.min(100, (fpsVal / 60) * 100) + '%';
+                        bars[i].className = 'perf-fps-bar' + (fpsVal < 20 ? ' bad' : fpsVal < 40 ? ' warn' : '');
+                    } else {
+                        bars[i].style.height = '0%';
+                    }
+                }
+            }
+        },
+
+        _getBarClass(pct) {
+            if (pct < 40) return 'low';
+            if (pct < 65) return 'mid';
+            if (pct < 85) return 'high';
+            return 'critical';
+        },
+
+        _update() {
+            if (!this._enabled) return;
+            const memEl = document.getElementById('perf-memory');
+            const memBar = document.getElementById('perf-memory-bar');
+            if (performance.memory) {
+                const used = performance.memory.usedJSHeapSize;
+                const total = performance.memory.jsHeapSizeLimit;
+                const pct = (used / total) * 100;
+                if (memEl) memEl.textContent = `${(used / 1048576).toFixed(1)} MB / ${(total / 1048576).toFixed(0)} MB (${pct.toFixed(1)}%)`;
+                if (memBar) { memBar.style.width = pct + '%'; memBar.className = 'perf-bar ' + this._getBarClass(pct); }
+            } else if (memEl) {
+                memEl.textContent = 'N/A (Chrome only)';
+            }
+
+            const domEl = document.getElementById('perf-dom');
+            const domBar = document.getElementById('perf-dom-bar');
+            const nodeCount = document.querySelectorAll('*').length;
+            const domPct = Math.min(100, (nodeCount / 10000) * 100);
+            if (domEl) domEl.textContent = `${nodeCount.toLocaleString()} nodes`;
+            if (domBar) { domBar.style.width = domPct + '%'; domBar.className = 'perf-bar ' + this._getBarClass(domPct); }
+
+            const msgEl = document.getElementById('perf-messages');
+            if (msgEl) msgEl.textContent = `${elements.messageContainer.querySelectorAll('.message').length} rendered / ${state.currentMessages.length} total`;
+
+            const ftEl = document.getElementById('perf-frametime');
+            const ftBar = document.getElementById('perf-frametime-bar');
+            if (ftEl) {
+                ftEl.textContent = `${this._lastFrameTime.toFixed(1)} ms`;
+                ftEl.style.color = this._lastFrameTime < 17 ? '#0f0' : this._lastFrameTime < 33 ? '#ff0' : '#f00';
+            }
+            if (ftBar) {
+                const ftPct = Math.min(100, (this._lastFrameTime / 50) * 100);
+                ftBar.style.width = ftPct + '%';
+                ftBar.className = 'perf-bar ' + this._getBarClass(ftPct);
+            }
+
+            const ltEl = document.getElementById('perf-longtasks');
+            if (ltEl) {
+                ltEl.textContent = this._longTaskCount.toString();
+                ltEl.style.color = this._longTaskCount === 0 ? '#0f0' : this._longTaskCount < 5 ? '#ff0' : '#f00';
+            }
+
+            const clsEl = document.getElementById('perf-cls');
+            if (clsEl) {
+                clsEl.textContent = this._clsValue.toFixed(4);
+                clsEl.style.color = this._clsValue < 0.1 ? '#0f0' : this._clsValue < 0.25 ? '#ff0' : '#f00';
+            }
+
+            const netEl = document.getElementById('perf-network');
+            if (netEl) {
+                if (navigator.connection) {
+                    netEl.textContent = `${navigator.connection.effectiveType || 'unknown'} · ${navigator.connection.downlink ? navigator.connection.downlink + ' Mbps' : '--'} ${navigator.connection.rtt !== undefined ? navigator.connection.rtt + 'ms' : ''}`.trim();
+                } else {
+                    netEl.textContent = navigator.onLine ? 'Online' : 'Offline';
+                }
+            }
+
+            const idbEl = document.getElementById('perf-idb');
+            if (idbEl) idbEl.textContent = `${this._idbOpsCount} ops since start`;
+
+            const upEl = document.getElementById('perf-uptime');
+            if (upEl) {
+                const seconds = Math.floor((Date.now() - this._startTime) / 1000);
+                upEl.textContent = seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`;
+            }
+        }
+    };
+    perfMonitor.init();
+
+    errorRecovery.init();
+
+    window.errorRecovery = errorRecovery;
+
+    appLogic.initializeApp();
+</script>
 </body>
 
 </html>
