@@ -1700,16 +1700,20 @@ body.turf-mode {
             z-index: 1;
         }
 
-        .history-item {
-            padding: 12px;
-            border: 1px solid var(--border-secondary);
-            border-radius: 8px;
-            margin-bottom: 10px;
-            background-color: var(--bg-primary);
-            transition: background-color 0.2s ease, border-color 0.3s ease;
-            cursor: pointer;
-            content-visibility: auto;
-            contain-intrinsic-size: auto 80px;
+        .message {
+            padding: 10px 15px;
+            border-radius: 15px;
+            max-width: var(--message-max-width);
+            min-width: 30%;
+            min-height: 40px;
+            position: relative;
+            word-wrap: break-word;
+            margin-top: 35px;
+            margin-bottom: 35px;
+            color: var(--text-primary);
+            transition: background-color 0.3s ease, color 0.3s ease, opacity 0.3s ease;
+            z-index: 1;
+            box-shadow: 0 1px 2px var(--shadow-primary);
         }
 
         .app-container.reduced-message-spacing .message {
@@ -2518,7 +2522,16 @@ body.turf-mode {
             background-color: var(--bg-primary);
             transition: background-color 0.2s ease, border-color 0.3s ease;
             cursor: pointer;
+        }
+
+        body.content-visibility-enabled .message,
+        body.content-visibility-enabled .history-item {
             content-visibility: auto;
+        }
+        body.content-visibility-enabled .message {
+            contain-intrinsic-size: auto 150px;
+        }
+        body.content-visibility-enabled .history-item {
             contain-intrinsic-size: auto 80px;
         }
 
@@ -7232,6 +7245,10 @@ font-size: 1.142em !important;
                                             </p>
                                             <hr style="margin: 10px 0; border-top: 1px solid var(--border-tertiary);">
                                             <label class="checkbox-label">
+                                                <input type="checkbox" id="enable-content-visibility-toggle">
+                                                画面外の描画を省略して動作を軽量化する
+                                            </label>
+                                            <label class="checkbox-label">
                                                 <input type="checkbox" id="enable-elevation-toggle">
                                                 UIを立体的にする
                                             </label>
@@ -8477,6 +8494,7 @@ footerTapScrollToBottomToggle: document.getElementById('footer-tap-scroll-to-bot
             headerFooterOpacityInput: document.getElementById('header-footer-opacity'),
             messageActionsBackgroundOpacityInput: document.getElementById('message-actions-background-opacity'),
             thoughtSummaryOpacityInput: document.getElementById('thought-summary-opacity'),
+            enableContentVisibilityToggle: document.getElementById('enable-content-visibility-toggle'),
     enableElevationToggle: document.getElementById('enable-elevation-toggle'),
 enableElevationHoverToggle: document.getElementById('enable-elevation-hover-toggle'),
 elevationHoverOption: document.getElementById('elevation-hover-option'),
@@ -9017,6 +9035,7 @@ enableHeaderFooterOpacity: true,
 enableMessageActionsBackgroundOpacity: true,
 enableToggleButtonTopOpacity: true,
 enableThoughtSummaryOpacity: true,
+enableContentVisibility: true,
 enableElevation: true,
 enableCryscrollerScrollOpacity: true,
                 enableCryscrollerScrollActiveOpacity: true,
@@ -11981,6 +12000,8 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 elements.thoughtSummaryOpacityInput.value = state.settings.thoughtSummaryOpacity ?? DEFAULT_THOUGHT_SUMMARY_OPACITY;
                 document.getElementById('cryscroller-scroll-opacity').value = state.settings.cryscrollerScrollOpacity ?? DEFAULT_CRYSCROLLER_SCROLL_OPACITY;
                 document.getElementById('cryscroller-scroll-active-opacity').value = state.settings.cryscrollerScrollActiveOpacity ?? DEFAULT_CRYSCROLLER_SCROLL_ACTIVE_OPACITY;
+                elements.enableContentVisibilityToggle.checked = state.settings.enableContentVisibility;
+                document.body.classList.toggle('content-visibility-enabled', state.settings.enableContentVisibility);
     elements.enableElevationToggle.checked = state.settings.enableElevation;
     elements.enableElevationHoverToggle.checked = state.settings.enableElevationHover;
     elements.elevationHoverOption.classList.toggle('hidden', !state.settings.enableElevation);
@@ -12150,10 +12171,6 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
             applySettingsUIDetailsOpenStates() {
                 const detailsElements = document.querySelectorAll('#settings-screen details[id]');
                 detailsElements.forEach(detailsEl => {
-                    if (detailsEl.id === 'settings-group-danger-zone-details') {
-                        detailsEl.open = false;
-                        return;
-                    }
                     if (state.settings.settingsUIDetailsOpenStates[detailsEl.id] === true) {
                         detailsEl.open = true;
                     } else if (state.settings.settingsUIDetailsOpenStates[detailsEl.id] === false) {
@@ -14790,6 +14807,10 @@ elements.imageGenMessageContainer.addEventListener('click', (event) => {
                         this.toggleMessageCollapse(index);
                     }
                 });
+                elements.enableContentVisibilityToggle.addEventListener('change', (e) => {
+                    state.settings.enableContentVisibility = e.target.checked;
+                    document.body.classList.toggle('content-visibility-enabled', state.settings.enableContentVisibility);
+                });
     elements.enableElevationToggle.addEventListener('change', () => {
         state.settings.enableElevation = elements.enableElevationToggle.checked;
         uiUtils.applyElevationSetting();
@@ -14812,11 +14833,7 @@ elements.imageGenMessageContainer.addEventListener('click', (event) => {
     document.querySelectorAll('#settings-screen details[id]').forEach(details => {
                     details.addEventListener('toggle', (event) => {
                         if (details.id) {
-                            if (details.id === 'settings-group-danger-zone-details') {
-                                state.settings.settingsUIDetailsOpenStates[details.id] = false;
-                            } else {
-                                state.settings.settingsUIDetailsOpenStates[details.id] = details.open;
-                            }
+                            state.settings.settingsUIDetailsOpenStates[details.id] = details.open;
                         }
                     });
                 });
@@ -18330,6 +18347,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
 
                 newSettings.enableSettingsCryscrollerScroll = elements.enableSettingsCryscrollerScrollToggle.checked;
                 newSettings.enableHistoryCryscrollerScroll = elements.enableHistoryCryscrollerScrollToggle.checked;
+                newSettings.enableContentVisibility = elements.enableContentVisibilityToggle.checked;
                 newSettings.enableElevation = elements.enableElevationToggle.checked;
                 newSettings.enableElevationHover = elements.enableElevationHoverToggle.checked;
                 newSettings.autoCloseOtherSettings = elements.autoCloseOtherSettingsToggle.checked;
@@ -18363,11 +18381,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     newSettings.removeDuplicateApiKeys = firstDuplicateRemoveCheckbox.checked;
                 }
                 document.querySelectorAll('#settings-screen details[id]').forEach(details => {
-                    if (details.id === 'settings-group-danger-zone-details') {
-                        newSettings.settingsUIDetailsOpenStates[details.id] = false;
-                    } else {
-                        newSettings.settingsUIDetailsOpenStates[details.id] = details.open;
-                    }
+                    newSettings.settingsUIDetailsOpenStates[details.id] = details.open;
                 });
                 if (!newSettings.apiProviderCycle[newSettings.apiProvider]) {
                     const enabledProvider = Object.entries(newSettings.apiProviderCycle).find(([, enabled]) => enabled)?.[0];
