@@ -1355,7 +1355,16 @@ body.turf-mode {
         #image-gen-screen .main-content { z-index: 1; background-color: transparent; overflow-y: auto; touch-action: pan-x pan-y pinch-zoom; }
         #image-gen-screen .chat-input-area { z-index: 2; background-color: rgba(var(--bg-secondary-rgb, 240, 242, 245), var(--header-footer-opacity, 1)); }
         #image-gen-send-btn.sending { background-color: #ffc107 !important; color: #333 !important; }
-
+.screen.image-gen-layer {
+            z-index: 50 !important;
+            background-color: var(--bg-primary);
+        }
+        #image-gen-history-screen {
+            transform: translateX(-100%);
+        }
+        #image-gen-settings-screen {
+            transform: translateX(100%);
+        }
         #settings-screen {
             transform: translateX(100%);
         }
@@ -4696,7 +4705,10 @@ font-size: 1.142em !important;
 
         body.immersive-mode .app-header, 
         body.immersive-mode #history-screen .app-header,
-        body.immersive-mode #settings-screen .app-header {
+        body.immersive-mode #settings-screen .app-header,
+        body.immersive-mode #image-gen-screen .app-header,
+        body.immersive-mode #image-gen-history-screen .app-header,
+        body.immersive-mode #image-gen-settings-screen .app-header {
             position: absolute;
             top: 0;
             left: 0;
@@ -4712,7 +4724,8 @@ font-size: 1.142em !important;
             z-index: 10;
             border-top: none;
         }
-        body.immersive-mode #chat-screen .main-content {
+        body.immersive-mode #chat-screen .main-content,
+        body.immersive-mode #image-gen-screen .main-content {
             height: 100%;
 
             padding-top: calc(var(--header-height, 50px) + 15px);
@@ -4720,7 +4733,9 @@ font-size: 1.142em !important;
             box-sizing: border-box;
         }
         body.immersive-mode #history-screen .main-content,
-        body.immersive-mode #settings-screen .main-content {
+        body.immersive-mode #settings-screen .main-content,
+        body.immersive-mode #image-gen-history-screen .main-content,
+        body.immersive-mode #image-gen-settings-screen .main-content {
             height: 100%;
             /* ヘッダー高さ + 影被り防止の余白(15px) */
             padding-top: calc(var(--header-height, 50px) + 15px);
@@ -5082,7 +5097,144 @@ font-size: 1.142em !important;
                 <button id="image-gen-send-btn" title="生成" style="height: 40px; width: 36px; padding: 0; font-size: 16px; font-weight: bold; flex-shrink: 0; background-color: #ff6b35; color: #fff; margin: 0; border-radius: 5px; border: none;">🎨</button>
             </footer>
         </div>
+<div id="image-gen-history-screen" class="screen image-gen-layer">
+            <header class="app-header">
+                <button id="back-to-image-gen-from-history" class="header-button">＞</button>
+                <h1>🎨 画像生成履歴</h1>
+            </header>
+            <main class="main-content">
+                <ul id="image-gen-history-list" class="history-list">
+                    <li class="js-image-gen-history-item-template history-item">
+                        <div class="history-item-details">
+                            <span class="history-item-title"></span>
+                        </div>
+                        <div class="history-item-bottom-row">
+                            <div class="history-item-dates">
+                                <span class="created-date"></span>
+                                <span class="updated-date"></span>
+                            </div>
+                            <div class="history-item-actions">
+                                <button class="js-edit-title-btn" title="タイトル編集">✎</button>
+                                <button class="js-delete-btn" title="削除">削除</button>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+                <p id="no-image-gen-history-message" class="hidden"
+                    style="text-align: center; color: var(--text-secondary); margin-top: 20px;">画像生成履歴はありません。</p>
+            </main>
+        </div>
 
+        <div id="image-gen-settings-screen" class="screen image-gen-layer">
+            <header class="app-header">
+                <button id="back-to-image-gen-from-settings" class="header-button">＜</button>
+                <h1>🎨 画像生成設定</h1>
+                <span id="image-gen-settings-save-notice" class="header-notice">※反映には保存が必要</span>
+                <button class="js-save-settings-btn header-save-button" title="設定を保存">設定を保存</button>
+            </header>
+            <main class="main-content">
+
+                <details open class="settings-group">
+                    <summary
+                        style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">
+                        APIキー設定</summary>
+                    <div style="margin-top:10px;">
+                        <label for="image-gen-api-key">Gemini APIキー:</label>
+                        <input type="password" id="image-gen-api-key" placeholder="APIキーを入力" aria-label="画像生成用 Gemini APIキー">
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                            ※ チャット設定のGemini APIキーと共有されます。ここで変更するとチャット側にも反映されます。
+                        </p>
+                    </div>
+                </details>
+
+                <details open class="settings-group">
+                    <summary
+                        style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">
+                        モデル選択</summary>
+                    <div style="margin-top:10px;">
+                        <label for="image-gen-settings-model">画像生成モデル:</label>
+                        <select id="image-gen-settings-model" aria-label="画像生成モデル">
+                            <option value="gemini-2.5-flash-image">Nano Banana (gemini-2.5-flash-image)</option>
+                            <option value="gemini-3.1-flash-image-preview">Nano Banana 2 (gemini-3.1-flash-image-preview)</option>
+                            <option value="gemini-3-pro-image-preview">Nano Banana Pro (gemini-3-pro-image-preview)</option>
+                        </select>
+                        <details style="margin-top: 10px;">
+                            <summary style="font-size: 14px; color: var(--text-link); cursor: pointer; list-style: revert;">追加モデル (カンマ区切り)</summary>
+                            <textarea id="image-gen-additional-models" placeholder="例: gemini-custom-image-model" aria-label="画像生成 追加モデル" style="margin-top: 5px;"></textarea>
+                        </details>
+                    </div>
+                </details>
+
+                <details open class="settings-group">
+                    <summary
+                        style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">
+                        画像生成パラメータ</summary>
+                    <div style="margin-top:10px;">
+                        <label for="image-gen-settings-aspect">アスペクト比:</label>
+                        <select id="image-gen-settings-aspect" aria-label="画像アスペクト比">
+                            <option value="">指定なし (デフォルト)</option>
+                            <optgroup label="正方形">
+                                <option value="1:1">1:1 (正方形)</option>
+                            </optgroup>
+                            <optgroup label="横長 (Landscape)">
+                                <option value="3:2">3:2</option>
+                                <option value="4:3">4:3</option>
+                                <option value="5:4">5:4</option>
+                                <option value="16:9">16:9 (ワイド)</option>
+                                <option value="21:9">21:9 (ウルトラワイド)</option>
+                                <option value="4:1">4:1 (パノラマ) ※3.1 Flash</option>
+                                <option value="8:1">8:1 (超横長) ※3.1 Flash</option>
+                            </optgroup>
+                            <optgroup label="縦長 (Portrait)">
+                                <option value="2:3">2:3</option>
+                                <option value="3:4">3:4</option>
+                                <option value="4:5">4:5</option>
+                                <option value="9:16">9:16 (縦長)</option>
+                                <option value="1:4">1:4 (縦パノラマ) ※3.1 Flash</option>
+                                <option value="1:8">1:8 (超縦長) ※3.1 Flash</option>
+                            </optgroup>
+                        </select>
+
+                        <label for="image-gen-settings-resolution">解像度:</label>
+                        <select id="image-gen-settings-resolution" aria-label="画像解像度">
+                            <option value="">指定なし (デフォルト: 1K)</option>
+                            <option value="512">512×512 (0.5K) ※3.1 Flashのみ</option>
+                            <option value="1K">1024×1024 (1K)</option>
+                            <option value="2K">2048×2048 (2K)</option>
+                            <option value="4K">4096×4096 (4K)</option>
+                        </select>
+
+                        <label for="image-gen-settings-count">生成枚数:</label>
+                        <select id="image-gen-settings-count" aria-label="生成枚数">
+                            <option value="">指定なし (デフォルト: 1)</option>
+                            <option value="1">1枚</option>
+                            <option value="2">2枚</option>
+                            <option value="3">3枚</option>
+                            <option value="4">4枚</option>
+                        </select>
+                    </div>
+                </details>
+
+                <details open class="settings-group">
+                    <summary
+                        style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">
+                        システムプロンプト (画像生成専用)</summary>
+                    <div style="margin-top:10px;">
+                        <label for="image-gen-system-prompt">画像生成用システムプロンプト:</label>
+                        <textarea id="image-gen-system-prompt" placeholder="例: あなたは高品質な画像を生成するAIです。ユーザーの指示に従って画像を作成してください。"
+                            aria-label="画像生成用システムプロンプト"></textarea>
+                        <label class="checkbox-label" style="margin-top: -5px; margin-bottom: 15px;">
+                            <input type="checkbox" id="image-gen-enable-system-prompt">
+                            この画像生成用システムプロンプトを有効にする
+                        </label>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                            ※ 有効時、画像生成リクエストの先頭にこのシステムプロンプトが付与されます。
+                        </p>
+                    </div>
+                </details>
+
+            </main>
+        </div>
         <div id="history-screen" class="screen">
             <div id="history-cryscroller-scroll-zone">
                 <div id="history-cryscroller-scroll-handle"></div>
@@ -7884,7 +8036,8 @@ font-size: 1.142em !important;
 
     <script>
         const DB_NAME = 'GeminiPWA_DB';
-        const DB_VERSION = 8;
+        const DB_VERSION = 9;
+        const IMAGE_CHATS_STORE = 'image_chats';
         const SETTINGS_STORE = 'settings';
         const CHATS_STORE = 'chats';
         const CHAT_UPDATEDAT_INDEX = 'updatedAtIndex';
@@ -8528,12 +8681,30 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             gotoHistoryFromImageGenBtn: document.getElementById('goto-history-from-image-gen-btn'),
             gotoSettingsFromImageGenBtn: document.getElementById('goto-settings-from-image-gen-btn'),
             imageGenAttachFileBtn: document.getElementById('image-gen-attach-file-btn'),
+            imageGenHistoryScreen: document.getElementById('image-gen-history-screen'),
+            imageGenSettingsScreen: document.getElementById('image-gen-settings-screen'),
+            backToImageGenFromHistoryBtn: document.getElementById('back-to-image-gen-from-history'),
+            backToImageGenFromSettingsBtn: document.getElementById('back-to-image-gen-from-settings'),
+            imageGenHistoryList: document.getElementById('image-gen-history-list'),
+            noImageGenHistoryMessage: document.getElementById('no-image-gen-history-message'),
+            imageGenHistoryItemTemplate: document.querySelector('.js-image-gen-history-item-template'),
+            imageGenApiKeyInput: document.getElementById('image-gen-api-key'),
+            imageGenSettingsModelSelect: document.getElementById('image-gen-settings-model'),
+            imageGenAdditionalModelsTextarea: document.getElementById('image-gen-additional-models'),
+            imageGenSettingsAspectSelect: document.getElementById('image-gen-settings-aspect'),
+            imageGenSettingsResolutionSelect: document.getElementById('image-gen-settings-resolution'),
+            imageGenSettingsCountSelect: document.getElementById('image-gen-settings-count'),
+            imageGenSystemPromptTextarea: document.getElementById('image-gen-system-prompt'),
+            imageGenEnableSystemPromptCheckbox: document.getElementById('image-gen-enable-system-prompt'),
         };
 
 
         const state = {
             db: null,
             currentChatId: null,
+            currentImageChatId: null,
+            imageGenTitle: '新規画像生成',
+            isImageGenTitleGenerated: false,
             currentChatBaseUrl: null, // チャット固有のベースURLを保持
             currentMessages: [],
             settings: {
@@ -8569,6 +8740,13 @@ geminiIncludeThoughts: false,
                 geminiImageAspectRatio: '',
                 geminiImageResolution: '',
                 geminiImageCount: '',
+                imageGenSystemPrompt: '',
+                imageGenEnableSystemPrompt: false,
+                imageGenAdditionalModels: '',
+                imageGenDefaultModel: 'gemini-2.5-flash-image',
+                imageGenDefaultAspect: '',
+                imageGenDefaultResolution: '',
+                imageGenDefaultCount: '',
                 // ▼ここから追加▼
                 enableImageUrlReplacement: false, // デフォルトは無効
                 imageUrlReplacementBase: '',      // ベースURLは空
@@ -8889,6 +9067,7 @@ enableCryscrollerScrollOpacity: true,
             isSummarizingForRetry: false,
             isProofreading: false,
             imageGenMessages:[],
+            currentImageGenChatId: null,
             imageGenIsSending: false,
         };
 
@@ -9022,6 +9201,11 @@ const dbUtils = {
                         }
                         if (chatStore && !chatStore.indexNames.contains(CHAT_CREATEDAT_INDEX)) {
                             chatStore.createIndex(CHAT_CREATEDAT_INDEX, 'createdAt', { unique: false });
+                        }
+let imageChatStore;
+                        if (!db.objectStoreNames.contains(IMAGE_CHATS_STORE)) {
+                            imageChatStore = db.createObjectStore(IMAGE_CHATS_STORE, { keyPath: 'id', autoIncrement: true });
+                            imageChatStore.createIndex(CHAT_UPDATEDAT_INDEX, 'updatedAt', { unique: false });
                         }
                     };
                 });
@@ -9373,6 +9557,170 @@ const dbUtils = {
                         const request = store.delete(id);
                         request.onsuccess = () => resolve();
                         request.onerror = (event) => reject(`チャット削除エラー: ${event.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            },
+
+            async saveImageChat(optionalTitle = null) {
+                await this.openDB();
+                if ((!state.imageGenMessages || state.imageGenMessages.length === 0)) {
+                    return Promise.resolve(state.currentImageChatId);
+                }
+                return new Promise((resolve, reject) => {
+                    try {
+                        const store = this._getStore(IMAGE_CHATS_STORE, 'readwrite');
+                        const now = Date.now();
+
+                        const executeSave = (chatIdToUse, existingData) => {
+                            let title = optionalTitle;
+                            if (title === null) {
+                                if (existingData && existingData.title) {
+                                    title = existingData.title;
+                                } else {
+                                    // 最初のユーザーメッセージ（添付ファイル含む）またはデフォルトのタイトル
+                                    const firstUserMessage = state.imageGenMessages.find(m => m.role === 'user');
+                                    let contentTitle = firstUserMessage ? firstUserMessage.content : '';
+                                    if(!contentTitle && firstUserMessage && firstUserMessage.attachments && firstUserMessage.attachments.length > 0) {
+                                        contentTitle = '(画像指定)';
+                                    }
+                                    title = contentTitle ? contentTitle.substring(0, 50) : "無題の画像生成";
+                                }
+                            }
+
+                            const chatData = {
+                                messages: state.imageGenMessages.map(msg => ({
+                                    role: msg.role, content: msg.content, attachments: msg.attachments, timestamp: msg.timestamp || now
+                                })),
+                                updatedAt: now,
+                                createdAt: existingData ? existingData.createdAt : now,
+                                title: title,
+                            };
+
+                            if (chatIdToUse) {
+                                chatData.id = chatIdToUse;
+                            }
+
+                            const putRequest = store.put(chatData);
+                            putRequest.onsuccess = (event) => {
+                                const savedId = event.target.result;
+                                if (!state.currentImageChatId && savedId) {
+                                    state.currentImageChatId = savedId;
+                                }
+                                if ((state.currentImageChatId || savedId) === (chatIdToUse || savedId)) {
+                                    state.imageGenTitle = chatData.title;
+                                    // if title update UI logic needed in future, do it here
+                                }
+                                resolve(state.currentImageChatId || savedId);
+                            };
+                            putRequest.onerror = (e) => reject(`画像生成チャット保存エラー: ${e.target.error}`);
+                        };
+
+                        if (state.currentImageChatId) {
+                            const getRequest = store.get(state.currentImageChatId);
+                            getRequest.onsuccess = (e) => {
+                                const existing = e.target.result;
+                                if (!existing) {
+                                    state.currentImageChatId = null;
+                                    executeSave(null, null);
+                                } else {
+                                    executeSave(state.currentImageChatId, existing);
+                                }
+                            };
+                            getRequest.onerror = () => {
+                                state.currentImageChatId = null;
+                                executeSave(null, null);
+                            };
+                        } else {
+                            executeSave(null, null);
+                        }
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            },
+
+            async updateImageChatTitleDb(id, newTitle) {
+                await this.openDB();
+                return new Promise((resolve, reject) => {
+                    try {
+                        const store = this._getStore(IMAGE_CHATS_STORE, 'readwrite');
+                        const getRequest = store.get(id);
+                        getRequest.onsuccess = (event) => {
+                            const chatData = event.target.result;
+                            if (chatData) {
+                                chatData.title = newTitle;
+                                chatData.updatedAt = Date.now();
+                                const putRequest = store.put(chatData);
+                                putRequest.onsuccess = () => resolve();
+                                putRequest.onerror = (e) => reject(`画像生成タイトル更新エラー: ${e.target.error}`);
+                            } else {
+                                reject(`画像生成チャットが見つかりません: ${id}`);
+                            }
+                        };
+                        getRequest.onerror = (e) => reject(`画像生成タイトル取得エラー: ${e.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            },
+
+            async getImageChat(id) {
+                await this.openDB();
+                return new Promise((resolve, reject) => {
+                    try {
+                        const store = this._getStore(IMAGE_CHATS_STORE);
+                        const request = store.get(id);
+                        request.onsuccess = (event) => resolve(event.target.result);
+                        request.onerror = (event) => reject(`画像生成チャット取得エラー: ${event.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            },
+
+            async getAllImageChats(sortBy = 'updatedAt') {
+                await this.openDB();
+                return new Promise((resolve, reject) => {
+                    try {
+                        const store = this._getStore(IMAGE_CHATS_STORE);
+                        const indexName = CHAT_UPDATEDAT_INDEX; // updatedAtのみ現在はサポート
+
+                        if (!store.indexNames.contains(indexName)) {
+                            const getAllRequest = store.getAll();
+                            getAllRequest.onsuccess = (event) => resolve(event.target.result.reverse());
+                            getAllRequest.onerror = (e) => reject(e.target.error);
+                            return;
+                        }
+
+                        const index = store.index(indexName);
+                        const request = index.openCursor(null, 'prev');
+                        const chats = [];
+                        request.onsuccess = (event) => {
+                            const cursor = event.target.result;
+                            if (cursor) {
+                                chats.push(cursor.value);
+                                cursor.continue();
+                            } else {
+                                resolve(chats);
+                            }
+                        };
+                        request.onerror = (event) => reject(`画像生成一覧取得エラー: ${event.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            },
+
+            async deleteImageChat(id) {
+                await this.openDB();
+                return new Promise((resolve, reject) => {
+                    try {
+                        const store = this._getStore(IMAGE_CHATS_STORE, 'readwrite');
+                        const request = store.delete(id);
+                        request.onsuccess = () => resolve();
+                        request.onerror = (event) => reject(`画像生成削除エラー: ${event.target.error}`);
                     } catch (error) {
                         reject(error);
                     }
@@ -11379,6 +11727,25 @@ elements.deepSeekModelNameSelect.value = state.settings.deepSeekModelName || DEF
                 elements.geminiImageAspectRatioSelect.value = state.settings.geminiImageAspectRatio || '';
                 elements.geminiImageResolutionSelect.value = state.settings.geminiImageResolution || '';
                 elements.geminiImageCountSelect.value = state.settings.geminiImageCount || '';
+
+                // 画像生成専用設定パネルの読み込み
+                elements.imageGenApiKeyInput.value = state.settings.apiKey || '';
+                elements.imageGenSettingsModelSelect.value = state.settings.imageGenDefaultModel || 'gemini-2.5-flash-image';
+                elements.imageGenAdditionalModelsTextarea.value = state.settings.imageGenAdditionalModels || '';
+                elements.imageGenSettingsAspectSelect.value = state.settings.geminiImageAspectRatio || '';
+                elements.imageGenSettingsResolutionSelect.value = state.settings.geminiImageResolution || '';
+                elements.imageGenSettingsCountSelect.value = state.settings.geminiImageCount || '';
+                elements.imageGenSystemPromptTextarea.value = state.settings.imageGenSystemPrompt || '';
+                elements.imageGenEnableSystemPromptCheckbox.checked = state.settings.imageGenEnableSystemPrompt;
+
+                // Sync API keys between panels
+                elements.imageGenApiKeyInput.addEventListener('input', () => {
+                   elements.geminiApiKeyInput.value = elements.imageGenApiKeyInput.value;
+                   if (state.settings.showMultiApiKeys) multiApiKeyUtils.syncMainApiKeyInput('gemini');
+                });
+                elements.geminiApiKeyInput.addEventListener('input', () => {
+                   elements.imageGenApiKeyInput.value = elements.geminiApiKeyInput.value;
+                });
                 elements.enableImageUrlReplacementCheckbox.checked = state.settings.enableImageUrlReplacement;
                 elements.imageUrlReplacementBaseInput.value = state.settings.imageUrlReplacementBase || '';
                 elements.imageUrlReplacementOptionsDiv.classList.toggle('hidden', !state.settings.enableImageUrlReplacement);
@@ -12196,7 +12563,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 // 判定を少し緩くして(100px)、キーボード開閉等のズレも許容する
                 const isChatAtBottom = screenName === 'chat' && (chatMain.scrollHeight - chatMain.scrollTop - chatMain.clientHeight < 100);
 
-   const allScreens = [elements.chatScreen, elements.historyScreen, elements.settingsScreen, elements.imageGenScreen];
+const allScreens =[elements.chatScreen, elements.historyScreen, elements.settingsScreen, elements.imageGenScreen, elements.imageGenHistoryScreen, elements.imageGenSettingsScreen];
                 let activeScreen = null;
 
                 if (!fromPopState) {
@@ -12237,9 +12604,20 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                     this.applySettingsToUI();
                 } else if (screenName === 'imageGen') {
                     activeScreen = elements.imageGenScreen;
-                    elements.chatScreen.style.transform = 'translateX(0)';
-                    elements.historyScreen.style.transform = 'translateX(-100%)';
-                    elements.settingsScreen.style.transform = 'translateX(100%)';
+                    elements.imageGenScreen.style.transform = 'translateX(0)';
+                    elements.imageGenHistoryScreen.style.transform = 'translateX(-100%)';
+                    elements.imageGenSettingsScreen.style.transform = 'translateX(100%)';
+                } else if (screenName === 'imageGenHistory') {
+                    activeScreen = elements.imageGenHistoryScreen;
+                    elements.imageGenScreen.style.transform = 'translateX(100%)';
+                    elements.imageGenHistoryScreen.style.transform = 'translateX(0)';
+                    elements.imageGenSettingsScreen.style.transform = 'translateX(200%)';
+                    appLogic.renderImageGenHistoryList();
+                } else if (screenName === 'imageGenSettings') {
+                    activeScreen = elements.imageGenSettingsScreen;
+                    elements.imageGenScreen.style.transform = 'translateX(-100%)';
+                    elements.imageGenHistoryScreen.style.transform = 'translateX(-200%)';
+                    elements.imageGenSettingsScreen.style.transform = 'translateX(0)';
                 }
 
                 if (screenName === 'imageGen') {
@@ -13388,8 +13766,10 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 
                 elements.gotoImageGenBtn.addEventListener('click', () => uiUtils.showScreen('imageGen'));
                 elements.backToChatFromImageGenBtn.addEventListener('click', () => uiUtils.showScreen('chat'));
-                elements.gotoHistoryFromImageGenBtn.addEventListener('click', () => uiUtils.showScreen('history'));
-                elements.gotoSettingsFromImageGenBtn.addEventListener('click', () => uiUtils.showScreen('settings'));
+                elements.gotoHistoryFromImageGenBtn.addEventListener('click', () => uiUtils.showScreen('imageGenHistory'));
+                elements.gotoSettingsFromImageGenBtn.addEventListener('click', () => uiUtils.showScreen('imageGenSettings'));
+                elements.backToImageGenFromHistoryBtn.addEventListener('click', () => uiUtils.showScreen('imageGen'));
+                elements.backToImageGenFromSettingsBtn.addEventListener('click', () => uiUtils.showScreen('imageGen'));
                 elements.imageGenAttachFileBtn.addEventListener('click', () => uiUtils.showFileUploadDialog());
                 elements.imageGenNewBtn.addEventListener('click', () => appLogic.startNewImageGenChat());
                 elements.imageGenSendBtn.addEventListener('click', () => {
@@ -15243,6 +15623,19 @@ helpIcons.forEach(icon => {
                     }, 2000);
                 }
             },
+            async startNewImageGenChat() {
+                const confirmed = await uiUtils.showCustomConfirm("現在の画像生成セッションをリセットし、新しく開始しますか？");
+                if (confirmed) {
+                    state.currentImageChatId = null;
+                    state.imageGenMessages = [];
+                    state.imageGenTitle = '新規画像生成';
+                    state.isImageGenTitleGenerated = false;
+                    state.pendingAttachments = [];
+                    elements.imageGenMessageContainer.innerHTML = '';
+                    if (elements.imageGenTitle) elements.imageGenTitle.textContent = state.imageGenTitle;
+                    uiUtils.updateAttachmentBadgeVisibility();
+                }
+            },
             async handleImageGenSend() {
                 const text = elements.imageGenInput.value.trim();
                 const attachmentsToSend = [...state.pendingAttachments];
@@ -15269,11 +15662,21 @@ helpIcons.forEach(icon => {
                 }
 
                 const model = elements.imageGenModelSelect.value;
-                const aspect = elements.imageGenQuickAspect.value;
-                const resolution = elements.imageGenQuickResolution.value;
+                const aspect = elements.imageGenQuickAspect.value || state.settings.geminiImageAspectRatio;
+                const resolution = elements.imageGenQuickResolution.value || state.settings.geminiImageResolution;
 
-                const apiMessages = state.imageGenMessages.map(m => {
+                let messagesToProcess = [...state.imageGenMessages];
+
+                // システムプロンプトの追加
+                if (state.settings.imageGenEnableSystemPrompt && state.settings.imageGenSystemPrompt) {
+                     messagesToProcess.unshift({ role: 'system', content: state.settings.imageGenSystemPrompt });
+                }
+
+                let apiMessages = messagesToProcess.map(m => {
                     if (m.role === 'error') return null;
+                    if (m.role === 'system') {
+                        return { role: 'system', parts: [{ text: m.content }] };
+                    }
                     const parts =[];
                     if (m.content) parts.push({ text: m.content });
                     if (m.attachments && m.attachments.length > 0) {
@@ -15285,14 +15688,26 @@ helpIcons.forEach(icon => {
                     return { role: m.role, parts: parts.length > 0 ? parts : [{ text: '' }] };
                 }).filter(m => m !== null);
                 
+                // systemロールをdeveloperロールに変換 (Gemini APIの仕様)
+                apiMessages = apiMessages.map(m => m.role === 'system' ? { role: 'user', parts: m.parts } : m);
+                // System Instructionとして別パラメータで渡すための抽出
+                let systemInstruction = null;
+                const firstMsg = apiMessages[0];
+                if (firstMsg && firstMsg.role === 'user' && state.settings.imageGenEnableSystemPrompt && state.settings.imageGenSystemPrompt) {
+                     // 簡易的に先頭のuserメッセージ(元system)から抽出
+                     systemInstruction = state.settings.imageGenSystemPrompt;
+                     apiMessages.shift(); // APIメッセージ配列からは削除
+                }
+                
                 const generationConfig = { responseModalities: ["TEXT", "IMAGE"] };
                 const imageConfig = {};
                 if (aspect) imageConfig.aspectRatio = aspect;
                 if (resolution) imageConfig.resolution = resolution;
+                if (state.settings.geminiImageCount) imageConfig.numberOfImages = parseInt(state.settings.geminiImageCount, 10);
                 if (Object.keys(imageConfig).length > 0) generationConfig.imageConfig = imageConfig;
                 
                 try {
-                    const response = await apiUtils.callGeminiApi(apiKey, model, apiMessages, generationConfig, null, false, false, false);
+                    const response = await apiUtils.callGeminiApi(apiKey, model, apiMessages, generationConfig, systemInstruction, false, false, false);
                     const data = await response.json();
                     let responseContent = '';
                     const candidate = data.candidates?.[0];
@@ -15320,6 +15735,11 @@ helpIcons.forEach(icon => {
                     state.imageGenIsSending = false;
                     elements.imageGenSendBtn.textContent = '🎨';
                     elements.imageGenSendBtn.classList.remove('sending');
+                    try {
+                        await dbUtils.saveImageChat();
+                    } catch (e) {
+                        console.error("画像生成チャット保存失敗", e);
+                    }
                 }
             },
             async loadChat(id) {
@@ -17564,6 +17984,18 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.geminiImageResolution = elements.geminiImageResolutionSelect.value;
                 newSettings.geminiImageCount = elements.geminiImageCountSelect.value;
 
+                // 画像生成専用設定パネルの保存
+                if(elements.imageGenApiKeyInput.value.trim() !== '') {
+                    newSettings.apiKey = elements.imageGenApiKeyInput.value.trim();
+                }
+                newSettings.imageGenDefaultModel = elements.imageGenSettingsModelSelect.value;
+                newSettings.imageGenAdditionalModels = elements.imageGenAdditionalModelsTextarea.value.trim();
+                newSettings.geminiImageAspectRatio = elements.imageGenSettingsAspectSelect.value; // 両方のパネルで同じstateを使用
+                newSettings.geminiImageResolution = elements.imageGenSettingsResolutionSelect.value; 
+                newSettings.geminiImageCount = elements.imageGenSettingsCountSelect.value;
+                newSettings.imageGenSystemPrompt = elements.imageGenSystemPromptTextarea.value.trim();
+                newSettings.imageGenEnableSystemPrompt = elements.imageGenEnableSystemPromptCheckbox.checked;
+
 newSettings.deepSeekApiEndpoint = elements.deepSeekApiEndpointInput.value.trim();
 newSettings.deepSeekModelName = elements.deepSeekModelNameSelect.value;
                 newSettings.deepSeekAdditionalModels = elements.deepSeekAdditionalModelsTextarea.value.trim();
@@ -19777,6 +20209,142 @@ initCryscrollerScroll() {
                 }
                 
                 updateHeights();
+            },
+
+            async renderImageGenHistoryList() {
+                try {
+                    const listElement = elements.imageGenHistoryList;
+                    if(!listElement) return;
+                    
+                    const chats = await dbUtils.getAllImageChats();
+                    listElement.querySelectorAll('.history-item:not(.js-image-gen-history-item-template)').forEach(item => item.remove());
+
+                    if (chats && chats.length > 0) {
+                        elements.noImageGenHistoryMessage.classList.add('hidden');
+
+                        chats.forEach(chat => {
+                            const li = elements.imageGenHistoryItemTemplate.cloneNode(true);
+                            li.classList.remove('js-image-gen-history-item-template');
+                            li.dataset.chatId = chat.id;
+                            
+                            // プレビュー等が必要であればここに追加...
+                            if (chat.messages && chat.messages.length > 0) {
+                                const lastMsg = chat.messages[chat.messages.length - 1];
+                                if (lastMsg && (lastMsg.role === 'user' || lastMsg.role === 'model')) {
+                                    const previewLayer = document.createElement('div');
+                                    previewLayer.classList.add('history-item-preview-layer', lastMsg.role === 'user' ? 'align-right' : 'align-left');
+                                    const bubble = document.createElement('div');
+                                    bubble.classList.add('history-preview-bubble');
+                                    let previewText = lastMsg.content;
+                                    if (!previewText && lastMsg.attachments && lastMsg.attachments.length > 0) {
+                                        previewText = `[画像指定]`;
+                                    } else if (!previewText) {
+                                        previewText = "(画像生成完了)"; // model応答に画像が含まれる等
+                                    }
+                                    if (previewText.length > 300) previewText = previewText.substring(0, 300) + "...";
+                                    bubble.textContent = previewText;
+                                    previewLayer.appendChild(bubble);
+                                    li.insertBefore(previewLayer, li.firstChild);
+                                }
+                            }
+
+                            const titleText = chat.title || `画像生成履歴 ${chat.id}`;
+                            const titleEl = li.querySelector('.history-item-title');
+                            titleEl.textContent = titleText;
+                            titleEl.title = titleText;
+
+                            li.querySelector('.created-date').textContent = `作成: ${uiUtils.formatDate(chat.createdAt)}`;
+                            li.querySelector('.updated-date').textContent = `更新: ${uiUtils.formatDate(chat.updatedAt)}`;
+
+                            li.onclick = (event) => {
+                                if (!event.target.closest('.history-item-actions button')) {
+                                    appLogic.loadImageChat(chat.id);
+                                    uiUtils.showScreen('imageGen');
+                                }
+                            };
+                            li.querySelector('.js-edit-title-btn').onclick = (e) => { 
+                                e.stopPropagation(); 
+                                appLogic.editImageGenHistoryTitle(chat.id, titleEl); 
+                            };
+                            li.querySelector('.js-delete-btn').onclick = (e) => { 
+                                e.stopPropagation(); 
+                                appLogic.confirmDeleteImageChat(chat.id, titleText); 
+                            };
+
+                            listElement.appendChild(li);
+                        });
+                    } else {
+                        elements.noImageGenHistoryMessage.classList.remove('hidden');
+                    }
+                } catch (error) {
+                    console.error("画像生成履歴一覧の取得に失敗:", error);
+                    uiUtils.showCustomAlert('画像生成履歴の読み込みに失敗しました。');
+                }
+            },
+
+            async loadImageChat(id) {
+                try {
+                    const chat = await dbUtils.getImageChat(id);
+                    if (chat) {
+                        state.currentImageChatId = chat.id;
+                        state.imageGenMessages = chat.messages || [];
+                        state.imageGenTitle = chat.title || '画像生成履歴';
+                        state.isImageGenTitleGenerated = true; // DBからの読み込み時はタイトルは既にあるとみなす
+                        
+                        // 画面構築
+                        elements.imageGenMessageContainer.innerHTML = '';
+                        state.imageGenMessages.forEach((msg, index) => {
+                            if (msg.role !== 'system') {
+                                uiUtils.appendImageGenMessage(msg.role, msg.content, index, msg.attachments);
+                            }
+                        });
+                        
+                        if (elements.imageGenTitle) {
+                            elements.imageGenTitle.textContent = state.imageGenTitle;
+                        }
+                    } else {
+                        uiUtils.showCustomAlert('指定された画像生成チャットが見つかりませんでした。');
+                    }
+                } catch (error) {
+                    console.error('画像生成チャット読み込みエラー:', error);
+                    uiUtils.showCustomAlert('画像生成チャットの読み込みに失敗しました。');
+                }
+            },
+            
+            async editImageGenHistoryTitle(chatId, titleElement) {
+                const newTitle = prompt('新しいタイトルを入力してください', titleElement.textContent);
+                if (newTitle !== null && newTitle.trim() !== '') {
+                    try {
+                        const finalTitle = newTitle.trim().substring(0, 100);
+                        await dbUtils.updateImageChatTitleDb(chatId, finalTitle);
+                        titleElement.textContent = finalTitle;
+                        if (state.currentImageChatId === chatId) {
+                            state.imageGenTitle = finalTitle;
+                            if (elements.imageGenTitle) elements.imageGenTitle.textContent = finalTitle;
+                        }
+                    } catch (error) {
+                        console.error("画像生成タイトルの更新に失敗:", error);
+                        uiUtils.showCustomAlert('タイトルの更新に失敗しました。');
+                    }
+                }
+            },
+
+            async confirmDeleteImageChat(id, title) {
+                const confirmed = await uiUtils.showCustomConfirm(`「${title}」の画像生成履歴を削除してもよろしいですか？`);
+                if (confirmed) {
+                    try {
+                        await dbUtils.deleteImageChat(id);
+                        if (state.currentImageChatId === id) {
+                            // 現在開いているものを削除したら新規にする？
+                            // 今回は単純に currentImageChatId を null にしておく
+                            state.currentImageChatId = null;
+                        }
+                        this.renderImageGenHistoryList();
+                    } catch (error) {
+                        console.error('画像生成チャットの削除に失敗:', error);
+                        uiUtils.showCustomAlert('削除に失敗しました。');
+                    }
+                }
             },
         };
         const webhookUtils = {
