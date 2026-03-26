@@ -13683,57 +13683,59 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
 
                     uiUtils.applySettingsToUI();
 
-                    const chats = await dbUtils.getAllChats(state.settings.historySortOrder);
-                    if (chats && chats.length > 0) {
-                        await this.loadChat(chats[0].id);
-                    } else {
-                        this.startNewChat();
-                    }
-
                     uiUtils.showScreen('chat');
                     history.replaceState({ screen: 'chat' }, '', '#chat');
                     state.currentScreen = 'chat';
 
-                    updateMessageMaxWidthVar();
-                    webhookUtils.initialize();
-                    proofreadingApiConfigUtils.initialize();
-                    const deleteConfirmCheckboxes = document.querySelectorAll('.js-disable-delete-api-key-confirmation-toggle');
-            deleteConfirmCheckboxes.forEach(checkbox => {
-                checkbox.addEventListener('change', (event) => {
-                    const isChecked = event.target.checked;
-
-                    deleteConfirmCheckboxes.forEach(cb => {
-                        if (cb !== event.target) {
-                            cb.checked = isChecked;
+                    setTimeout(async () => {
+                        const chats = await dbUtils.getAllChats(state.settings.historySortOrder);
+                        if (chats && chats.length > 0) {
+                            await this.loadChat(chats[0].id);
+                        } else {
+                            this.startNewChat();
                         }
-                    });
-                });
-            });
 
-            const removeDuplicateCheckboxes = document.querySelectorAll('.js-remove-duplicate-api-keys-toggle');
-            removeDuplicateCheckboxes.forEach(checkbox => {
-                checkbox.addEventListener('change', (event) => {
-                    const isChecked = event.target.checked;
-                    removeDuplicateCheckboxes.forEach(cb => {
-                        if (cb !== event.target) {
-                            cb.checked = isChecked;
+                        updateMessageMaxWidthVar();
+                        webhookUtils.initialize();
+                        proofreadingApiConfigUtils.initialize();
+                        
+                        const deleteConfirmCheckboxes = document.querySelectorAll('.js-disable-delete-api-key-confirmation-toggle');
+                        deleteConfirmCheckboxes.forEach(checkbox => {
+                            checkbox.addEventListener('change', (event) => {
+                                const isChecked = event.target.checked;
+                                deleteConfirmCheckboxes.forEach(cb => {
+                                    if (cb !== event.target) {
+                                        cb.checked = isChecked;
+                                    }
+                                });
+                            });
+                        });
+
+                        const removeDuplicateCheckboxes = document.querySelectorAll('.js-remove-duplicate-api-keys-toggle');
+                        removeDuplicateCheckboxes.forEach(checkbox => {
+                            checkbox.addEventListener('change', (event) => {
+                                const isChecked = event.target.checked;
+                                removeDuplicateCheckboxes.forEach(cb => {
+                                    if (cb !== event.target) {
+                                        cb.checked = isChecked;
+                                    }
+                                });
+                            });
+                        });
+
+                        this.setupEventListeners();
+                        this.updateZoomState();
+                        uiUtils.adjustTextareaHeight();
+                        uiUtils.setSendingState(false);
+
+                        if (state.settings.autoScrollOnNewMessage) {
+                            uiUtils.scrollToBottom();
                         }
-                    });
-                });
-            });
 
-                    this.setupEventListeners();
-                    this.updateZoomState();
-                    uiUtils.adjustTextareaHeight();
-                    uiUtils.setSendingState(false);
-
-                    if (state.settings.autoScrollOnNewMessage) {
-                        uiUtils.scrollToBottom();
-                    }
-
-                    if (typeof window.initializationSuccess === 'function') {
-                        window.initializationSuccess();
-                    }
+                        if (typeof window.initializationSuccess === 'function') {
+                            window.initializationSuccess();
+                        }
+                    }, 0);
                 } catch (error) {
                     const userChoice = await uiUtils.showInitializationFailureDialog(`アプリの初期化に失敗しました: ${error.message}`);
                     if (userChoice === 'export') {
