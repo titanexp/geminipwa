@@ -13614,13 +13614,20 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                     registerServiceWorker();
 
                     if (navigator.storage && navigator.storage.persist) {
-                        navigator.storage.persisted().then(isPersisted => {
-                            if (!isPersisted) navigator.storage.persist().catch(() => {});
-                        }).catch(() => {});
+                        try {
+                            const isPersisted = await navigator.storage.persisted();
+                            if (!isPersisted) {
+                                await navigator.storage.persist();
+                            }
+                        } catch (e) {
+                            console.warn("Storage persistence request failed:", e);
+                        }
                     }
+
 
                     await dbUtils.openDB();
                     await dbUtils.loadSettings();
+                    if (navigator.storage && navigator.storage.persist) { navigator.storage.persist(); }
                     uiUtils.applyTheme();
                     uiUtils.applyFontFamily();
                     uiUtils.applySidePanelSettingsToUI();
@@ -13674,61 +13681,61 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                         try { state.aiIconUrl = URL.createObjectURL(state.settings.aiIconBlob); } catch (e) { }
                     }
 
-                    // UIの枠組みを先に見せることで体感速度を向上
+                    uiUtils.applySettingsToUI();
+
                     uiUtils.showScreen('chat');
                     history.replaceState({ screen: 'chat' }, '', '#chat');
                     state.currentScreen = 'chat';
 
-                    uiUtils.applySettingsToUI();
-
-                    // 裏で重い履歴データの読み込みを行う
-                    const chats = await dbUtils.getAllChats(state.settings.historySortOrder);
-                    if (chats && chats.length > 0) {
-                        await this.loadChat(chats[0].id);
-                    } else {
-                        this.startNewChat();
-                    }
-
-                    updateMessageMaxWidthVar();
-                    webhookUtils.initialize();
-                    proofreadingApiConfigUtils.initialize();
-                    const deleteConfirmCheckboxes = document.querySelectorAll('.js-disable-delete-api-key-confirmation-toggle');
-            deleteConfirmCheckboxes.forEach(checkbox => {
-                checkbox.addEventListener('change', (event) => {
-                    const isChecked = event.target.checked;
-
-                    deleteConfirmCheckboxes.forEach(cb => {
-                        if (cb !== event.target) {
-                            cb.checked = isChecked;
+                    setTimeout(async () => {
+                        const chats = await dbUtils.getAllChats(state.settings.historySortOrder);
+                        if (chats && chats.length > 0) {
+                            await this.loadChat(chats[0].id);
+                        } else {
+                            this.startNewChat();
                         }
-                    });
-                });
-            });
 
-            const removeDuplicateCheckboxes = document.querySelectorAll('.js-remove-duplicate-api-keys-toggle');
-            removeDuplicateCheckboxes.forEach(checkbox => {
-                checkbox.addEventListener('change', (event) => {
-                    const isChecked = event.target.checked;
-                    removeDuplicateCheckboxes.forEach(cb => {
-                        if (cb !== event.target) {
-                            cb.checked = isChecked;
+                        updateMessageMaxWidthVar();
+                        webhookUtils.initialize();
+                        proofreadingApiConfigUtils.initialize();
+                        
+                        const deleteConfirmCheckboxes = document.querySelectorAll('.js-disable-delete-api-key-confirmation-toggle');
+                        deleteConfirmCheckboxes.forEach(checkbox => {
+                            checkbox.addEventListener('change', (event) => {
+                                const isChecked = event.target.checked;
+                                deleteConfirmCheckboxes.forEach(cb => {
+                                    if (cb !== event.target) {
+                                        cb.checked = isChecked;
+                                    }
+                                });
+                            });
+                        });
+
+                        const removeDuplicateCheckboxes = document.querySelectorAll('.js-remove-duplicate-api-keys-toggle');
+                        removeDuplicateCheckboxes.forEach(checkbox => {
+                            checkbox.addEventListener('change', (event) => {
+                                const isChecked = event.target.checked;
+                                removeDuplicateCheckboxes.forEach(cb => {
+                                    if (cb !== event.target) {
+                                        cb.checked = isChecked;
+                                    }
+                                });
+                            });
+                        });
+
+                        this.setupEventListeners();
+                        this.updateZoomState();
+                        uiUtils.adjustTextareaHeight();
+                        uiUtils.setSendingState(false);
+
+                        if (state.settings.autoScrollOnNewMessage) {
+                            uiUtils.scrollToBottom();
                         }
-                    });
-                });
-            });
 
-                    this.setupEventListeners();
-                    this.updateZoomState();
-                    uiUtils.adjustTextareaHeight();
-                    uiUtils.setSendingState(false);
-
-                    if (state.settings.autoScrollOnNewMessage) {
-                        uiUtils.scrollToBottom();
-                    }
-
-                    if (typeof window.initializationSuccess === 'function') {
-                        window.initializationSuccess();
-                    }
+                        if (typeof window.initializationSuccess === 'function') {
+                            window.initializationSuccess();
+                        }
+                    }, 0);
                 } catch (error) {
                     const userChoice = await uiUtils.showInitializationFailureDialog(`アプリの初期化に失敗しました: ${error.message}`);
                     if (userChoice === 'export') {
