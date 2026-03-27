@@ -17994,13 +17994,27 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
             },
 
             async exportAllSessions() {
-                const confirmed = await uiUtils.showCustomConfirm("全てのセッションを1つのJSONファイルとしてエクスポートしますか？");
+                let confirmed = true;
+                if (document.getElementById('history-screen') && !document.querySelector('#initFailureDialog[open]')) {
+                    confirmed = await uiUtils.showCustomConfirm("全てのセッションを1つのJSONファイルとしてエクスポートしますか？");
+                }
                 if (!confirmed) return;
 
                 try {
-                    const chats = await dbUtils.getAllChats();
+                    const chats = await new Promise((resolve, reject) => {
+                        const req = indexedDB.open(DB_NAME);
+                        req.onsuccess = e => {
+                            const db = e.target.result;
+                            if (!db.objectStoreNames.contains(CHATS_STORE)) return resolve([]);
+                            const store = db.transaction(CHATS_STORE, 'readonly').objectStore(CHATS_STORE);
+                            const getAllReq = store.getAll();
+                            getAllReq.onsuccess = () => resolve(getAllReq.result || []);
+                            getAllReq.onerror = () => reject(getAllReq.error);
+                        };
+                        req.onerror = e => reject(e.target.error);
+                    });
                     if (!chats || chats.length === 0) {
-                        await uiUtils.showCustomAlert("エクスポートするセッションがありません。");
+                        try { await uiUtils.showCustomAlert("エクスポートするセッションがありません。"); } catch(e) { alert("エクスポートするセッションがありません。"); }
                         return;
                     }
 
@@ -23759,4 +23773,3 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
 </body>
 
 </html>
-    
