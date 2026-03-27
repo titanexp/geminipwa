@@ -2528,11 +2528,27 @@ body.turf-mode {
         body.content-visibility-enabled .history-item {
             content-visibility: auto;
         }
+
+        body.content-visibility-enabled .message:hover,
+        body.content-visibility-enabled .message.show-actions,
+        body.content-visibility-enabled .history-item:hover {
+            content-visibility: visible;
+        }
+
+
         body.content-visibility-enabled .message {
             contain-intrinsic-size: auto 150px;
         }
         body.content-visibility-enabled .history-item {
             contain-intrinsic-size: auto 80px;
+        }
+
+        .message.model .message-content > pre:only-child {
+            background-color: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+            white-space: pre-wrap;
+            font-family: inherit;
         }
 
         .history-item:hover {
@@ -5062,7 +5078,7 @@ font-size: 1.142em !important;
         body.dark-mode #perf-monitor-panel { background-color: rgba(0, 0, 0, 0.9); }
     </style>
 
-    <script src="marked.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
 </head>
@@ -8253,7 +8269,7 @@ font-size: 1.142em !important;
 
     <script>
         const DB_NAME = 'GeminiPWA_DB';
-        const DB_VERSION = 9;
+        const DB_VERSION = 8;
         const IMAGE_CHATS_STORE = 'image_chats';
         const SETTINGS_STORE = 'settings';
         const CHATS_STORE = 'chats';
@@ -10553,6 +10569,39 @@ appendMessage(role, content, index, isStreamingPlaceholder = false, cascadeInfo 
                 }
 
                 if (role === 'user' && attachments && attachments.length > 0) {
+                    const imageGrid = document.createElement('div');
+                    imageGrid.style.display = 'flex';
+                    imageGrid.style.gap = '8px';
+                    imageGrid.style.marginBottom = '8px';
+                    imageGrid.style.overflowX = 'auto';
+                    imageGrid.style.paddingBottom = '4px';
+
+                    attachments.forEach((att, attachmentIndex) => {
+                        if (att.mimeType && att.mimeType.startsWith('image/') && att.base64Data) {
+                            const img = document.createElement('img');
+                            img.src = `data:${att.mimeType};base64,${att.base64Data}`;
+                            img.alt = att.name;
+                            img.style.width = '80px';
+                            img.style.height = '80px';
+                            img.style.borderRadius = '6px';
+                            img.style.objectFit = 'cover';
+                            img.style.cursor = 'pointer';
+                            img.style.flexShrink = '0';
+                            img.style.border = '1px solid var(--border-secondary)';
+                            img.title = att.name;
+                            
+                            img.onclick = (e) => {
+                                e.preventDefault();
+                                appLogic.previewAttachment(index, attachmentIndex);
+                            };
+                            imageGrid.appendChild(img);
+                        }
+                    });
+
+                    if (imageGrid.children.length > 0) {
+                        contentDiv.appendChild(imageGrid);
+                    }
+
                     const details = document.createElement('details');
                     details.classList.add('attachment-details');
                     const summary = document.createElement('summary');
@@ -15803,10 +15852,52 @@ appendImageGenMessage(role, content, index, attachments = null) {
                 }
 
                 if (attachments && attachments.length > 0) {
-                    const attachInfo = document.createElement('div');
-                    attachInfo.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin-bottom: 5px;';
-                    attachInfo.textContent = `[添付ファイル: ${attachments.map(a => a.name).join(', ')}]`;
-                    contentDiv.appendChild(attachInfo);
+                    const imageGrid = document.createElement('div');
+                    imageGrid.style.display = 'flex';
+                    imageGrid.style.gap = '8px';
+                    imageGrid.style.marginBottom = '5px';
+                    imageGrid.style.overflowX = 'auto';
+                    imageGrid.style.paddingBottom = '4px';
+
+                    attachments.forEach((att) => {
+                        if (att.mimeType && att.mimeType.startsWith('image/') && att.base64Data) {
+                            const img = document.createElement('img');
+                            img.src = `data:${att.mimeType};base64,${att.base64Data}`;
+                            img.alt = att.name;
+                            img.style.width = '80px';
+                            img.style.height = '80px';
+                            img.style.borderRadius = '6px';
+                            img.style.objectFit = 'cover';
+                            img.style.cursor = 'pointer';
+                            img.style.flexShrink = '0';
+                            img.style.border = '1px solid var(--border-secondary)';
+                            img.title = att.name;
+                            
+                            img.onclick = (e) => {
+                                e.preventDefault();
+                                const dialog = elements.imagePreviewDialog;
+                                const dialogImg = dialog.querySelector('img');
+                                const okBtn = dialog.querySelector('.dialog-ok-btn');
+                                dialogImg.src = img.src;
+                                dialogImg.alt = img.alt;
+                                okBtn.onclick = () => dialog.close();
+                                dialog.showModal();
+                            };
+                            imageGrid.appendChild(img);
+                        }
+                    });
+
+                    if (imageGrid.children.length > 0) {
+                        contentDiv.appendChild(imageGrid);
+                    }
+
+                    const nonImageAtts = attachments.filter(att => !(att.mimeType && att.mimeType.startsWith('image/') && att.base64Data));
+                    if (nonImageAtts.length > 0 || imageGrid.children.length === 0) {
+                        const attachInfo = document.createElement('div');
+                        attachInfo.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin-bottom: 5px;';
+                        attachInfo.textContent = `[添付ファイル: ${attachments.map(a => a.name).join(', ')}]`;
+                        contentDiv.appendChild(attachInfo);
+                    }
                 }
                 if (role === 'model' && typeof marked !== 'undefined') {
                     contentDiv.innerHTML = uiUtils._sanitizeAndParseMarkdown(content || '');
@@ -18638,7 +18729,13 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                     try {
                         uiUtils.revokeExistingObjectUrl();
                         uiUtils.revokeExistingIconUrls();
-                        await dbUtils.clearAllData();
+                        
+                        await new Promise((resolve, reject) => {
+                            const req = indexedDB.deleteDatabase(DB_NAME);
+                            req.onsuccess = () => resolve();
+                            req.onerror = () => reject(req.error);
+                            req.onblocked = () => resolve();
+                        });
                         
                         try {
                             localStorage.clear();
@@ -18896,6 +18993,39 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 if (originalMessage.role === 'user') {
                     contentDiv.innerHTML = '';
                     if (originalMessage.attachments && originalMessage.attachments.length > 0) {
+                        const imageGrid = document.createElement('div');
+                        imageGrid.style.display = 'flex';
+                        imageGrid.style.gap = '8px';
+                        imageGrid.style.marginBottom = '8px';
+                        imageGrid.style.overflowX = 'auto';
+                        imageGrid.style.paddingBottom = '4px';
+
+                        originalMessage.attachments.forEach((att, attachmentIndex) => {
+                            if (att.mimeType && att.mimeType.startsWith('image/') && att.base64Data) {
+                                const img = document.createElement('img');
+                                img.src = `data:${att.mimeType};base64,${att.base64Data}`;
+                                img.alt = att.name;
+                                img.style.width = '80px';
+                                img.style.height = '80px';
+                                img.style.borderRadius = '6px';
+                                img.style.objectFit = 'cover';
+                                img.style.cursor = 'pointer';
+                                img.style.flexShrink = '0';
+                                img.style.border = '1px solid var(--border-secondary)';
+                                img.title = att.name;
+                                
+                                img.onclick = (e) => {
+                                    e.preventDefault();
+                                    appLogic.previewAttachment(currentIndex, attachmentIndex);
+                                };
+                                imageGrid.appendChild(img);
+                            }
+                        });
+
+                        if (imageGrid.children.length > 0) {
+                            contentDiv.appendChild(imageGrid);
+                        }
+
                         const details = document.createElement('details');
                         details.classList.add('attachment-details');
                         const summary = document.createElement('summary');
@@ -23629,3 +23759,4 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
 </body>
 
 </html>
+    
