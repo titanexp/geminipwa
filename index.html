@@ -9852,13 +9852,9 @@ enableCryscrollerScrollOpacity: true,
                 enableConsoleMonitor: false,
                 lastOpenedChatId: null,
                 isPerfMonitorOpen: false,
-                isPerfMonitorMinimized: false,
                 isConsoleMonitorOpen: false,
-                isConsoleMonitorMinimized: false,
                 isTokenMonitorOpen: false,
-                isTokenMonitorMinimized: false,
                 isTwinEngineSummaryOpen: false,
-                isTwinEngineSummaryMinimized: false,
 
         },
             backgroundImageUrl: null,
@@ -10122,12 +10118,6 @@ let imageChatStore;
                             if (loadedSettings.hasOwnProperty('enableGrounding') && !loadedSettings.hasOwnProperty('geminiEnableGrounding')) state.settings.geminiEnableGrounding = loadedSettings.enableGrounding;
                             if (loadedSettings.hasOwnProperty('includeDeepSeekThoughts') && !loadedSettings.hasOwnProperty('deepSeekIncludeDeepSeekThoughts')) state.settings.deepSeekIncludeDeepSeekThoughts = loadedSettings.includeDeepSeekThoughts;
                             if (loadedSettings.hasOwnProperty('expandDeepSeekThoughtsByDefault') && !loadedSettings.hasOwnProperty('deepSeekExpandThoughtsByDefault')) state.settings.deepSeekExpandThoughtsByDefault = loadedSettings.expandDeepSeekThoughtsByDefault;
-
-                            // 各種モニターの最小化状態の読み込み
-                            if (loadedSettings.hasOwnProperty('isPerfMonitorMinimized')) state.settings.isPerfMonitorMinimized = loadedSettings.isPerfMonitorMinimized;
-                            if (loadedSettings.hasOwnProperty('isConsoleMonitorMinimized')) state.settings.isConsoleMonitorMinimized = loadedSettings.isConsoleMonitorMinimized;
-                            if (loadedSettings.hasOwnProperty('isTokenMonitorMinimized')) state.settings.isTokenMonitorMinimized = loadedSettings.isTokenMonitorMinimized;
-                            if (loadedSettings.hasOwnProperty('isTwinEngineSummaryMinimized')) state.settings.isTwinEngineSummaryMinimized = loadedSettings.isTwinEngineSummaryMinimized;
 
                             let backends = loadedSettings.llmaggregatorBackends || [];
                             if (backends.length === 0 && loadedSettings.llmAggregatorApiBackend) {
@@ -24358,10 +24348,8 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             const header = panel.querySelector('.token-header');
             if (elements.tokenMinimizeBtn) {
                 elements.tokenMinimizeBtn.addEventListener('click', () => {
-                    const isMinimized = panel.classList.toggle('minimized');
-                    elements.tokenMinimizeBtn.textContent = isMinimized ? '□' : '_';
-                    state.settings.isTokenMonitorMinimized = isMinimized;
-                    dbUtils.saveSetting('isTokenMonitorMinimized', isMinimized);
+                    panel.classList.toggle('minimized');
+                    elements.tokenMinimizeBtn.textContent = panel.classList.contains('minimized') ? '□' : '_';
                 });
             }
             if (elements.tokenCloseBtn) {
@@ -24402,9 +24390,7 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
         },
         toggle() {
             state.isTokenMonitorVisible = !state.isTokenMonitorVisible;
-            state.settings.isTokenMonitorOpen = state.isTokenMonitorVisible;
             elements.tokenMonitorPanel.classList.toggle('hidden', !state.isTokenMonitorVisible);
-            dbUtils.saveSetting('isTokenMonitorOpen', state.isTokenMonitorVisible);
             if (state.isTokenMonitorVisible) this.updateDisplay();
         },
         estimateTokens(text, provider = 'openai') {
@@ -24577,20 +24563,12 @@ const perfMonitor = {
                 });
             }
             const closeBtn = document.getElementById('perf-close-btn');
-            if (closeBtn) closeBtn.addEventListener('click', () => { 
-                this.stop(); 
-                if (this.toggle) {
-                    this.toggle.checked = false;
-                    this.toggle.dispatchEvent(new Event('change'));
-                }
-            });
+            if (closeBtn) closeBtn.addEventListener('click', () => { this.stop(); if (this.toggle) this.toggle.checked = false; });
             const minimizeBtn = document.getElementById('perf-minimize-btn');
             if (minimizeBtn) minimizeBtn.addEventListener('click', () => {
                 if (this.panel) {
-                    const isMinimized = this.panel.classList.toggle('minimized');
-                    minimizeBtn.textContent = isMinimized ? '□' : '_';
-                    state.settings.isPerfMonitorMinimized = isMinimized;
-                    dbUtils.saveSetting('isPerfMonitorMinimized', isMinimized);
+                    this.panel.classList.toggle('minimized');
+                    minimizeBtn.textContent = this.panel.classList.contains('minimized') ? '□' : '_';
                 }
             });
             const clearSpikesBtn = document.getElementById('perf-clear-spikes');
@@ -24673,12 +24651,31 @@ const perfMonitor = {
         start() {
             if (this._enabled) return;
             this._enabled = true;
-            state.settings.isPerfMonitorOpen = true;
-            dbUtils.saveSetting('isPerfMonitorOpen', true);
             this._startTime = Date.now();
             this._longTaskCount = 0; this._clsValue = 0; this._idbOpsCount = 0;
             this._droppedFrames = 0; this._lastMemoryUsed = 0;
-            this._fpsHistory =
+            this._fpsHistory =[]; this._frameCount = 0; this._lastFpsTime = performance.now();
+            if (this.panel) {
+                this.panel.classList.remove('hidden', 'minimized');
+                const minBtn = document.getElementById('perf-minimize-btn');
+                if (minBtn) minBtn.textContent = '_';
+            }
+            this._initFpsGraph();
+            this._startFpsCounter();
+            this._startObservers();
+            this._updateSpikeLogDisplay();
+            this._intervalId = setInterval(() => this._update(), 1000);
+            this._update();
+        },
+
+        stop() {
+            this._enabled = false;
+            if (this.panel) this.panel.classList.add('hidden');
+            if (this._intervalId) { clearInterval(this._intervalId); this._intervalId = null; }
+            if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
+            if (this._longTaskObserver) { this._longTaskObserver.disconnect(); this._longTaskObserver = null; }
+            if (this._clsObserver) { this._clsObserver.disconnect(); this._clsObserver = null; }
+        },
 
         _initFpsGraph() {
             const graph = document.getElementById('perf-fps-graph');
