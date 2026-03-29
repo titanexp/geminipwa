@@ -5292,6 +5292,114 @@ font-size: 1.142em !important;
         #perf-monitor-panel .perf-fps-bar.bad { background-color: #f00; }
         body.dark-mode #perf-monitor-panel { background-color: rgba(0, 0, 0, 0.9); }
 
+        #console-monitor-panel {
+            position: fixed;
+            bottom: 70px;
+            right: 310px;
+            width: 320px;
+            background-color: rgba(0, 0, 0, 0.85);
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 9999;
+            pointer-events: auto;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            transition: opacity 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            max-height: 40vh;
+        }
+        #console-monitor-panel.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+        #console-monitor-panel.minimized {
+            width: auto;
+            min-width: 80px;
+            padding: 6px 10px;
+            height: auto;
+        }
+        #console-monitor-panel.minimized .console-body { display: none; }
+        #console-monitor-panel .console-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.3);
+            cursor: move;
+            color: #0ff;
+            font-weight: bold;
+        }
+        #console-monitor-panel .console-header-actions {
+            display: flex;
+            gap: 4px;
+        }
+        #console-monitor-panel .console-header-actions button {
+            background: none;
+            border: 1px solid rgba(0, 255, 255, 0.4);
+            color: #0ff;
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        #console-monitor-panel .console-header-actions button:hover { background-color: rgba(0, 255, 255, 0.15); }
+        #console-monitor-panel .console-body {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            overflow: hidden;
+        }
+        #console-monitor-panel #console-log-area {
+            flex-grow: 1;
+            overflow-y: auto;
+            margin-bottom: 8px;
+            padding-right: 4px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0, 255, 255, 0.3) transparent;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            min-height: 100px;
+        }
+        #console-monitor-panel .log-entry { margin-bottom: 4px; border-bottom: 1px dashed rgba(255,255,255,0.1); padding-bottom: 2px; }
+        #console-monitor-panel .log-entry.error { color: #f55; }
+        #console-monitor-panel .log-entry.warn { color: #fd0; }
+        #console-monitor-panel .log-entry.info { color: #aaa; }
+        #console-monitor-panel .log-entry.cmd { color: #0ff; }
+        #console-monitor-panel .console-input-area {
+            display: flex;
+            gap: 4px;
+        }
+        #console-monitor-panel #console-input {
+            flex-grow: 1;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            color: #0f0;
+            font-family: inherit;
+            font-size: 11px;
+            padding: 4px;
+            border-radius: 3px;
+            outline: none;
+        }
+        #console-monitor-panel #console-submit-btn {
+            background: rgba(0, 255, 255, 0.1);
+            border: 1px solid rgba(0, 255, 255, 0.4);
+            color: #0ff;
+            font-family: inherit;
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        #console-monitor-panel #console-submit-btn:hover { background-color: rgba(0, 255, 255, 0.2); }
+        body.dark-mode #console-monitor-panel { background-color: rgba(0, 0, 0, 0.9); }
+
         #token-monitor-panel {
             position: fixed;
             bottom: 70px;
@@ -5560,6 +5668,25 @@ font-size: 1.142em !important;
         <div class="perf-section"><div class="perf-label">UPTIME</div><div class="perf-value" id="perf-uptime">0s</div></div>
     </div>
 </div>
+
+<div id="console-monitor-panel" class="hidden">
+    <div class="console-header">
+        <span>💻 CONSOLE</span>
+        <div class="console-header-actions">
+            <button id="console-minimize-btn" title="最小化">_</button>
+            <button id="console-close-btn" title="閉じる">✕</button>
+        </div>
+    </div>
+    <div class="console-body">
+        <div id="console-log-area"></div>
+        <div class="console-input-area">
+            <span style="display:flex;align-items:center;color:#0ff;">&gt;</span>
+            <input type="text" id="console-input" placeholder="コマンド (/help)..." autocomplete="off" spellcheck="false">
+            <button id="console-submit-btn">実行</button>
+        </div>
+    </div>
+</div>
+
 <div class="app-container">
 
         <div id="chat-screen" class="screen active">
@@ -8581,6 +8708,13 @@ font-size: 1.142em !important;
                             <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 5px;">
                                 ※ FPS、メモリ使用量、DOM要素数、描画タイミング等をリアルタイム表示します。
                             </p>
+                            <label class="checkbox-label" style="font-size: 12px;">
+                                <input type="checkbox" id="enable-console-monitor-toggle">
+                                デバッグコンソールを表示する (エラー監視・コマンド入力)
+                            </label>
+                            <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 5px;">
+                                ※ エラーログの確認や /clear-cache などのコマンド入力が可能なパネルを表示します。
+                            </p>
                             <div class="font-slider-container" style="margin-top: 15px; border-top: 1px dashed var(--border-secondary); padding-top: 10px;">
                                 <label for="cryscroller-observer-delay">スクロールバー描画遅延 (ms):</label>
                                 <div class="input-slider-wrapper">
@@ -9287,6 +9421,7 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             historyCryscrollerScrollZone: document.getElementById('history-cryscroller-scroll-zone'),
             historyCryscrollerScrollHandle: document.getElementById('history-cryscroller-scroll-handle'),
                         enableHistoryCryscrollerScrollToggle: document.getElementById('enable-history-cryscroller-scroll-toggle'),
+            enableConsoleMonitorToggle: document.getElementById('enable-console-monitor-toggle'),
             historyBgInput: document.getElementById('history-bg-input'),
             uploadHistoryBgBtn: document.getElementById('upload-history-bg-btn'),
             historyBgThumbnail: document.getElementById('history-bg-thumbnail'),
@@ -9665,9 +9800,10 @@ enableCryscrollerScrollOpacity: true,
                 cryscrollerObserverDelay: 500,
                 enableSettingsCryscrollerScroll: true,
                 enableHistoryCryscrollerScroll: true,
-                enablePerfMonitor: false,
+            enablePerfMonitor: false,
+            enableConsoleMonitor: false,
 
-                        },
+        },
             backgroundImageUrl: null,
             historyBackgroundImageUrl: null,
             settingsBackgroundImageUrl: null,
@@ -12775,6 +12911,15 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                         perfMonitor.start();
                     } else {
                         perfMonitor.stop();
+                    }
+                }
+                const consoleToggle = document.getElementById('enable-console-monitor-toggle');
+                if (consoleToggle) {
+                    consoleToggle.checked = state.settings.enableConsoleMonitor;
+                    if (state.settings.enableConsoleMonitor) {
+                        consoleMonitor.start();
+                    } else {
+                        consoleMonitor.stop();
                     }
                 }
             },
@@ -18996,6 +19141,7 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 newSettings.enableSettingsCryscrollerScroll = elements.enableSettingsCryscrollerScrollToggle.checked;
                 newSettings.enableHistoryCryscrollerScroll = elements.enableHistoryCryscrollerScrollToggle.checked;
                 newSettings.enablePerfMonitor = document.getElementById('enable-perf-monitor-toggle')?.checked || false;
+                newSettings.enableConsoleMonitor = document.getElementById('enable-console-monitor-toggle')?.checked || false;
                 newSettings.enableContentVisibility = elements.enableContentVisibilityToggle.checked;
                 newSettings.enableElevation = elements.enableElevationToggle.checked;
                 newSettings.enableElevationHover = elements.enableElevationHoverToggle.checked;
@@ -23076,10 +23222,15 @@ async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemIns
 
                 this.logError(type, errorInfo);
 
+                if (typeof consoleMonitor !== 'undefined' && consoleMonitor._enabled) {
+                    let msg = errorInfo.message || errorInfo.reason || JSON.stringify(errorInfo);
+                    consoleMonitor.log(`${type}: ${msg}`, 'error');
+                }
+
                 const isCriticalError = this.isCriticalError(errorInfo);
 
                 if (this.errorCount >= this.maxErrors || isCriticalError) {
-                    this.triggerForceReload(type, errorInfo, isCritical);
+                    this.triggerForceReload(type, errorInfo, isCriticalError);
                 }
             },
 
@@ -24364,7 +24515,222 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             }
         }
     };
+
+    const consoleMonitor = {
+        _enabled: false,
+        _isDragging: false,
+        _dragOffsetX: 0,
+        _dragOffsetY: 0,
+        get panel() { return document.getElementById('console-monitor-panel'); },
+        get toggle() { return document.getElementById('enable-console-monitor-toggle'); },
+
+        init() {
+            if (this.toggle) {
+                this.toggle.checked = false;
+                this.toggle.addEventListener('change', () => {
+                    if (this.toggle.checked) this.start();
+                    else this.stop();
+                });
+            }
+            const closeBtn = document.getElementById('console-close-btn');
+            if (closeBtn) closeBtn.addEventListener('click', () => { this.stop(); if (this.toggle) this.toggle.checked = false; state.settings.enableConsoleMonitor = false; });
+            const minimizeBtn = document.getElementById('console-minimize-btn');
+            if (minimizeBtn) minimizeBtn.addEventListener('click', () => {
+                if (this.panel) {
+                    this.panel.classList.toggle('minimized');
+                    minimizeBtn.textContent = this.panel.classList.contains('minimized') ? '□' : '_';
+                }
+            });
+
+            const submitBtn = document.getElementById('console-submit-btn');
+            const inputField = document.getElementById('console-input');
+
+            if (submitBtn && inputField) {
+                submitBtn.addEventListener('click', () => this.executeCommand(inputField.value));
+                inputField.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        this.executeCommand(inputField.value);
+                    }
+                });
+            }
+
+            this._initDrag();
+
+            const origError = console.error;
+            console.error = (...args) => {
+                origError(...args);
+                if (this._enabled) this.log(args.join(' '), 'error');
+            };
+            const origWarn = console.warn;
+            console.warn = (...args) => {
+                origWarn(...args);
+                if (this._enabled) this.log(args.join(' '), 'warn');
+            };
+            const origLog = console.log;
+            console.log = (...args) => {
+                origLog(...args);
+                if (this._enabled) this.log(args.join(' '), 'info');
+            };
+        },
+
+        _initDrag() {
+            const panel = this.panel;
+            if (!panel) return;
+            const header = panel.querySelector('.console-header');
+            if (!header) return;
+            const onStart = (e) => {
+                if (e.target.tagName === 'BUTTON') return;
+                this._isDragging = true;
+                const rect = panel.getBoundingClientRect();
+                this._dragOffsetX = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+                this._dragOffsetY = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+                panel.style.transition = 'none';
+                e.preventDefault();
+            };
+            const onMove = (e) => {
+                if (!this._isDragging) return;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                let newLeft = Math.max(0, Math.min(clientX - this._dragOffsetX, window.innerWidth - panel.offsetWidth));
+                let newTop = Math.max(0, Math.min(clientY - this._dragOffsetY, window.innerHeight - panel.offsetHeight));
+                panel.style.left = newLeft + 'px';
+                panel.style.top = newTop + 'px';
+                panel.style.bottom = 'auto';
+                panel.style.right = 'auto';
+                e.preventDefault();
+            };
+            const onEnd = () => { this._isDragging = false; panel.style.transition = ''; };
+            header.addEventListener('mousedown', onStart);
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onEnd);
+            header.addEventListener('touchstart', onStart, { passive: false });
+            document.addEventListener('touchmove', onMove, { passive: false });
+            document.addEventListener('touchend', onEnd);
+        },
+
+        start() {
+            if (this._enabled) return;
+            this._enabled = true;
+            if (this.panel) {
+                this.panel.classList.remove('hidden', 'minimized');
+                const minBtn = document.getElementById('console-minimize-btn');
+                if (minBtn) minBtn.textContent = '_';
+            }
+            this.log('Console initialized. Type /help for commands.', 'cmd');
+        },
+
+        stop() {
+            this._enabled = false;
+            if (this.panel) this.panel.classList.add('hidden');
+        },
+
+        log(message, type = 'normal') {
+            const logArea = document.getElementById('console-log-area');
+            if (!logArea) return;
+            
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            
+            const time = new Date().toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            
+            let displayMsg = message;
+            if (typeof message === 'object') {
+                try {
+                    displayMsg = JSON.stringify(message, null, 2);
+                } catch(e) {
+                    displayMsg = String(message);
+                }
+            }
+
+            entry.textContent = `[${time}] ${displayMsg}`;
+            logArea.appendChild(entry);
+            
+            logArea.scrollTop = logArea.scrollHeight;
+        },
+
+        async executeCommand(cmdString) {
+            const inputField = document.getElementById('console-input');
+            if (inputField) inputField.value = '';
+            
+            const cmd = cmdString.trim();
+            if (!cmd) return;
+
+            this.log(`> ${cmd}`, 'cmd');
+
+            const parts = cmd.split(' ');
+            const mainCmd = parts[0].toLowerCase();
+
+            switch (mainCmd) {
+                case '/help':
+                    this.log('Available commands:\n/clear - Clear console\n/clear-cache - Clear SW and browser cache, then reload\n/reset-data - Delete all IndexedDB data and reload\n/reload - Reload page\n/state - Dump current app state\n/eval [js] - Evaluate JavaScript (Use with caution)', 'info');
+                    break;
+                case '/clear':
+                    const logArea = document.getElementById('console-log-area');
+                    if (logArea) logArea.innerHTML = '';
+                    break;
+                case '/clear-cache':
+                    this.log('Clearing cache and reloading...', 'warn');
+                    if (typeof errorRecovery !== 'undefined') {
+                        errorRecovery.clearCacheAndReload();
+                    } else {
+                        this.log('errorRecovery is not defined.', 'error');
+                    }
+                    break;
+                case '/reset-data':
+                    this.log('Deleting all data...', 'error');
+                    try {
+                        await dbUtils.clearAllData();
+                        localStorage.clear();
+                        sessionStorage.clear();
+                        window.location.reload(true);
+                    } catch(e) {
+                        this.log(`Reset failed: ${e.message}`, 'error');
+                    }
+                    break;
+                case '/reload':
+                    window.location.reload(true);
+                    break;
+                case '/state':
+                    this.log({
+                        currentScreen: state.currentScreen,
+                        currentChatId: state.currentChatId,
+                        messageCount: state.currentMessages.length,
+                        isSending: state.isSending,
+                        apiProvider: state.settings.apiProvider
+                    }, 'info');
+                    break;
+                case '/eval':
+                    const code = parts.slice(1).join(' ');
+                    if (!code) {
+                        this.log('Usage: /eval [js code]', 'warn');
+                        break;
+                    }
+                    try {
+                        const result = eval(code);
+                        this.log(result, 'normal');
+                    } catch(e) {
+                        this.log(e.message, 'error');
+                    }
+                    break;
+                default:
+                    if (mainCmd.startsWith('/')) {
+                        this.log(`Unknown command: ${mainCmd}. Type /help`, 'warn');
+                    } else {
+                        try {
+                            const result = eval(cmd);
+                            this.log(result, 'normal');
+                        } catch(e) {
+                            this.log(e.message, 'error');
+                        }
+                    }
+                    break;
+            }
+        }
+    };
+
     tokenMonitor.init();
+    consoleMonitor.init();
     perfMonitor.init();
 
     errorRecovery.init();
