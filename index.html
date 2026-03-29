@@ -5664,6 +5664,7 @@ font-size: 1.142em !important;
     </div>
     <div class="perf-body">
         <div class="perf-section"><div class="perf-label">FPS</div><div class="perf-value" id="perf-fps">-- fps</div><div class="perf-fps-graph" id="perf-fps-graph"></div></div>
+        <div class="perf-section"><div class="perf-label">BOOT TIME</div><div class="perf-value" id="perf-boottime">-- ms</div></div>
         <div class="perf-section"><div class="perf-label">MEMORY (JS Heap)</div><div class="perf-value" id="perf-memory">N/A</div><div class="perf-bar-container"><div class="perf-bar low" id="perf-memory-bar" style="width:0%"></div></div></div>
         <div class="perf-section"><div class="perf-label">DOM NODES</div><div class="perf-value" id="perf-dom">--</div><div class="perf-bar-container"><div class="perf-bar low" id="perf-dom-bar" style="width:0%"></div></div></div>
         <div class="perf-section"><div class="perf-label">MESSAGES</div><div class="perf-value" id="perf-messages">--</div></div>
@@ -9499,6 +9500,7 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
 
         const state = {
             db: null,
+            bootTime: null,
             currentChatId: null,
             currentImageChatId: null,
             imageGenTitle: '新規画像生成',
@@ -14663,6 +14665,9 @@ if (state.settings.imageGenBackgroundImageBlob instanceof Blob) {
                     if (state.settings.autoScrollOnNewMessage) {
                         uiUtils.scrollToBottom();
                     }
+
+                    // アプリが操作可能になったタイミングで起動時間を記録
+                    state.bootTime = performance.now();
 
                     if (typeof window.initializationSuccess === 'function') {
                         window.initializationSuccess();
@@ -24565,6 +24570,19 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
 
         _update() {
             if (!this._enabled) return;
+
+            // BOOT TIME の表示更新
+            const bootEl = document.getElementById('perf-boottime');
+            if (bootEl) {
+                if (state.bootTime) {
+                    bootEl.textContent = `${state.bootTime.toFixed(0)} ms`;
+                    // 1秒未満で緑、3秒未満で黄、それ以上で赤
+                    bootEl.style.color = state.bootTime < 1000 ? '#0f0' : state.bootTime < 3000 ? '#ff0' : '#f00';
+                } else {
+                    bootEl.textContent = 'Measuring...';
+                }
+            }
+
             const memEl = document.getElementById('perf-memory');
             const memBar = document.getElementById('perf-memory-bar');
             if (performance.memory) {
