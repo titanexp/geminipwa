@@ -5673,7 +5673,16 @@ font-size: 1.142em !important;
         <div class="perf-section"><div class="perf-label">LAYOUT SHIFTS</div><div class="perf-value" id="perf-cls">0.000</div></div>
         <div class="perf-section"><div class="perf-label">NETWORK</div><div class="perf-value" id="perf-network">--</div></div>
         <div class="perf-section"><div class="perf-label">INDEXEDDB OPS</div><div class="perf-value" id="perf-idb">--</div></div>
+        <div class="perf-section"><div class="perf-label">DROPPED FRAMES (>33ms)</div><div class="perf-value" id="perf-dropped">0</div></div>
         <div class="perf-section"><div class="perf-label">UPTIME</div><div class="perf-value" id="perf-uptime">0s</div></div>
+        <div class="perf-section" style="border-bottom:none; margin-top:10px;">
+            <div class="perf-label" style="display:flex; justify-content:space-between;">
+                <span>🚨 SPIKE LOG (Last 5)</span>
+                <button id="perf-clear-spikes" style="background:none; border:1px solid #0f0; color:#0f0; font-size:9px; padding:0 4px; border-radius:3px; cursor:pointer;">Clear</button>
+            </div>
+            <div id="perf-spike-log" style="font-size:10px; margin-top:4px; color:#ff0; min-height: 40px; word-break: break-all;">-- No spikes recorded --</div>
+            <p style="font-size: 9px; color: #080; margin-top: 4px;">※GPU直接監視はWebの仕様上不可能なため、Frame Timeと欠落フレーム数で描画負荷を評価しています。</p>
+        </div>
     </div>
 </div>
 
@@ -24421,11 +24430,12 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
         }
     };
 
-    const perfMonitor = {
-        _enabled: false, _intervalId: null, _rafId: null, _fpsHistory: [], _maxFpsHistory: 60,
+const perfMonitor = {
+        _enabled: false, _intervalId: null, _rafId: null, _fpsHistory:[], _maxFpsHistory: 60,
         _frameCount: 0, _lastFpsTime: 0, _lastFrameTime: 0, _longTaskCount: 0, _clsValue: 0,
         _longTaskObserver: null, _clsObserver: null, _idbOpsCount: 0, _startTime: Date.now(),
         _isDragging: false, _dragOffsetX: 0, _dragOffsetY: 0,
+        _droppedFrames: 0, _spikes:[], _lastMemoryUsed: 0,
         get panel() { return document.getElementById('perf-monitor-panel'); },
         get toggle() { return document.getElementById('enable-perf-monitor-toggle'); },
 
@@ -24445,6 +24455,11 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                     this.panel.classList.toggle('minimized');
                     minimizeBtn.textContent = this.panel.classList.contains('minimized') ? '□' : '_';
                 }
+            });
+            const clearSpikesBtn = document.getElementById('perf-clear-spikes');
+            if (clearSpikesBtn) clearSpikesBtn.addEventListener('click', () => {
+                this._spikes =[];
+                this._updateSpikeLogDisplay();
             });
             this._initDrag();
             this._patchIdbOps();
@@ -24492,12 +24507,39 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             dbUtils.saveChat = async (...args) => { this._idbOpsCount++; return originalSaveChat(...args); };
         },
 
+        logSpike(message, level = 'warn') {
+            const time = new Date().toLocaleTimeString('en-GB', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            this._spikes.unshift({ time, message, level });
+            if (this._spikes.length > 5) this._spikes.pop();
+            this._updateSpikeLogDisplay();
+            
+            // Console Monitor が有効ならそちらにも流す
+            if (typeof consoleMonitor !== 'undefined' && consoleMonitor._enabled) {
+                consoleMonitor.log(`[SPIKE] ${message}`, level === 'critical' ? 'error' : 'warn');
+            }
+        },
+
+        _updateSpikeLogDisplay() {
+            const container = document.getElementById('perf-spike-log');
+            if (!container) return;
+            if (this._spikes.length === 0) {
+                container.innerHTML = '-- No spikes recorded --';
+                container.style.color = '#0f0';
+                return;
+            }
+            container.innerHTML = this._spikes.map(s => {
+                const color = s.level === 'critical' ? '#f55' : '#fd0';
+                return `<div style="color:${color}; margin-bottom:2px;">[${s.time}] ${s.message}</div>`;
+            }).join('');
+        },
+
         start() {
             if (this._enabled) return;
             this._enabled = true;
             this._startTime = Date.now();
             this._longTaskCount = 0; this._clsValue = 0; this._idbOpsCount = 0;
-            this._fpsHistory = []; this._frameCount = 0; this._lastFpsTime = performance.now();
+            this._droppedFrames = 0; this._lastMemoryUsed = 0;
+            this._fpsHistory =[]; this._frameCount = 0; this._lastFpsTime = performance.now();
             if (this.panel) {
                 this.panel.classList.remove('hidden', 'minimized');
                 const minBtn = document.getElementById('perf-minimize-btn');
@@ -24506,6 +24548,7 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             this._initFpsGraph();
             this._startFpsCounter();
             this._startObservers();
+            this._updateSpikeLogDisplay();
             this._intervalId = setInterval(() => this._update(), 1000);
             this._update();
         },
@@ -24535,14 +24578,33 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             let lastTime = performance.now();
             const tick = (now) => {
                 if (!this._enabled) return;
-                this._lastFrameTime = now - lastTime;
+                const frameTime = now - lastTime;
+                this._lastFrameTime = frameTime;
                 lastTime = now;
                 this._frameCount++;
+
+                // グラフィック負荷のスパイク検知 (33ms = 30fps割れ)
+                if (frameTime > 33) {
+                    this._droppedFrames++;
+                    if (frameTime > 100) { // 100ms以上のフリーズは重度のグラフィックスパイク
+                        this.logSpike(`Jank: Frame took ${frameTime.toFixed(1)}ms`, 'critical');
+                    }
+                }
+
                 const elapsed = now - this._lastFpsTime;
                 if (elapsed >= 1000) {
                     const fps = Math.round((this._frameCount * 1000) / elapsed);
                     this._fpsHistory.push(fps);
                     if (this._fpsHistory.length > this._maxFpsHistory) this._fpsHistory.shift();
+                    
+                    // FPS急降下の検知
+                    if (this._fpsHistory.length >= 2) {
+                        const prevFps = this._fpsHistory[this._fpsHistory.length - 2];
+                        if (prevFps >= 45 && fps <= 30) {
+                            this.logSpike(`FPS Drop: ${prevFps} -> ${fps}`, 'warn');
+                        }
+                    }
+
                     this._frameCount = 0;
                     this._lastFpsTime = now;
                     this._updateFpsDisplay(fps);
@@ -24600,18 +24662,18 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
         _update() {
             if (!this._enabled) return;
 
-            // BOOT TIME の表示更新
+            // BOOT TIME
             const bootEl = document.getElementById('perf-boottime');
             if (bootEl) {
                 if (state.bootTime) {
                     bootEl.textContent = `${state.bootTime.toFixed(0)} ms`;
-                    // 1秒未満で緑、3秒未満で黄、それ以上で赤
                     bootEl.style.color = state.bootTime < 1000 ? '#0f0' : state.bootTime < 3000 ? '#ff0' : '#f00';
                 } else {
                     bootEl.textContent = 'Measuring...';
                 }
             }
 
+            // MEMORY
             const memEl = document.getElementById('perf-memory');
             const memBar = document.getElementById('perf-memory-bar');
             if (performance.memory) {
@@ -24620,6 +24682,15 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                 const pct = (used / total) * 100;
                 if (memEl) memEl.textContent = `${(used / 1048576).toFixed(1)} MB / ${(total / 1048576).toFixed(0)} MB (${pct.toFixed(1)}%)`;
                 if (memBar) { memBar.style.width = pct + '%'; memBar.className = 'perf-bar ' + this._getBarClass(pct); }
+                
+                // Memory Spike検知 (+50MBの急激なメモリ確保)
+                if (this._lastMemoryUsed > 0) {
+                    const diffMB = (used - this._lastMemoryUsed) / 1048576;
+                    if (diffMB > 50) {
+                        this.logSpike(`Memory Spike: +${diffMB.toFixed(1)} MB`, 'warn');
+                    }
+                }
+                this._lastMemoryUsed = used;
             } else if (memEl) {
                 memEl.textContent = 'N/A (Chrome only)';
             }
@@ -24644,6 +24715,12 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                 const ftPct = Math.min(100, (this._lastFrameTime / 50) * 100);
                 ftBar.style.width = ftPct + '%';
                 ftBar.className = 'perf-bar ' + this._getBarClass(ftPct);
+            }
+
+            const dropEl = document.getElementById('perf-dropped');
+            if (dropEl) {
+                dropEl.textContent = this._droppedFrames.toLocaleString();
+                dropEl.style.color = this._droppedFrames === 0 ? '#0f0' : this._droppedFrames < 10 ? '#ff0' : '#f00';
             }
 
             const ltEl = document.getElementById('perf-longtasks');
@@ -24677,7 +24754,6 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             }
         }
     };
-
     const consoleMonitor = {
         _enabled: false,
         _isDragging: false,
