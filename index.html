@@ -5528,9 +5528,9 @@ font-size: 1.142em !important;
         }
     </style>
 
-        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js" defer></script>
 </head>
 
 <body>
@@ -10363,6 +10363,35 @@ let imageChatStore;
                 });
             },
 
+            async getLatestChatId(sortBy = 'updatedAt') {
+                await this.openDB();
+                return new Promise((resolve, reject) => {
+                    try {
+                        const store = this._getStore(CHATS_STORE);
+                        const indexName = sortBy === 'createdAt' ? CHAT_CREATEDAT_INDEX : CHAT_UPDATEDAT_INDEX;
+
+                        if (!store.indexNames.contains(indexName)) {
+                            resolve(null);
+                            return;
+                        }
+
+                        const index = store.index(indexName);
+                        const request = index.openCursor(null, 'prev');
+                        request.onsuccess = (event) => {
+                            const cursor = event.target.result;
+                            if (cursor) {
+                                resolve(cursor.value.id); // 最初の1件（最新）のIDだけ返して即終了
+                            } else {
+                                resolve(null);
+                            }
+                        };
+                        request.onerror = (event) => reject(`最新ID取得エラー: ${event.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            },
+
             async deleteChat(id) {
                 await this.openDB();
                 return new Promise((resolve, reject) => {
@@ -14618,9 +14647,10 @@ if (state.settings.imageGenBackgroundImageBlob instanceof Blob) {
 
                     uiUtils.applySettingsToUI();
 
-                    const chats = await dbUtils.getAllChats(state.settings.historySortOrder);
-                    if (chats && chats.length > 0) {
-                        await this.loadChat(chats[0].id);
+                    // 全件取得をやめ、最新のIDだけを超高速で取得する
+                    const latestChatId = await dbUtils.getLatestChatId(state.settings.historySortOrder);
+                    if (latestChatId) {
+                        await this.loadChat(latestChatId);
                     } else {
                         this.startNewChat();
                     }
@@ -14666,7 +14696,6 @@ if (state.settings.imageGenBackgroundImageBlob instanceof Blob) {
                         uiUtils.scrollToBottom();
                     }
 
-                    // アプリが操作可能になったタイミングで起動時間を記録
                     state.bootTime = performance.now();
 
                     if (typeof window.initializationSuccess === 'function') {
