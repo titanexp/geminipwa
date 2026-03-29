@@ -2629,21 +2629,14 @@ body.turf-mode {
             cursor: pointer;
         }
 
-        body.content-visibility-enabled .message,
         body.content-visibility-enabled .history-item {
             content-visibility: auto;
         }
 
-        body.content-visibility-enabled .message:hover,
-        body.content-visibility-enabled .message.show-actions,
         body.content-visibility-enabled .history-item:hover {
             content-visibility: visible;
         }
 
-
-        body.content-visibility-enabled .message {
-            contain-intrinsic-size: auto 150px;
-        }
         body.content-visibility-enabled .history-item {
             contain-intrinsic-size: auto 80px;
         }
@@ -9857,6 +9850,7 @@ enableCryscrollerScrollOpacity: true,
                 enableHistoryCryscrollerScroll: true,
             enablePerfMonitor: false,
                 enableConsoleMonitor: false,
+                lastOpenedChatId: null,
                 isPerfMonitorOpen: false,
                 isConsoleMonitorOpen: false,
                 isTokenMonitorOpen: false,
@@ -10282,6 +10276,8 @@ let imageChatStore;
                                 const savedId = event.target.result;
                                 if (!state.currentChatId && savedId) {
                                     state.currentChatId = savedId;
+                                    state.settings.lastOpenedChatId = savedId;
+                                    dbUtils.saveSetting('lastOpenedChatId', savedId);
                                 }
                                 if ((state.currentChatId || savedId) === (chatIdToUse || savedId)) {
                                     uiUtils.updateChatTitle(chatData.title);
@@ -14679,11 +14675,27 @@ uiUtils.applySettingsToUI();
                         appLogic.toggleTwinEngineSummary();
                     }
 
-                    const latestChatId = await dbUtils.getLatestChatId(state.settings.historySortOrder);
-                    if (latestChatId) {
-                        await this.loadChat(latestChatId);
+                    let chatToLoadId = state.settings.lastOpenedChatId;
+                    let chatExists = false;
+
+                    if (chatToLoadId) {
+                        try {
+                            const chat = await dbUtils.getChat(chatToLoadId);
+                            if (chat) chatExists = true;
+                        } catch (e) {
+                            chatExists = false;
+                        }
+                    }
+
+                    if (chatExists) {
+                        await this.loadChat(chatToLoadId);
                     } else {
-                        this.startNewChat();
+                        const latestChatId = await dbUtils.getLatestChatId(state.settings.historySortOrder);
+                        if (latestChatId) {
+                            await this.loadChat(latestChatId);
+                        } else {
+                            this.startNewChat();
+                        }
                     }
 
                     uiUtils.showScreen('chat');
@@ -16563,6 +16575,8 @@ resetSwipeState() {
             },
             startNewChat() {
                 state.currentChatId = null;
+                state.settings.lastOpenedChatId = null;
+                dbUtils.saveSetting('lastOpenedChatId', null);
                 state.currentMessages = [];
                 state.currentChatBaseUrl = null;
                 if (state.settings.commonSystemPrompt && state.settings.commonSystemPrompt.trim() !== '') {
@@ -16935,6 +16949,8 @@ appendImageGenMessage(role, content, index, attachments = null) {
                     const chat = await dbUtils.getChat(id);
                     if (chat) {
                         state.currentChatId = chat.id;
+                        state.settings.lastOpenedChatId = chat.id;
+                        dbUtils.saveSetting('lastOpenedChatId', chat.id);
                         state.currentMessages = chat.messages?.map(msg => ({
                             ...msg,
                             attachments: msg.attachments || [],
