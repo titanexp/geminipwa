@@ -9851,10 +9851,14 @@ enableCryscrollerScrollOpacity: true,
             enablePerfMonitor: false,
                 enableConsoleMonitor: false,
                 lastOpenedChatId: null,
-                isPerfMonitorOpen: false,
+                                isPerfMonitorOpen: false,
                 isConsoleMonitorOpen: false,
                 isTokenMonitorOpen: false,
                 isTwinEngineSummaryOpen: false,
+                isPerfMonitorMinimized: false,
+                isConsoleMonitorMinimized: false,
+                isTokenMonitorMinimized: false,
+                isTwinEngineSummaryMinimized: false,
 
         },
             backgroundImageUrl: null,
@@ -14662,7 +14666,7 @@ if (state.settings.backgroundImageBlob instanceof Blob) {
 
 uiUtils.applySettingsToUI();
 
-                    if (state.settings.isPerfMonitorOpen) {
+                                        if (state.settings.isPerfMonitorOpen) {
                         perfMonitor.start();
                     }
                     if (state.settings.isConsoleMonitorOpen) {
@@ -14673,7 +14677,20 @@ uiUtils.applySettingsToUI();
                     }
                     if (state.settings.isTwinEngineSummaryOpen) {
                         appLogic.toggleTwinEngineSummary();
-                    }
+                    }['perf-monitor-panel', 'console-monitor-panel', 'token-monitor-panel', 'twin-engine-summary-area'].forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el) {
+                            let isMinimized = false;
+                            if (id === 'perf-monitor-panel') isMinimized = state.settings.isPerfMonitorMinimized;
+                            else if (id === 'console-monitor-panel') isMinimized = state.settings.isConsoleMonitorMinimized;
+                            else if (id === 'token-monitor-panel') isMinimized = state.settings.isTokenMonitorMinimized;
+                            else if (id === 'twin-engine-summary-area') isMinimized = state.settings.isTwinEngineSummaryMinimized;
+                            
+                            el.classList.toggle('minimized', isMinimized);
+                            const minBtn = el.querySelector('button[title="最小化"]');
+                            if (minBtn) minBtn.textContent = isMinimized ? '□' : '_';
+                        }
+                    });
 
                     let chatToLoadId = state.settings.lastOpenedChatId;
                     let chatExists = false;
@@ -14865,10 +14882,11 @@ uiUtils.applySettingsToUI();
                 const teMinBtn = document.getElementById('twin-engine-minimize-btn');
                 const teCloseBtn = document.getElementById('twin-engine-close-btn');
 
-                if (teCloseBtn) teCloseBtn.addEventListener('click', () => { this.toggleTwinEngineSummary(); });
+                                if (teCloseBtn) teCloseBtn.addEventListener('click', () => { this.toggleTwinEngineSummary(); appLogic.saveSettings(false); });
                 if (teMinBtn) teMinBtn.addEventListener('click', () => {
                     tePanel.classList.toggle('minimized');
                     teMinBtn.textContent = tePanel.classList.contains('minimized') ? '□' : '_';
+                    appLogic.saveSettings(false);
                 });
 
                 let teIsDragging = false;
@@ -19411,10 +19429,14 @@ newSettings.footerTapScrollToBottom = elements.footerTapScrollToBottomToggle.che
                 newSettings.enableHistoryCryscrollerScroll = elements.enableHistoryCryscrollerScrollToggle.checked;
                 newSettings.enablePerfMonitor = document.getElementById('enable-perf-monitor-toggle')?.checked || false;
                 newSettings.enableConsoleMonitor = document.getElementById('enable-console-monitor-toggle')?.checked || false;
-                newSettings.isPerfMonitorOpen = perfMonitor._enabled;
+                                newSettings.isPerfMonitorOpen = perfMonitor._enabled;
                 newSettings.isConsoleMonitorOpen = consoleMonitor._enabled;
                 newSettings.isTokenMonitorOpen = state.isTokenMonitorVisible;
                 newSettings.isTwinEngineSummaryOpen = state.isTwinEngineSummaryVisible;
+                newSettings.isPerfMonitorMinimized = document.getElementById('perf-monitor-panel')?.classList.contains('minimized') || false;
+                newSettings.isConsoleMonitorMinimized = document.getElementById('console-monitor-panel')?.classList.contains('minimized') || false;
+                newSettings.isTokenMonitorMinimized = document.getElementById('token-monitor-panel')?.classList.contains('minimized') || false;
+                newSettings.isTwinEngineSummaryMinimized = document.getElementById('twin-engine-summary-area')?.classList.contains('minimized') || false;
                 newSettings.enableContentVisibility = elements.enableContentVisibilityToggle.checked;
                 newSettings.enableElevation = elements.enableElevationToggle.checked;
                 newSettings.enableElevationHover = elements.enableElevationHoverToggle.checked;
@@ -24346,15 +24368,17 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             const panel = elements.tokenMonitorPanel;
             if (!panel) return;
             const header = panel.querySelector('.token-header');
-            if (elements.tokenMinimizeBtn) {
+                        if (elements.tokenMinimizeBtn) {
                 elements.tokenMinimizeBtn.addEventListener('click', () => {
                     panel.classList.toggle('minimized');
                     elements.tokenMinimizeBtn.textContent = panel.classList.contains('minimized') ? '□' : '_';
+                    appLogic.saveSettings(false);
                 });
             }
             if (elements.tokenCloseBtn) {
                 elements.tokenCloseBtn.addEventListener('click', () => {
                     this.toggle();
+                    appLogic.saveSettings(false);
                 });
             }
 
@@ -24562,13 +24586,14 @@ const perfMonitor = {
                     else this.stop();
                 });
             }
-            const closeBtn = document.getElementById('perf-close-btn');
-            if (closeBtn) closeBtn.addEventListener('click', () => { this.stop(); if (this.toggle) this.toggle.checked = false; });
+                        const closeBtn = document.getElementById('perf-close-btn');
+            if (closeBtn) closeBtn.addEventListener('click', () => { this.stop(); if (this.toggle) this.toggle.checked = false; appLogic.saveSettings(false); });
             const minimizeBtn = document.getElementById('perf-minimize-btn');
             if (minimizeBtn) minimizeBtn.addEventListener('click', () => {
                 if (this.panel) {
                     this.panel.classList.toggle('minimized');
                     minimizeBtn.textContent = this.panel.classList.contains('minimized') ? '□' : '_';
+                    appLogic.saveSettings(false);
                 }
             });
             const clearSpikesBtn = document.getElementById('perf-clear-spikes');
@@ -24885,13 +24910,14 @@ const perfMonitor = {
                     else this.stop();
                 });
             }
-            const closeBtn = document.getElementById('console-close-btn');
-            if (closeBtn) closeBtn.addEventListener('click', () => { this.stop(); if (this.toggle) this.toggle.checked = false; state.settings.enableConsoleMonitor = false; });
+                        const closeBtn = document.getElementById('console-close-btn');
+            if (closeBtn) closeBtn.addEventListener('click', () => { this.stop(); if (this.toggle) this.toggle.checked = false; state.settings.enableConsoleMonitor = false; appLogic.saveSettings(false); });
             const minimizeBtn = document.getElementById('console-minimize-btn');
             if (minimizeBtn) minimizeBtn.addEventListener('click', () => {
                 if (this.panel) {
                     this.panel.classList.toggle('minimized');
                     minimizeBtn.textContent = this.panel.classList.contains('minimized') ? '□' : '_';
+                    appLogic.saveSettings(false);
                 }
             });
 
