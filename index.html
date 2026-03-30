@@ -5519,22 +5519,6 @@ font-size: 1.142em !important;
             padding: 4px;
             font-size: 10px;
         }
-        #twin-engine-summary-area, #token-monitor-panel, #perf-monitor-panel, #console-monitor-panel {
-            transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease !important;
-        }
-        #twin-engine-summary-area.hidden, #token-monitor-panel.hidden, #perf-monitor-panel.hidden, #console-monitor-panel.hidden {
-            transform: scale(0) !important;
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-        }
-        #console-monitor-panel {
-            right: 10px !important;
-            max-width: calc(100vw - 20px) !important;
-        }
-        @media (min-width: 650px) {
-            #console-monitor-panel { right: 310px !important; }
-        }
     </style>
 
         <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
@@ -14833,6 +14817,19 @@ uiUtils.applySettingsToUI();
                             
                         </div>
                         <p style="font-size: 12px; margin-top: 30px; color: var(--text-secondary); max-width: 600px; margin-left: auto; margin-right: auto; word-wrap: break-word;">エラー詳細: <span id="recovery-error-details"></span></p>
+                        <div style="margin-top: 20px; max-width: 600px; margin-left: auto; margin-right: auto; text-align: left; background: rgba(0,0,0,0.8); border: 1px solid #0ff; padding: 10px; border-radius: 5px;">
+                            <div id="recovery-console-log" style="height: 100px; overflow-y: auto; color: #0f0; font-family: monospace; font-size: 11px; margin-bottom: 5px; white-space: pre-wrap; word-break: break-all;">[Recovery Console]
+Available commands / objects:
+- window.location.reload()
+- localStorage.clear()
+- indexedDB.deleteDatabase('GeminiPWA_DB')
+- state, dbUtils, appLogic, uiUtils, errorRecovery
+</div>
+                            <div style="display: flex; gap: 5px;">
+                                <input type="text" id="recovery-console-input" style="flex-grow: 1; background: #000; color: #0f0; border: 1px solid #0ff; padding: 5px; font-family: monospace; font-size: 11px;" placeholder="JavaScriptを入力...">
+                                <button id="recovery-console-btn" style="background: #004444; color: #0ff; border: 1px solid #0ff; padding: 5px 10px; cursor: pointer; font-size: 11px;">実行</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -14855,6 +14852,26 @@ uiUtils.applySettingsToUI();
                 });
                 document.getElementById('recovery-clear-history-btn').addEventListener('click', () => this.confirmClearAllHistory());
                 document.getElementById('recovery-clear-data-btn').addEventListener('click', () => this.confirmClearAllData());
+
+                const rLog = document.getElementById('recovery-console-log');
+                const rInput = document.getElementById('recovery-console-input');
+                const rBtn = document.getElementById('recovery-console-btn');
+                const runEval = () => {
+                    const code = rInput.value.trim();
+                    if (!code) return;
+                    rLog.textContent += '> ' + code + '\n';
+                    try {
+                        const res = eval(code);
+                        rLog.textContent += (typeof res === 'object' ? JSON.stringify(res) : String(res)) + '\n';
+                    } catch (e) {
+                        rLog.textContent += e.toString() + '\n';
+                    }
+                    rInput.value = '';
+                    rLog.scrollTop = rLog.scrollHeight;
+                };
+                rBtn.addEventListener('click', runEval);
+                rInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') runEval(); });
+
                 const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
                 document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mode', 'pastel-blue-mode', 'pastel-yellow-mode', 'pastel-purple-mode', 'pastel-rainbow-mode');
                 document.body.classList.add(prefersDark ? 'dark-mode' : 'light-mode-forced');
@@ -16258,15 +16275,6 @@ resetSwipeState() {
                 state.isSwiping = false;
             },
             toggleTwinEngineSummary() {
-                const btn = elements.twinEngineSummaryBtn;
-                const panel = elements.twinEngineSummaryArea;
-                if (btn && panel) {
-                    const btnRect = btn.getBoundingClientRect();
-                    const originX = btnRect.left + (btnRect.width / 2) - panel.offsetLeft;
-                    const originY = btnRect.top + (btnRect.height / 2) - panel.offsetTop;
-                    panel.style.transformOrigin = `${originX}px ${originY}px`;
-                }
-
                 state.isTwinEngineSummaryVisible = !state.isTwinEngineSummaryVisible;
                 elements.twinEngineSummaryArea.classList.toggle('hidden', !state.isTwinEngineSummaryVisible);
 
@@ -24407,28 +24415,38 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                 });
             }
 
+            let currentScale = 1, initialPinchDist = null, initialScale = 1;
+            const getDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
             const onStart = (e) => {
                 if (e.target.tagName === 'BUTTON') return;
+                if (e.touches && e.touches.length === 2) {
+                    this._isDragging = false; initialPinchDist = getDist(e.touches); initialScale = currentScale;
+                    panel.style.transition = 'none'; e.preventDefault(); return;
+                }
                 this._isDragging = true;
                 const rect = panel.getBoundingClientRect();
-                this._dragOffsetX = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-                this._dragOffsetY = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+                this._dragOffsetX = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / currentScale;
+                this._dragOffsetY = ((e.touches ? e.touches[0].clientY : e.clientY) - rect.top) / currentScale;
                 panel.style.transition = 'none';
                 e.preventDefault();
             };
             const onMove = (e) => {
+                if (e.touches && e.touches.length === 2 && initialPinchDist) {
+                    currentScale = Math.max(0.5, Math.min(3, initialScale * (getDist(e.touches) / initialPinchDist)));
+                    panel.style.transform = `scale(${currentScale})`;
+                    panel.style.transformOrigin = 'top left';
+                    e.preventDefault(); return;
+                }
                 if (!this._isDragging) return;
                 const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                let newLeft = Math.max(0, Math.min(clientX - this._dragOffsetX, window.innerWidth - panel.offsetWidth));
-                let newTop = Math.max(0, Math.min(clientY - this._dragOffsetY, window.innerHeight - panel.offsetHeight));
-                panel.style.left = newLeft + 'px';
-                panel.style.top = newTop + 'px';
-                panel.style.bottom = 'auto';
-                panel.style.right = 'auto';
+                let newLeft = Math.max(0, Math.min(clientX - this._dragOffsetX * currentScale, window.innerWidth - panel.offsetWidth * currentScale));
+                let newTop = Math.max(0, Math.min(clientY - this._dragOffsetY * currentScale, window.innerHeight - panel.offsetHeight * currentScale));
+                panel.style.left = newLeft + 'px'; panel.style.top = newTop + 'px';
+                panel.style.bottom = 'auto'; panel.style.right = 'auto';
                 e.preventDefault();
             };
-            const onEnd = () => { this._isDragging = false; panel.style.transition = ''; };
+            const onEnd = () => { this._isDragging = false; initialPinchDist = null; panel.style.transition = ''; };
             
             header.addEventListener('mousedown', onStart);
             document.addEventListener('mousemove', onMove);
@@ -24437,20 +24455,10 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             document.addEventListener('touchmove', onMove, { passive: false });
             document.addEventListener('touchend', onEnd);
         },
-toggle() {
-            const btn = elements.toggleTokenMonitorBtn;
-            const panel = elements.tokenMonitorPanel;
-            if (btn && panel) {
-                const btnRect = btn.getBoundingClientRect();
-                const originX = btnRect.left + (btnRect.width / 2) - panel.offsetLeft;
-                const originY = btnRect.top + (btnRect.height / 2) - panel.offsetTop;
-                panel.style.transformOrigin = `${originX}px ${originY}px`;
-            }
-
+        toggle() {
             state.isTokenMonitorVisible = !state.isTokenMonitorVisible;
             elements.tokenMonitorPanel.classList.toggle('hidden', !state.isTokenMonitorVisible);
             if (state.isTokenMonitorVisible) this.updateDisplay();
-            setTimeout(() => appLogic.saveSettings(false), 0);
         },
         estimateTokens(text, provider = 'openai') {
             if (!text) return 0;
@@ -24645,28 +24653,38 @@ const perfMonitor = {
             if (!panel) return;
             const header = panel.querySelector('.perf-header');
             if (!header) return;
+            let currentScale = 1, initialPinchDist = null, initialScale = 1;
+            const getDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
             const onStart = (e) => {
                 if (e.target.tagName === 'BUTTON') return;
+                if (e.touches && e.touches.length === 2) {
+                    this._isDragging = false; initialPinchDist = getDist(e.touches); initialScale = currentScale;
+                    panel.style.transition = 'none'; e.preventDefault(); return;
+                }
                 this._isDragging = true;
                 const rect = panel.getBoundingClientRect();
-                this._dragOffsetX = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-                this._dragOffsetY = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+                this._dragOffsetX = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / currentScale;
+                this._dragOffsetY = ((e.touches ? e.touches[0].clientY : e.clientY) - rect.top) / currentScale;
                 panel.style.transition = 'none';
                 e.preventDefault();
             };
             const onMove = (e) => {
+                if (e.touches && e.touches.length === 2 && initialPinchDist) {
+                    currentScale = Math.max(0.5, Math.min(3, initialScale * (getDist(e.touches) / initialPinchDist)));
+                    panel.style.transform = `scale(${currentScale})`;
+                    panel.style.transformOrigin = 'top left';
+                    e.preventDefault(); return;
+                }
                 if (!this._isDragging) return;
                 const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                let newLeft = Math.max(0, Math.min(clientX - this._dragOffsetX, window.innerWidth - panel.offsetWidth));
-                let newTop = Math.max(0, Math.min(clientY - this._dragOffsetY, window.innerHeight - panel.offsetHeight));
-                panel.style.left = newLeft + 'px';
-                panel.style.top = newTop + 'px';
-                panel.style.bottom = 'auto';
-                panel.style.right = 'auto';
+                let newLeft = Math.max(0, Math.min(clientX - this._dragOffsetX * currentScale, window.innerWidth - panel.offsetWidth * currentScale));
+                let newTop = Math.max(0, Math.min(clientY - this._dragOffsetY * currentScale, window.innerHeight - panel.offsetHeight * currentScale));
+                panel.style.left = newLeft + 'px'; panel.style.top = newTop + 'px';
+                panel.style.bottom = 'auto'; panel.style.right = 'auto';
                 e.preventDefault();
             };
-            const onEnd = () => { this._isDragging = false; panel.style.transition = ''; };
+            const onEnd = () => { this._isDragging = false; initialPinchDist = null; panel.style.transition = ''; };
             header.addEventListener('mousedown', onStart);
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onEnd);
@@ -24710,14 +24728,6 @@ const perfMonitor = {
 
         start() {
             if (this._enabled) return;
-            const btn = this.toggle;
-            const panel = this.panel;
-            if (btn && panel) {
-                const btnRect = btn.getBoundingClientRect();
-                const originX = btnRect.left + (btnRect.width / 2) - panel.offsetLeft;
-                const originY = btnRect.top + (btnRect.height / 2) - panel.offsetTop;
-                panel.style.transformOrigin = `${originX}px ${originY}px`;
-            }
             this._enabled = true;
             this._startTime = Date.now();
             this._longTaskCount = 0; this._clsValue = 0; this._idbOpsCount = 0;
@@ -24738,14 +24748,6 @@ const perfMonitor = {
 
         stop() {
             this._enabled = false;
-            const btn = this.toggle;
-            const panel = this.panel;
-            if (btn && panel) {
-                const btnRect = btn.getBoundingClientRect();
-                const originX = btnRect.left + (btnRect.width / 2) - panel.offsetLeft;
-                const originY = btnRect.top + (btnRect.height / 2) - panel.offsetTop;
-                panel.style.transformOrigin = `${originX}px ${originY}px`;
-            }
             if (this.panel) this.panel.classList.add('hidden');
             if (this._intervalId) { clearInterval(this._intervalId); this._intervalId = null; }
             if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
@@ -25009,28 +25011,38 @@ const perfMonitor = {
             if (!panel) return;
             const header = panel.querySelector('.console-header');
             if (!header) return;
+            let currentScale = 1, initialPinchDist = null, initialScale = 1;
+            const getDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
             const onStart = (e) => {
                 if (e.target.tagName === 'BUTTON') return;
+                if (e.touches && e.touches.length === 2) {
+                    this._isDragging = false; initialPinchDist = getDist(e.touches); initialScale = currentScale;
+                    panel.style.transition = 'none'; e.preventDefault(); return;
+                }
                 this._isDragging = true;
                 const rect = panel.getBoundingClientRect();
-                this._dragOffsetX = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-                this._dragOffsetY = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+                this._dragOffsetX = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / currentScale;
+                this._dragOffsetY = ((e.touches ? e.touches[0].clientY : e.clientY) - rect.top) / currentScale;
                 panel.style.transition = 'none';
                 e.preventDefault();
             };
             const onMove = (e) => {
+                if (e.touches && e.touches.length === 2 && initialPinchDist) {
+                    currentScale = Math.max(0.5, Math.min(3, initialScale * (getDist(e.touches) / initialPinchDist)));
+                    panel.style.transform = `scale(${currentScale})`;
+                    panel.style.transformOrigin = 'top left';
+                    e.preventDefault(); return;
+                }
                 if (!this._isDragging) return;
                 const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                let newLeft = Math.max(0, Math.min(clientX - this._dragOffsetX, window.innerWidth - panel.offsetWidth));
-                let newTop = Math.max(0, Math.min(clientY - this._dragOffsetY, window.innerHeight - panel.offsetHeight));
-                panel.style.left = newLeft + 'px';
-                panel.style.top = newTop + 'px';
-                panel.style.bottom = 'auto';
-                panel.style.right = 'auto';
+                let newLeft = Math.max(0, Math.min(clientX - this._dragOffsetX * currentScale, window.innerWidth - panel.offsetWidth * currentScale));
+                let newTop = Math.max(0, Math.min(clientY - this._dragOffsetY * currentScale, window.innerHeight - panel.offsetHeight * currentScale));
+                panel.style.left = newLeft + 'px'; panel.style.top = newTop + 'px';
+                panel.style.bottom = 'auto'; panel.style.right = 'auto';
                 e.preventDefault();
             };
-            const onEnd = () => { this._isDragging = false; panel.style.transition = ''; };
+            const onEnd = () => { this._isDragging = false; initialPinchDist = null; panel.style.transition = ''; };
             header.addEventListener('mousedown', onStart);
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onEnd);
@@ -25041,14 +25053,6 @@ const perfMonitor = {
 
         start() {
             if (this._enabled) return;
-            const btn = this.toggle;
-            const panel = this.panel;
-            if (btn && panel) {
-                const btnRect = btn.getBoundingClientRect();
-                const originX = btnRect.left + (btnRect.width / 2) - panel.offsetLeft;
-                const originY = btnRect.top + (btnRect.height / 2) - panel.offsetTop;
-                panel.style.transformOrigin = `${originX}px ${originY}px`;
-            }
             this._enabled = true;
             if (this.panel) {
                 this.panel.classList.remove('hidden', 'minimized');
@@ -25060,14 +25064,6 @@ const perfMonitor = {
 
         stop() {
             this._enabled = false;
-            const btn = this.toggle;
-            const panel = this.panel;
-            if (btn && panel) {
-                const btnRect = btn.getBoundingClientRect();
-                const originX = btnRect.left + (btnRect.width / 2) - panel.offsetLeft;
-                const originY = btnRect.top + (btnRect.height / 2) - panel.offsetTop;
-                panel.style.transformOrigin = `${originX}px ${originY}px`;
-            }
             if (this.panel) this.panel.classList.add('hidden');
         },
 
