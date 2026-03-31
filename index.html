@@ -24450,12 +24450,32 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
         },
     };
 
+    const localTokenizers={openai:{encoder:null,status:'idle',_type:'ai-tokenizer'},anthropic:{encoder:null,status:'idle',_type:'ai-tokenizer'},gemini:{encoder:null,status:'idle',_type:'hf-transformers'},grok:{encoder:null,status:'idle',_type:'ai-tokenizer'},deepseek:{encoder:null,status:'idle',_type:'ai-tokenizer'},llmaggregator:{encoder:null,status:'idle',_type:'ai-tokenizer'}};
+    let _AiTokenizerClass=null;const _aiTokenizerEncodings={};
+    async function getAiTokenizerClass(){if(_AiTokenizerClass)return _AiTokenizerClass;const m=await import('https://esm.sh/ai-tokenizer@latest');_AiTokenizerClass=m.Tokenizer||m.default;return _AiTokenizerClass;}
+    async function getAiTokenizerEncoding(n){if(_aiTokenizerEncodings[n])return _aiTokenizerEncodings[n];const m=await import(`https://esm.sh/ai-tokenizer@latest/encoding/${n}`);_aiTokenizerEncodings[n]=m;return m;}
+    async function loadAiTokenizer(en){const[T,E]=await Promise.all([getAiTokenizerClass(),getAiTokenizerEncoding(en)]);return new T(E);}
+    async function loadGemmaEncoder(){const e=localTokenizers.gemini;if(e.encoder)return e.encoder;const{AutoTokenizer}=await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3');const t=await AutoTokenizer.from_pretrained('onnx-community/gemma-3-1b-it-ONNX');e.encoder=t;return t;}
+
     const tokenMonitor = {
         _isDragging: false,
         _dragOffsetX: 0,
         _dragOffsetY: 0,
 
+        async initLocalTokenizer() {
+            const p = state.settings.apiProvider === 'claude' ? 'anthropic' : state.settings.apiProvider;
+            const e = localTokenizers[p];
+            if(!e || e.status !== 'idle') return;
+            e.status = 'loading';
+            try {
+                if(p === 'openai' || p === 'grok' || p === 'deepseek' || p === 'llmaggregator'){e.encoder=await loadAiTokenizer('o200k_base');e._type='ai-tokenizer';e.status='ready';}
+                else if(p === 'anthropic'){e.encoder=await loadAiTokenizer('claude');e._type='ai-tokenizer';e.status='ready';}
+                else if(p === 'gemini'){e.encoder=await loadGemmaEncoder();e._type='hf-transformers';e.status='ready';}
+                if(state.isTokenMonitorVisible) this.updateDisplay();
+            } catch(err) { e.status='failed'; }
+        },
         init() {
+            this.initLocalTokenizer();
             const panel = elements.tokenMonitorPanel;
             if (!panel) return;
             const header = panel.querySelector('.token-header');
@@ -24520,6 +24540,18 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
         },
         estimateTokens(text, provider = 'openai') {
             if (!text) return 0;
+            const p = provider === 'claude' ? 'anthropic' : provider;
+            const e = localTokenizers[p];
+            if (e) {
+                if (e.status === 'idle') this.initLocalTokenizer();
+                if (e.status === 'ready' && e.encoder) {
+                    try {
+                        if (e._type === 'hf-transformers') return e.encoder.encode(text, null, { add_special_tokens: false }).length;
+                        if (typeof e.encoder.count === 'function') return e.encoder.count(text);
+                        if (typeof e.encoder.encode === 'function') return Array.from(e.encoder.encode(text)).length;
+                    } catch (err) {}
+                }
+            }
             const co = { openai: { h: 1.8, k: 1.8, j: 1.1, a: 4.5 }, anthropic: { h: 1.7, k: 1.7, j: 1.05, a: 4.3 }, gemini: { h: 1.5, k: 1.5, j: 1.0, a: 4.0 }, grok: { h: 1.8, k: 1.8, j: 1.1, a: 4.5 }, deepseek: { h: 1.6, k: 1.6, j: 1.0, a: 4.2 }, llmaggregator: { h: 1.6, k: 1.6, j: 1.0, a: 4.2 } };
             const c = co[provider] || co.openai;
             let t = 0;
