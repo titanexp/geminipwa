@@ -13019,12 +13019,18 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 };
 
 
-                setupModelListener(elements.geminiAdditionalModelsTextarea, 'additionalModels', uiUtils.updateUserModelOptions);
-                setupModelListener(elements.deepSeekAdditionalModelsTextarea, 'deepSeekAdditionalModels', uiUtils.updateDeepSeekUserModelOptions);
-                setupModelListener(elements.claudeAdditionalModelsTextarea, 'claudeAdditionalModels', uiUtils.updateClaudeUserModelOptions);
-                setupModelListener(elements.openaiAdditionalModelsTextarea, 'openaiAdditionalModels', uiUtils.updateOpenAIUserModelOptions);
-                setupModelListener(elements.xaiAdditionalModelsTextarea, 'xaiAdditionalModels', uiUtils.updateXaiUserModelOptions);
-                setupModelListener(elements.llmAggregatorAdditionalModelsTextarea, 'llmAggregatorAdditionalModels', uiUtils.updateLlmAggregatorUserModelOptions);
+                const modelSettingsMap = [
+                    { el: 'gemini', key: 'additionalModels', fn: 'updateUserModelOptions' },
+                    { el: 'deepSeek', key: 'deepSeekAdditionalModels', fn: 'updateDeepSeekUserModelOptions' },
+                    { el: 'claude', key: 'claudeAdditionalModels', fn: 'updateClaudeUserModelOptions' },
+                    { el: 'openai', key: 'openaiAdditionalModels', fn: 'updateOpenAIUserModelOptions' },
+                    { el: 'xai', key: 'xaiAdditionalModels', fn: 'updateXaiUserModelOptions' },
+                    { el: 'llmAggregator', key: 'llmAggregatorAdditionalModels', fn: 'updateLlmAggregatorUserModelOptions' }
+                ];
+                modelSettingsMap.forEach(({ el, key, fn }) => {
+                    const textarea = elements[`${el}AdditionalModelsTextarea`];
+                    if (textarea) setupModelListener(textarea, key, uiUtils[fn]);
+                });
 
                 this.updateTwinEngineModeButton();
                 this.updateTwinEngineApiKeyCycleButton();
@@ -14687,8 +14693,7 @@ if (state.settings.backgroundImageBlob instanceof Blob) {
                         try { state.aiIconUrl = URL.createObjectURL(state.settings.aiIconBlob); } catch (e) { }
                     }
 
-                    // --- 他のパネルの背景画像はブラウザがアイドル状態（描画完了後）になったら読み込む ---
-                    const loadOtherBackgrounds = () => {
+                    setTimeout(() => {
                         const loadBg = (blob, currentUrl, cssVarName) => {
                             if (blob instanceof Blob) {
                                 try {
@@ -14712,16 +14717,7 @@ if (state.settings.backgroundImageBlob instanceof Blob) {
                         state.imageGenSettingsBackgroundImageUrl = loadBg(state.settings.imageGenSettingsBackgroundImageBlob, state.imageGenSettingsBackgroundImageUrl, '--image-gen-settings-background-image');
 
                         uiUtils.updateBackgroundSettingsUI();
-                    };
-
-                    // 端末性能に応じた自動遅延
-                    if ('requestIdleCallback' in window) {
-                        // ブラウザの手が空いたタイミングで実行。念のため最長でも2秒後には強制実行
-                        requestIdleCallback(loadOtherBackgrounds, { timeout: 2000 });
-                    } else {
-                        // 古いブラウザ（旧Safariなど）向けのフォールバック
-                        setTimeout(loadOtherBackgrounds, 500);
-                    }
+                    }, 800);
 
 
 uiUtils.applySettingsToUI();
@@ -15238,6 +15234,29 @@ elements.showTwinEngineSettingsToggle.addEventListener('change', (e) => {
                     });
                 }
 
+                const bgTypes = [
+                    { id: 'chat', prefix: '', varName: '--chat-background-image' },
+                    { id: 'history', prefix: 'history', varName: '--history-background-image' },
+                    { id: 'settings', prefix: 'settings', varName: '--settings-background-image' },
+                    { id: 'imageGen', prefix: 'imageGen', varName: '--image-gen-background-image' },
+                    { id: 'imageGenHistory', prefix: 'imageGenHistory', varName: '--image-gen-history-background-image' },
+                    { id: 'imageGenSettings', prefix: 'imageGenSettings', varName: '--image-gen-settings-background-image' }
+                ];
+
+                const getBgKeys = (type) => {
+                    const t = bgTypes.find(x => x.id === type);
+                    const p = t.prefix ? t.prefix : 'background';
+                    const up = t.prefix ? t.prefix.charAt(0).toUpperCase() + t.prefix.slice(1) : 'Background';
+                    return {
+                        urlKey: t.prefix ? `${t.prefix}BackgroundImageUrl` : 'backgroundImageUrl',
+                        blobKey: t.prefix ? `${t.prefix}BackgroundImageBlob` : 'backgroundImageBlob',
+                        cssVar: t.varName,
+                        btnUpload: elements[t.prefix ? `upload${up}BgBtn` : 'uploadBackgroundBtn'],
+                        input: elements[t.prefix ? `${t.prefix}BgInput` : 'backgroundImageInput'],
+                        btnDelete: elements[t.prefix ? `delete${up}BgBtn` : 'deleteBackgroundBtn']
+                    };
+                };
+
                 const handleBgUpload = async (file, type) => {
                     if (!file) return;
                     const maxSize = 5 * 1024 * 1024;
@@ -15245,44 +15264,13 @@ elements.showTwinEngineSettingsToggle.addEventListener('change', (e) => {
                         await uiUtils.showCustomAlert(`ファイルサイズが大きすぎます (${formatFileSize(file.size)})。${formatFileSize(maxSize)}以下にしてください。`);
                         return;
                     }
+                    const keys = getBgKeys(type);
                     const objectUrl = URL.createObjectURL(file);
-                    if (type === 'chat') {
-                        if (state.backgroundImageUrl) URL.revokeObjectURL(state.backgroundImageUrl);
-                        state.backgroundImageUrl = objectUrl;
-                        state.settings.backgroundImageBlob = file;
-                        document.documentElement.style.setProperty('--chat-background-image', `url(${objectUrl})`);
-                        await dbUtils.saveSetting('backgroundImageBlob', file);
-                    } else if (type === 'history') {
-                        if (state.historyBackgroundImageUrl) URL.revokeObjectURL(state.historyBackgroundImageUrl);
-                        state.historyBackgroundImageUrl = objectUrl;
-                        state.settings.historyBackgroundImageBlob = file;
-                        document.documentElement.style.setProperty('--history-background-image', `url(${objectUrl})`);
-                        await dbUtils.saveSetting('historyBackgroundImageBlob', file);
-                    } else if (type === 'settings') {
-                        if (state.settingsBackgroundImageUrl) URL.revokeObjectURL(state.settingsBackgroundImageUrl);
-                        state.settingsBackgroundImageUrl = objectUrl;
-                        state.settings.settingsBackgroundImageBlob = file;
-                        document.documentElement.style.setProperty('--settings-background-image', `url(${objectUrl})`);
-                        await dbUtils.saveSetting('settingsBackgroundImageBlob', file);
-                    } else if (type === 'imageGen') {
-                        if (state.imageGenBackgroundImageUrl) URL.revokeObjectURL(state.imageGenBackgroundImageUrl);
-                        state.imageGenBackgroundImageUrl = objectUrl;
-                        state.settings.imageGenBackgroundImageBlob = file;
-                        document.documentElement.style.setProperty('--image-gen-background-image', `url(${objectUrl})`);
-                        await dbUtils.saveSetting('imageGenBackgroundImageBlob', file);
-                    } else if (type === 'imageGenHistory') {
-                        if (state.imageGenHistoryBackgroundImageUrl) URL.revokeObjectURL(state.imageGenHistoryBackgroundImageUrl);
-                        state.imageGenHistoryBackgroundImageUrl = objectUrl;
-                        state.settings.imageGenHistoryBackgroundImageBlob = file;
-                        document.documentElement.style.setProperty('--image-gen-history-background-image', `url(${objectUrl})`);
-                        await dbUtils.saveSetting('imageGenHistoryBackgroundImageBlob', file);
-                    } else if (type === 'imageGenSettings') {
-                        if (state.imageGenSettingsBackgroundImageUrl) URL.revokeObjectURL(state.imageGenSettingsBackgroundImageUrl);
-                        state.imageGenSettingsBackgroundImageUrl = objectUrl;
-                        state.settings.imageGenSettingsBackgroundImageBlob = file;
-                        document.documentElement.style.setProperty('--image-gen-settings-background-image', `url(${objectUrl})`);
-                        await dbUtils.saveSetting('imageGenSettingsBackgroundImageBlob', file);
-                    }
+                    if (state[keys.urlKey]) URL.revokeObjectURL(state[keys.urlKey]);
+                    state[keys.urlKey] = objectUrl;
+                    state.settings[keys.blobKey] = file;
+                    document.documentElement.style.setProperty(keys.cssVar, `url(${objectUrl})`);
+                    await dbUtils.saveSetting(keys.blobKey, file);
                     uiUtils.updateBackgroundSettingsUI();
                     if (state.settings.autoSaveSettings) this.saveSettings(false);
                 };
@@ -15290,77 +15278,25 @@ elements.showTwinEngineSettingsToggle.addEventListener('change', (e) => {
                 const confirmDeleteBg = async (type) => {
                     const confirmed = await uiUtils.showCustomConfirm("背景画像を削除しますか？");
                     if (confirmed) {
-                        if (type === 'chat') {
-                            if (state.backgroundImageUrl) URL.revokeObjectURL(state.backgroundImageUrl);
-                            state.backgroundImageUrl = null;
-                            state.settings.backgroundImageBlob = null;
-                            document.documentElement.style.setProperty('--chat-background-image', 'none');
-                            await dbUtils.saveSetting('backgroundImageBlob', null);
-                        } else if (type === 'history') {
-                            if (state.historyBackgroundImageUrl) URL.revokeObjectURL(state.historyBackgroundImageUrl);
-                            state.historyBackgroundImageUrl = null;
-                            state.settings.historyBackgroundImageBlob = null;
-                            document.documentElement.style.setProperty('--history-background-image', 'none');
-                            await dbUtils.saveSetting('historyBackgroundImageBlob', null);
-                        } else if (type === 'settings') {
-                            if (state.settingsBackgroundImageUrl) URL.revokeObjectURL(state.settingsBackgroundImageUrl);
-                            state.settingsBackgroundImageUrl = null;
-                            state.settings.settingsBackgroundImageBlob = null;
-                            document.documentElement.style.setProperty('--settings-background-image', 'none');
-                            await dbUtils.saveSetting('settingsBackgroundImageBlob', null);
-                        } else if (type === 'imageGen') {
-                            if (state.imageGenBackgroundImageUrl) URL.revokeObjectURL(state.imageGenBackgroundImageUrl);
-                            state.imageGenBackgroundImageUrl = null;
-                            state.settings.imageGenBackgroundImageBlob = null;
-                            document.documentElement.style.setProperty('--image-gen-background-image', 'none');
-                            await dbUtils.saveSetting('imageGenBackgroundImageBlob', null);
-                        } else if (type === 'imageGenHistory') {
-                            if (state.imageGenHistoryBackgroundImageUrl) URL.revokeObjectURL(state.imageGenHistoryBackgroundImageUrl);
-                            state.imageGenHistoryBackgroundImageUrl = null;
-                            state.settings.imageGenHistoryBackgroundImageBlob = null;
-                            document.documentElement.style.setProperty('--image-gen-history-background-image', 'none');
-                            await dbUtils.saveSetting('imageGenHistoryBackgroundImageBlob', null);
-                        } else if (type === 'imageGenSettings') {
-                            if (state.imageGenSettingsBackgroundImageUrl) URL.revokeObjectURL(state.imageGenSettingsBackgroundImageUrl);
-                            state.imageGenSettingsBackgroundImageUrl = null;
-                            state.settings.imageGenSettingsBackgroundImageBlob = null;
-                            document.documentElement.style.setProperty('--image-gen-settings-background-image', 'none');
-                            await dbUtils.saveSetting('imageGenSettingsBackgroundImageBlob', null);
-                        }
+                        const keys = getBgKeys(type);
+                        if (state[keys.urlKey]) URL.revokeObjectURL(state[keys.urlKey]);
+                        state[keys.urlKey] = null;
+                        state.settings[keys.blobKey] = null;
+                        document.documentElement.style.setProperty(keys.cssVar, 'none');
+                        await dbUtils.saveSetting(keys.blobKey, null);
                         uiUtils.updateBackgroundSettingsUI();
                         if (state.settings.autoSaveSettings) this.saveSettings(false);
                     }
                 };
 
-                elements.uploadBackgroundBtn.addEventListener('click', () => elements.backgroundImageInput.click());
-                elements.backgroundImageInput.addEventListener('change', (e) => { handleBgUpload(e.target.files[0], 'chat'); e.target.value = null; });
-                elements.deleteBackgroundBtn.addEventListener('click', () => confirmDeleteBg('chat'));
-
-                if (elements.uploadHistoryBgBtn) {
-                    elements.uploadHistoryBgBtn.addEventListener('click', () => elements.historyBgInput.click());
-                    elements.historyBgInput.addEventListener('change', (e) => { handleBgUpload(e.target.files[0], 'history'); e.target.value = null; });
-                    elements.deleteHistoryBgBtn.addEventListener('click', () => confirmDeleteBg('history'));
-                }
-                if (elements.uploadSettingsBgBtn) {
-                    elements.uploadSettingsBgBtn.addEventListener('click', () => elements.settingsBgInput.click());
-                    elements.settingsBgInput.addEventListener('change', (e) => { handleBgUpload(e.target.files[0], 'settings'); e.target.value = null; });
-                    elements.deleteSettingsBgBtn.addEventListener('click', () => confirmDeleteBg('settings'));
-                }
-                if (elements.uploadImageGenBgBtn) {
-                    elements.uploadImageGenBgBtn.addEventListener('click', () => elements.imageGenBgInput.click());
-                    elements.imageGenBgInput.addEventListener('change', (e) => { handleBgUpload(e.target.files[0], 'imageGen'); e.target.value = null; });
-                    elements.deleteImageGenBgBtn.addEventListener('click', () => confirmDeleteBg('imageGen'));
-                }
-                if (elements.uploadImageGenHistoryBgBtn) {
-                    elements.uploadImageGenHistoryBgBtn.addEventListener('click', () => elements.imageGenHistoryBgInput.click());
-                    elements.imageGenHistoryBgInput.addEventListener('change', (e) => { handleBgUpload(e.target.files[0], 'imageGenHistory'); e.target.value = null; });
-                    elements.deleteImageGenHistoryBgBtn.addEventListener('click', () => confirmDeleteBg('imageGenHistory'));
-                }
-                if (elements.uploadImageGenSettingsBgBtn) {
-                    elements.uploadImageGenSettingsBgBtn.addEventListener('click', () => elements.imageGenSettingsBgInput.click());
-                    elements.imageGenSettingsBgInput.addEventListener('change', (e) => { handleBgUpload(e.target.files[0], 'imageGenSettings'); e.target.value = null; });
-                    elements.deleteImageGenSettingsBgBtn.addEventListener('click', () => confirmDeleteBg('imageGenSettings'));
-                }
+                bgTypes.forEach(t => {
+                    const keys = getBgKeys(t.id);
+                    if (keys.btnUpload && keys.input && keys.btnDelete) {
+                        keys.btnUpload.addEventListener('click', () => keys.input.click());
+                        keys.input.addEventListener('change', (e) => { handleBgUpload(e.target.files[0], t.id); e.target.value = null; });
+                        keys.btnDelete.addEventListener('click', () => confirmDeleteBg(t.id));
+                    }
+                });
 
 
                 elements.showUserIconToggle.addEventListener('change', () => {
@@ -16104,33 +16040,23 @@ elements.imageGenMessageContainer.addEventListener('click', (event) => {
                 window.addEventListener('resize', uiUtils.adjustHeaderLayout);
                 uiUtils.adjustHeaderLayout();
 
-                elements.apiProviderCycleGeminiCheckbox.addEventListener('change', () => {
-                    state.settings.apiProviderCycle.gemini = elements.apiProviderCycleGeminiCheckbox.checked;
-                    uiUtils.updateApiProviderSelectOptions();
-                });
-                elements.apiProviderCycleDeepSeekCheckbox.addEventListener('change', () => {
-                    state.settings.apiProviderCycle.deepseek = elements.apiProviderCycleDeepSeekCheckbox.checked;
-                    uiUtils.updateApiProviderSelectOptions();
-                });
-                elements.apiProviderCycleClaudeCheckbox.addEventListener('change', () => {
-                    state.settings.apiProviderCycle.claude = elements.apiProviderCycleClaudeCheckbox.checked;
-                    uiUtils.updateApiProviderSelectOptions();
-                });
-                elements.apiProviderCycleOpenAICheckbox.addEventListener('change', () => {
-                    state.settings.apiProviderCycle.openai = elements.apiProviderCycleOpenAICheckbox.checked;
-                    uiUtils.updateApiProviderSelectOptions();
-                });
-                elements.apiProviderCycleXaiCheckbox.addEventListener('change', () => {
-                    state.settings.apiProviderCycle.xai = elements.apiProviderCycleXaiCheckbox.checked;
-                    uiUtils.updateApiProviderSelectOptions();
-                });
-                elements.apiProviderCycleLlmAggregatorCheckbox.addEventListener('change', () => {
-                    state.settings.apiProviderCycle.llmaggregator = elements.apiProviderCycleLlmAggregatorCheckbox.checked;
-                    uiUtils.updateApiProviderSelectOptions();
-                });
-                elements.apiProviderCycleDummyCheckbox.addEventListener('change', () => {
-                    state.settings.apiProviderCycle.dummy = elements.apiProviderCycleDummyCheckbox.checked;
-                    uiUtils.updateApiProviderSelectOptions();
+                const cycleProviders = [
+                    { id: 'Gemini', key: 'gemini' },
+                    { id: 'DeepSeek', key: 'deepseek' },
+                    { id: 'Claude', key: 'claude' },
+                    { id: 'OpenAI', key: 'openai' },
+                    { id: 'Xai', key: 'xai' },
+                    { id: 'LlmAggregator', key: 'llmaggregator' },
+                    { id: 'Dummy', key: 'dummy' }
+                ];
+                cycleProviders.forEach(({ id, key }) => {
+                    const checkbox = elements[`apiProviderCycle${id}Checkbox`];
+                    if (checkbox) {
+                        checkbox.addEventListener('change', () => {
+                            state.settings.apiProviderCycle[key] = checkbox.checked;
+                            uiUtils.updateApiProviderSelectOptions();
+                        });
+                    }
                 });
 
                 const llmUrlInput = elements.llmAggregatorApiBackendInput;
@@ -16153,12 +16079,12 @@ elements.imageGenMessageContainer.addEventListener('click', (event) => {
 
                 multiApiKeyUtils.initializeMultiApiKeys();
                 multiBackendUtils.initialize();
-                elements.geminiApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('gemini'));
-                elements.deepSeekApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('deepseek'));
-                elements.claudeApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('claude'));
-                elements.openaiApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('openai'));
-                elements.xaiApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('xai'));
-                elements.llmAggregatorApiKeyInput.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput('llmaggregator'));
+                ['gemini', 'deepSeek', 'claude', 'openai', 'xai', 'llmAggregator'].forEach(provider => {
+                    const input = elements[`${provider}ApiKeyInput`];
+                    if (input) {
+                        input.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput(provider.toLowerCase()));
+                    }
+                });
                 elements.showMultiApiKeysToggle.addEventListener('change', (e) => {
                     uiUtils.toggleMultiApiKeysVisibility(e.target.checked);
                 });
@@ -17626,189 +17552,72 @@ appendImageGenMessage(role, content, index, attachments = null) {
 
                 if (isBackgroundProcess) {
                     const providerForSettingsB = sourceSessionContext.apiProvider || state.settings.apiProvider;
-                    if (providerForSettingsB === 'gemini') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.geminiTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.geminiMaxTokens;
+const p = providerForSettingsB;
+                    const prefix = p === 'deepseek' ? 'deepSeek' : p === 'llmaggregator' ? 'llmAggregator' : p;
+                    contextTemperature = sourceSessionContext.temperature ?? state.settings[`${prefix}Temperature`];
+                    contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings[`${prefix}MaxTokens`];
+                    contextTopP = sourceSessionContext.topP ?? state.settings[`${prefix}TopP`];
+                    contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings[`${prefix}PresencePenalty`];
+                    contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings[`${prefix}FrequencyPenalty`];
+                    contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings[`${prefix}StreamingOutput`];
+                    contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings[`${prefix}StreamingSpeed`];
+                    contextDummyUser = sourceSessionContext.dummyUser ?? state.settings[`${prefix}DummyUser`];
+                    contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings[`${prefix}EnableDummyUser`];
+                    contextDummyModel = sourceSessionContext.dummyModel ?? state.settings[`${prefix}DummyModel`];
+                    contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings[`${prefix}EnableDummyModel`];
+                    contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings[`${prefix}ConcatDummyModel`];
+                    if (p === 'gemini') {
                         contextGeminiTopK = sourceSessionContext.topK ?? state.settings.geminiTopK;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.geminiTopP;
-                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.geminiPresencePenalty;
-                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.geminiFrequencyPenalty;
                         contextGeminiThinkingBudget = sourceSessionContext.thinkingBudget ?? state.settings.geminiThinkingBudget;
-
                         contextGeminiIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.geminiIncludeThoughts;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.geminiStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.geminiStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.geminiDummyUser;
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.geminiEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.geminiDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.geminiEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.geminiConcatDummyModel;
                         contextGeminiPseudoStreaming = sourceSessionContext.pseudoStreaming ?? state.settings.geminiPseudoStreaming;
                         contextGeminiEnableGrounding = sourceSessionContext.enableGrounding ?? state.settings.geminiEnableGrounding;
-                    } else if (providerForSettingsB === 'deepseek') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.deepSeekTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.deepSeekMaxTokens;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.deepSeekTopP;
-                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.deepSeekPresencePenalty;
-                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.deepSeekFrequencyPenalty;
-                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeDeepSeekThoughts ?? state.settings.deepSeekIncludeDeepSeekThoughts;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.deepSeekStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.deepSeekStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.deepSeekDummyUser;
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.deepSeekEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.deepSeekDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.deepSeekEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.deepSeekConcatDummyModel;
-                    } else if (providerForSettingsB === 'llmaggregator') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.llmAggregatorTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.llmAggregatorMaxTokens;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.llmAggregatorTopP;
-                        contextLlmAggregatorTopK = sourceSessionContext.topK ?? state.settings.llmAggregatorTopK;
-                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.llmAggregatorIncludeThoughts;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.llmAggregatorStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.llmAggregatorStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.llmAggregatorDummyUser;
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.llmAggregatorEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.llmAggregatorDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.llmAggregatorEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.llmAggregatorConcatDummyModel;
-                    } else if (providerForSettingsB === 'claude') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.claudeTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.claudeMaxTokens;
+                    } else if (p === 'deepseek' || p === 'llmaggregator') {
+                        contextDeepSeekIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings[`${prefix}IncludeThoughts`];
+                        if (p === 'llmaggregator') contextLlmAggregatorTopK = sourceSessionContext.topK ?? state.settings.llmAggregatorTopK;
+                    } else if (p === 'claude') {
                         contextClaudeTopK = sourceSessionContext.topK ?? state.settings.claudeTopK;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.claudeTopP;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.claudeStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.claudeStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.claudeDummyUser;
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.claudeEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.claudeDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.claudeEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.claudeConcatDummyModel;
                         contextClaudeIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.claudeIncludeThoughts;
                         contextClaudeThinkingBudget = sourceSessionContext.thinkingBudget ?? state.settings.claudeThinkingBudget;
                         contextClaudeExpandThoughtsByDefault = sourceSessionContext.expandThoughtsByDefault ?? state.settings.claudeExpandThoughtsByDefault;
-                    } else if (providerForSettingsB === 'openai') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.openaiTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.openaiMaxTokens;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.openaiTopP;
-                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.openaiPresencePenalty;
-                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.openaiFrequencyPenalty;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.openaiStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.openaiStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.openaiDummyUser;
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.openaiEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.openaiDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.openaiEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.openaiConcatDummyModel;
-                    } else if (providerForSettingsB === 'xai') {
-                        contextTemperature = sourceSessionContext.temperature ?? state.settings.xaiTemperature;
-                        contextMaxTokens = sourceSessionContext.maxTokens ?? state.settings.xaiMaxTokens;
-                        contextTopP = sourceSessionContext.topP ?? state.settings.xaiTopP;
-                        contextPresencePenalty = sourceSessionContext.presencePenalty ?? state.settings.xaiPresencePenalty;
-                        contextFrequencyPenalty = sourceSessionContext.frequencyPenalty ?? state.settings.xaiFrequencyPenalty;
-                        contextStreamingOutput = sourceSessionContext.streamingOutput ?? state.settings.xaiStreamingOutput;
-                        contextStreamingSpeed = sourceSessionContext.streamingSpeed ?? state.settings.xaiStreamingSpeed;
-                        contextDummyUser = sourceSessionContext.dummyUser ?? state.settings.xaiDummyUser;
-                        contextEnableDummyUser = sourceSessionContext.enableDummyUser ?? state.settings.xaiEnableDummyUser;
-                        contextDummyModel = sourceSessionContext.dummyModel ?? state.settings.xaiDummyModel;
-                        contextEnableDummyModel = sourceSessionContext.enableDummyModel ?? state.settings.xaiEnableDummyModel;
-                        contextConcatDummyModel = sourceSessionContext.concatDummyModel ?? state.settings.xaiConcatDummyModel;
+                    } else if (p === 'xai') {
                         contextXaiVisionEnable = sourceSessionContext.visionEnable ?? state.settings.xaiVisionEnable;
                         contextXaiIncludeThoughts = sourceSessionContext.includeThoughts ?? state.settings.xaiIncludeThoughts;
                         contextXaiReasoningEffort = sourceSessionContext.reasoningEffort ?? state.settings.xaiReasoningEffort;
                     }
                 } else {
-                    if (selectedApiProvider === 'gemini') {
-                        contextTemperature = state.settings.geminiTemperature;
-                        contextMaxTokens = state.settings.geminiMaxTokens;
+const p = selectedApiProvider;
+                    const prefix = p === 'deepseek' ? 'deepSeek' : p === 'llmaggregator' ? 'llmAggregator' : p;
+                    contextTemperature = state.settings[`${prefix}Temperature`];
+                    contextMaxTokens = state.settings[`${prefix}MaxTokens`];
+                    contextTopP = state.settings[`${prefix}TopP`];
+                    contextPresencePenalty = state.settings[`${prefix}PresencePenalty`];
+                    contextFrequencyPenalty = state.settings[`${prefix}FrequencyPenalty`];
+                    contextStreamingOutput = state.settings[`${prefix}StreamingOutput`];
+                    contextStreamingSpeed = state.settings[`${prefix}StreamingSpeed`];
+                    contextDummyUser = state.settings[`${prefix}DummyUser`];
+                    contextEnableDummyUser = state.settings[`${prefix}EnableDummyUser`];
+                    contextDummyModel = state.settings[`${prefix}DummyModel`];
+                    contextEnableDummyModel = state.settings[`${prefix}EnableDummyModel`];
+                    contextConcatDummyModel = state.settings[`${prefix}ConcatDummyModel`];
+                    if (p === 'gemini') {
                         contextGeminiTopK = state.settings.geminiTopK;
-                        contextTopP = state.settings.geminiTopP;
-                        contextPresencePenalty = state.settings.geminiPresencePenalty;
-                        contextFrequencyPenalty = state.settings.geminiFrequencyPenalty;
                         contextGeminiThinkingBudget = state.settings.geminiThinkingBudget;
                         contextGeminiIncludeThoughts = state.settings.geminiIncludeThoughts;
-                        contextStreamingOutput = state.settings.geminiStreamingOutput;
-                        contextStreamingSpeed = state.settings.geminiStreamingSpeed;
-                        contextDummyUser = state.settings.geminiDummyUser;
-                        contextEnableDummyUser = state.settings.geminiEnableDummyUser;
-                        contextDummyModel = state.settings.geminiDummyModel;
-                        contextEnableDummyModel = state.settings.geminiEnableDummyModel;
-                        contextConcatDummyModel = state.settings.geminiConcatDummyModel;
                         contextGeminiPseudoStreaming = state.settings.geminiPseudoStreaming;
                         contextGeminiEnableGrounding = state.settings.geminiEnableGrounding;
-                    } else if (selectedApiProvider === 'deepseek') {
-                        contextTemperature = state.settings.deepSeekTemperature;
-                        contextMaxTokens = state.settings.deepSeekMaxTokens;
-                        contextTopP = state.settings.deepSeekTopP;
-                        contextPresencePenalty = state.settings.deepSeekPresencePenalty;
-                        contextFrequencyPenalty = state.settings.deepSeekFrequencyPenalty;
-                        deepSeekIncludeThoughtsB = state.settings.deepSeekIncludeDeepSeekThoughts;
-                        contextStreamingOutput = state.settings.deepSeekStreamingOutput;
-                        contextStreamingSpeed = state.settings.deepSeekStreamingSpeed;
-                        contextDummyUser = state.settings.deepSeekDummyUser;
-                        contextEnableDummyUser = state.settings.deepSeekEnableDummyUser;
-                        contextDummyModel = state.settings.deepSeekDummyModel;
-                        contextEnableDummyModel = state.settings.deepSeekEnableDummyModel;
-                        contextConcatDummyModel = state.settings.deepSeekConcatDummyModel;
-                    } else if (selectedApiProvider === 'claude') {
-                        contextTemperature = state.settings.claudeTemperature;
-                        contextMaxTokens = state.settings.claudeMaxTokens;
+                    } else if (p === 'deepseek' || p === 'llmaggregator') {
+                        deepSeekIncludeThoughtsB = state.settings[p === 'deepseek' ? 'deepSeekIncludeDeepSeekThoughts' : 'llmAggregatorIncludeThoughts'];
+                        if (p === 'llmaggregator') contextLlmAggregatorTopK = state.settings.llmAggregatorTopK;
+                    } else if (p === 'claude') {
                         contextClaudeTopK = state.settings.claudeTopK;
-                        contextTopP = state.settings.claudeTopP;
-                        contextStreamingOutput = state.settings.claudeStreamingOutput;
-                        contextStreamingSpeed = state.settings.claudeStreamingSpeed;
-                        contextDummyUser = state.settings.claudeDummyUser;
-                        contextEnableDummyUser = state.settings.claudeEnableDummyUser;
-                        contextDummyModel = state.settings.claudeDummyModel;
-                        contextEnableDummyModel = state.settings.claudeEnableDummyModel;
-                        contextConcatDummyModel = state.settings.claudeConcatDummyModel;
                         contextClaudeIncludeThoughts = state.settings.claudeIncludeThoughts;
                         contextClaudeThinkingBudget = state.settings.claudeThinkingBudget;
                         contextClaudeExpandThoughtsByDefault = state.settings.claudeExpandThoughtsByDefault;
-                    } else if (selectedApiProvider === 'openai') {
-                        contextTemperature = state.settings.openaiTemperature;
-                        contextMaxTokens = state.settings.openaiMaxTokens;
-                        contextTopP = state.settings.openaiTopP;
-                        contextPresencePenalty = state.settings.openaiPresencePenalty;
-                        contextFrequencyPenalty = state.settings.openaiFrequencyPenalty;
-                        contextStreamingOutput = state.settings.openaiStreamingOutput;
-                        contextStreamingSpeed = state.settings.openaiStreamingSpeed;
-                        contextDummyUser = state.settings.openaiDummyUser;
-                        contextEnableDummyUser = state.settings.openaiEnableDummyUser;
-                        contextDummyModel = state.settings.openaiDummyModel;
-                        contextEnableDummyModel = state.settings.openaiEnableDummyModel;
-                        contextConcatDummyModel = state.settings.openaiConcatDummyModel;
-                    } else if (selectedApiProvider === 'xai') {
-                        contextTemperature = state.settings.xaiTemperature;
-                        contextMaxTokens = state.settings.xaiMaxTokens;
-                        contextTopP = state.settings.xaiTopP;
-                        contextPresencePenalty = state.settings.xaiPresencePenalty;
-                        contextFrequencyPenalty = state.settings.xaiFrequencyPenalty;
-                        contextStreamingOutput = state.settings.xaiStreamingOutput;
-                        contextStreamingSpeed = state.settings.xaiStreamingSpeed;
-                        contextDummyUser = state.settings.xaiDummyUser;
-                        contextEnableDummyUser = state.settings.xaiEnableDummyUser;
-                        contextDummyModel = state.settings.xaiDummyModel;
-                        contextEnableDummyModel = state.settings.xaiEnableDummyModel;
-                        contextConcatDummyModel = state.settings.xaiConcatDummyModel;
+                    } else if (p === 'xai') {
                         contextXaiVisionEnable = state.settings.xaiVisionEnable;
                         contextXaiIncludeThoughts = state.settings.xaiIncludeThoughts;
                         contextXaiReasoningEffort = state.settings.xaiReasoningEffort;
-                    } else if (selectedApiProvider === 'llmaggregator') {
-                        contextTemperature = state.settings.llmAggregatorTemperature;
-                        contextMaxTokens = state.settings.llmAggregatorMaxTokens;
-                        contextTopP = state.settings.llmAggregatorTopP;
-                        contextLlmAggregatorTopK = state.settings.llmAggregatorTopK;
-                        contextPresencePenalty = state.settings.llmAggregatorPresencePenalty;
-                        contextFrequencyPenalty = state.settings.llmAggregatorFrequencyPenalty;
-                        deepSeekIncludeThoughtsB = state.settings.llmAggregatorIncludeThoughts;
-                        contextStreamingOutput = state.settings.llmAggregatorStreamingOutput;
-                        contextStreamingSpeed = state.settings.llmAggregatorStreamingSpeed;
-                        contextDummyUser = state.settings.llmAggregatorDummyUser;
-                        contextEnableDummyUser = state.settings.llmAggregatorEnableDummyUser;
-                        contextDummyModel = state.settings.llmAggregatorDummyModel;
-                        contextEnableDummyModel = state.settings.llmAggregatorEnableDummyModel;
-                        contextConcatDummyModel = state.settings.llmAggregatorConcatDummyModel;
                     }
                 }
 
@@ -19048,48 +18857,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 };
                 reader.readAsText(file);
             },
-            async handleBackgroundImageUpload(file) {
-                const maxSize = 5 * 1024 * 1024;
-                if (file.size > maxSize) {
-                    await uiUtils.showCustomAlert(`画像サイズが大きすぎます (${(maxSize / 1024 / 1024).toFixed(1)}MB以下にしてください)`);
-                    return;
-                }
-                if (!file.type.startsWith('image/')) {
-                    await uiUtils.showCustomAlert("画像ファイルを選択してください (JPEG, PNG, GIF, WebPなど)");
-                    return;
-                }
-
-                try {
-                    uiUtils.revokeExistingObjectUrl();
-                    const blob = file;
-                    await dbUtils.saveSetting('backgroundImageBlob', blob);
-                    state.settings.backgroundImageBlob = blob;
-                    state.backgroundImageUrl = URL.createObjectURL(blob);
-                    document.documentElement.style.setProperty('--chat-background-image', `url(${state.backgroundImageUrl})`);
-                    uiUtils.updateBackgroundSettingsUI();
-                } catch (error) {
-                    uiUtils.revokeExistingObjectUrl();
-                    document.documentElement.style.setProperty('--chat-background-image', 'none');
-                    state.settings.backgroundImageBlob = null;
-                    uiUtils.updateBackgroundSettingsUI();
-                }
-            },
-            async confirmDeleteBackgroundImage() {
-                const confirmed = await uiUtils.showCustomConfirm("背景画像を削除しますか？");
-                if (confirmed) {
-                    await this.handleBackgroundImageDelete();
-                }
-            },
-            async handleBackgroundImageDelete() {
-                try {
-                    uiUtils.revokeExistingObjectUrl();
-                    await dbUtils.saveSetting('backgroundImageBlob', null);
-                    state.settings.backgroundImageBlob = null;
-                    document.documentElement.style.setProperty('--chat-background-image', 'none');
-                    uiUtils.updateBackgroundSettingsUI();
-                } catch (error) {
-                }
-            },
+            
             async handleIconUpload(type, file) {
                 const maxSize = 1 * 1024 * 1024;
                 if (file.size > maxSize) {
@@ -20759,111 +20527,42 @@ elements.selectFilesBtn.disabled = false;
                         claudeTopKB, claudeIncludeThoughtsB, claudeThinkingBudgetB, claudeExpandThoughtsByDefaultB,
                         xaiVisionEnableB, xaiIncludeThoughtsB, xaiReasoningEffortB, llmAggregatorTopKB;
 
-                    if (providerForSettingsB === 'gemini') {
-                        systemPromptB = state.settings.geminiSystemPrompt;
-                        enableSystemPromptDefaultB = state.settings.geminiEnableSystemPromptDefault;
-                        temperatureB = state.settings.geminiTemperature;
-                        maxTokensB = state.settings.geminiMaxTokens;
+const p = providerForSettingsB;
+                    const prefix = p === 'deepseek' ? 'deepSeek' : p === 'llmaggregator' ? 'llmAggregator' : p;
+                    systemPromptB = state.settings[`${prefix}SystemPrompt`];
+                    enableSystemPromptDefaultB = state.settings[`${prefix}EnableSystemPromptDefault`];
+                    temperatureB = state.settings[`${prefix}Temperature`];
+                    maxTokensB = state.settings[`${prefix}MaxTokens`];
+                    topPB = state.settings[`${prefix}TopP`];
+                    presencePenaltyB = state.settings[`${prefix}PresencePenalty`];
+                    frequencyPenaltyB = state.settings[`${prefix}FrequencyPenalty`];
+                    streamingOutputB = state.settings[`${prefix}StreamingOutput`];
+                    streamingSpeedB = state.settings[`${prefix}StreamingSpeed`];
+                    dummyUserB = state.settings[`${prefix}DummyUser`];
+                    enableDummyUserB = state.settings[`${prefix}EnableDummyUser`];
+                    dummyModelB = state.settings[`${prefix}DummyModel`];
+                    enableDummyModelB = state.settings[`${prefix}EnableDummyModel`];
+                    concatDummyModelB = state.settings[`${prefix}ConcatDummyModel`];
+                    if (p === 'gemini') {
                         geminiTopKB = state.settings.geminiTopK;
-                        topPB = state.settings.geminiTopP;
-                        presencePenaltyB = state.settings.geminiPresencePenalty;
-                        frequencyPenaltyB = state.settings.geminiFrequencyPenalty;
                         geminiThinkingBudgetB = state.settings.geminiThinkingBudget;
                         geminiIncludeThoughtsB = state.settings.geminiIncludeThoughts;
-                        streamingOutputB = state.settings.geminiStreamingOutput;
-                        streamingSpeedB = state.settings.geminiStreamingSpeed;
-                        dummyUserB = state.settings.geminiDummyUser;
-                        enableDummyUserB = state.settings.geminiEnableDummyUser;
-                        dummyModelB = state.settings.geminiDummyModel;
-                        enableDummyModelB = state.settings.geminiEnableDummyModel;
-                        concatDummyModelB = state.settings.geminiConcatDummyModel;
                         geminiPseudoStreamingB = state.settings.geminiPseudoStreaming;
                         geminiEnableGroundingB = state.settings.geminiEnableGrounding;
-                    } else if (providerForSettingsB === 'deepseek') {
-                        systemPromptB = state.settings.deepSeekSystemPrompt;
-                        enableSystemPromptDefaultB = state.settings.deepSeekEnableSystemPromptDefault;
-                        temperatureB = state.settings.deepSeekTemperature;
-                        maxTokensB = state.settings.deepSeekMaxTokens;
-                        topPB = state.settings.deepSeekTopP;
-                        presencePenaltyB = state.settings.deepSeekPresencePenalty;
-                        frequencyPenaltyB = state.settings.deepSeekFrequencyPenalty;
-                        deepSeekIncludeThoughtsB = state.settings.deepSeekIncludeDeepSeekThoughts;
-                        streamingOutputB = state.settings.deepSeekStreamingOutput;
-                        streamingSpeedB = state.settings.deepSeekStreamingSpeed;
-                        dummyUserB = state.settings.deepSeekDummyUser;
-                        enableDummyUserB = state.settings.deepSeekEnableDummyUser;
-                        dummyModelB = state.settings.deepSeekDummyModel;
-                        enableDummyModelB = state.settings.deepSeekEnableDummyModel;
-                        concatDummyModelB = state.settings.deepSeekConcatDummyModel;
-                    } else if (providerForSettingsB === 'llmaggregator') {
-                        systemPromptB = state.settings.llmAggregatorSystemPrompt;
-                        enableSystemPromptDefaultB = state.settings.llmAggregatorEnableSystemPromptDefault;
-                        temperatureB = state.settings.llmAggregatorTemperature;
-                        maxTokensB = state.settings.llmAggregatorMaxTokens;
-                        topPB = state.settings.llmAggregatorTopP;
-                        llmAggregatorTopKB = state.settings.llmAggregatorTopK;
-                        presencePenaltyB = state.settings.llmAggregatorPresencePenalty;
-                        frequencyPenaltyB = state.settings.llmAggregatorFrequencyPenalty;
-                        deepSeekIncludeThoughtsB = state.settings.llmAggregatorIncludeThoughts;
-                        streamingOutputB = state.settings.llmAggregatorStreamingOutput;
-                        streamingSpeedB = state.settings.llmAggregatorStreamingSpeed;
-                        dummyUserB = state.settings.llmAggregatorDummyUser;
-                        enableDummyUserB = state.settings.llmAggregatorEnableDummyUser;
-                        dummyModelB = state.settings.llmAggregatorDummyModel;
-                        enableDummyModelB = state.settings.llmAggregatorEnableDummyModel;
-                        concatDummyModelB = state.settings.llmAggregatorConcatDummyModel;
-                    } else if (providerForSettingsB === 'claude') {
-                        systemPromptB = state.settings.claudeSystemPrompt;
-                        enableSystemPromptDefaultB = state.settings.claudeEnableSystemPromptDefault;
-                        temperatureB = state.settings.claudeTemperature;
-                        maxTokensB = state.settings.claudeMaxTokens;
+                    } else if (p === 'deepseek' || p === 'llmaggregator') {
+                        deepSeekIncludeThoughtsB = state.settings[p === 'deepseek' ? 'deepSeekIncludeDeepSeekThoughts' : 'llmAggregatorIncludeThoughts'];
+                        if (p === 'llmaggregator') llmAggregatorTopKB = state.settings.llmAggregatorTopK;
+                    } else if (p === 'claude') {
                         claudeTopKB = state.settings.claudeTopK;
-                        topPB = state.settings.claudeTopP;
-                        streamingOutputB = state.settings.claudeStreamingOutput;
-                        streamingSpeedB = state.settings.claudeStreamingSpeed;
-                        dummyUserB = state.settings.claudeDummyUser;
-                        enableDummyUserB = state.settings.claudeEnableDummyUser;
-                        dummyModelB = state.settings.claudeDummyModel;
-                        enableDummyModelB = state.settings.claudeEnableDummyModel;
-                        concatDummyModelB = state.settings.claudeConcatDummyModel;
                         claudeIncludeThoughtsB = state.settings.claudeIncludeThoughts;
                         claudeThinkingBudgetB = state.settings.claudeThinkingBudget;
                         claudeExpandThoughtsByDefaultB = state.settings.claudeExpandThoughtsByDefault;
-                    } else if (providerForSettingsB === 'openai') {
-                        systemPromptB = state.settings.openaiSystemPrompt;
-                        enableSystemPromptDefaultB = state.settings.openaiEnableSystemPromptDefault;
-                        temperatureB = state.settings.openaiTemperature;
-                        maxTokensB = state.settings.openaiMaxTokens;
-                        topPB = state.settings.openaiTopP;
-                        presencePenaltyB = state.settings.openaiPresencePenalty;
-                        frequencyPenaltyB = state.settings.openaiFrequencyPenalty;
-                        streamingOutputB = state.settings.openaiStreamingOutput;
-                        streamingSpeedB = state.settings.openaiStreamingSpeed;
-                        dummyUserB = state.settings.openaiDummyUser;
-                        enableDummyUserB = state.settings.openaiEnableDummyUser;
-                        dummyModelB = state.settings.openaiDummyModel;
-                        enableDummyModelB = state.settings.openaiEnableDummyModel;
-                        concatDummyModelB = state.settings.openaiConcatDummyModel;
-                    } else if (providerForSettingsB === 'xai') {
-                        systemPromptB = state.settings.xaiSystemPrompt;
-                        enableSystemPromptDefaultB = state.settings.xaiEnableSystemPromptDefault;
-                        temperatureB = state.settings.xaiTemperature;
-                        maxTokensB = state.settings.xaiMaxTokens;
-                        topPB = state.settings.xaiTopP;
-                        presencePenaltyB = state.settings.xaiPresencePenalty;
-                        frequencyPenaltyB = state.settings.xaiFrequencyPenalty;
-                        streamingOutputB = state.settings.xaiStreamingOutput;
-                        streamingSpeedB = state.settings.xaiStreamingSpeed;
-                        dummyUserB = state.settings.xaiDummyUser;
-                        enableDummyUserB = state.settings.xaiEnableDummyUser;
-                        dummyModelB = state.settings.xaiDummyModel;
-                        enableDummyModelB = state.settings.xaiEnableDummyModel;
-                        concatDummyModelB = state.settings.xaiConcatDummyModel;
+                    } else if (p === 'xai') {
                         xaiVisionEnableB = state.settings.xaiVisionEnable;
                         xaiIncludeThoughtsB = state.settings.xaiIncludeThoughts;
                         xaiReasoningEffortB = state.settings.xaiReasoningEffort;
                     }
-
+                    
                     const contextForB = {
                         sessionId: sessionB_Id,
                         messages: sessionB_Data.messages ? [...sessionB_Data.messages] : [],
@@ -23580,11 +23279,10 @@ const multiApiKeyUtils = {
             },
 
             initializeMultiApiKeys() {
-                elements.addGeminiApiKeyBtn.addEventListener('click', () => this.addApiKey('gemini'));
-                elements.addDeepseekApiKeyBtn.addEventListener('click', () => this.addApiKey('deepseek'));
-                elements.addClaudeApiKeyBtn.addEventListener('click', () => this.addApiKey('claude'));
-                elements.addOpenaiApiKeyBtn.addEventListener('click', () => this.addApiKey('openai'));
-                elements.addXaiApiKeyBtn.addEventListener('click', () => this.addApiKey('xai'));
+                ['Gemini', 'Deepseek', 'Claude', 'Openai', 'Xai'].forEach(provider => {
+                    const btn = elements[`add${provider}ApiKeyBtn`];
+                    if (btn) btn.addEventListener('click', () => this.addApiKey(provider.toLowerCase()));
+                });
                 if (elements.addImageGenApiKeyBtn) {
                     elements.addImageGenApiKeyBtn.addEventListener('click', () => {
                         elements.geminiNewApiKeysInput.value = elements.imageGenNewApiKeysInput.value;
