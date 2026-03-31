@@ -14252,6 +14252,49 @@ const allScreens =[elements.chatScreen, elements.historyScreen, elements.setting
                     }
                 });
             },
+            makeDraggableAndZoomable(panel, header) {
+                if (!panel || !header) return;
+                let currentScale = 1, initialPinchDist = null, initialScale = 1;
+                let isDragging = false, dragOffsetX = 0, dragOffsetY = 0;
+                const getDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+                const onStart = (e) => {
+                    if (e.target.tagName === 'BUTTON') return;
+                    if (e.touches && e.touches.length === 2) {
+                        isDragging = false; initialPinchDist = getDist(e.touches); initialScale = currentScale;
+                        panel.style.transition = 'none'; e.preventDefault(); return;
+                    }
+                    isDragging = true;
+                    const rect = panel.getBoundingClientRect();
+                    dragOffsetX = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / currentScale;
+                    dragOffsetY = ((e.touches ? e.touches[0].clientY : e.clientY) - rect.top) / currentScale;
+                    panel.style.transition = 'none';
+                    e.preventDefault();
+                };
+                const onMove = (e) => {
+                    if (e.touches && e.touches.length === 2 && initialPinchDist) {
+                        currentScale = Math.max(0.5, Math.min(3, initialScale * (getDist(e.touches) / initialPinchDist)));
+                        panel.style.transform = `scale(${currentScale})`;
+                        panel.style.transformOrigin = 'top left';
+                        e.preventDefault(); return;
+                    }
+                    if (!isDragging) return;
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    let newLeft = Math.max(0, Math.min(clientX - dragOffsetX * currentScale, window.innerWidth - panel.offsetWidth * currentScale));
+                    let newTop = Math.max(0, Math.min(clientY - dragOffsetY * currentScale, window.innerHeight - panel.offsetHeight * currentScale));
+                    panel.style.left = newLeft + 'px'; panel.style.top = newTop + 'px';
+                    panel.style.bottom = 'auto'; panel.style.right = 'auto';
+                    e.preventDefault();
+                };
+                const onEnd = () => { isDragging = false; initialPinchDist = null; panel.style.transition = ''; };
+                
+                header.addEventListener('mousedown', onStart);
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onEnd);
+                header.addEventListener('touchstart', onStart, { passive: false });
+                document.addEventListener('touchmove', onMove, { passive: false });
+                document.addEventListener('touchend', onEnd);
+            }
         };
         function interruptibleSleep(ms, signal) {
             return new Promise((resolve, reject) => {
@@ -14644,7 +14687,8 @@ if (state.settings.backgroundImageBlob instanceof Blob) {
                         try { state.aiIconUrl = URL.createObjectURL(state.settings.aiIconBlob); } catch (e) { }
                     }
 
-                    setTimeout(() => {
+                    // --- 他のパネルの背景画像はブラウザがアイドル状態（描画完了後）になったら読み込む ---
+                    const loadOtherBackgrounds = () => {
                         const loadBg = (blob, currentUrl, cssVarName) => {
                             if (blob instanceof Blob) {
                                 try {
@@ -14668,7 +14712,16 @@ if (state.settings.backgroundImageBlob instanceof Blob) {
                         state.imageGenSettingsBackgroundImageUrl = loadBg(state.settings.imageGenSettingsBackgroundImageBlob, state.imageGenSettingsBackgroundImageUrl, '--image-gen-settings-background-image');
 
                         uiUtils.updateBackgroundSettingsUI();
-                    }, 800);
+                    };
+
+                    // 端末性能に応じた自動遅延
+                    if ('requestIdleCallback' in window) {
+                        // ブラウザの手が空いたタイミングで実行。念のため最長でも2秒後には強制実行
+                        requestIdleCallback(loadOtherBackgrounds, { timeout: 2000 });
+                    } else {
+                        // 古いブラウザ（旧Safariなど）向けのフォールバック
+                        setTimeout(loadOtherBackgrounds, 500);
+                    }
 
 
 uiUtils.applySettingsToUI();
@@ -14929,51 +14982,8 @@ Available commands / objects:
                     appLogic.saveSettings(false);
                 });
 
-                let teIsDragging = false;
-                let teDragOffsetX = 0;
-                let teDragOffsetY = 0;
-                let teScale = 1, teInitPinchDist = null, teInitScale = 1;
-                const teGetDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-                const teOnStart = (e) => {
-                    if (e.target.tagName === 'BUTTON') return;
-                    if (e.touches && e.touches.length === 2) {
-                        teIsDragging = false; teInitPinchDist = teGetDist(e.touches); teInitScale = teScale;
-                        tePanel.style.transition = 'none'; e.preventDefault(); return;
-                    }
-                    teIsDragging = true;
-                    const rect = tePanel.getBoundingClientRect();
-                    teDragOffsetX = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / teScale;
-                    teDragOffsetY = ((e.touches ? e.touches[0].clientY : e.clientY) - rect.top) / teScale;
-                    tePanel.style.transition = 'none';
-                    e.preventDefault();
-                };
-                const teOnMove = (e) => {
-                    if (e.touches && e.touches.length === 2 && teInitPinchDist) {
-                        teScale = Math.max(0.5, Math.min(3, teInitScale * (teGetDist(e.touches) / teInitPinchDist)));
-                        tePanel.style.transform = `scale(${teScale})`;
-                        tePanel.style.transformOrigin = 'top left';
-                        e.preventDefault(); return;
-                    }
-                    if (!teIsDragging) return;
-                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                    let newLeft = Math.max(0, Math.min(clientX - teDragOffsetX * teScale, window.innerWidth - tePanel.offsetWidth * teScale));
-                    let newTop = Math.max(0, Math.min(clientY - teDragOffsetY * teScale, window.innerHeight - tePanel.offsetHeight * teScale));
-                    tePanel.style.left = newLeft + 'px';
-                    tePanel.style.top = newTop + 'px';
-                    tePanel.style.bottom = 'auto';
-                    tePanel.style.right = 'auto';
-                    e.preventDefault();
-                };
-                const teOnEnd = () => { teIsDragging = false; teInitPinchDist = null; tePanel.style.transition = ''; };
-                
                 if (teHeader) {
-                    teHeader.addEventListener('mousedown', teOnStart);
-                    document.addEventListener('mousemove', teOnMove);
-                    document.addEventListener('mouseup', teOnEnd);
-                    teHeader.addEventListener('touchstart', teOnStart, { passive: false });
-                    document.addEventListener('touchmove', teOnMove, { passive: false });
-                    document.addEventListener('touchend', teOnEnd);
+                    uiUtils.makeDraggableAndZoomable(tePanel, teHeader);
                 }
 
                 elements.twinEngineApiKeyCycleBtn.addEventListener('click', () => this.cycleTwinEngineApiKey());
@@ -21135,20 +21145,15 @@ elements.selectFilesBtn.disabled = false;
 
                 dialog.showModal();
             },
-initCryscrollerScroll() {
-                const mainContent = elements.chatScreen.querySelector('.main-content');
-                const zone = elements.cryscrollerScrollZone;
-                const handle = elements.cryscrollerScrollHandle;
+_setupGenericCryscroller(config) {
+                const { mainContent, zone, handle, isEnabledFn, hasMarkers, screenElement } = config;
 
                 const updateMarkers = () => {
-                    if (!state.settings.enableCryscrollerScroll) return;
-                    
+                    if (!hasMarkers || !isEnabledFn()) return;
                     zone.querySelectorAll('.scroll-marker').forEach(el => el.remove());
-
                     const messages = elements.messageContainer.querySelectorAll('.message');
                     const contentHeight = mainContent.scrollHeight;
                     const zoneHeight = zone.clientHeight;
-
                     if (contentHeight === 0 || zoneHeight === 0) return;
 
                     const TURF_USER_RGB = "102, 215, 19";
@@ -21158,19 +21163,10 @@ initCryscrollerScroll() {
                     messages.forEach(msg => {
                         const marker = document.createElement('div');
                         marker.classList.add('scroll-marker');
-                        
-                        let isUser = false;
-                        let isModel = false;
-
-                        if (msg.classList.contains('user')) {
-                            marker.classList.add('user');
-                            isUser = true;
-                        } else if (msg.classList.contains('model')) {
-                            marker.classList.add('model');
-                            isModel = true;
-                        } else {
-                            return;
-                        }
+                        let isUser = false, isModel = false;
+                        if (msg.classList.contains('user')) { marker.classList.add('user'); isUser = true; }
+                        else if (msg.classList.contains('model')) { marker.classList.add('model'); isModel = true; }
+                        else return;
 
                         const relativeTop = (msg.offsetTop / contentHeight) * zoneHeight;
                         marker.style.top = `${relativeTop}px`;
@@ -21180,39 +21176,34 @@ initCryscrollerScroll() {
                             const messageData = state.currentMessages[index];
                             const contentText = messageData ? (messageData.content || "") : msg.innerText;
                             const textLength = contentText.length;
-
                             if (textLength > 0) {
                                 const intensity = Math.min(1, textLength / MAX_INTENSITY_LENGTH);
                                 const alpha = 0.3 + (0.7 * intensity);
-
-                                if (isUser) {
-                                    marker.style.backgroundColor = `rgba(${TURF_USER_RGB}, ${alpha})`;
-                                } else if (isModel) {
-                                    marker.style.backgroundColor = `rgba(${TURF_MODEL_RGB}, ${alpha})`;
-                                }
+                                if (isUser) marker.style.backgroundColor = `rgba(${TURF_USER_RGB}, ${alpha})`;
+                                else if (isModel) marker.style.backgroundColor = `rgba(${TURF_MODEL_RGB}, ${alpha})`;
                             } else {
                                 marker.style.backgroundColor = ""; 
                             }
                         }
-
-                        const onMarkerClick = (e) => {
-                            e.stopPropagation(); 
-                            e.preventDefault();
+                        marker.addEventListener('click', (e) => {
+                            e.stopPropagation(); e.preventDefault();
                             mainContent.scrollTop = msg.offsetTop - 10;
-                        };
-
-                        marker.addEventListener('click', onMarkerClick);
-
+                        });
                         zone.appendChild(marker);
                     });
                 };
 
                 const updateHandle = () => {
-                    if (!state.settings.enableCryscrollerScroll) return;
-
+                    if (!isEnabledFn()) return;
                     if (!document.body.classList.contains('immersive-mode')) {
-                        zone.style.top = `${mainContent.offsetTop}px`;
-                        zone.style.height = `${mainContent.offsetHeight}px`;
+                        if (hasMarkers) {
+                            zone.style.top = `${mainContent.offsetTop}px`;
+                            zone.style.height = `${mainContent.offsetHeight}px`;
+                        } else {
+                            const headerHeight = screenElement.querySelector('.app-header').offsetHeight;
+                            zone.style.top = `${headerHeight}px`;
+                            zone.style.height = `calc(100% - ${headerHeight}px)`;
+                        }
                     } else {
                         zone.style.removeProperty('top');
                         zone.style.removeProperty('height');
@@ -21225,283 +21216,96 @@ initCryscrollerScroll() {
 
                     if (contentHeight <= viewHeight) {
                         handle.style.display = 'none';
-                        zone.querySelectorAll('.scroll-marker').forEach(el => el.style.display = 'none');
+                        if (hasMarkers) zone.querySelectorAll('.scroll-marker').forEach(el => el.style.display = 'none');
                         return;
                     }
                     handle.style.display = 'block';
-                    zone.querySelectorAll('.scroll-marker').forEach(el => el.style.display = 'block');
+                    if (hasMarkers) zone.querySelectorAll('.scroll-marker').forEach(el => el.style.display = 'block');
 
-                    let handleHeight = (viewHeight / contentHeight) * zoneHeight;
-                    handleHeight = Math.max(handleHeight, 40);
-                    
+                    let handleHeight = Math.max((viewHeight / contentHeight) * zoneHeight, 40);
                     const maxScrollTop = contentHeight - viewHeight;
                     const maxHandleTop = zoneHeight - handleHeight;
-                    
-                    let handleTop = 0;
-                    if (maxScrollTop > 0) {
-                        handleTop = (scrollTop / maxScrollTop) * maxHandleTop;
-                    }
+                    let handleTop = maxScrollTop > 0 ? (scrollTop / maxScrollTop) * maxHandleTop : 0;
 
                     handle.style.height = `${handleHeight}px`;
                     handle.style.transform = `translateY(${handleTop}px)`;
                 };
 
-                const updateAll = () => {
-                    updateHandle();
-                    updateMarkers();
-                };
+                const updateAll = () => { updateHandle(); if (hasMarkers) updateMarkers(); };
 
                 let scrollTimeout;
-                const onScroll = () => {
+                mainContent.addEventListener('scroll', () => {
                     updateHandle();
                     zone.classList.add('is-scrolling');
                     clearTimeout(scrollTimeout);
-                    scrollTimeout = setTimeout(() => {
-                        zone.classList.remove('is-scrolling');
-                    }, 000);
-                };
-                mainContent.addEventListener('scroll', onScroll, { passive: true });
+                    scrollTimeout = setTimeout(() => zone.classList.remove('is-scrolling'), 0);
+                }, { passive: true });
                 window.addEventListener('resize', updateAll);
                 
                 let observerTimeout;
                 const observer = new MutationObserver(() => {
                     if (observerTimeout) return;
                     observerTimeout = setTimeout(() => {
-                        updateAll();
-                        observerTimeout = null;
-                    }, state.isSending ? (state.settings.cryscrollerObserverDelay || 500) : 50);
+                        updateAll(); observerTimeout = null;
+                    }, hasMarkers ? (state.isSending ? (state.settings.cryscrollerObserverDelay || 500) : 50) : 100);
                 });
-                observer.observe(elements.messageContainer, { childList: true, subtree: true, attributes: true });
+                observer.observe(hasMarkers ? elements.messageContainer : mainContent, { childList: true, subtree: true, attributes: true });
 
                 let isDragging = false;
-
                 const scrollByZone = (clientY) => {
                     const rect = zone.getBoundingClientRect();
-                    const relativeY = clientY - rect.top;
-                    const zoneHeight = zone.clientHeight;
-                    
-                    const contentHeight = mainContent.scrollHeight;
-                    const viewHeight = mainContent.clientHeight;
-                    
-                    const percentage = Math.min(Math.max(relativeY / zoneHeight, 0), 1);
-                    const targetScrollTop = percentage * (contentHeight - viewHeight);
-                    
-                    mainContent.scrollTop = targetScrollTop;
+                    const percentage = Math.min(Math.max((clientY - rect.top) / zone.clientHeight, 0), 1);
+                    mainContent.scrollTop = percentage * (mainContent.scrollHeight - mainContent.clientHeight);
                 };
 
                 const startDrag = (e) => {
-                    if (!state.settings.enableCryscrollerScroll) return;
+                    if (!isEnabledFn()) return;
                     isDragging = true;
                     zone.classList.add('is-dragging');
-                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                    scrollByZone(clientY);
+                    scrollByZone(e.touches ? e.touches[0].clientY : e.clientY);
                     e.preventDefault();
                 };
-
-                const doDrag = (e) => {
-                    if (!isDragging) return;
-                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                    scrollByZone(clientY);
-                    e.preventDefault();
-                };
-
-                const endDrag = () => {
-                    isDragging = false;
-                    zone.classList.remove('is-dragging');
-                };
+                const doDrag = (e) => { if (isDragging) { scrollByZone(e.touches ? e.touches[0].clientY : e.clientY); e.preventDefault(); } };
+                const endDrag = () => { isDragging = false; zone.classList.remove('is-dragging'); };
 
                 zone.addEventListener('touchstart', startDrag, { passive: false });
                 zone.addEventListener('touchmove', doDrag, { passive: false });
                 zone.addEventListener('touchend', endDrag);
-                
                 zone.addEventListener('mousedown', startDrag);
                 document.addEventListener('mousemove', doDrag);
                 document.addEventListener('mouseup', endDrag);
 
                 setTimeout(updateAll, 100);
             },
-            initSettingsCryscrollerScroll() {
-                const mainContent = elements.settingsScreen.querySelector('.main-content');
-                const zone = elements.settingsCryscrollerScrollZone;
-                const handle = elements.settingsCryscrollerScrollHandle;
-                const updateHandle = () => {
-                    if (!state.settings.enableSettingsCryscrollerScroll) return;
-                    if (!document.body.classList.contains('immersive-mode')) {
-                        const headerHeight = elements.settingsScreen.querySelector('.app-header').offsetHeight;
-                        zone.style.top = `${headerHeight}px`;
-                        zone.style.height = `calc(100% - ${headerHeight}px)`;
-                    } else {
-                        zone.style.removeProperty('top');
-                        zone.style.removeProperty('height');
-                    }
-                    const contentHeight = mainContent.scrollHeight;
-                    const viewHeight = mainContent.clientHeight;
-                    const zoneHeight = zone.clientHeight;
-                    const scrollTop = mainContent.scrollTop;
-                    if (contentHeight <= viewHeight) {
-                        handle.style.display = 'none';
-                        return;
-                    }
-                    handle.style.display = 'block';
-                    let handleHeight = (viewHeight / contentHeight) * zoneHeight;
-                    handleHeight = Math.max(handleHeight, 40);
-                    const maxScrollTop = contentHeight - viewHeight;
-                    const maxHandleTop = zoneHeight - handleHeight;
-                    let handleTop = 0;
-                    if (maxScrollTop > 0) {
-                        handleTop = (scrollTop / maxScrollTop) * maxHandleTop;
-                    }
-                    handle.style.height = `${handleHeight}px`;
-                    handle.style.transform = `translateY(${handleTop}px)`;
-                };
-                let scrollTimeout;
-                const onScroll = () => {
-                    updateHandle();
-                    zone.classList.add('is-scrolling');
-                    clearTimeout(scrollTimeout);
-                    scrollTimeout = setTimeout(() => {
-                        zone.classList.remove('is-scrolling');
-                    }, 000);
-                };
-                mainContent.addEventListener('scroll', onScroll, { passive: true });
-                window.addEventListener('resize', updateHandle);
-                let observerTimeout;
-                const observer = new MutationObserver(() => {
-                    if (observerTimeout) return;
-                    observerTimeout = setTimeout(() => {
-                        updateHandle();
-                        observerTimeout = null;
-                    }, 100);
+            initCryscrollerScroll() {
+                this._setupGenericCryscroller({
+                    mainContent: elements.chatScreen.querySelector('.main-content'),
+                    zone: elements.cryscrollerScrollZone,
+                    handle: elements.cryscrollerScrollHandle,
+                    isEnabledFn: () => state.settings.enableCryscrollerScroll,
+                    hasMarkers: true,
+                    screenElement: elements.chatScreen
                 });
-                observer.observe(mainContent, { childList: true, subtree: true, attributes: true });
-                let isDragging = false;
-                const scrollByZone = (clientY) => {
-                    const rect = zone.getBoundingClientRect();
-                    const relativeY = clientY - rect.top;
-                    const zoneHeight = zone.clientHeight;
-                    const contentHeight = mainContent.scrollHeight;
-                    const viewHeight = mainContent.clientHeight;
-                    const percentage = Math.min(Math.max(relativeY / zoneHeight, 0), 1);
-                    const targetScrollTop = percentage * (contentHeight - viewHeight);
-                    mainContent.scrollTop = targetScrollTop;
-                };
-                const startDrag = (e) => {
-                    if (!state.settings.enableSettingsCryscrollerScroll) return;
-                    isDragging = true;
-                    zone.classList.add('is-dragging');
-                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                    scrollByZone(clientY);
-                    e.preventDefault();
-                };
-                const doDrag = (e) => {
-                    if (!isDragging) return;
-                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                    scrollByZone(clientY);
-                    e.preventDefault();
-                };
-                const endDrag = () => {
-                    isDragging = false;
-                    zone.classList.remove('is-dragging');
-                };
-                zone.addEventListener('touchstart', startDrag, { passive: false });
-                zone.addEventListener('touchmove', doDrag, { passive: false });
-                zone.addEventListener('touchend', endDrag);
-                zone.addEventListener('mousedown', startDrag);
-                document.addEventListener('mousemove', doDrag);
-                document.addEventListener('mouseup', endDrag);
-                setTimeout(updateHandle, 500);
             },
-
-            initHistoryCryscrollerScroll() {
-                const mainContent = elements.historyScreen.querySelector('.main-content');
-                const zone = elements.historyCryscrollerScrollZone;
-                const handle = elements.historyCryscrollerScrollHandle;
-                const updateHandle = () => {
-                    if (!state.settings.enableHistoryCryscrollerScroll) return;
-                    if (!document.body.classList.contains('immersive-mode')) {
-                        const headerHeight = elements.historyScreen.querySelector('.app-header').offsetHeight;
-                        zone.style.top = `${headerHeight}px`;
-                        zone.style.height = `calc(100% - ${headerHeight}px)`;
-                    } else {
-                        zone.style.removeProperty('top');
-                        zone.style.removeProperty('height');
-                    }
-                    const contentHeight = mainContent.scrollHeight;
-                    const viewHeight = mainContent.clientHeight;
-                    const zoneHeight = zone.clientHeight;
-                    const scrollTop = mainContent.scrollTop;
-                    if (contentHeight <= viewHeight) {
-                        handle.style.display = 'none';
-                        return;
-                    }
-                    handle.style.display = 'block';
-                    let handleHeight = (viewHeight / contentHeight) * zoneHeight;
-                    handleHeight = Math.max(handleHeight, 40);
-                    const maxScrollTop = contentHeight - viewHeight;
-                    const maxHandleTop = zoneHeight - handleHeight;
-                    let handleTop = 0;
-                    if (maxScrollTop > 0) {
-                        handleTop = (scrollTop / maxScrollTop) * maxHandleTop;
-                    }
-                    handle.style.height = `${handleHeight}px`;
-                    handle.style.transform = `translateY(${handleTop}px)`;
-                };
-                let scrollTimeout;
-                const onScroll = () => {
-                    updateHandle();
-                    zone.classList.add('is-scrolling');
-                    clearTimeout(scrollTimeout);
-                    scrollTimeout = setTimeout(() => {
-                        zone.classList.remove('is-scrolling');
-                    }, 000);
-                };
-                mainContent.addEventListener('scroll', onScroll, { passive: true });
-                window.addEventListener('resize', updateHandle);
-                let observerTimeout;
-                const observer = new MutationObserver(() => {
-                    if (observerTimeout) return;
-                    observerTimeout = setTimeout(() => {
-                        updateHandle();
-                        observerTimeout = null;
-                    }, 100);
+            initSettingsCryscrollerScroll() {
+                this._setupGenericCryscroller({
+                    mainContent: elements.settingsScreen.querySelector('.main-content'),
+                    zone: elements.settingsCryscrollerScrollZone,
+                    handle: elements.settingsCryscrollerScrollHandle,
+                    isEnabledFn: () => state.settings.enableSettingsCryscrollerScroll,
+                    hasMarkers: false,
+                    screenElement: elements.settingsScreen
                 });
-                observer.observe(mainContent, { childList: true, subtree: true, attributes: true });
-                let isDragging = false;
-                const scrollByZone = (clientY) => {
-                    const rect = zone.getBoundingClientRect();
-                    const relativeY = clientY - rect.top;
-                    const zoneHeight = zone.clientHeight;
-                    const contentHeight = mainContent.scrollHeight;
-                    const viewHeight = mainContent.clientHeight;
-                    const percentage = Math.min(Math.max(relativeY / zoneHeight, 0), 1);
-                    const targetScrollTop = percentage * (contentHeight - viewHeight);
-                    mainContent.scrollTop = targetScrollTop;
-                };
-                const startDrag = (e) => {
-                    if (!state.settings.enableHistoryCryscrollerScroll) return;
-                    isDragging = true;
-                    zone.classList.add('is-dragging');
-                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                    scrollByZone(clientY);
-                    e.preventDefault();
-                };
-                const doDrag = (e) => {
-                    if (!isDragging) return;
-                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                    scrollByZone(clientY);
-                    e.preventDefault();
-                };
-                const endDrag = () => {
-                    isDragging = false;
-                    zone.classList.remove('is-dragging');
-                };
-                zone.addEventListener('touchstart', startDrag, { passive: false });
-                zone.addEventListener('touchmove', doDrag, { passive: false });
-                zone.addEventListener('touchend', endDrag);
-                zone.addEventListener('mousedown', startDrag);
-                document.addEventListener('mousemove', doDrag);
-                document.addEventListener('mouseup', endDrag);
-                setTimeout(updateHandle, 500);
+            },
+            initHistoryCryscrollerScroll() {
+                this._setupGenericCryscroller({
+                    mainContent: elements.historyScreen.querySelector('.main-content'),
+                    zone: elements.historyCryscrollerScrollZone,
+                    handle: elements.historyCryscrollerScrollHandle,
+                    isEnabledFn: () => state.settings.enableHistoryCryscrollerScroll,
+                    hasMarkers: false,
+                    screenElement: elements.historyScreen
+                });
             },
             updateImmersiveLayout() {
                 if (!state.settings.enableImmersiveScrolling) {
@@ -24507,45 +24311,7 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                 });
             }
 
-            let currentScale = 1, initialPinchDist = null, initialScale = 1;
-            const getDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-            const onStart = (e) => {
-                if (e.target.tagName === 'BUTTON') return;
-                if (e.touches && e.touches.length === 2) {
-                    this._isDragging = false; initialPinchDist = getDist(e.touches); initialScale = currentScale;
-                    panel.style.transition = 'none'; e.preventDefault(); return;
-                }
-                this._isDragging = true;
-                const rect = panel.getBoundingClientRect();
-                this._dragOffsetX = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / currentScale;
-                this._dragOffsetY = ((e.touches ? e.touches[0].clientY : e.clientY) - rect.top) / currentScale;
-                panel.style.transition = 'none';
-                e.preventDefault();
-            };
-            const onMove = (e) => {
-                if (e.touches && e.touches.length === 2 && initialPinchDist) {
-                    currentScale = Math.max(0.5, Math.min(3, initialScale * (getDist(e.touches) / initialPinchDist)));
-                    panel.style.transform = `scale(${currentScale})`;
-                    panel.style.transformOrigin = 'top left';
-                    e.preventDefault(); return;
-                }
-                if (!this._isDragging) return;
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                let newLeft = Math.max(0, Math.min(clientX - this._dragOffsetX * currentScale, window.innerWidth - panel.offsetWidth * currentScale));
-                let newTop = Math.max(0, Math.min(clientY - this._dragOffsetY * currentScale, window.innerHeight - panel.offsetHeight * currentScale));
-                panel.style.left = newLeft + 'px'; panel.style.top = newTop + 'px';
-                panel.style.bottom = 'auto'; panel.style.right = 'auto';
-                e.preventDefault();
-            };
-            const onEnd = () => { this._isDragging = false; initialPinchDist = null; panel.style.transition = ''; };
-            
-            header.addEventListener('mousedown', onStart);
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onEnd);
-            header.addEventListener('touchstart', onStart, { passive: false });
-            document.addEventListener('touchmove', onMove, { passive: false });
-            document.addEventListener('touchend', onEnd);
+            uiUtils.makeDraggableAndZoomable(panel, header);
         },
         toggle() {
             state.isTokenMonitorVisible = !state.isTokenMonitorVisible;
@@ -24756,44 +24522,7 @@ const perfMonitor = {
             if (!panel) return;
             const header = panel.querySelector('.perf-header');
             if (!header) return;
-            let currentScale = 1, initialPinchDist = null, initialScale = 1;
-            const getDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-            const onStart = (e) => {
-                if (e.target.tagName === 'BUTTON') return;
-                if (e.touches && e.touches.length === 2) {
-                    this._isDragging = false; initialPinchDist = getDist(e.touches); initialScale = currentScale;
-                    panel.style.transition = 'none'; e.preventDefault(); return;
-                }
-                this._isDragging = true;
-                const rect = panel.getBoundingClientRect();
-                this._dragOffsetX = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / currentScale;
-                this._dragOffsetY = ((e.touches ? e.touches[0].clientY : e.clientY) - rect.top) / currentScale;
-                panel.style.transition = 'none';
-                e.preventDefault();
-            };
-            const onMove = (e) => {
-                if (e.touches && e.touches.length === 2 && initialPinchDist) {
-                    currentScale = Math.max(0.5, Math.min(3, initialScale * (getDist(e.touches) / initialPinchDist)));
-                    panel.style.transform = `scale(${currentScale})`;
-                    panel.style.transformOrigin = 'top left';
-                    e.preventDefault(); return;
-                }
-                if (!this._isDragging) return;
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                let newLeft = Math.max(0, Math.min(clientX - this._dragOffsetX * currentScale, window.innerWidth - panel.offsetWidth * currentScale));
-                let newTop = Math.max(0, Math.min(clientY - this._dragOffsetY * currentScale, window.innerHeight - panel.offsetHeight * currentScale));
-                panel.style.left = newLeft + 'px'; panel.style.top = newTop + 'px';
-                panel.style.bottom = 'auto'; panel.style.right = 'auto';
-                e.preventDefault();
-            };
-            const onEnd = () => { this._isDragging = false; initialPinchDist = null; panel.style.transition = ''; };
-            header.addEventListener('mousedown', onStart);
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onEnd);
-            header.addEventListener('touchstart', onStart, { passive: false });
-            document.addEventListener('touchmove', onMove, { passive: false });
-            document.addEventListener('touchend', onEnd);
+            uiUtils.makeDraggableAndZoomable(panel, header);
         },
 
         _patchIdbOps() {
@@ -25114,44 +24843,7 @@ const perfMonitor = {
             if (!panel) return;
             const header = panel.querySelector('.console-header');
             if (!header) return;
-            let currentScale = 1, initialPinchDist = null, initialScale = 1;
-            const getDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-            const onStart = (e) => {
-                if (e.target.tagName === 'BUTTON') return;
-                if (e.touches && e.touches.length === 2) {
-                    this._isDragging = false; initialPinchDist = getDist(e.touches); initialScale = currentScale;
-                    panel.style.transition = 'none'; e.preventDefault(); return;
-                }
-                this._isDragging = true;
-                const rect = panel.getBoundingClientRect();
-                this._dragOffsetX = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / currentScale;
-                this._dragOffsetY = ((e.touches ? e.touches[0].clientY : e.clientY) - rect.top) / currentScale;
-                panel.style.transition = 'none';
-                e.preventDefault();
-            };
-            const onMove = (e) => {
-                if (e.touches && e.touches.length === 2 && initialPinchDist) {
-                    currentScale = Math.max(0.5, Math.min(3, initialScale * (getDist(e.touches) / initialPinchDist)));
-                    panel.style.transform = `scale(${currentScale})`;
-                    panel.style.transformOrigin = 'top left';
-                    e.preventDefault(); return;
-                }
-                if (!this._isDragging) return;
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                let newLeft = Math.max(0, Math.min(clientX - this._dragOffsetX * currentScale, window.innerWidth - panel.offsetWidth * currentScale));
-                let newTop = Math.max(0, Math.min(clientY - this._dragOffsetY * currentScale, window.innerHeight - panel.offsetHeight * currentScale));
-                panel.style.left = newLeft + 'px'; panel.style.top = newTop + 'px';
-                panel.style.bottom = 'auto'; panel.style.right = 'auto';
-                e.preventDefault();
-            };
-            const onEnd = () => { this._isDragging = false; initialPinchDist = null; panel.style.transition = ''; };
-            header.addEventListener('mousedown', onStart);
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onEnd);
-            header.addEventListener('touchstart', onStart, { passive: false });
-            document.addEventListener('touchmove', onMove, { passive: false });
-            document.addEventListener('touchend', onEnd);
+            uiUtils.makeDraggableAndZoomable(panel, header);
         },
 
         start() {
