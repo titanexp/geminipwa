@@ -14552,7 +14552,7 @@ if (state.settings.backgroundImageBlob instanceof Blob) {
                         try { state.aiIconUrl = URL.createObjectURL(state.settings.aiIconBlob); } catch (e) { }
                     }
 
-                    setTimeout(() => {
+                                        setTimeout(async () => {
                         const loadBg = (blob, currentUrl, cssVarName) => {
                             if (blob instanceof Blob) {
                                 try {
@@ -14569,12 +14569,20 @@ if (state.settings.backgroundImageBlob instanceof Blob) {
                             return null;
                         };
 
+                        // 優先度2: 通常履歴、通常設定、画像生成チャット画面
                         state.historyBackgroundImageUrl = loadBg(state.settings.historyBackgroundImageBlob, state.historyBackgroundImageUrl, '--history-background-image');
                         state.settingsBackgroundImageUrl = loadBg(state.settings.settingsBackgroundImageBlob, state.settingsBackgroundImageUrl, '--settings-background-image');
                         state.imageGenBackgroundImageUrl = loadBg(state.settings.imageGenBackgroundImageBlob, state.imageGenBackgroundImageUrl, '--image-gen-background-image');
-                        state.imageGenHistoryBackgroundImageUrl = loadBg(state.settings.imageGenHistoryBackgroundImageBlob, state.imageGenHistoryBackgroundImageUrl, '--image-gen-history-background-image');
-                        state.imageGenSettingsBackgroundImageUrl = loadBg(state.settings.imageGenSettingsBackgroundImageBlob, state.imageGenSettingsBackgroundImageUrl, '--image-gen-settings-background-image');
+                        uiUtils.updateBackgroundSettingsUI();
 
+                        // 優先度3: 画像生成履歴画面 (少し遅らせて負荷を分散)
+                        await sleep(400);
+                        state.imageGenHistoryBackgroundImageUrl = loadBg(state.settings.imageGenHistoryBackgroundImageBlob, state.imageGenHistoryBackgroundImageUrl, '--image-gen-history-background-image');
+                        uiUtils.updateBackgroundSettingsUI();
+
+                        // 優先度4 (最低序列): 画像生成設定画面
+                        await sleep(400);
+                        state.imageGenSettingsBackgroundImageUrl = loadBg(state.settings.imageGenSettingsBackgroundImageBlob, state.imageGenSettingsBackgroundImageUrl, '--image-gen-settings-background-image');
                         uiUtils.updateBackgroundSettingsUI();
                     }, 800);
 
