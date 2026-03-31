@@ -14925,28 +14925,40 @@ Available commands / objects:
                 let teIsDragging = false;
                 let teDragOffsetX = 0;
                 let teDragOffsetY = 0;
+                let teScale = 1, teInitPinchDist = null, teInitScale = 1;
+                const teGetDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
                 const teOnStart = (e) => {
                     if (e.target.tagName === 'BUTTON') return;
+                    if (e.touches && e.touches.length === 2) {
+                        teIsDragging = false; teInitPinchDist = teGetDist(e.touches); teInitScale = teScale;
+                        tePanel.style.transition = 'none'; e.preventDefault(); return;
+                    }
                     teIsDragging = true;
                     const rect = tePanel.getBoundingClientRect();
-                    teDragOffsetX = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-                    teDragOffsetY = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+                    teDragOffsetX = ((e.touches ? e.touches[0].clientX : e.clientX) - rect.left) / teScale;
+                    teDragOffsetY = ((e.touches ? e.touches[0].clientY : e.clientY) - rect.top) / teScale;
                     tePanel.style.transition = 'none';
                     e.preventDefault();
                 };
                 const teOnMove = (e) => {
+                    if (e.touches && e.touches.length === 2 && teInitPinchDist) {
+                        teScale = Math.max(0.5, Math.min(3, teInitScale * (teGetDist(e.touches) / teInitPinchDist)));
+                        tePanel.style.transform = `scale(${teScale})`;
+                        tePanel.style.transformOrigin = 'top left';
+                        e.preventDefault(); return;
+                    }
                     if (!teIsDragging) return;
                     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                    let newLeft = Math.max(0, Math.min(clientX - teDragOffsetX, window.innerWidth - tePanel.offsetWidth));
-                    let newTop = Math.max(0, Math.min(clientY - teDragOffsetY, window.innerHeight - tePanel.offsetHeight));
+                    let newLeft = Math.max(0, Math.min(clientX - teDragOffsetX * teScale, window.innerWidth - tePanel.offsetWidth * teScale));
+                    let newTop = Math.max(0, Math.min(clientY - teDragOffsetY * teScale, window.innerHeight - tePanel.offsetHeight * teScale));
                     tePanel.style.left = newLeft + 'px';
                     tePanel.style.top = newTop + 'px';
                     tePanel.style.bottom = 'auto';
                     tePanel.style.right = 'auto';
                     e.preventDefault();
                 };
-                const teOnEnd = () => { teIsDragging = false; tePanel.style.transition = ''; };
+                const teOnEnd = () => { teIsDragging = false; teInitPinchDist = null; tePanel.style.transition = ''; };
                 
                 if (teHeader) {
                     teHeader.addEventListener('mousedown', teOnStart);
@@ -21609,12 +21621,11 @@ initCryscrollerScroll() {
                         state.imageGenMessages = chat.messages || [];
                         state.imageGenTitle = chat.title || '画像生成履歴';
                         state.isImageGenTitleGenerated = true; // DBからの読み込み時はタイトルは既にあるとみなす
-                        
-                        // 画面構築
+
                         elements.imageGenMessageContainer.innerHTML = '';
                         state.imageGenMessages.forEach((msg, index) => {
                             if (msg.role !== 'system') {
-                                uiUtils.appendImageGenMessage(msg.role, msg.content, index, msg.attachments);
+                                this.appendImageGenMessage(msg.role, msg.content, index, msg.attachments);
                             }
                         });
                         
