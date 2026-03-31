@@ -9767,10 +9767,9 @@ enableCryscrollerScrollOpacity: true,
                 enableSettingsCryscrollerScroll: true,
                 enableHistoryCryscrollerScroll: true,
             enablePerfMonitor: false,
-                                enableConsoleMonitor: false,
+                enableConsoleMonitor: false,
                 lastOpenedChatId: null,
-                lastOpenedImageChatId: null,
-                isPerfMonitorOpen: false,
+                                isPerfMonitorOpen: false,
                 isConsoleMonitorOpen: false,
                 isTokenMonitorOpen: false,
                 isTwinEngineSummaryOpen: false,
@@ -10388,13 +10387,11 @@ let imageChatStore;
                                 chatData.id = chatIdToUse;
                             }
 
-                                                        const putRequest = store.put(chatData);
+                            const putRequest = store.put(chatData);
                             putRequest.onsuccess = (event) => {
                                 const savedId = event.target.result;
                                 if (!state.currentImageChatId && savedId) {
                                     state.currentImageChatId = savedId;
-                                    state.settings.lastOpenedImageChatId = savedId;
-                                    dbUtils.saveSetting('lastOpenedImageChatId', savedId);
                                 }
                                 if ((state.currentImageChatId || savedId) === (chatIdToUse || savedId)) {
                                     state.imageGenTitle = chatData.title;
@@ -10448,35 +10445,6 @@ let imageChatStore;
                             }
                         };
                         getRequest.onerror = (e) => reject(`画像生成タイトル取得エラー: ${e.target.error}`);
-                    } catch (error) {
-                        reject(error);
-                    }
-                });
-            },
-
-                        async getLatestImageChatId() {
-                await this.openDB();
-                return new Promise((resolve, reject) => {
-                    try {
-                        const store = this._getStore(IMAGE_CHATS_STORE);
-                        const indexName = CHAT_UPDATEDAT_INDEX;
-
-                        if (!store.indexNames.contains(indexName)) {
-                            resolve(null);
-                            return;
-                        }
-
-                        const index = store.index(indexName);
-                        const request = index.openCursor(null, 'prev');
-                        request.onsuccess = (event) => {
-                            const cursor = event.target.result;
-                            if (cursor) {
-                                resolve(cursor.value.id);
-                            } else {
-                                resolve(null);
-                            }
-                        };
-                        request.onerror = (event) => reject(`画像生成最新ID取得エラー: ${event.target.error}`);
                     } catch (error) {
                         reject(error);
                     }
@@ -12447,26 +12415,20 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 elements.twinEngineEnableDummyModelCheckbox.checked = state.settings.twinEngineEnableDummyModel;
                 elements.twinEngineConcatDummyModelCheckbox.checked = state.settings.twinEngineConcatDummyModel;
 
-                elements.geminiApiKeyInput.value = state.settings.apiKey || '';
-                elements.geminiModelNameSelect.value = state.settings.modelName || DEFAULT_MODEL;
-                elements.geminiAdditionalModelsTextarea.value = state.settings.additionalModels || '';
-elements.deepSeekApiKeyInput.value = state.settings.deepSeekApiKey || '';
-elements.deepSeekApiEndpointInput.value = state.settings.deepSeekApiEndpoint || '';
-elements.deepSeekModelNameSelect.value = state.settings.deepSeekModelName || DEFAULT_DEEPSEEK_MODEL;
-                elements.deepSeekAdditionalModelsTextarea.value = state.settings.deepSeekAdditionalModels || '';
-                elements.claudeApiKeyInput.value = state.settings.claudeApiKey || '';
-                elements.claudeModelNameSelect.value = state.settings.claudeModelName || DEFAULT_CLAUDE_MODEL;
-                elements.claudeAdditionalModelsTextarea.value = state.settings.claudeAdditionalModels || '';
-                elements.openaiApiKeyInput.value = state.settings.openaiApiKey || '';
-                elements.openaiModelNameSelect.value = state.settings.openaiModelName || DEFAULT_OPENAI_MODEL;
-                elements.openaiAdditionalModelsTextarea.value = state.settings.openaiAdditionalModels || '';
-                elements.xaiApiKeyInput.value = state.settings.xaiApiKey || '';
-                elements.xaiModelNameSelect.value = state.settings.xaiModelName || DEFAULT_XAI_MODEL;
-                elements.xaiAdditionalModelsTextarea.value = state.settings.xaiAdditionalModels || '';
-                elements.llmAggregatorApiBackendInput.value = state.settings.llmAggregatorApiBackend || '';
-                elements.llmAggregatorApiKeyInput.value = state.settings.llmAggregatorApiKey || '';
-                elements.llmAggregatorModelNameSelect.value = state.settings.llmAggregatorModelName || DEFAULT_LLMAGGREGATOR_MODEL;
-                elements.llmAggregatorAdditionalModelsTextarea.value = state.settings.llmAggregatorAdditionalModels || '';
+                const pInit = [
+                    { p: 'gemini', sKey: 'apiKey', sMod: 'modelName', sAdd: 'additionalModels', dMod: DEFAULT_MODEL },
+                    { p: 'deepSeek', sKey: 'deepSeekApiKey', sMod: 'deepSeekModelName', sAdd: 'deepSeekAdditionalModels', dMod: DEFAULT_DEEPSEEK_MODEL, epEl: 'deepSeekApiEndpointInput', sEp: 'deepSeekApiEndpoint' },
+                    { p: 'claude', sKey: 'claudeApiKey', sMod: 'claudeModelName', sAdd: 'claudeAdditionalModels', dMod: DEFAULT_CLAUDE_MODEL },
+                    { p: 'openai', sKey: 'openaiApiKey', sMod: 'openaiModelName', sAdd: 'openaiAdditionalModels', dMod: DEFAULT_OPENAI_MODEL },
+                    { p: 'xai', sKey: 'xaiApiKey', sMod: 'xaiModelName', sAdd: 'xaiAdditionalModels', dMod: DEFAULT_XAI_MODEL },
+                    { p: 'llmAggregator', sKey: 'llmAggregatorApiKey', sMod: 'llmAggregatorModelName', sAdd: 'llmAggregatorAdditionalModels', dMod: DEFAULT_LLMAGGREGATOR_MODEL, epEl: 'llmAggregatorApiBackendInput', sEp: 'llmAggregatorApiBackend' }
+                ];
+                pInit.forEach(({ p, sKey, sMod, sAdd, dMod, epEl, sEp }) => {
+                    if (elements[`${p}ApiKeyInput`]) elements[`${p}ApiKeyInput`].value = state.settings[sKey] || '';
+                    if (elements[`${p}ModelNameSelect`]) elements[`${p}ModelNameSelect`].value = state.settings[sMod] || dMod;
+                    if (elements[`${p}AdditionalModelsTextarea`]) elements[`${p}AdditionalModelsTextarea`].value = state.settings[sAdd] || '';
+                    if (epEl && elements[epEl]) elements[epEl].value = state.settings[sEp] || '';
+                });
 
                 multiBackendUtils.toggleMultiBackendsVisibility(true);
                 elements.showSettingsScrollToTopButtonToggle.checked = state.settings.showSettingsScrollToTopButton;
@@ -16687,16 +16649,13 @@ appendImageGenMessage(role, content, index, attachments = null) {
                     }, 2000);
                 }
             },
-            async startNewImageGenChat(skipConfirm = false) {
-                let confirmed = true;
-                if (!skipConfirm) {
-                    confirmed = await uiUtils.showCustomConfirm("現在の画像生成セッションをリセットし、新しく開始しますか？");
-                }
+            async startNewImageGenChat() {
+                const confirmed = await uiUtils.showCustomConfirm("現在の画像生成セッションをリセットし、新しく開始しますか？");
                 if (confirmed) {
                     state.currentImageChatId = null;
-                    state.settings.lastOpenedImageChatId = null;
-                    dbUtils.saveSetting('lastOpenedImageChatId', null);
-                    state.imageGenMessages =
+                    state.imageGenMessages = [];
+                    state.imageGenTitle = '新規画像生成';
+                    state.isImageGenTitleGenerated = false;
                     state.pendingAttachments = [];
                     elements.imageGenMessageContainer.innerHTML = '';
                     if (elements.imageGenTitle) elements.imageGenTitle.textContent = state.imageGenTitle;
@@ -18921,103 +18880,42 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.imageGenSystemPrompt = elements.imageGenSystemPromptTextarea.value.trim();
                 newSettings.imageGenEnableSystemPrompt = elements.imageGenEnableSystemPromptCheckbox.checked;
 
-newSettings.deepSeekApiEndpoint = elements.deepSeekApiEndpointInput.value.trim();
-newSettings.deepSeekModelName = elements.deepSeekModelNameSelect.value;
-                newSettings.deepSeekAdditionalModels = elements.deepSeekAdditionalModelsTextarea.value.trim();
-                newSettings.deepSeekSystemPrompt = elements.deepSeekSystemPromptDefaultTextarea.value.trim();
-                newSettings.deepSeekEnableSystemPromptDefault = elements.deepSeekEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.deepSeekMaxTokens = getParamValue('deepseek-max-tokens', true, 1);
-                newSettings.deepSeekTemperature = getParamValue('deepseek-temperature', false, 0, 2);
-                newSettings.deepSeekTopP = getParamValue('deepseek-top-p', false, 0, 1);
-                newSettings.deepSeekPresencePenalty = getParamValue('deepseek-presence-penalty', false, -2.0, 2.0);
-                newSettings.deepSeekFrequencyPenalty = getParamValue('deepseek-frequency-penalty', false, -2.0, 2.0);
-                newSettings.deepSeekIncludeDeepSeekThoughts = elements.deepSeekIncludeThoughtsToggle.checked;
-                newSettings.deepSeekExpandThoughtsByDefault = elements.deepSeekExpandThoughtsByDefaultToggle.checked;
-                newSettings.deepSeekStreamingOutput = elements.deepSeekStreamingOutputCheckbox.checked;
-                newSettings.deepSeekStreamingSpeed = elements.deepSeekStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.deepSeekStreamingSpeedInput.value, 10);
-                newSettings.deepSeekDummyUser = elements.deepSeekDummyUserInput.value.trim();
-                newSettings.deepSeekEnableDummyUser = elements.deepSeekEnableDummyUserCheckbox.checked;
-                newSettings.deepSeekDummyModel = elements.deepSeekDummyModelInput.value.trim();
-                newSettings.deepSeekEnableDummyModel = elements.deepSeekEnableDummyModelCheckbox.checked;
-                newSettings.deepSeekConcatDummyModel = elements.deepSeekConcatDummyModelCheckbox.checked;
-
-                newSettings.claudeModelName = elements.claudeModelNameSelect.value;
-                newSettings.claudeAdditionalModels = elements.claudeAdditionalModelsTextarea.value.trim();
-                newSettings.claudeSystemPrompt = elements.claudeSystemPromptDefaultTextarea.value.trim();
-                newSettings.claudeEnableSystemPromptDefault = elements.claudeEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.claudeMaxTokens = getParamValue('claude-max-tokens', true, 1);
-                newSettings.claudeTemperature = getParamValue('claude-temperature', false, 0, 1);
-                newSettings.claudeTopK = getParamValue('claude-top-k', true, 1);
-                newSettings.claudeTopP = getParamValue('claude-top-p', false, 0, 1);
-                newSettings.claudeThinkingBudget = getParamValue('claude-thinking-budget', true, 1024);
-                newSettings.claudeIncludeThoughts = elements.claudeIncludeThoughtsToggle.checked;
-                newSettings.claudeExpandThoughtsByDefault = elements.claudeExpandThoughtsByDefaultToggle.checked;
-                newSettings.claudeStreamingOutput = elements.claudeStreamingOutputCheckbox.checked;
-                newSettings.claudeStreamingSpeed = elements.claudeStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.claudeStreamingSpeedInput.value, 10);
-                newSettings.claudeDummyUser = elements.claudeDummyUserInput.value.trim();
-                newSettings.claudeEnableDummyUser = elements.claudeEnableDummyUserCheckbox.checked;
-                newSettings.claudeDummyModel = elements.claudeDummyModelInput.value.trim();
-                newSettings.claudeEnableDummyModel = elements.claudeEnableDummyModelCheckbox.checked;
-                newSettings.claudeConcatDummyModel = elements.claudeConcatDummyModelCheckbox.checked;
-
-                newSettings.openaiModelName = elements.openaiModelNameSelect.value;
-                newSettings.openaiAdditionalModels = elements.openaiAdditionalModelsTextarea.value.trim();
-                newSettings.openaiSystemPrompt = elements.openaiSystemPromptDefaultTextarea.value.trim();
-                newSettings.openaiEnableSystemPromptDefault = elements.openaiEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.openaiMaxTokens = getParamValue('openai-max-tokens', true, 1);
-                newSettings.openaiTemperature = getParamValue('openai-temperature', false, 0, 2);
-                newSettings.openaiTopP = getParamValue('openai-top-p', false, 0, 1);
-                newSettings.openaiPresencePenalty = getParamValue('openai-presence-penalty', false, -2.0, 2.0);
-                newSettings.openaiFrequencyPenalty = getParamValue('openai-frequency-penalty', false, -2.0, 2.0);
-                newSettings.openaiStreamingOutput = elements.openaiStreamingOutputCheckbox.checked;
-                newSettings.openaiStreamingSpeed = elements.openaiStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.openaiStreamingSpeedInput.value, 10);
-                newSettings.openaiDummyUser = elements.openaiDummyUserInput.value.trim();
-                newSettings.openaiEnableDummyUser = elements.openaiEnableDummyUserCheckbox.checked;
-                newSettings.openaiDummyModel = elements.openaiDummyModelInput.value.trim();
-                newSettings.openaiEnableDummyModel = elements.openaiEnableDummyModelCheckbox.checked;
-                newSettings.openaiConcatDummyModel = elements.openaiConcatDummyModelCheckbox.checked;
-
-                newSettings.xaiModelName = elements.xaiModelNameSelect.value;
-                newSettings.xaiAdditionalModels = elements.xaiAdditionalModelsTextarea.value.trim();
-                newSettings.xaiSystemPrompt = elements.xaiSystemPromptDefaultTextarea.value.trim();
-                newSettings.xaiEnableSystemPromptDefault = elements.xaiEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.xaiMaxTokens = getParamValue('xai-max-tokens', true, 1);
-                newSettings.xaiTemperature = getParamValue('xai-temperature', false, 0, 2);
-                newSettings.xaiTopP = getParamValue('xai-top-p', false, 0, 1);
-                newSettings.xaiPresencePenalty = getParamValue('xai-presence-penalty', false, -2.0, 2.0);
-                newSettings.xaiFrequencyPenalty = getParamValue('xai-frequency-penalty', false, -2.0, 2.0);
-                newSettings.xaiIncludeThoughts = elements.xaiIncludeThoughtsToggle.checked;
-                newSettings.xaiExpandThoughtsByDefault = elements.xaiExpandThoughtsByDefaultToggle.checked;
-                newSettings.xaiReasoningEffort = elements.xaiReasoningEffortSelect.value;
-                newSettings.xaiStreamingOutput = elements.xaiStreamingOutputCheckbox.checked;
-                newSettings.xaiStreamingSpeed = elements.xaiStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.xaiStreamingSpeedInput.value, 10);
-                newSettings.xaiDummyUser = elements.xaiDummyUserInput.value.trim();
-                newSettings.xaiEnableDummyUser = elements.xaiEnableDummyUserCheckbox.checked;
-                newSettings.xaiDummyModel = elements.xaiDummyModelInput.value.trim();
-                newSettings.xaiEnableDummyModel = elements.xaiEnableDummyModelCheckbox.checked;
-                newSettings.xaiConcatDummyModel = elements.xaiConcatDummyModelCheckbox.checked;
-                newSettings.xaiVisionEnable = elements.xaiVisionEnableCheckbox.checked;
-
-                newSettings.llmAggregatorApiBackend = elements.llmAggregatorApiBackendInput.value.trim();
-                newSettings.llmAggregatorModelName = elements.llmAggregatorModelNameSelect.value;
-
-                newSettings.llmAggregatorSystemPrompt = elements.llmAggregatorSystemPromptDefaultTextarea.value.trim();
-                newSettings.llmAggregatorEnableSystemPromptDefault = elements.llmAggregatorEnableSystemPromptDefaultCheckbox.checked;
-                newSettings.llmAggregatorMaxTokens = getParamValue('llmaggregator-max-tokens', true, 1);
-                newSettings.llmAggregatorTemperature = getParamValue('llmaggregator-temperature', false, 0, 2);
-                newSettings.llmAggregatorTopP = getParamValue('llmaggregator-top-p', false, 0, 1);
-                newSettings.llmAggregatorTopK = getParamValue('llmaggregator-top-k', true, 0);
-                newSettings.llmAggregatorPresencePenalty = getParamValue('llmaggregator-presence-penalty', false, -2.0, 2.0);
-                newSettings.llmAggregatorFrequencyPenalty = getParamValue('llmaggregator-frequency-penalty', false, -2.0, 2.0);
-                newSettings.llmAggregatorIncludeThoughts = elements.llmAggregatorIncludeThoughtsToggle.checked;
-                newSettings.llmAggregatorExpandThoughtsByDefault = elements.llmAggregatorExpandThoughtsByDefaultToggle.checked;
-                newSettings.llmAggregatorStreamingOutput = elements.llmAggregatorStreamingOutputCheckbox.checked;
-                newSettings.llmAggregatorStreamingSpeed = elements.llmAggregatorStreamingSpeedInput.value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements.llmAggregatorStreamingSpeedInput.value, 10);
-                newSettings.llmAggregatorDummyUser = elements.llmAggregatorDummyUserInput.value.trim();
-                newSettings.llmAggregatorEnableDummyUser = elements.llmAggregatorEnableDummyUserCheckbox.checked;
-                newSettings.llmAggregatorDummyModel = elements.llmAggregatorDummyModelInput.value.trim();
-                newSettings.llmAggregatorEnableDummyModel = elements.llmAggregatorEnableDummyModelCheckbox.checked;
-                newSettings.llmAggregatorConcatDummyModel = elements.llmAggregatorConcatDummyModelCheckbox.checked;
+const pSave = [
+                    { p: 'deepSeek', s: 'deepseek' },
+                    { p: 'claude', s: 'claude' },
+                    { p: 'openai', s: 'openai' },
+                    { p: 'xai', s: 'xai' },
+                    { p: 'llmAggregator', s: 'llmaggregator' }
+                ];
+                pSave.forEach(({ p, s }) => {
+                    if (elements[`${p}ApiEndpointInput`]) newSettings[`${p}ApiEndpoint`] = elements[`${p}ApiEndpointInput`].value.trim();
+                    newSettings[`${p}ModelName`] = elements[`${p}ModelNameSelect`].value;
+                    newSettings[`${p}AdditionalModels`] = elements[`${p}AdditionalModelsTextarea`].value.trim();
+                    newSettings[`${p}SystemPrompt`] = elements[`${p}SystemPromptDefaultTextarea`].value.trim();
+                    newSettings[`${p}EnableSystemPromptDefault`] = elements[`${p}EnableSystemPromptDefaultCheckbox`].checked;
+                    newSettings[`${p}MaxTokens`] = getParamValue(`${s}-max-tokens`, true, 1);
+                    newSettings[`${p}Temperature`] = getParamValue(`${s}-temperature`, false, 0, p === 'claude' ? 1 : 2);
+                    newSettings[`${p}TopP`] = getParamValue(`${s}-top-p`, false, 0, 1);
+                    if (['claude', 'llmAggregator'].includes(p)) newSettings[`${p}TopK`] = getParamValue(`${s}-top-k`, true, p === 'claude' ? 1 : 0);
+                    if (p !== 'claude') {
+                        newSettings[`${p}PresencePenalty`] = getParamValue(`${s}-presence-penalty`, false, -2.0, 2.0);
+                        newSettings[`${p}FrequencyPenalty`] = getParamValue(`${s}-frequency-penalty`, false, -2.0, 2.0);
+                    }
+                    if (p === 'claude') newSettings.claudeThinkingBudget = getParamValue('claude-thinking-budget', true, 1024);
+                    if (['deepSeek', 'claude', 'xai', 'llmAggregator'].includes(p)) {
+                        newSettings[p === 'deepSeek' ? 'deepSeekIncludeDeepSeekThoughts' : `${p}IncludeThoughts`] = elements[`${p}IncludeThoughtsToggle`].checked;
+                        newSettings[`${p}ExpandThoughtsByDefault`] = elements[`${p}ExpandThoughtsByDefaultToggle`].checked;
+                    }
+                    if (p === 'xai') newSettings.xaiReasoningEffort = elements.xaiReasoningEffortSelect.value;
+                    if (p === 'xai') newSettings.xaiVisionEnable = elements.xaiVisionEnableCheckbox.checked;
+                    newSettings[`${p}StreamingOutput`] = elements[`${p}StreamingOutputCheckbox`].checked;
+                    newSettings[`${p}StreamingSpeed`] = elements[`${p}StreamingSpeedInput`].value === '' ? DEFAULT_STREAMING_SPEED : parseInt(elements[`${p}StreamingSpeedInput`].value, 10);
+                    newSettings[`${p}DummyUser`] = elements[`${p}DummyUserInput`].value.trim();
+                    newSettings[`${p}EnableDummyUser`] = elements[`${p}EnableDummyUserCheckbox`].checked;
+                    newSettings[`${p}DummyModel`] = elements[`${p}DummyModelInput`].value.trim();
+                    newSettings[`${p}EnableDummyModel`] = elements[`${p}EnableDummyModelCheckbox`].checked;
+                    newSettings[`${p}ConcatDummyModel`] = elements[`${p}ConcatDummyModelCheckbox`].checked;
+                });
 
 newSettings.llmAggregatorAdditionalModels = elements.llmAggregatorAdditionalModelsTextarea.value.trim();
                 newSettings.llmAggregatorApiBackend = elements.llmAggregatorApiBackendInput.value.trim();
@@ -20949,14 +20847,12 @@ _setupGenericCryscroller(config) {
                 }
             },
 
-           async loadImageChat(id) {
+            async loadImageChat(id) {
                 try {
                     const chat = await dbUtils.getImageChat(id);
                     if (chat) {
                         state.currentImageChatId = chat.id;
-                        state.settings.lastOpenedImageChatId = chat.id;
-                        dbUtils.saveSetting('lastOpenedImageChatId', chat.id);
-                        state.imageGenMessages = chat.messages ||[];
+                        state.imageGenMessages = chat.messages || [];
                         state.imageGenTitle = chat.title || '画像生成履歴';
                         state.isImageGenTitleGenerated = true; // DBからの読み込み時はタイトルは既にあるとみなす
 
