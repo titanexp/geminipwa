@@ -5644,6 +5644,10 @@ font-size: 1.142em !important;
             <button id="token-copy-btn" style="background-color: var(--bg-button-copy);">コピー</button>
             <button id="token-reset-btn" style="background-color: var(--bg-button-delete);">リセット</button>
         </div>
+        <div class="token-panel-actions" style="margin-top: 5px;">
+            <button id="token-download-tokenizer-btn" style="background-color: var(--bg-button-update); width: 100%;">トークナイザーをダウンロード</button>
+        </div>
+        <div id="token-download-status" style="font-size: 10px; color: var(--text-secondary); text-align: center; margin-top: 5px;">未ダウンロード (概算値で計算中)</div>
     </div>
 </div>
 
@@ -9240,6 +9244,8 @@ footerTapScrollToBottomToggle: document.getElementById('footer-tap-scroll-to-bot
             tokenTurnHistory: document.getElementById('token-turn-history'),
             tokenCopyBtn: document.getElementById('token-copy-btn'),
             tokenResetBtn: document.getElementById('token-reset-btn'),
+            tokenDownloadBtn: document.getElementById('token-download-tokenizer-btn'),
+            tokenDownloadStatus: document.getElementById('token-download-status'),
             showTokenMonitorButtonToggle: document.getElementById('show-token-monitor-button-toggle'),
             showBulkHistoryActionsToggle: document.getElementById('show-bulk-history-actions-toggle'),
             showPasteButtonInFooterToggle: document.getElementById('show-paste-button-in-footer-toggle'),
@@ -24461,9 +24467,10 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
         _isDragging: false,
         _dragOffsetX: 0,
         _dragOffsetY: 0,
+        _isDownloadingTokenizers: false,
 
-        async initLocalTokenizer() {
-            const p = state.settings.apiProvider === 'claude' ? 'anthropic' : state.settings.apiProvider;
+        async initLocalTokenizer(providerStr) {
+            const p = providerStr === 'claude' ? 'anthropic' : (providerStr || state.settings.apiProvider);
             const e = localTokenizers[p];
             if(!e || e.status !== 'idle') return;
             e.status = 'loading';
@@ -24472,12 +24479,46 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                 else if(p === 'anthropic'){e.encoder=await loadAiTokenizer('claude');e._type='ai-tokenizer';e.status='ready';}
                 else if(p === 'gemini'){e.encoder=await loadGemmaEncoder();e._type='hf-transformers';e.status='ready';}
                 if(state.isTokenMonitorVisible) this.updateDisplay();
-            } catch(err) { e.status='failed'; }
+            } catch(err) { e.status='failed'; throw err; }
+        },
+        async downloadAllTokenizers() {
+            if (this._isDownloadingTokenizers) return;
+            this._isDownloadingTokenizers = true;
+            const btn = elements.tokenDownloadBtn;
+            const status = elements.tokenDownloadStatus;
+            
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = "ダウンロード中...";
+            }
+            if (status) status.textContent = "数十MBの通信が発生します。お待ちください...";
+
+            const allProviders = Object.keys(localTokenizers);
+            try {
+                await Promise.all(allProviders.map(p => this.initLocalTokenizer(p)));
+                if (btn) btn.style.display = 'none';
+                if (status) status.textContent = "正確なトークン計算が有効です";
+                if (state.isTokenMonitorVisible) this.updateDisplay();
+            } catch (e) {
+                if (btn) {
+                    btn.textContent = "エラー発生 (再試行)";
+                    btn.disabled = false;
+                }
+                if (status) status.textContent = "ダウンロードに失敗しました。";
+                this._isDownloadingTokenizers = false;
+                allProviders.forEach(p => {
+                    if (localTokenizers[p].status === 'loading' || localTokenizers[p].status === 'failed') {
+                        localTokenizers[p].status = 'idle';
+                    }
+                });
+            }
         },
         init() {
-            this.initLocalTokenizer();
             const panel = elements.tokenMonitorPanel;
             if (!panel) return;
+            if (elements.tokenDownloadBtn) {
+                elements.tokenDownloadBtn.addEventListener('click', () => this.downloadAllTokenizers());
+            }
             const header = panel.querySelector('.token-header');
                         if (elements.tokenMinimizeBtn) {
                 elements.tokenMinimizeBtn.addEventListener('click', () => {
@@ -24543,7 +24584,6 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             const p = provider === 'claude' ? 'anthropic' : provider;
             const e = localTokenizers[p];
             if (e) {
-                if (e.status === 'idle') this.initLocalTokenizer();
                 if (e.status === 'ready' && e.encoder) {
                     try {
                         if (e._type === 'hf-transformers') return e.encoder.encode(text, null, { add_special_tokens: false }).length;
