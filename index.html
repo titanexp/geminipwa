@@ -5851,7 +5851,30 @@ font-size: 1.142em !important;
                     <div style="margin-top:10px;">
                         <label for="image-gen-api-key">Gemini APIキー:</label>
                         <input type="password" id="image-gen-api-key" placeholder="APIキーを入力" aria-label="画像生成用 Gemini APIキー">
-                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: -5px; margin-bottom: 15px;">
+                        <details id="image-gen-multi-api-keys-section" class="hidden" style="margin-top: 10px;">
+                            <summary
+                                style="font-size: 14px; color: var(--text-link); padding-bottom: 5px; margin-bottom: 10px; display: list-item; list-style: revert; cursor: pointer; font-weight: normal;">
+                                複数APIキー管理 (Gemini)</summary>
+                            <div style="padding-left: 15px; margin-top: 10px;">
+                                <div id="image-gen-api-keys-list" class="api-keys-list"></div>
+                                <div style="margin-top: -5px; display: flex; gap: 5px; align-items: center;">
+                                    <textarea id="image-gen-new-api-keys-input" class="api-key-item-input" placeholder="新しいAPIキーを入力..." style="flex-grow: 1; margin-bottom: 0; height: 38px; resize: vertical; min-height: 0; padding-top: 10px;"></textarea>
+                                    <button type="button" id="add-image-gen-api-key-btn" class="add-api-key-btn" style="width: auto; padding: 8px 15px; min-width: 84px;">追加</button>
+                                </div>
+                                <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px; margin-bottom: 15px;">
+                                    ※ カンマ(,)区切りで複数のAPIキーを一括追加<span class="api-key-help-icon" title="一括登録コマンドの使い方">?</span>
+                                </p>
+                                <label class="checkbox-label" style="font-size: 12px; margin-top: -5px;">
+                                    <input type="checkbox" class="js-remove-duplicate-api-keys-toggle">
+                                    重複登録されたAPIキーを削除
+                                </label>
+                                <label class="checkbox-label" style="font-size: 12px; margin-top: -5px;">
+                                    <input type="checkbox" class="js-disable-delete-api-key-confirmation-toggle">
+                                    APIキー削除時の確認ダイアログ
+                                </label>
+                            </div>
+                        </details>
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px; margin-bottom: 15px;">
                             ※ チャット設定のGemini APIキーと共有されます。ここで変更するとチャット側にも反映されます。
                         </p>
                     </div>
@@ -9508,6 +9531,10 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             imageGenSettingsCountSelect: document.getElementById('image-gen-settings-count'),
             imageGenSystemPromptTextarea: document.getElementById('image-gen-system-prompt'),
             imageGenEnableSystemPromptCheckbox: document.getElementById('image-gen-enable-system-prompt'),
+            imageGenMultiApiKeysSection: document.getElementById('image-gen-multi-api-keys-section'),
+            imageGenApiKeysList: document.getElementById('image-gen-api-keys-list'),
+            imageGenNewApiKeysInput: document.getElementById('image-gen-new-api-keys-input'),
+            addImageGenApiKeyBtn: document.getElementById('add-image-gen-api-key-btn'),
         };
 
 
@@ -14195,17 +14222,33 @@ const allScreens =[elements.chatScreen, elements.historyScreen, elements.setting
                                 case 'xai': singleKeyValue = state.settings.xaiApiKey; break;
                                 case 'llmaggregator': singleKeyValue = state.settings.llmAggregatorApiKey; break;
                             }
-                            singleKeyInput.value = singleKeyValue || '';
-                        }
-                    }
-                });
+                            initializeMultiApiKeys() {
+                elements.addGeminiApiKeyBtn.addEventListener('click', () => this.addApiKey('gemini'));
+                elements.addDeepseekApiKeyBtn.addEventListener('click', () => this.addApiKey('deepseek'));
+                elements.addClaudeApiKeyBtn.addEventListener('click', () => this.addApiKey('claude'));
+                elements.addOpenaiApiKeyBtn.addEventListener('click', () => this.addApiKey('openai'));
+                elements.addXaiApiKeyBtn.addEventListener('click', () => this.addApiKey('xai'));
+                if (elements.addImageGenApiKeyBtn) {
+                    elements.addImageGenApiKeyBtn.addEventListener('click', () => this.addApiKey('gemini', true));
+                }
+
+                this.renderAllApiKeyLists();
             },
-            updateApiKeyInputType() {
+
+            async addApiKey(provider, isImageGen = false) {
+                let inputElementId = `${provider}-new-api-keys-input`;
+                if (isImageGen && provider === 'gemini') {
+                    inputElementId = 'image-gen-new-api-keys-input';
+                }
+                const inputElement = document.getElementById(inputElementId);
+                if (!inputElement) return;
+                const inputText = inputElement.value; // .trim() を削除
+updateApiKeyInputType() {
                 const isUnmasked = state.settings.unmaskApiKeys;
                 const type = isUnmasked ? 'text' : 'password';
                 const mainInputIds = [
                     'gemini-api-key', 'deepseek-api-key', 'claude-api-key',
-                    'openai-api-key', 'xai-api-key', 'llmaggregator-api-key'
+                    'openai-api-key', 'xai-api-key', 'llmaggregator-api-key', 'image-gen-api-key'
                 ];
                 mainInputIds.forEach(id => {
                     const el = document.getElementById(id);
@@ -23851,14 +23894,16 @@ const multiApiKeyUtils = {
                 uiUtils.updateApiKeyCycleButtons();
             },
             
-            clearAllNewKeyTextareas() {
-                const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'];
+clearAllNewKeyTextareas() {
+                const providers =['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'];
                 providers.forEach(provider => {
                     const inputElement = document.getElementById(`${provider}-new-api-keys-input`);
                     if (inputElement) {
                         inputElement.value = '';
                     }
                 });
+                const imageGenInput = document.getElementById('image-gen-new-api-keys-input');
+                if (imageGenInput) imageGenInput.value = '';
             },
             
             async deleteApiKey(provider, keyId) {
@@ -23967,6 +24012,7 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                 switch (provider) {
                     case 'gemini':
                         elements.geminiApiKeyInput.value = activeKey;
+                        if (elements.imageGenApiKeyInput) elements.imageGenApiKeyInput.value = activeKey;
                         break;
                     case 'deepseek':
                         elements.deepSeekApiKeyInput.value = activeKey;
@@ -23985,30 +24031,47 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
 
             renderApiKeyList(provider) {
                 const keys = this.getApiKeysArray(provider);
-                const container = this.getListContainer(provider);
-                const addButton = this.getAddButton(provider);
+                
+                const renderToContainer = (containerId, addButtonId) => {
+                    const container = document.getElementById(containerId);
+                    const addButton = document.getElementById(addButtonId);
+                    if (!container || !addButton) return;
 
-                container.innerHTML = '';
+                    container.innerHTML = '';
 
-                if (keys.length === 0) {
-                    const emptyMsg = document.createElement('p');
-                    emptyMsg.textContent = 'APIキーが設定されていません。';
-                    emptyMsg.style.color = 'var(--text-secondary)';
-                    emptyMsg.style.fontSize = '13px';
-                    emptyMsg.style.textAlign = 'center';
-                    emptyMsg.style.margin = '10px 0';
-                    container.appendChild(emptyMsg);
-                } else {
-                    keys.forEach((key, index) => {
-                        const item = this.createApiKeyItem(provider, key, index);
-                        container.appendChild(item);
-                    });
+                    if (keys.length === 0) {
+                        const emptyMsg = document.createElement('p');
+                        emptyMsg.textContent = 'APIキーが設定されていません。';
+                        emptyMsg.style.color = 'var(--text-secondary)';
+                        emptyMsg.style.fontSize = '13px';
+                        emptyMsg.style.textAlign = 'center';
+                        emptyMsg.style.margin = '10px 0';
+                        container.appendChild(emptyMsg);
+                    } else {
+                        keys.forEach((key, index) => {
+                            const item = this.createApiKeyItem(provider, key, index);
+                            container.appendChild(item);
+                        });
+                    }
+
+                    addButton.disabled = keys.length >= this.MAX_API_KEYS;
+                    addButton.textContent = keys.length >= this.MAX_API_KEYS
+                        ? `最大${this.MAX_API_KEYS}個まで`
+                        : '追加';
+                };
+
+                if (provider === 'gemini') {
+                    renderToContainer('gemini-api-keys-list', 'add-gemini-api-key-btn');
+                    renderToContainer('image-gen-api-keys-list', 'add-image-gen-api-key-btn');
+                } else if (provider === 'deepseek') {
+                    renderToContainer('deepseek-api-keys-list', 'add-deepseek-api-key-btn');
+                } else if (provider === 'claude') {
+                    renderToContainer('claude-api-keys-list', 'add-claude-api-key-btn');
+                } else if (provider === 'openai') {
+                    renderToContainer('openai-api-keys-list', 'add-openai-api-key-btn');
+                } else if (provider === 'xai') {
+                    renderToContainer('xai-api-keys-list', 'add-xai-api-key-btn');
                 }
-
-                addButton.disabled = keys.length >= this.MAX_API_KEYS;
-                addButton.textContent = keys.length >= this.MAX_API_KEYS
-                    ? `最大${this.MAX_API_KEYS}個まで`
-                    : '追加';
             },
 
             createApiKeyItem(provider, key, index) {
