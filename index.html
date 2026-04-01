@@ -9996,10 +9996,19 @@ let imageChatStore;
                     try {
                         const store = this._getStore(CHATS_STORE);
                         const indexName = sortBy === 'createdAt' ? CHAT_CREATEDAT_INDEX : CHAT_UPDATEDAT_INDEX;
+                        
+                        const processList = (chat) => {
+                            const l = { id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt };
+                            if (chat.messages && chat.messages.length > 0) {
+                                const m = chat.messages[chat.messages.length - 1];
+                                l.messages = [{ role: m.role, content: m.content ? m.content.substring(0, 350) : '', attachments: m.attachments ? m.attachments.map(a => ({ name: a.name })) : [] }];
+                            } else { l.messages = []; }
+                            return l;
+                        };
 
                         if (!store.indexNames.contains(indexName)) {
                             const getAllRequest = store.getAll();
-                            getAllRequest.onsuccess = (event) => resolve(event.target.result.reverse());
+                            getAllRequest.onsuccess = (event) => resolve(event.target.result.reverse().map(processList));
                             getAllRequest.onerror = (e) => reject(e.target.error);
                             return;
                         }
@@ -10010,7 +10019,7 @@ let imageChatStore;
                         request.onsuccess = (event) => {
                             const cursor = event.target.result;
                             if (cursor) {
-                                chats.push(cursor.value);
+                                chats.push(processList(cursor.value));
                                 cursor.continue();
                             } else {
                                 resolve(chats);
@@ -10188,11 +10197,20 @@ let imageChatStore;
                 return new Promise((resolve, reject) => {
                     try {
                         const store = this._getStore(IMAGE_CHATS_STORE);
-                        const indexName = CHAT_UPDATEDAT_INDEX; // updatedAtのみ現在はサポート
+                        const indexName = CHAT_UPDATEDAT_INDEX;
+                        
+                        const processList = (chat) => {
+                            const l = { id: chat.id, title: chat.title, createdAt: chat.createdAt, updatedAt: chat.updatedAt };
+                            if (chat.messages && chat.messages.length > 0) {
+                                const m = chat.messages[chat.messages.length - 1];
+                                l.messages = [{ role: m.role, content: m.content ? m.content.substring(0, 350) : '', attachments: m.attachments ? m.attachments.map(a => ({ name: a.name })) : [] }];
+                            } else { l.messages = []; }
+                            return l;
+                        };
 
                         if (!store.indexNames.contains(indexName)) {
                             const getAllRequest = store.getAll();
-                            getAllRequest.onsuccess = (event) => resolve(event.target.result.reverse());
+                            getAllRequest.onsuccess = (event) => resolve(event.target.result.reverse().map(processList));
                             getAllRequest.onerror = (e) => reject(e.target.error);
                             return;
                         }
@@ -10203,7 +10221,7 @@ let imageChatStore;
                         request.onsuccess = (event) => {
                             const cursor = event.target.result;
                             if (cursor) {
-                                chats.push(cursor.value);
+                                chats.push(processList(cursor.value));
                                 cursor.continue();
                             } else {
                                 resolve(chats);
