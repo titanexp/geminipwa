@@ -9634,6 +9634,7 @@ enableCryscrollerScrollOpacity: true,
             responseStartTime: 0,
             isSummarizing: false,
             abortController: null,
+            imageGenAbortController: null,
             partialStreamContent: '',
             partialThoughtStreamContent: '',
             editingMessageIndex: null,
@@ -14503,7 +14504,11 @@ Available commands / objects:
                 elements.imageGenAttachFileBtn.addEventListener('click', () => uiUtils.showFileUploadDialog());
                 elements.imageGenNewBtn.addEventListener('click', () => appLogic.startNewImageGenChat());
                 elements.imageGenSendBtn.addEventListener('click', () => {
-                    if (!state.imageGenIsSending) appLogic.handleImageGenSend();
+                    if (state.imageGenIsSending) {
+                        if (state.imageGenAbortController) state.imageGenAbortController.abort();
+                    } else {
+                        appLogic.handleImageGenSend();
+                    }
                 });
                 elements.imageGenInput.addEventListener('input', () => {
                     elements.imageGenInput.style.height = 'auto';
@@ -16429,10 +16434,11 @@ appendImageGenMessage(role, content, index, attachments = null) {
                 if (resolution) imageConfig.resolution = resolution;
                 if (state.settings.geminiImageCount) imageConfig.numberOfImages = parseInt(state.settings.geminiImageCount, 10);
                 if (Object.keys(imageConfig).length > 0) generationConfig.imageConfig = imageConfig;
-                
-                try {
-                    const response = await apiUtils.callGeminiApi(apiKey, model, apiMessages, generationConfig, systemInstruction, false, false, false);
-                    const data = await response.json();
+                    
+                    state.imageGenAbortController = new AbortController();
+                    try {
+                        const response = await apiUtils.callGeminiApi(apiKey, model, apiMessages, generationConfig, systemInstruction, false, false, false, state.imageGenAbortController.signal);
+                        const data = await response.json();
                     let responseContent = '';
                     const candidate = data.candidates?.[0];
 
@@ -20788,8 +20794,9 @@ toggleImageGenMessageCollapse(index) {
                     if (state.settings.geminiImageCount) imageConfig.numberOfImages = parseInt(state.settings.geminiImageCount, 10);
                     if (Object.keys(imageConfig).length > 0) generationConfig.imageConfig = imageConfig;
                     
+                    state.imageGenAbortController = new AbortController();
                     try {
-                        const response = await apiUtils.callGeminiApi(apiKey, model, apiMessages, generationConfig, systemInstruction, false, false, false);
+                        const response = await apiUtils.callGeminiApi(apiKey, model, apiMessages, generationConfig, systemInstruction, false, false, false, state.imageGenAbortController.signal);
                         const data = await response.json();
                         let responseContent = '';
                         const candidate = data.candidates?.[0];
@@ -20939,14 +20946,19 @@ toggleImageGenMessageCollapse(index) {
             }
         };
         const apiUtils = {
-            async callGeminiApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding) {
+            async callGeminiApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, usePseudo, enableGrounding, customSignal) {
                 if (!apiKey) {
                     throw new Error("APIキーが設定されていません。");
                 }
                 let baseUrl = GEMINI_API_BASE_URL;
 
-                state.abortController = new AbortController();
-                const { signal } = state.abortController;
+                let signal;
+                if (customSignal) {
+                    signal = customSignal;
+                } else {
+                    state.abortController = new AbortController();
+                    signal = state.abortController.signal;
+                }
 
                 const isImageGenModel = isImageGenerationModel(model);
                 const enableImageGen = state.settings.geminiEnableImageGeneration || isImageGenModel;
