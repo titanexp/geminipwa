@@ -8436,6 +8436,7 @@ font-size: 1.142em !important;
             <img src="" alt="画像プレビュー">
         </div>
         <div class="dialog-actions">
+            <button id="download-preview-image-btn" class="dialog-cancel-btn">ダウンロード</button>
             <button value="ok" class="dialog-ok-btn">閉じる</button>
         </div>
     </dialog>
@@ -10025,7 +10026,10 @@ let imageChatStore;
 
                         if (!store.indexNames.contains(indexName)) {
                             const getAllRequest = store.getAll();
-                            getAllRequest.onsuccess = (event) => resolve(event.target.result.reverse().map(processList));
+                            getAllRequest.onsuccess = (event) => {
+                                const sorted = event.target.result.sort((a, b) => b[sortBy] - a[sortBy]);
+                                resolve(sorted.map(processList));
+                            };
                             getAllRequest.onerror = (e) => reject(e.target.error);
                             return;
                         }
@@ -10227,7 +10231,10 @@ let imageChatStore;
 
                         if (!store.indexNames.contains(indexName)) {
                             const getAllRequest = store.getAll();
-                            getAllRequest.onsuccess = (event) => resolve(event.target.result.reverse().map(processList));
+                            getAllRequest.onsuccess = (event) => {
+                                const sorted = event.target.result.sort((a, b) => b[sortBy] - a[sortBy]);
+                                resolve(sorted.map(processList));
+                            };
                             getAllRequest.onerror = (e) => reject(e.target.error);
                             return;
                         }
@@ -10532,7 +10539,7 @@ shouldExpandThoughtsByDefault(provider) {
                         content = content.replace(/(\!\[[^\(\]\n]+).*?(https?:\/\/)/g, '$1]($2');
                         // --- ステップ1: AIが生成したフルURLをプレースホルダー形式に強制変換 ---
                         // AIが生成する多様なURLの崩れに対応するための修正
-                        content = content.replace(/!\[(.*?)\]\((https?)([:.\/\s　-]*)(.*?)\)/gi, (match, altText, protocol, separator, restOfUrl) => {
+                        content = content.replace(/!\[(.*?)\]\((https?)([:.\/\s-]*)(.*?)\)/gi, (match, altText, protocol, separator, restOfUrl) => {
                             // separator には ":", "://", "-", ".-", "s" など、プロトコルとホスト名の間のあらゆる文字が入る
                             // restOfUrl には "example.com/image.png" のような、ホスト名以降の部分が入る
 
@@ -10642,7 +10649,7 @@ shouldExpandThoughtsByDefault(provider) {
                                 const cleanedFilename = (nameWithoutExt + extension).toLowerCase();
 
                                 const cleanedPathname = (pathPart ? pathPart + '/' : '/') + cleanedFilename;
-                                const newUrl = urlObject.origin + cleanedPathname.replace(/\/{2,}/g, '/');
+                                const newUrl = baseUrl.replace(/\/$/, '') + cleanedPathname.replace(/\/{2,}/g, '/');
 
                                 console.log("Final Pathname:", cleanedPathname);
                                 console.log("Final URL:", newUrl);
@@ -10660,13 +10667,10 @@ shouldExpandThoughtsByDefault(provider) {
                 } else {
                     console.log('[Markdown Img] No Base URL available (neither chat-specific nor global). Skipping replacement.');
                 }
+                const rawHtml = typeof marked !== 'undefined' ? marked.parse(content || '') : content || '';
                 if (typeof DOMPurify === 'undefined') {
-                    const div = document.createElement('div');
-                    div.textContent = content || '';
-                    return div.innerHTML;
+                    return rawHtml;
                 }
-
-                const rawHtml = marked.parse(content || '');
                                 const cleanHtml = DOMPurify.sanitize(rawHtml, {
                     ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'ul', 'ol', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'code', 'a', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr', 'img'],
                     ALLOWED_ATTR: ['href', 'title', 'target', 'rel', 'src', 'alt'],
@@ -12151,7 +12155,7 @@ const getCurrentMermaidTheme = () => {
                     if (elements[`${key}SystemPromptDefaultTextarea`]) elements[`${key}SystemPromptDefaultTextarea`].value = state.settings[`${key}SystemPrompt`] || '';
                     if (elements[`${key}EnableSystemPromptDefaultCheckbox`]) elements[`${key}EnableSystemPromptDefaultCheckbox`].checked = state.settings[`${key}EnableSystemPromptDefault`];
                     
-                    const storageKeyMaxTokens = id === 'deepseek' ? 'deepseekMaxTokensSliderMax' : `${key}MaxTokensSliderMax`;
+                    const storageKeyMaxTokens = id === 'deepseek' ? 'deepSeekMaxTokensSliderMax' : `${key}MaxTokensSliderMax`;
                     setupParamUI(`${id}-max-tokens`, storageKeyMaxTokens);
                     setupParamUI(`${id}-temperature`);
                     setupParamUI(`${id}-top-p`);
@@ -13463,7 +13467,7 @@ const allScreens =[elements.chatScreen, elements.historyScreen, elements.setting
                 });
             },
             toggleMultiApiKeysVisibility(show) {
-                const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai'];
+                const providers = ['gemini', 'deepseek', 'claude', 'openai', 'xai', 'llmaggregator'];
 
                 providers.forEach(provider => {
                     const multiKeySection = document.getElementById(`${provider}-multi-api-keys-section`);
@@ -13513,7 +13517,7 @@ const allScreens =[elements.chatScreen, elements.historyScreen, elements.setting
                 const type = isUnmasked ? 'text' : 'password';
                 const mainInputIds = [
                     'gemini-api-key', 'deepseek-api-key', 'claude-api-key',
-                    'openai-api-key', 'xai-api-key', 'llmaggregator-api-key'
+                    'openai-api-key', 'xai-api-key', 'llmaggregator-api-key', 'image-gen-api-key'
                 ];
                 mainInputIds.forEach(id => {
                     const el = document.getElementById(id);
@@ -14985,41 +14989,40 @@ const visibilityToggles = [
                     }
                 }, true);
 
-                elements.messageContainer.addEventListener('click', (event) => {
+                const handleMessageClick = (event, isImageGen) => {
                     const target = event.target;
                     const button = target.closest('button');
                     const clickedMessage = target.closest('.message');
+                    const container = isImageGen ? elements.imageGenMessageContainer : elements.messageContainer;
 
                     if (button && clickedMessage) {
                         const index = parseInt(clickedMessage.dataset.index, 10);
 
-                        if (button.classList.contains('cascade-prev-btn')) {
-                            appLogic.navigateCascade(index, 'prev'); return;
-                        }
-                        if (button.classList.contains('cascade-next-btn')) {
-                            appLogic.navigateCascade(index, 'next'); return;
-                        }
-                        if (button.classList.contains('cascade-delete-btn')) {
-                            appLogic.confirmDeleteCascadeResponse(index); return;
-                        }
+                        if (!isImageGen && button.classList.contains('cascade-prev-btn')) { appLogic.navigateCascade(index, 'prev'); return; }
+                        if (!isImageGen && button.classList.contains('cascade-next-btn')) { appLogic.navigateCascade(index, 'next'); return; }
+                        if (!isImageGen && button.classList.contains('cascade-delete-btn')) { appLogic.confirmDeleteCascadeResponse(index); return; }
 
                         if (button.classList.contains('message-toggle-button')) {
-                            uiUtils.toggleMessageCollapse(index); return;
+                            isImageGen ? appLogic.toggleImageGenMessageCollapse(index) : appLogic.toggleMessageCollapse(index);
+                            return;
                         }
-
                         if (button.classList.contains('js-edit-btn')) {
-                            appLogic.startEditMessage(index, clickedMessage); return;
+                            isImageGen ? appLogic.startEditImageGenMessage(index, clickedMessage) : appLogic.startEditMessage(index, clickedMessage);
+                            return;
                         }
                         if (button.classList.contains('js-delete-btn')) {
-                            appLogic.deleteMessage(index); return;
+                            isImageGen ? appLogic.deleteImageGenMessage(index) : appLogic.deleteMessage(index);
+                            return;
                         }
                         if (button.classList.contains('js-copy-btn')) {
-                            appLogic.copyMessageText(index, button); return;
+                            isImageGen ? appLogic.copyImageGenMessageText(index, button) : appLogic.copyMessageText(index, button);
+                            return;
                         }
                         if (button.classList.contains('js-retry-btn')) {
                             const role = clickedMessage.classList.contains('model') ? 'model' : 'user';
-                            const userIndexForRetry = (role === 'model' && index > 0) ? appLogic.findPreviousUserIndex(index) : index;
-                            if (userIndexForRetry !== -1) appLogic.retryFromMessage(userIndexForRetry);
+                            const userIndexForRetry = (role === 'model' && index > 0) ? 
+                                (isImageGen ? appLogic.findPreviousImageGenUserIndex(index) : appLogic.findPreviousUserIndex(index)) : index;
+                            if (userIndexForRetry !== -1) isImageGen ? appLogic.retryFromImageGenMessage(userIndexForRetry) : appLogic.retryFromMessage(userIndexForRetry);
                             return;
                         }
                     }
@@ -15029,77 +15032,23 @@ const visibilityToggles = [
                     }
 
                     if (clickedMessage) {
-                        const currentlyShown = elements.messageContainer.querySelector('.message.show-actions');
-                        if (currentlyShown && currentlyShown !== clickedMessage) {
-                            currentlyShown.classList.remove('show-actions');
-                        }
-                        if (!clickedMessage.classList.contains('editing')) {
-                            clickedMessage.classList.toggle('show-actions');
-                        }
+                        const currentlyShown = container.querySelector('.message.show-actions');
+                        if (currentlyShown && currentlyShown !== clickedMessage) currentlyShown.classList.remove('show-actions');
+                        if (!clickedMessage.classList.contains('editing')) clickedMessage.classList.toggle('show-actions');
                     } else {
-                        const currentlyShown = elements.messageContainer.querySelector('.message.show-actions');
-                        if (currentlyShown) {
-                            currentlyShown.classList.remove('show-actions');
-                        }
+                        const currentlyShown = container.querySelector('.message.show-actions');
+                        if (currentlyShown) currentlyShown.classList.remove('show-actions');
                     }
-                }, true);
+                };
+
+                elements.messageContainer.addEventListener('click', (e) => handleMessageClick(e, false), true);
+                elements.imageGenMessageContainer.addEventListener('click', (e) => handleMessageClick(e, true), true);
+
                 document.body.addEventListener('click', (event) => {
                     if (!elements.messageContainer.contains(event.target) &&
                         !elements.imageGenMessageContainer.contains(event.target) &&
                         !event.target.closest('.custom-dialog')) {
-                        const currentlyShown = document.querySelectorAll('.message.show-actions');
-                        currentlyShown.forEach(el => el.classList.remove('show-actions'));
-                    }
-                }, true);
-
-elements.imageGenMessageContainer.addEventListener('click', (event) => {
-                    const target = event.target;
-                    const button = target.closest('button');
-                    const clickedMessage = target.closest('.message');
-
-                    if (button && clickedMessage) {
-                        const index = parseInt(clickedMessage.dataset.index, 10);
-                        if (button.dataset.action === 'image-gen-toggle-collapse') {
-                            appLogic.toggleImageGenMessageCollapse(index);
-                            return;
-                        }
-                        if (button.classList.contains('js-image-gen-edit-btn')) {
-                            appLogic.startEditImageGenMessage(index, clickedMessage);
-                            return;
-                        }
-                        if (button.classList.contains('js-image-gen-delete-btn')) {
-                            appLogic.deleteImageGenMessage(index); 
-                            return;
-                        }
-                        if (button.classList.contains('js-image-gen-copy-btn')) {
-                            appLogic.copyImageGenMessageText(index, button); 
-                            return;
-                        }
-                        if (button.classList.contains('js-image-gen-retry-btn')) {
-                            const role = clickedMessage.classList.contains('model') ? 'model' : 'user';
-                            const userIndexForRetry = (role === 'model' && index > 0) ? appLogic.findPreviousImageGenUserIndex(index) : index;
-                            if (userIndexForRetry !== -1) appLogic.retryFromImageGenMessage(userIndexForRetry);
-                            return;
-                        }
-                    }
-                    
-                    if (target.closest('.interactive-title-content, .code-copy-button, a[href="#"], .attachment-actions button')) {
-                        return;
-                    }
-
-                    if (clickedMessage) {
-                        const currentlyShown = elements.imageGenMessageContainer.querySelector('.message.show-actions');
-                        if (currentlyShown && currentlyShown !== clickedMessage) {
-                            currentlyShown.classList.remove('show-actions');
-                        }
-                        if (!clickedMessage.classList.contains('editing')) {
-                            clickedMessage.classList.toggle('show-actions');
-                        }
-                    } else {
-                        const currentlyShown = elements.imageGenMessageContainer.querySelector('.message.show-actions');
-                        if (currentlyShown) {
-                            currentlyShown.classList.remove('show-actions');
-                        }
+                        document.querySelectorAll('.message.show-actions').forEach(el => el.classList.remove('show-actions'));
                     }
                 }, true);
 
@@ -15199,13 +15148,6 @@ elements.imageGenMessageContainer.addEventListener('click', (event) => {
                 elements.fileUploadDialog.addEventListener('close', () => {
                     if (elements.fileUploadDialog.returnValue !== 'ok') {
                         this.cancelAttachment();
-                    }
-                });
-                elements.messageContainer.addEventListener('click', (event) => {
-                    const targetButton = event.target.closest('.message-toggle-button');
-                    if (targetButton && targetButton.dataset.action === 'toggle-collapse') {
-                        const index = parseInt(targetButton.dataset.index, 10);
-                        this.toggleMessageCollapse(index);
                     }
                 });
                 elements.enableContentVisibilityToggle.addEventListener('change', (e) => {
@@ -15990,13 +15932,8 @@ appendImageGenMessage(role, content, index, attachments = null) {
                 const resolution = elements.imageGenQuickResolution.value || state.settings.geminiImageResolution;
                 let messagesToProcess = [...state.imageGenMessages];
 
-                if (state.settings.imageGenEnableSystemPrompt && state.settings.imageGenSystemPrompt) {
-                     messagesToProcess.unshift({ role: 'system', content: state.settings.imageGenSystemPrompt });
-                }
-
                 let apiMessages = messagesToProcess.map(m => {
                     if (m.role === 'error') return null;
-                    if (m.role === 'system') return { role: 'system', parts: [{ text: m.content }] };
                     const parts = [];
                     if (m.content) parts.push({ text: m.content });
                     if (m.attachments && m.attachments.length > 0) {
@@ -16008,12 +15945,9 @@ appendImageGenMessage(role, content, index, attachments = null) {
                     return { role: m.role, parts: parts.length > 0 ? parts : [{ text: '' }] };
                 }).filter(m => m !== null);
                 
-                apiMessages = apiMessages.map(m => m.role === 'system' ? { role: 'user', parts: m.parts } : m);
                 let systemInstruction = null;
-                const firstMsg = apiMessages[0];
-                if (firstMsg && firstMsg.role === 'user' && state.settings.imageGenEnableSystemPrompt && state.settings.imageGenSystemPrompt) {
+                if (state.settings.imageGenEnableSystemPrompt && state.settings.imageGenSystemPrompt) {
                      systemInstruction = { role: "system", parts: [{ text: state.settings.imageGenSystemPrompt }] };
-                     apiMessages.shift(); 
                 }
                 
                 const generationConfig = { responseModalities: ["TEXT", "IMAGE"] };
@@ -20671,24 +20605,26 @@ async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemIns
                     ...(generationConfig.frequencyPenalty !== undefined && { frequency_penalty: generationConfig.frequencyPenalty }),
                 };
 
-                if (provider === 'llmaggregator' && generationConfig.topK !== null) {
+                let requestHeaders = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                };
+
+                if (provider === 'llmaggregator') {
                     if (generationConfig.topK !== null) {
                         dsRequestBody.top_k = generationConfig.topK;
                     }
                     const activeBackend = multiBackendUtils.getActiveBackend();
                     if(activeBackend && activeBackend.url.includes('openrouter.ai')) {
-                        dsRequestBody.http_referer = "https://geminipwa.pages.dev/";
-                        dsRequestBody.site_url = "https://github.com/titan823/geminipwa";
+                        requestHeaders['HTTP-Referer'] = "https://geminipwa.pages.dev/";
+                        requestHeaders['X-Title'] = "GeminiPWA";
                     }
                 }
 
                 try {
                     const response = await fetch(endpoint, {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${apiKey}`
-                        },
+                        headers: requestHeaders,
                         body: JSON.stringify(dsRequestBody),
                         signal
                     });
@@ -20710,7 +20646,11 @@ async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemIns
                         if (choice && choice.message && choice.message.reasoning_content) {
                             reasoningContent = choice.message.reasoning_content;
                         }
-                        response.json = async () => ({ ...data, parsedReasoningContent: reasoningContent });
+                        Object.defineProperty(response, 'json', {
+                            value: async () => ({ ...data, parsedReasoningContent: reasoningContent }),
+                            writable: true,
+                            configurable: true
+                        });
                     }
                     return response;
                 } catch (error) {
@@ -21090,7 +21030,11 @@ async callOpenAICompatibleApi(apiKey, model, provider, messagesForApi, generatio
                     if (data.usage?.completion_tokens_details?.reasoning_tokens) {
                         data.usage.completion_tokens += data.usage.completion_tokens_details.reasoning_tokens;
                     }
-                    response.json = async () => ({ ...data, xaiThoughtSummary: reasoningContent });
+                    Object.defineProperty(response, 'json', {
+                        value: async () => ({ ...data, xaiThoughtSummary: reasoningContent }),
+                        writable: true,
+                        configurable: true
+                    });
                 }
                 return response;
             },
@@ -21501,11 +21445,10 @@ async callOpenAICompatibleApi(apiKey, model, provider, messagesForApi, generatio
             },
 
             updateMainBackendInput() {
-                if (!state.settings.showMultiBackends) return;
-                const activeBackend = this.getActiveBackend();
-                elements.llmAggregatorApiBackendInput.value = activeBackend ? activeBackend.url : '';
-                elements.llmAggregatorApiKeyInput.value = this.getActiveApiKeyForBackend(activeBackend);
-            },
+    const activeBackend = this.getActiveBackend();
+    elements.llmAggregatorApiBackendInput.value = activeBackend ? activeBackend.url : '';
+    elements.llmAggregatorApiKeyInput.value = this.getActiveApiKeyForBackend(activeBackend);
+},
 
             renderList() {
                 const backends = state.settings.llmaggregatorBackends;
@@ -22947,6 +22890,8 @@ const perfMonitor = {
         },
 
         _patchIdbOps() {
+            if (this._patchedIdbOps) return;
+            this._patchedIdbOps = true;
             const originalSaveSetting = dbUtils.saveSetting.bind(dbUtils);
             dbUtils.saveSetting = async (...args) => { this._idbOpsCount++; return originalSaveSetting(...args); };
             const originalSaveChat = dbUtils.saveChat.bind(dbUtils);
