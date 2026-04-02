@@ -7201,6 +7201,7 @@ font-size: 1.142em !important;
                                 </p>
                             </div>
                         </div>
+                    </div>
                 </details>
                                 <details class="settings-group" id="settings-group-image">
                     <summary
@@ -8090,7 +8091,6 @@ font-size: 1.142em !important;
                                 <input type="checkbox" id="auto-close-other-settings-toggle">
                                 『その他設定』を自動で閉じる
                             </label>
-                        </div>
                         </div>
                     </details>
                 </div>
@@ -9180,9 +9180,17 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
                 geminiFrequencyPenalty: null,
                 geminiThinkingBudget: null,
 geminiMaxTokensSliderMax: null,
-geminiTopKSliderMax: null,
-geminiThinkingBudgetSliderMax: null,
-geminiIncludeThoughts: false,
+                geminiTopKSliderMax: null,
+                geminiThinkingBudgetSliderMax: null,
+                deepSeekMaxTokensSliderMax: null,
+                claudeMaxTokensSliderMax: null,
+                claudeTopKSliderMax: null,
+                claudeThinkingBudgetSliderMax: null,
+                openaiMaxTokensSliderMax: null,
+                xaiMaxTokensSliderMax: null,
+                llmAggregatorMaxTokensSliderMax: null,
+                llmAggregatorTopKSliderMax: null,
+                geminiIncludeThoughts: false,
                 geminiExpandThoughtsByDefault: false,
                 geminiStreamingOutput: false,
                 geminiStreamingSpeed: DEFAULT_STREAMING_SPEED,
@@ -9547,7 +9555,6 @@ enableCryscrollerScrollOpacity: true,
             isSummarizingForRetry: false,
             isProofreading: false,
             imageGenMessages:[],
-            currentImageGenChatId: null,
             imageGenIsSending: false,
         };
 
@@ -10262,15 +10269,17 @@ let imageChatStore;
                 await this.openDB();
                 return new Promise((resolve, reject) => {
                     try {
-                        const transaction = state.db.transaction([SETTINGS_STORE, CHATS_STORE], 'readwrite');
+                        const transaction = state.db.transaction([SETTINGS_STORE, CHATS_STORE, IMAGE_CHATS_STORE], 'readwrite');
                         const settingsStore = transaction.objectStore(SETTINGS_STORE);
                         const chatsStore = transaction.objectStore(CHATS_STORE);
+                        const imageChatsStore = transaction.objectStore(IMAGE_CHATS_STORE);
 
                         transaction.oncomplete = () => resolve();
                         transaction.onerror = (e) => reject(`データ全消去エラー: ${e.target.error}`);
 
                         settingsStore.clear();
                         chatsStore.clear();
+                        imageChatsStore.clear();
                     } catch (error) {
                         reject(error);
                     }
@@ -12115,6 +12124,10 @@ const getCurrentMermaidTheme = () => {
                 elements.imageGenSystemPromptTextarea.value = state.settings.imageGenSystemPrompt || '';
                 elements.imageGenEnableSystemPromptCheckbox.checked = state.settings.imageGenEnableSystemPrompt;
                 
+                if(elements.imageGenModelSelect) elements.imageGenModelSelect.value = state.settings.imageGenDefaultModel || 'gemini-2.5-flash-image';
+                if(elements.imageGenQuickAspect) elements.imageGenQuickAspect.value = state.settings.geminiImageAspectRatio || '';
+                if(elements.imageGenQuickResolution) elements.imageGenQuickResolution.value = state.settings.geminiImageResolution || '';
+
                 multiApiKeyUtils.updateMainApiKeyInput('imageGen');
 
                 elements.enableImageUrlReplacementCheckbox.checked = state.settings.enableImageUrlReplacement;
@@ -12165,8 +12178,6 @@ const getCurrentMermaidTheme = () => {
                     if (elements[`${key}ConcatDummyModelCheckbox`]) elements[`${key}ConcatDummyModelCheckbox`].checked = state.settings[`${key}ConcatDummyModel`];
                 });
 
-elements.llmAggregatorEnableDummyModelCheckbox.checked = state.settings.llmAggregatorEnableDummyModel;
-                elements.llmAggregatorConcatDummyModelCheckbox.checked = state.settings.llmAggregatorConcatDummyModel;
                 if (typeof perfMonitor !== 'undefined' && perfMonitor.recordBootMark) perfMonitor.recordBootMark("SettingsUI: API Values");
 
                 elements.enterToSendCheckbox.checked = state.settings.enterToSend;
@@ -12413,7 +12424,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 ];
                 modelSettingsMap.forEach(({ el, key, fn }) => {
                     const textarea = elements[`${el}AdditionalModelsTextarea`];
-                    if (textarea) setupModelListener(textarea, key, uiUtils[fn]);
+                    if (textarea) setupModelListener(textarea, key, () => uiUtils[fn]());
                 });
 
                 this.updateTwinEngineModeButton();
@@ -15758,13 +15769,14 @@ resetSwipeState() {
                 state.currentChatId = null;
                 state.settings.lastOpenedChatId = null;
                 dbUtils.saveSetting('lastOpenedChatId', null);
+
+                if (state.currentMessages.length > 0) tokenMonitor.addCurrentSessionToCumulative();
+                if (state.isTokenMonitorVisible) setTimeout(() => tokenMonitor.updateDisplay(), 100);
+
                 state.currentMessages = [];
                 state.currentChatBaseUrl = null;
                 if (state.settings.commonSystemPrompt && state.settings.commonSystemPrompt.trim() !== '') {
                 }
-
-if (state.currentMessages.length > 0) tokenMonitor.addCurrentSessionToCumulative();
-                if (state.isTokenMonitorVisible) setTimeout(() => tokenMonitor.updateDisplay(), 100);
 
                 state.pendingAttachments =[];
                 elements.twinEngineSummaryArea.classList.add('hidden');
@@ -18148,6 +18160,9 @@ const pSave = [
                         newSettings[`${p}FrequencyPenalty`] = getParamValue(`${s}-frequency-penalty`, false, -2.0, 2.0);
                     }
                     if (p === 'claude') newSettings.claudeThinkingBudget = getParamValue('claude-thinking-budget', true, 1024);
+                    newSettings[`${p}MaxTokensSliderMax`] = getSliderMaxValue(`${s}-max-tokens`);
+                    if (['claude', 'llmAggregator'].includes(p)) newSettings[`${p}TopKSliderMax`] = getSliderMaxValue(`${s}-top-k`);
+                    if (p === 'claude') newSettings.claudeThinkingBudgetSliderMax = getSliderMaxValue('claude-thinking-budget');
                     if (['deepSeek', 'claude', 'xai', 'llmAggregator'].includes(p)) {
                         newSettings[p === 'deepSeek' ? 'deepSeekIncludeDeepSeekThoughts' : `${p}IncludeThoughts`] = elements[`${p}IncludeThoughtsToggle`].checked;
                         newSettings[`${p}ExpandThoughtsByDefault`] = elements[`${p}ExpandThoughtsByDefaultToggle`].checked;
@@ -20749,7 +20764,8 @@ async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemIns
                                         if (delta.reasoning_content) {
                                             reasoningTextChunk = delta.reasoning_content;
                                             accumulatedFullReasoningContent += reasoningTextChunk;
-                                        } else if (delta.content) {
+                                        }
+                                        if (delta.content) {
                                             contentTextChunk = delta.content;
                                         }
                                     }
@@ -21042,8 +21058,9 @@ async callOpenAICompatibleApi(apiKey, model, provider, messagesForApi, generatio
                 if (provider === 'openai') baseUrl = OPENAI_API_BASE_URL;
                 else if (provider === 'xai') baseUrl = XAI_API_BASE_URL;
                 else if (provider === 'llmaggregator') {
-                    baseUrl = state.settings.llmAggregatorApiBackend;
-                    if (!baseUrl) throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
+                    const rawUrl = state.settings.llmAggregatorApiBackend;
+                    if (!rawUrl) throw new Error("LLM AggregatorのAPIバックエンドURLが設定されていません。");
+                    baseUrl = `${rawUrl.replace(/\/$/, '')}/chat/completions`;
                 } else throw new Error(`Unsupported provider for callOpenAICompatibleApi: ${provider}`);
 
                 if (!apiKey) throw new Error(`${provider} のAPIキーが設定されていません。`);
@@ -21935,7 +21952,7 @@ async callOpenAICompatibleApi(apiKey, model, provider, messagesForApi, generatio
                         const keysToRemove = [];
                         for (let i = 0; i < localStorage.length; i++) {
                             const key = localStorage.key(i);
-                            if (key && !protectedKeys.some(protected => key.includes(protected))) {
+                            if (key && !protectedKeys.some(p => key.includes(p))) {
                                 keysToRemove.push(key);
                             }
                         }
@@ -22643,7 +22660,8 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
         _isDownloadingTokenizers: false,
 
         async initLocalTokenizer(providerStr) {
-            const p = providerStr === 'claude' ? 'anthropic' : (providerStr || state.settings.apiProvider);
+            let p = providerStr === 'claude' ? 'anthropic' : (providerStr || state.settings.apiProvider);
+            if (p === 'xai') p = 'grok';
             const e = localTokenizers[p];
             if(!e || e.status !== 'idle') return;
             e.status = 'loading';
@@ -22716,7 +22734,8 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
         },
         estimateTokens(text, provider = 'openai') {
             if (!text) return 0;
-            const p = provider === 'claude' ? 'anthropic' : provider;
+            let p = provider === 'claude' ? 'anthropic' : provider;
+            if (p === 'xai') p = 'grok';
             const e = localTokenizers[p];
             if (e) {
                 if (e.status === 'ready' && e.encoder) {
@@ -23389,4 +23408,3 @@ const perfMonitor = {
 </body>
 
 </html>
-    
