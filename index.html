@@ -4203,16 +4203,7 @@ body.turf-mode .app-header:active {
 
 
 
-body.turf-mode button:disabled {
-  background-image: none;
 
-}
-
-body.turf-mode .app-header:hover,
-body.turf-mode .app-header:active {
-  transform: none;
-
-}
 
 body.turf-mode button:nth-of-type(6n+1) {
   background-position: 15% 88%, 92% 18%, 45% 63%, 7% 39%, 68% 51%;
@@ -9321,6 +9312,9 @@ geminiIncludeThoughts: false,
                 imageGenDefaultAspect: '',
                 imageGenDefaultResolution: '',
                 imageGenDefaultCount: '',
+                imageGenApiKey: '',
+                imageGenApiKeys: [],
+                imageGenActiveApiKeyIndex: -1,
                 // ▼ここから追加▼
                 enableImageUrlReplacement: false, // デフォルトは無効
                 imageUrlReplacementBase: '',      // ベースURLは空
@@ -10799,8 +10793,10 @@ renderChatMessages(maintainScroll = false) {
                         this.appendMessage(msg.role, msg.content, i, false, null, msg.attachments, fragment);
                     }
                 }
+                if (typeof perfMonitor !== 'undefined' && perfMonitor.recordBootMark) perfMonitor.recordBootMark("RenderChat: Create Fragments");
 
                 elements.messageContainer.appendChild(fragment);
+                if (typeof perfMonitor !== 'undefined' && perfMonitor.recordBootMark) perfMonitor.recordBootMark("RenderChat: Append to DOM");
 
 
                 if (maintainScroll && oldScrollTop !== null) {
@@ -11741,6 +11737,14 @@ const getCurrentMermaidTheme = () => {
                 this.setSendingState(false);
                 this.scrollToBottom();
             },
+            scrollToTop() {
+                requestAnimationFrame(() => {
+                    const mainContent = elements.chatScreen.querySelector('.main-content');
+                    if (mainContent) {
+                        mainContent.scrollTop = 0;
+                    }
+                });
+            },
             scrollToBottom() {
                 requestAnimationFrame(() => {
                     const mainContent = elements.chatScreen.querySelector('.main-content');
@@ -12353,7 +12357,7 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 elements.geminiImageCountSelect.value = state.settings.geminiImageCount || '';
 
                 // 画像生成専用設定パネルの読み込み
-                elements.imageGenApiKeyInput.value = state.settings.apiKey || '';
+                elements.imageGenApiKeyInput.value = state.settings.imageGenApiKey || '';
                 elements.imageGenSettingsModelSelect.value = state.settings.imageGenDefaultModel || 'gemini-2.5-flash-image';
                 elements.imageGenAdditionalModelsTextarea.value = state.settings.imageGenAdditionalModels || '';
                 elements.imageGenSettingsAspectSelect.value = state.settings.geminiImageAspectRatio || '';
@@ -12361,15 +12365,9 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                 elements.imageGenSettingsCountSelect.value = state.settings.geminiImageCount || '';
                 elements.imageGenSystemPromptTextarea.value = state.settings.imageGenSystemPrompt || '';
                 elements.imageGenEnableSystemPromptCheckbox.checked = state.settings.imageGenEnableSystemPrompt;
+                
+                multiApiKeyUtils.updateMainApiKeyInput('imageGen');
 
-                // Sync API keys between panels
-                elements.imageGenApiKeyInput.addEventListener('input', () => {
-                   elements.geminiApiKeyInput.value = elements.imageGenApiKeyInput.value;
-                   if (state.settings.showMultiApiKeys) multiApiKeyUtils.syncMainApiKeyInput('gemini');
-                });
-                elements.geminiApiKeyInput.addEventListener('input', () => {
-                   elements.imageGenApiKeyInput.value = elements.geminiApiKeyInput.value;
-                });
                 elements.enableImageUrlReplacementCheckbox.checked = state.settings.enableImageUrlReplacement;
                 elements.imageUrlReplacementBaseInput.value = state.settings.imageUrlReplacementBase || '';
                 elements.imageUrlReplacementOptionsDiv.classList.toggle('hidden', !state.settings.enableImageUrlReplacement);
@@ -12415,6 +12413,10 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
                     if (elements[`${key}EnableDummyModelCheckbox`]) elements[`${key}EnableDummyModelCheckbox`].checked = state.settings[`${key}EnableDummyModel`];
                     if (elements[`${key}ConcatDummyModelCheckbox`]) elements[`${key}ConcatDummyModelCheckbox`].checked = state.settings[`${key}ConcatDummyModel`];
                 });
+
+elements.llmAggregatorEnableDummyModelCheckbox.checked = state.settings.llmAggregatorEnableDummyModel;
+                elements.llmAggregatorConcatDummyModelCheckbox.checked = state.settings.llmAggregatorConcatDummyModel;
+                if (typeof perfMonitor !== 'undefined' && perfMonitor.recordBootMark) perfMonitor.recordBootMark("SettingsUI: API Values");
 
                 elements.enterToSendCheckbox.checked = state.settings.enterToSend;
 elements.headerTapScrollToTopToggle.checked = state.settings.headerTapScrollToTop;
@@ -12626,6 +12628,7 @@ elements.footerTapScrollToBottomToggle.checked = state.settings.footerTapScrollT
                 this.updateOpenAIUserModelOptions();
                 this.updateXaiUserModelOptions();
                 this.updateLlmAggregatorUserModelOptions();
+                if (typeof perfMonitor !== 'undefined' && perfMonitor.recordBootMark) perfMonitor.recordBootMark("SettingsUI: Checkboxes & Selects");
                 this.updateBackgroundSettingsUI();
                 this.updateIconSettingsUI();
                 this.applyTheme();
@@ -13743,7 +13746,7 @@ const allScreens =[elements.chatScreen, elements.historyScreen, elements.setting
                     if (label?.tagName === 'LABEL') label.classList.toggle('hidden', show);
                     elements.imageGenApiKeyInput.classList.toggle('hidden', show);
                     if (!show) {
-                        elements.imageGenApiKeyInput.value = state.settings.apiKey || '';
+                        elements.imageGenApiKeyInput.value = state.settings.imageGenApiKey || '';
                     }
                 }
             },
@@ -14174,13 +14177,8 @@ _setupParamSlider(paramId, defaultValue, storageKey) {
                 console.groupEnd();
             },
             async initializeApp() {
-                const bootMarks = [];
-                let lastMark = 0;
-                const mark = (label) => {
-                    const now = performance.now();
-                    if (lastMark !== 0) bootMarks.push({ label, duration: now - lastMark });
-                    lastMark = now;
-                };
+                if (typeof perfMonitor !== 'undefined' && perfMonitor.recordBootMark) perfMonitor._lastBootMarkTime = performance.timeOrigin || performance.now();
+                const mark = (label) => { if (typeof perfMonitor !== 'undefined' && perfMonitor.recordBootMark) perfMonitor.recordBootMark(label); };
                 mark("Page Load ~ Init");
 
                 try {
@@ -14371,7 +14369,7 @@ if (state.settings.backgroundImageBlob instanceof Blob) {
 
                     mark("Finalize Setup");
                     state.bootTime = performance.now();
-                    state.bootMetrics = bootMarks.sort((a, b) => b.duration - a.duration);
+                    if (typeof perfMonitor !== 'undefined') state.bootMetrics = [...perfMonitor._bootMarks].sort((a, b) => b.duration - a.duration);
 
                     if (typeof window.initializationSuccess === 'function') {
                         window.initializationSuccess();
@@ -14553,8 +14551,8 @@ Available commands / objects:
                 elements.twinEngineModeToggleBtn.addEventListener('click', () => this.toggleTwinEngineMode());
                 elements.footerTwinEngineModeToggleBtn.addEventListener('click', () => this.toggleTwinEngineMode());
 
-                elements.scrollToTopBtn.addEventListener('click', () => this.scrollToTop());
-                elements.scrollToBottomBtn.addEventListener('click', () => this.scrollToBottom());
+                elements.scrollToTopBtn.addEventListener('click', () => uiUtils.scrollToTop());
+                elements.scrollToBottomBtn.addEventListener('click', () => uiUtils.scrollToBottom());
                 elements.aiToAiChatBtn.addEventListener('click', () => this.initiateAiToAiStep());
                 elements.pasteToInputBtn.addEventListener('click', () => this.pasteToUserInput());
                 elements.rollDiceBtn.addEventListener('click', () => this.rollDiceAndInput());
@@ -14710,17 +14708,7 @@ Available commands / objects:
                     });
                 });
 
-elements.showTwinEngineSettingsToggle.addEventListener('change', (e) => {
-                    const isVisible = e.target.checked;
-                    const twinEngineSettingsGroup = document.getElementById('settings-group-twin-engine');
-                    if (twinEngineSettingsGroup) {
-                        twinEngineSettingsGroup.classList.toggle('hidden', !isVisible);
-                    }
-                    if (elements.twinEngineSummaryBtn) {
-                        const showButton = isVisible && state.settings.showTwinEngineSummaryButton;
-                        elements.twinEngineSummaryBtn.classList.toggle('hidden', !showButton);
-                    }
-                });
+
 
                 if (elements.uploadBulkBgBtn && elements.bulkBgInput) {
                     elements.uploadBulkBgBtn.addEventListener('click', () => elements.bulkBgInput.click());
@@ -15509,7 +15497,7 @@ elements.imageGenMessageContainer.addEventListener('click', (event) => {
                         if (e.target.tagName === 'BUTTON' || e.target.closest('button') || e.target.tagName === 'INPUT') return;
                         
                         const screenId = header.closest('.screen')?.id;
-                        if (screenId === 'chat-screen') this.scrollToTop();
+                        if (screenId === 'chat-screen') uiUtils.scrollToTop();
                         else if (screenId === 'settings-screen') this.scrollToSettingsTop();
                         else if (screenId === 'history-screen') {
                             const main = document.querySelector('#history-screen .main-content');
@@ -15523,7 +15511,7 @@ elements.imageGenMessageContainer.addEventListener('click', (event) => {
                     footer.addEventListener('click', (e) => {
                         if (!state.settings.footerTapScrollToBottom) return;
                         if (e.target.tagName === 'BUTTON' || e.target.closest('button') || e.target.tagName === 'TEXTAREA') return;
-                        if (state.currentScreen === 'chat') this.scrollToBottom();
+                        if (state.currentScreen === 'chat') uiUtils.scrollToBottom();
                     });
                 }
 
@@ -15621,10 +15609,11 @@ elements.imageGenMessageContainer.addEventListener('click', (event) => {
 
                 multiApiKeyUtils.initializeMultiApiKeys();
                 multiBackendUtils.initialize();
-                ['gemini', 'deepSeek', 'claude', 'openai', 'xai', 'llmAggregator'].forEach(provider => {
+                ['gemini', 'deepSeek', 'claude', 'openai', 'xai', 'llmAggregator', 'imageGen'].forEach(provider => {
                     const input = elements[`${provider}ApiKeyInput`];
                     if (input) {
-                        input.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput(provider.toLowerCase()));
+                        const targetProvider = provider === 'imageGen' ? 'imageGen' : provider.toLowerCase();
+                        input.addEventListener('input', () => multiApiKeyUtils.syncMainApiKeyInput(targetProvider));
                     }
                 });
                 elements.showMultiApiKeysToggle.addEventListener('change', (e) => {
@@ -15996,22 +15985,6 @@ resetSwipeState() {
                     uiUtils.updateLoadingIndicator();
                 }
             },
-            scrollToTop() {
-                requestAnimationFrame(() => {
-                    const mainContent = elements.chatScreen.querySelector('.main-content');
-                    if (mainContent) {
-                        mainContent.scrollTop = 0;
-                    }
-                });
-            },
-            scrollToBottom() {
-                requestAnimationFrame(() => {
-                    const mainContent = elements.chatScreen.querySelector('.main-content');
-                    if (mainContent) {
-                        mainContent.scrollTop = mainContent.scrollHeight;
-                    }
-                });
-            },
             async pasteToUserInput() {
                 const button = elements.pasteToInputBtn;
                 const originalTextContent = button.textContent;
@@ -16151,12 +16124,7 @@ if (state.currentMessages.length > 0) tokenMonitor.addCurrentSessionToCumulative
                     uiUtils.scrollToBottom();
                 }
             },
-            startNewImageGenChat() {
-                state.imageGenMessages =[];
-                elements.imageGenMessageContainer.innerHTML = '';
-                elements.imageGenInput.value = '';
-                elements.imageGenInput.style.height = '40px';
-            },
+            
 appendImageGenMessage(role, content, index, attachments = null) {
                 const messageDiv = document.createElement('div');
                 messageDiv.classList.add('message', role);
@@ -16382,7 +16350,7 @@ appendImageGenMessage(role, content, index, attachments = null) {
                 state.pendingAttachments =[];
                 uiUtils.updateAttachmentBadgeVisibility();
 
-                const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('gemini') : state.settings.apiKey;
+                const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('imageGen') : state.settings.imageGenApiKey;
                 if (!apiKey) {
                     this.appendImageGenMessage('error', 'Gemini APIキーが設定されていません。', -1);
                     state.imageGenIsSending = false;
@@ -16495,7 +16463,9 @@ appendImageGenMessage(role, content, index, attachments = null) {
                 }
 
                 try {
+                    const mark = (l) => { if (typeof perfMonitor !== 'undefined' && perfMonitor.recordBootMark) perfMonitor.recordBootMark(l); };
                     const chat = await dbUtils.getChat(id);
+                    mark("LoadChat: DB Fetch");
                     if (chat) {
                         state.currentChatId = chat.id;
                         state.settings.lastOpenedChatId = chat.id;
@@ -16538,7 +16508,9 @@ appendImageGenMessage(role, content, index, attachments = null) {
                             }
                         });
 
+                        mark("LoadChat: State Setup");
                         uiUtils.renderChatMessages();
+                        mark("LoadChat: DOM Render");
                         uiUtils.updateChatTitle(chat.title);
                         elements.userInput.value = '';
                         uiUtils.adjustTextareaHeight();
@@ -18539,9 +18511,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
                 newSettings.geminiImageCount = elements.geminiImageCountSelect.value;
 
                 // 画像生成専用設定パネルの保存
-                if(elements.imageGenApiKeyInput.value.trim() !== '') {
-                    newSettings.apiKey = elements.imageGenApiKeyInput.value.trim();
-                }
+                newSettings.imageGenApiKey = elements.imageGenApiKeyInput.value.trim();
                 newSettings.imageGenDefaultModel = elements.imageGenSettingsModelSelect.value;
                 newSettings.imageGenAdditionalModels = elements.imageGenAdditionalModelsTextarea.value.trim();
                 newSettings.geminiImageAspectRatio = elements.imageGenSettingsAspectSelect.value; // 両方のパネルで同じstateを使用
@@ -20747,7 +20717,7 @@ toggleImageGenMessageCollapse(index) {
                     elements.imageGenSendBtn.textContent = '止';
                     elements.imageGenSendBtn.classList.add('sending');
                     
-                    const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('gemini') : state.settings.apiKey;
+                    const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('imageGen') : state.settings.imageGenApiKey;
                     if (!apiKey) {
                         this.appendImageGenMessage('error', 'Gemini APIキーが設定されていません。', -1);
                         state.imageGenIsSending = false;
@@ -22685,9 +22655,7 @@ const multiApiKeyUtils = {
                 });
                 if (elements.addImageGenApiKeyBtn) {
                     elements.addImageGenApiKeyBtn.addEventListener('click', () => {
-                        elements.geminiNewApiKeysInput.value = elements.imageGenNewApiKeysInput.value;
-                        this.addApiKey('gemini');
-                        elements.imageGenNewApiKeysInput.value = '';
+                        this.addApiKey('imageGen');
                     });
                 }
 
@@ -22866,13 +22834,10 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             updateMainApiKeyInput(provider) {
                 if (!state.settings.showMultiApiKeys) return;
                 const activeKey = this.getActiveApiKey(provider);
-                const elPrefix = provider === 'deepseek' ? 'deepSeek' : provider;
+                const elPrefix = provider === 'deepseek' ? 'deepSeek' : provider === 'imageGen' ? 'imageGen' : provider;
                 const inputEl = elements[`${elPrefix}ApiKeyInput`];
                 
                 if (inputEl) inputEl.value = activeKey;
-                if (provider === 'gemini' && elements.imageGenApiKeyInput) {
-                    elements.imageGenApiKeyInput.value = activeKey;
-                }
             },
 
             renderApiKeyList(provider) {
@@ -22908,9 +22873,6 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                 };
 
                 renderToContainer(container, addButton);
-                if (provider === 'gemini') {
-                    renderToContainer(elements.imageGenApiKeysList, elements.addImageGenApiKeyBtn);
-                }
             },
 
             createApiKeyItem(provider, key, index) {
@@ -22980,7 +22942,7 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
             },
 
             renderAllApiKeyLists() {
-                ['gemini', 'deepseek', 'claude', 'openai', 'xai'].forEach(provider => {
+                ['gemini', 'deepseek', 'claude', 'openai', 'xai', 'imageGen'].forEach(provider => {
                     this.renderApiKeyList(provider);
                 });
             },
@@ -23531,6 +23493,12 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
     };
 
 const perfMonitor = {
+        _bootMarks: [], _lastBootMarkTime: 0,
+        recordBootMark(label) {
+            const now = performance.now();
+            if (this._lastBootMarkTime !== 0) this._bootMarks.push({ label, duration: now - this._lastBootMarkTime });
+            this._lastBootMarkTime = now;
+        },
         _enabled: false, _intervalId: null, _rafId: null, _fpsHistory:[], _maxFpsHistory: 60,
         _frameCount: 0, _lastFpsTime: 0, _lastFrameTime: 0, _longTaskCount: 0, _clsValue: 0,
         _longTaskObserver: null, _clsObserver: null, _idbOpsCount: 0, _startTime: Date.now(),
