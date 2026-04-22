@@ -6136,7 +6136,7 @@ font-size: 1.142em !important;
                         LLM Aggregator 設定</summary>
                     <div style="margin-top:15px;">
                         <label for="llmaggregator-api-backend">API バックエンド URL:</label>
-                        <input type="text" id="llmaggregator-api-backend" placeholder="例: https://api.openrouter.ai/v1"
+                        <input type="text" id="llmaggregator-api-backend" placeholder="例: https://openrouter.ai/api/v1"
                             aria-label="LLM Aggregator API バックエンド URL">
                         <div id="llmaggregator-url-error"
                             style="color: red; font-size: 11px; margin-top: -5px; height: 14px;"></div>
@@ -6147,7 +6147,7 @@ font-size: 1.142em !important;
                             <div style="padding-left: 15px; margin-top: 10px;">
                                 <div id="llmaggregator-backends-list" class="api-keys-list"></div>
                                 <div style="margin-top: -5px; display: flex; gap: 5px; align-items: center;">
-                                    <textarea id="llmaggregator-new-backends-input" class="api-key-item-input" placeholder="例:https://api.openrouter.ai/v1" style="flex-grow: 1; margin-bottom: 0; height: 38px; resize: vertical; min-height: 0; padding-top: 10px;"></textarea>
+                                    <textarea id="llmaggregator-new-backends-input" class="api-key-item-input" placeholder="例: https://openrouter.ai/api/v1" style="flex-grow: 1; margin-bottom: 0; height: 38px; resize: vertical; min-height: 0; padding-top: 10px;"></textarea>
                                     <button type="button" id="add-llmaggregator-backend-btn" class="add-api-key-btn" style="width: auto; padding: 8px 15px; min-width: 84px;">追加</button>
                                 </div>
                                 <p style="font-size: 11px; color: var(--text-secondary); margin-top: 5px; margin-bottom: 15px;">
@@ -9401,7 +9401,7 @@ deepSeekModelName: DEFAULT_DEEPSEEK_MODEL,
                 xaiIncludeThoughts: false,
                 xaiExpandThoughtsByDefault: false,
                 xaiReasoningEffort: 'low',
-                llmAggregatorApiBackend: '',
+                llmAggregatorApiBackend: 'https://openrouter.ai/api/v1',
                 llmAggregatorApiKey: '',
                 llmaggregatorBackends: [],
                 llmaggregatorActiveBackendIndex: -1,
@@ -9879,11 +9879,13 @@ let imageChatStore;
                             if (loadedSettings.hasOwnProperty('expandDeepSeekThoughtsByDefault') && !loadedSettings.hasOwnProperty('deepSeekExpandThoughtsByDefault')) state.settings.deepSeekExpandThoughtsByDefault = loadedSettings.expandDeepSeekThoughtsByDefault;
 
                             let backends = loadedSettings.llmaggregatorBackends || [];
-                            if (backends.length === 0 && loadedSettings.llmAggregatorApiBackend) {
+                            if (backends.length === 0) {
+                                const fallbackUrl = loadedSettings.llmAggregatorApiBackend || 'https://openrouter.ai/api/v1';
+                                const fallbackLabel = loadedSettings.llmAggregatorApiBackend ? 'デフォルトURL' : 'OpenRouter';
                                 backends.push({
                                     id: `migrated-backend-${Date.now()}`,
-                                    label: 'デフォルトURL',
-                                    url: loadedSettings.llmAggregatorApiBackend,
+                                    label: fallbackLabel,
+                                    url: fallbackUrl,
                                     isActive: true,
                                     apiKeys: [],
                                     activeApiKeyIndex: -1
@@ -9902,7 +9904,14 @@ let imageChatStore;
                                 }
                             }
                             state.settings.llmaggregatorBackends = backends;
-                            state.settings.llmaggregatorActiveBackendIndex = (backends.length > 0) ? 0 : -1;
+                            
+                            const activeIdx = backends.findIndex(b => b.isActive);
+                            state.settings.llmaggregatorActiveBackendIndex = activeIdx !== -1 ? activeIdx : (backends.length > 0 ? 0 : -1);
+                            
+                            // 新規や未設定環境で初期値が適用された場合、state側にも反映
+                            if (!loadedSettings.llmAggregatorApiBackend) {
+                                state.settings.llmAggregatorApiBackend = 'https://openrouter.ai/api/v1';
+                            }
 
                             if (loadedSettings.webhookUrl && !loadedSettings.webhooks) {
                                 loadedSettings.webhooks = [{
