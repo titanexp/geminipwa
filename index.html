@@ -5530,6 +5530,10 @@ font-size: 1.142em !important;
                 <div id="image-gen-message-container" class="message-container"></div>
             </main>
             <footer class="chat-input-area image-gen-input-area">
+                <select id="image-gen-mode-select" title="生成タイプ" class="image-gen-quick-select">
+                    <option value="image">画像</option>
+                    <option value="video">動画</option>
+                </select>
                 <select id="image-gen-quick-aspect" title="アスペクト比" class="image-gen-quick-select">
                     <option value="">比率</option>
                     <option value="1:1">1:1</option>
@@ -5544,6 +5548,14 @@ font-size: 1.142em !important;
                     <option value="1K">1K</option>
                     <option value="2K">2K</option>
                     <option value="4K">4K</option>
+                </select>
+                <select id="image-gen-quick-duration" title="動画の長さ" class="image-gen-quick-select hidden">
+                    <option value="">秒数</option>
+                    <option value="4">4秒</option>
+                    <option value="5">5秒</option>
+                    <option value="6">6秒</option>
+                    <option value="8">8秒</option>
+                    <option value="10">10秒</option>
                 </select>
                 <textarea id="image-gen-input" placeholder="画像を説明..." rows="1" aria-label="画像生成プロンプト"></textarea>
                 <button id="image-gen-attach-file-btn" title="ファイルを添付" class="footer-action-button" style="position: relative;">+<span class="attachment-badge"></span></button>
@@ -5623,6 +5635,12 @@ font-size: 1.142em !important;
                             <option value="llmaggregator">LLM Aggregator</option>
                         </select>
                         <br><br>
+                        <label for="image-gen-settings-mode">生成タイプ:</label>
+                        <select id="image-gen-settings-mode" aria-label="生成タイプ">
+                            <option value="image">画像</option>
+                            <option value="video">動画</option>
+                        </select>
+                        <br><br>
                         <label for="image-gen-settings-model">画像生成モデル:</label>
                         <select id="image-gen-settings-model" aria-label="画像生成モデル">
                             <option value="gemini-2.5-flash-image">Nano Banana (gemini-2.5-flash-image)</option>
@@ -5636,7 +5654,7 @@ font-size: 1.142em !important;
                     </div>
                 </details>
 
-                <details open class="settings-group">
+                <details id="image-gen-image-params-group" open class="settings-group">
                     <summary
                         style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">
                         画像生成パラメータ</summary>
@@ -8579,8 +8597,9 @@ font-size: 1.142em !important;
 
     <script>
         const DB_NAME = 'GeminiPWA_DB';
-        const DB_VERSION = 8;
+        const DB_VERSION = 9;
         const IMAGE_CHATS_STORE = 'image_chats';
+        const IMAGE_GEN_MEDIA_STORE = 'image_gen_media';
         const SETTINGS_STORE = 'settings';
         const CHATS_STORE = 'chats';
         const CHAT_UPDATEDAT_INDEX = 'updatedAtIndex';
@@ -8600,6 +8619,9 @@ font-size: 1.142em !important;
         const DEFAULT_OPENAI_MODEL = 'gpt-3.5-turbo';
         const DEFAULT_XAI_MODEL = 'grok-4-1-fast-non-reasoning';
         const DEFAULT_LLMAGGREGATOR_MODEL = 'x-ai/grok-4.1-fast';
+        const DEFAULT_IMAGE_GEN_MODEL = 'gemini-2.5-flash-image';
+        const DEFAULT_VIDEO_GEN_MODEL = 'bytedance/seedance-2.0';
+        const IMAGE_GEN_VIDEO_POLL_INTERVAL_MS = 5000;
         const DEFAULT_STREAMING_SPEED = 12;
         const DEFAULT_TEMPERATURE = 0.5;
         const DEFAULT_MAX_TOKENS = 4000;
@@ -8731,7 +8753,8 @@ const DEFAULT_CRYSCROLLER_SCROLL_WIDTH = 35;
             'console.groq.com',
             'fireworks.ai',
             'huggingface.co',
-            'deepinfra.com'
+            'deepinfra.com',
+            'nvidia.com' 
         ];
 
         const extensionToMimeTypeMap = {
@@ -9241,10 +9264,12 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             imageGenMessageContainer: document.getElementById('image-gen-message-container'),
             imageGenInput: document.getElementById('image-gen-input'),
             imageGenSendBtn: document.getElementById('image-gen-send-btn'),
+            imageGenModeSelect: document.getElementById('image-gen-mode-select'),
             imageGenProviderSelect: document.getElementById('image-gen-provider-select'),
             imageGenModelSelect: document.getElementById('image-gen-model-select'),
             imageGenQuickAspect: document.getElementById('image-gen-quick-aspect'),
             imageGenQuickResolution: document.getElementById('image-gen-quick-resolution'),
+            imageGenQuickDuration: document.getElementById('image-gen-quick-duration'),
             imageGenNewBtn: document.getElementById('image-gen-new-btn'),
             showImageGenButtonToggle: document.getElementById('show-image-gen-button-toggle'),
             gotoHistoryFromImageGenBtn: document.getElementById('goto-history-from-image-gen-btn'),
@@ -9263,11 +9288,20 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             addImageGenApiKeyBtn: document.getElementById('add-image-gen-api-key-btn'),
             imageGenNewApiKeysInput: document.getElementById('image-gen-new-api-keys-input'),
             imageGenSettingsProviderSelect: document.getElementById('image-gen-settings-provider'),
+            imageGenSettingsModeSelect: document.getElementById('image-gen-settings-mode'),
             imageGenSettingsModelSelect: document.getElementById('image-gen-settings-model'),
             imageGenAdditionalModelsTextarea: document.getElementById('image-gen-additional-models'),
             imageGenSettingsAspectSelect: document.getElementById('image-gen-settings-aspect'),
             imageGenSettingsResolutionSelect: document.getElementById('image-gen-settings-resolution'),
             imageGenSettingsCountSelect: document.getElementById('image-gen-settings-count'),
+            imageGenImageParamsGroup: document.getElementById('image-gen-image-params-group'),
+            imageGenVideoParamsGroup: document.getElementById('image-gen-video-params-group'),
+            imageGenVideoDurationSelect: document.getElementById('image-gen-video-duration'),
+            imageGenVideoResolutionSelect: document.getElementById('image-gen-video-resolution'),
+            imageGenVideoAspectSelect: document.getElementById('image-gen-video-aspect'),
+            imageGenVideoGenerateAudioCheckbox: document.getElementById('image-gen-video-generate-audio'),
+            imageGenVideoSeedInput: document.getElementById('image-gen-video-seed'),
+            imageGenVideoProviderNote: document.getElementById('image-gen-video-provider-note'),
             imageGenSystemPromptTextarea: document.getElementById('image-gen-system-prompt'),
             imageGenEnableSystemPromptCheckbox: document.getElementById('image-gen-enable-system-prompt'),
         };
@@ -9318,10 +9352,11 @@ geminiIncludeThoughts: false,
                 geminiImageAspectRatio: '',
                 geminiImageResolution: '',
                 geminiImageCount: '',
+                imageGenMode: 'image',
                 imageGenSystemPrompt: '',
                 imageGenEnableSystemPrompt: false,
                 imageGenAdditionalModels: '',
-                imageGenDefaultModel: 'gemini-2.5-flash-image',
+                imageGenDefaultModel: DEFAULT_IMAGE_GEN_MODEL,
                 imageGenDefaultAspect: '',
                 imageGenDefaultResolution: '',
                 imageGenDefaultCount: '',
@@ -9329,6 +9364,12 @@ geminiIncludeThoughts: false,
                 imageGenApiKey: '',
                 imageGenApiKeys: [],
                 imageGenActiveApiKeyIndex: -1,
+                videoGenDefaultModel: DEFAULT_VIDEO_GEN_MODEL,
+                videoGenAspectRatio: '16:9',
+                videoGenResolution: '720p',
+                videoGenDuration: '5',
+                videoGenGenerateAudio: true,
+                videoGenSeed: '',
                 // ▼ここから追加▼
                 enableImageUrlReplacement: false, // デフォルトは無効
                 imageUrlReplacementBase: '',      // ベースURLは空
@@ -9680,6 +9721,7 @@ enableCryscrollerScrollOpacity: true,
             imageGenMessages:[],
             currentImageGenChatId: null,
             imageGenIsSending: false,
+            imageGenMediaObjectUrls: new Set(),
         };
 
                 const sanitizeText = (text, maxLength = 255) => {
@@ -9739,6 +9781,23 @@ enableCryscrollerScrollOpacity: true,
                 reader.onerror = error => reject(error);
                 reader.readAsDataURL(file);
             });
+        }
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteArrays = [];
+            for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+                const slice = byteCharacters.slice(offset, offset + 512);
+                const byteNumbers = new Array(slice.length);
+                for (let i = 0; i < slice.length; i++) {
+                    byteNumbers[i] = slice.charCodeAt(i);
+                }
+                byteArrays.push(new Uint8Array(byteNumbers));
+            }
+            return new Blob(byteArrays, { type: mimeType || 'application/octet-stream' });
+        }
+        function attachmentToDataUrl(attachment) {
+            if (!attachment || !attachment.base64Data || !attachment.mimeType) return null;
+            return `data:${attachment.mimeType};base64,${attachment.base64Data}`;
         }
         function registerServiceWorker() {
             if ('serviceWorker' in navigator) {
@@ -9819,6 +9878,14 @@ let imageChatStore;
                         if (!db.objectStoreNames.contains(IMAGE_CHATS_STORE)) {
                             imageChatStore = db.createObjectStore(IMAGE_CHATS_STORE, { keyPath: 'id', autoIncrement: true });
                             imageChatStore.createIndex(CHAT_UPDATEDAT_INDEX, 'updatedAt', { unique: false });
+                        } else {
+                            imageChatStore = event.target.transaction.objectStore(IMAGE_CHATS_STORE);
+                        }
+                        if (imageChatStore && !imageChatStore.indexNames.contains(CHAT_CREATEDAT_INDEX)) {
+                            imageChatStore.createIndex(CHAT_CREATEDAT_INDEX, 'createdAt', { unique: false });
+                        }
+                        if (!db.objectStoreNames.contains(IMAGE_GEN_MEDIA_STORE)) {
+                            db.createObjectStore(IMAGE_GEN_MEDIA_STORE, { keyPath: 'id' });
                         }
                     };
                 });
@@ -10048,6 +10115,7 @@ let imageChatStore;
 
                             const chatData = {
                                 messages: messagesToSave,
+                                mode: state.settings.imageGenMode || 'image',
                                 updatedAt: now,
                                 createdAt: existingData ? existingData.createdAt : now,
                                 title: title,
@@ -10216,6 +10284,57 @@ let imageChatStore;
                 });
             },
 
+            async saveImageGenMediaBlob(blob, metadata = {}) {
+                await this.openDB();
+                const mediaId = metadata.id || `igm-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+                const payload = {
+                    id: mediaId,
+                    blob,
+                    mimeType: metadata.mimeType || blob?.type || 'application/octet-stream',
+                    fileName: metadata.fileName || null,
+                    createdAt: metadata.createdAt || Date.now(),
+                };
+                return new Promise((resolve, reject) => {
+                    try {
+                        const store = this._getStore(IMAGE_GEN_MEDIA_STORE, 'readwrite');
+                        const request = store.put(payload);
+                        request.onsuccess = () => resolve(mediaId);
+                        request.onerror = (event) => reject(`画像生成メディア保存エラー: ${event.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            },
+
+            async getImageGenMediaBlob(mediaId) {
+                await this.openDB();
+                return new Promise((resolve, reject) => {
+                    try {
+                        const store = this._getStore(IMAGE_GEN_MEDIA_STORE);
+                        const request = store.get(mediaId);
+                        request.onsuccess = (event) => resolve(event.target.result || null);
+                        request.onerror = (event) => reject(`画像生成メディア取得エラー: ${event.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            },
+
+            async deleteImageGenMediaBlob(mediaId) {
+                if (!mediaId) return;
+                await this.openDB();
+                return new Promise((resolve, reject) => {
+                    try {
+                        const store = this._getStore(IMAGE_GEN_MEDIA_STORE, 'readwrite');
+                        const request = store.delete(mediaId);
+                        request.onsuccess = () => resolve();
+                        request.onerror = (event) => reject(`画像生成メディア削除エラー: ${event.target.error}`);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            },
+
             async saveImageChat(optionalTitle = null) {
                 await this.openDB();
                 if ((!state.imageGenMessages || state.imageGenMessages.length === 0)) {
@@ -10244,7 +10363,14 @@ let imageChatStore;
 
                             const chatData = {
                                 messages: state.imageGenMessages.map(msg => ({
-                                    role: msg.role, content: msg.content, attachments: msg.attachments, timestamp: msg.timestamp || now
+                                    role: msg.role,
+                                    content: msg.content,
+                                    attachments: msg.attachments,
+                                    artifacts: (msg.artifacts || []).map(artifact => {
+                                        const { objectUrl, ...rest } = artifact;
+                                        return rest;
+                                    }),
+                                    timestamp: msg.timestamp || now
                                 })),
                                 updatedAt: now,
                                 createdAt: existingData ? existingData.createdAt : now,
@@ -12273,34 +12399,156 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
         document.body.classList.toggle('elevation-enabled', state.settings.enableElevation);
         document.body.classList.toggle('elevation-hover-enabled', state.settings.enableElevationHover);
     },
-    populateImageGenModelOptions(selectElement, provider) {
+    populateImageGenModelOptions(selectElement, provider, mode = state.settings.imageGenMode || 'image') {
         if (!selectElement) return;
         selectElement.innerHTML = '';
-        if (provider === 'gemini') {
-            const options = [
-                { value: 'gemini-2.5-flash-image', text: 'Nano Banana (gemini-2.5-flash-image)' },
+        let options = [];
+        if (mode === 'video') {
+            options = [
+                { value: DEFAULT_VIDEO_GEN_MODEL, text: 'Seedance 2.0 (bytedance/seedance-2.0)' },
+                { value: 'bytedance/seedance-2.0-lite', text: 'Seedance 2.0 Lite (bytedance/seedance-2.0-lite)' }
+            ];
+        } else if (provider === 'gemini') {
+            options = [
+                { value: DEFAULT_IMAGE_GEN_MODEL, text: 'Nano Banana (gemini-2.5-flash-image)' },
                 { value: 'gemini-3.1-flash-image-preview', text: 'Nano Banana 2 (gemini-3.1-flash-image-preview)' },
                 { value: 'gemini-3-pro-image-preview', text: 'Nano Banana Pro (gemini-3-pro-image-preview)' }
             ];
-            options.forEach(opt => {
-                const option = document.createElement('option');
-                option.value = opt.value;
-                option.textContent = opt.text;
-                selectElement.appendChild(option);
-            });
         } else if (provider === 'llmaggregator') {
-            const options = [
+            options = [
                 { value: 'google/gemini-3-pro-image-preview', text: 'Nano Banana Pro (google/gemini-3-pro-image-preview)' },
-                { value: 'google/gemini-3.1-flash-image-preview', text: 'Nano Banana 2 (google/gemini-3.1-flash-image-preview)' },
-                { value: 'bytedance/seedance-2.0', text: 'Seedance 2.0 (bytedance/seedance-2.0)' }
+                { value: 'google/gemini-3.1-flash-image-preview', text: 'Nano Banana 2 (google/gemini-3.1-flash-image-preview)' }
             ];
-            options.forEach(opt => {
-                const option = document.createElement('option');
-                option.value = opt.value;
-                option.textContent = opt.text;
-                selectElement.appendChild(option);
-            });
         }
+        options.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.text;
+            selectElement.appendChild(option);
+        });
+    },
+    ensureImageGenVideoSettingsMarkup() {
+        if (document.getElementById('image-gen-video-params-group')) {
+            elements.imageGenVideoParamsGroup = document.getElementById('image-gen-video-params-group');
+            elements.imageGenVideoDurationSelect = document.getElementById('image-gen-video-duration');
+            elements.imageGenVideoResolutionSelect = document.getElementById('image-gen-video-resolution');
+            elements.imageGenVideoAspectSelect = document.getElementById('image-gen-video-aspect');
+            elements.imageGenVideoGenerateAudioCheckbox = document.getElementById('image-gen-video-generate-audio');
+            elements.imageGenVideoSeedInput = document.getElementById('image-gen-video-seed');
+            return;
+        }
+        const anchor = elements.imageGenSystemPromptTextarea?.closest('details.settings-group');
+        if (!anchor) return;
+        anchor.insertAdjacentHTML('beforebegin', `
+                <details id="image-gen-video-params-group" class="settings-group hidden" open>
+                    <summary
+                        style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">
+                        動画生成パラメータ</summary>
+                    <div style="margin-top:10px;">
+                        <label for="image-gen-video-duration">秒数:</label>
+                        <select id="image-gen-video-duration" aria-label="動画の長さ">
+                            <option value="4">4秒</option>
+                            <option value="5">5秒</option>
+                            <option value="6">6秒</option>
+                            <option value="8">8秒</option>
+                            <option value="10">10秒</option>
+                            <option value="12">12秒</option>
+                            <option value="15">15秒</option>
+                        </select>
+                        <label for="image-gen-video-resolution">解像度:</label>
+                        <select id="image-gen-video-resolution" aria-label="動画解像度">
+                            <option value="480p">480p</option>
+                            <option value="720p">720p</option>
+                            <option value="1080p">1080p</option>
+                            <option value="1K">1K</option>
+                            <option value="2K">2K</option>
+                        </select>
+                        <label for="image-gen-video-aspect">アスペクト比:</label>
+                        <select id="image-gen-video-aspect" aria-label="動画アスペクト比">
+                            <option value="16:9">16:9</option>
+                            <option value="9:16">9:16</option>
+                            <option value="1:1">1:1</option>
+                            <option value="4:3">4:3</option>
+                            <option value="3:4">3:4</option>
+                            <option value="21:9">21:9</option>
+                            <option value="9:21">9:21</option>
+                        </select>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="image-gen-video-generate-audio" checked>
+                            音声も生成する
+                        </label>
+                        <label for="image-gen-video-seed">Seed:</label>
+                        <input type="number" id="image-gen-video-seed" placeholder="任意">
+                        <p style="font-size: 11px; color: var(--text-secondary); margin-top: 12px;">
+                            画像を1枚添付すると先頭フレーム、2枚目は末尾フレーム、3枚目以降は参照画像として送信します。
+                        </p>
+                    </div>
+                </details>`);
+        elements.imageGenVideoParamsGroup = document.getElementById('image-gen-video-params-group');
+        elements.imageGenVideoDurationSelect = document.getElementById('image-gen-video-duration');
+        elements.imageGenVideoResolutionSelect = document.getElementById('image-gen-video-resolution');
+        elements.imageGenVideoAspectSelect = document.getElementById('image-gen-video-aspect');
+        elements.imageGenVideoGenerateAudioCheckbox = document.getElementById('image-gen-video-generate-audio');
+        elements.imageGenVideoSeedInput = document.getElementById('image-gen-video-seed');
+    },
+    updateImageGenQuickResolutionOptions(mode = state.settings.imageGenMode || 'image') {
+        if (!elements.imageGenQuickResolution) return;
+        const currentValue = elements.imageGenQuickResolution.value;
+        const options = mode === 'video'
+            ? [
+                { value: '', text: '解像度' },
+                { value: '480p', text: '480p' },
+                { value: '720p', text: '720p' },
+                { value: '1080p', text: '1080p' },
+                { value: '1K', text: '1K' },
+                { value: '2K', text: '2K' }
+            ]
+            : [
+                { value: '', text: '解像度' },
+                { value: '512', text: '0.5K' },
+                { value: '1K', text: '1K' },
+                { value: '2K', text: '2K' },
+                { value: '4K', text: '4K' }
+            ];
+        elements.imageGenQuickResolution.innerHTML = options.map(opt => `<option value="${opt.value}">${opt.text}</option>`).join('');
+        if (options.some(opt => opt.value === currentValue)) {
+            elements.imageGenQuickResolution.value = currentValue;
+        }
+    },
+    syncImageGenModeUI(mode = state.settings.imageGenMode || 'image') {
+        const normalizedMode = mode === 'video' ? 'video' : 'image';
+        state.settings.imageGenMode = normalizedMode;
+        this.ensureImageGenVideoSettingsMarkup();
+        const isVideoMode = normalizedMode === 'video';
+        if (elements.imageGenModeSelect) elements.imageGenModeSelect.value = normalizedMode;
+        if (elements.imageGenSettingsModeSelect) elements.imageGenSettingsModeSelect.value = normalizedMode;
+        if (isVideoMode) {
+            state.settings.imageGenProvider = 'llmaggregator';
+        }
+        if (elements.imageGenProviderSelect) {
+            elements.imageGenProviderSelect.value = state.settings.imageGenProvider || 'gemini';
+            elements.imageGenProviderSelect.disabled = isVideoMode;
+        }
+        if (elements.imageGenSettingsProviderSelect) {
+            elements.imageGenSettingsProviderSelect.value = state.settings.imageGenProvider || 'gemini';
+            elements.imageGenSettingsProviderSelect.disabled = isVideoMode;
+        }
+        this.populateImageGenModelOptions(elements.imageGenModelSelect, state.settings.imageGenProvider || 'gemini', normalizedMode);
+        this.populateImageGenModelOptions(elements.imageGenSettingsModelSelect, state.settings.imageGenProvider || 'gemini', normalizedMode);
+        const selectedModel = isVideoMode ? (state.settings.videoGenDefaultModel || DEFAULT_VIDEO_GEN_MODEL) : (state.settings.imageGenDefaultModel || DEFAULT_IMAGE_GEN_MODEL);
+        if (elements.imageGenModelSelect) elements.imageGenModelSelect.value = selectedModel;
+        if (elements.imageGenSettingsModelSelect) elements.imageGenSettingsModelSelect.value = selectedModel;
+        if (elements.imageGenQuickDuration) elements.imageGenQuickDuration.classList.toggle('hidden', !isVideoMode);
+        if (elements.imageGenImageParamsGroup) elements.imageGenImageParamsGroup.classList.toggle('hidden', isVideoMode);
+        if (elements.imageGenVideoParamsGroup) elements.imageGenVideoParamsGroup.classList.toggle('hidden', !isVideoMode);
+        if (elements.imageGenVideoProviderNote) elements.imageGenVideoProviderNote.classList.toggle('hidden', !isVideoMode);
+        if (elements.imageGenTitle && (!state.currentImageChatId || !state.imageGenTitle)) {
+            elements.imageGenTitle.textContent = isVideoMode ? 'Video Generation' : 'Image Generation';
+        }
+        if (elements.imageGenSendBtn) {
+            elements.imageGenSendBtn.title = isVideoMode ? 'Generate video' : 'Generate image';
+        }
+        this.updateImageGenQuickResolutionOptions(normalizedMode);
     },
             
             applySettingsToUI() {
@@ -12419,26 +12667,27 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
 
                 // 画像生成専用設定パネルの読み込み
                 elements.imageGenApiKeyInput.value = state.settings.imageGenApiKey || '';
+                uiUtils.ensureImageGenVideoSettingsMarkup();
                 if (elements.imageGenSettingsProviderSelect) {
                     elements.imageGenSettingsProviderSelect.value = state.settings.imageGenProvider || 'gemini';
                 }
                 if (elements.imageGenProviderSelect) {
                     elements.imageGenProviderSelect.value = state.settings.imageGenProvider || 'gemini';
                 }
-                if (elements.imageGenModelSelect) {
-                    uiUtils.populateImageGenModelOptions(elements.imageGenModelSelect, state.settings.imageGenProvider || 'gemini');
-                }
-                if (elements.imageGenSettingsModelSelect) {
-                    uiUtils.populateImageGenModelOptions(elements.imageGenSettingsModelSelect, state.settings.imageGenProvider || 'gemini');
-                }
-                if (elements.imageGenSettingsModelSelect) elements.imageGenSettingsModelSelect.value = state.settings.imageGenDefaultModel || 'gemini-2.5-flash-image';
-                if (elements.imageGenModelSelect) elements.imageGenModelSelect.value = state.settings.imageGenDefaultModel || 'gemini-2.5-flash-image';
+                if (elements.imageGenModeSelect) elements.imageGenModeSelect.value = state.settings.imageGenMode || 'image';
+                if (elements.imageGenSettingsModeSelect) elements.imageGenSettingsModeSelect.value = state.settings.imageGenMode || 'image';
                 elements.imageGenAdditionalModelsTextarea.value = state.settings.imageGenAdditionalModels || '';
                 elements.imageGenSettingsAspectSelect.value = state.settings.geminiImageAspectRatio || '';
                 elements.imageGenSettingsResolutionSelect.value = state.settings.geminiImageResolution || '';
                 elements.imageGenSettingsCountSelect.value = state.settings.geminiImageCount || '';
+                if (elements.imageGenVideoDurationSelect) elements.imageGenVideoDurationSelect.value = state.settings.videoGenDuration || '5';
+                if (elements.imageGenVideoResolutionSelect) elements.imageGenVideoResolutionSelect.value = state.settings.videoGenResolution || '720p';
+                if (elements.imageGenVideoAspectSelect) elements.imageGenVideoAspectSelect.value = state.settings.videoGenAspectRatio || '16:9';
+                if (elements.imageGenVideoGenerateAudioCheckbox) elements.imageGenVideoGenerateAudioCheckbox.checked = state.settings.videoGenGenerateAudio !== false;
+                if (elements.imageGenVideoSeedInput) elements.imageGenVideoSeedInput.value = state.settings.videoGenSeed || '';
                 elements.imageGenSystemPromptTextarea.value = state.settings.imageGenSystemPrompt || '';
                 elements.imageGenEnableSystemPromptCheckbox.checked = state.settings.imageGenEnableSystemPrompt;
+                uiUtils.syncImageGenModeUI(state.settings.imageGenMode || 'image');
                 
                 multiApiKeyUtils.updateMainApiKeyInput('imageGen');
 
@@ -14579,8 +14828,8 @@ Available commands / objects:
                     elements.imageGenProviderSelect.addEventListener('change', () => {
                         state.settings.imageGenProvider = elements.imageGenProviderSelect.value;
                         if (elements.imageGenSettingsProviderSelect) elements.imageGenSettingsProviderSelect.value = state.settings.imageGenProvider;
-                        uiUtils.populateImageGenModelOptions(elements.imageGenModelSelect, state.settings.imageGenProvider);
-                        if (elements.imageGenSettingsModelSelect) uiUtils.populateImageGenModelOptions(elements.imageGenSettingsModelSelect, state.settings.imageGenProvider);
+                        uiUtils.populateImageGenModelOptions(elements.imageGenModelSelect, state.settings.imageGenProvider, state.settings.imageGenMode);
+                        if (elements.imageGenSettingsModelSelect) uiUtils.populateImageGenModelOptions(elements.imageGenSettingsModelSelect, state.settings.imageGenProvider, state.settings.imageGenMode);
                         appLogic.saveSettings(false);
                     });
                 }
@@ -14588,28 +14837,51 @@ Available commands / objects:
                     elements.imageGenSettingsProviderSelect.addEventListener('change', () => {
                         state.settings.imageGenProvider = elements.imageGenSettingsProviderSelect.value;
                         if (elements.imageGenProviderSelect) elements.imageGenProviderSelect.value = state.settings.imageGenProvider;
-                        if (elements.imageGenModelSelect) uiUtils.populateImageGenModelOptions(elements.imageGenModelSelect, state.settings.imageGenProvider);
-                        uiUtils.populateImageGenModelOptions(elements.imageGenSettingsModelSelect, state.settings.imageGenProvider);
+                        if (elements.imageGenModelSelect) uiUtils.populateImageGenModelOptions(elements.imageGenModelSelect, state.settings.imageGenProvider, state.settings.imageGenMode);
+                        uiUtils.populateImageGenModelOptions(elements.imageGenSettingsModelSelect, state.settings.imageGenProvider, state.settings.imageGenMode);
+                        appLogic.saveSettings(false);
+                    });
+                }
+                if (elements.imageGenModeSelect) {
+                    elements.imageGenModeSelect.addEventListener('change', () => {
+                        uiUtils.syncImageGenModeUI(elements.imageGenModeSelect.value);
+                        appLogic.saveSettings(false);
+                    });
+                }
+                if (elements.imageGenSettingsModeSelect) {
+                    elements.imageGenSettingsModeSelect.addEventListener('change', () => {
+                        uiUtils.syncImageGenModeUI(elements.imageGenSettingsModeSelect.value);
                         appLogic.saveSettings(false);
                     });
                 }
                 if (elements.imageGenModelSelect) {
                     elements.imageGenModelSelect.addEventListener('change', () => {
-                        state.settings.imageGenDefaultModel = elements.imageGenModelSelect.value;
-                        if (elements.imageGenSettingsModelSelect) elements.imageGenSettingsModelSelect.value = state.settings.imageGenDefaultModel;
+                        if ((state.settings.imageGenMode || 'image') === 'video') {
+                            state.settings.videoGenDefaultModel = elements.imageGenModelSelect.value;
+                            if (elements.imageGenSettingsModelSelect) elements.imageGenSettingsModelSelect.value = state.settings.videoGenDefaultModel;
+                        } else {
+                            state.settings.imageGenDefaultModel = elements.imageGenModelSelect.value;
+                            if (elements.imageGenSettingsModelSelect) elements.imageGenSettingsModelSelect.value = state.settings.imageGenDefaultModel;
+                        }
                         appLogic.saveSettings(false);
                     });
                 }
                 if (elements.imageGenSettingsModelSelect) {
                     elements.imageGenSettingsModelSelect.addEventListener('change', () => {
-                        state.settings.imageGenDefaultModel = elements.imageGenSettingsModelSelect.value;
-                        if (elements.imageGenModelSelect) elements.imageGenModelSelect.value = state.settings.imageGenDefaultModel;
+                        if ((state.settings.imageGenMode || 'image') === 'video') {
+                            state.settings.videoGenDefaultModel = elements.imageGenSettingsModelSelect.value;
+                            if (elements.imageGenModelSelect) elements.imageGenModelSelect.value = state.settings.videoGenDefaultModel;
+                        } else {
+                            state.settings.imageGenDefaultModel = elements.imageGenSettingsModelSelect.value;
+                            if (elements.imageGenModelSelect) elements.imageGenModelSelect.value = state.settings.imageGenDefaultModel;
+                        }
                         appLogic.saveSettings(false);
                     });
                 }
                 elements.imageGenSendBtn.addEventListener('click', () => {
                     if (state.imageGenIsSending) {
                         if (state.imageGenAbortController) state.imageGenAbortController.abort();
+                        if (state.abortController) state.abortController.abort();
                     } else {
                         appLogic.handleImageGenSend();
                     }
@@ -16231,7 +16503,86 @@ if (state.currentMessages.length > 0) tokenMonitor.addCurrentSessionToCumulative
                 }
             },
             
-appendImageGenMessage(role, content, index, attachments = null) {
+            revokeImageGenMediaObjectUrls() {
+                state.imageGenMediaObjectUrls.forEach(url => {
+                    try { URL.revokeObjectURL(url); } catch (e) {}
+                });
+                state.imageGenMediaObjectUrls.clear();
+            },
+            async cleanupImageGenArtifactsForMessage(message) {
+                if (!message?.artifacts || message.artifacts.length === 0) return;
+                for (const artifact of message.artifacts) {
+                    if (artifact.objectUrl) {
+                        try { URL.revokeObjectURL(artifact.objectUrl); } catch (e) {}
+                        state.imageGenMediaObjectUrls.delete(artifact.objectUrl);
+                    }
+                    if (artifact.mediaId) {
+                        try { await dbUtils.deleteImageGenMediaBlob(artifact.mediaId); } catch (e) {}
+                    }
+                }
+            },
+            async hydrateImageGenMessageArtifacts(message) {
+                if (!message?.artifacts || message.artifacts.length === 0) return message;
+                const hydratedArtifacts = [];
+                for (const artifact of message.artifacts) {
+                    const hydrated = { ...artifact };
+                    if (!hydrated.objectUrl && hydrated.mediaId) {
+                        try {
+                            const mediaRecord = await dbUtils.getImageGenMediaBlob(hydrated.mediaId);
+                            if (mediaRecord?.blob) {
+                                hydrated.objectUrl = URL.createObjectURL(mediaRecord.blob);
+                                state.imageGenMediaObjectUrls.add(hydrated.objectUrl);
+                                hydrated.mimeType = hydrated.mimeType || mediaRecord.mimeType || mediaRecord.blob.type;
+                            }
+                        } catch (e) {}
+                    }
+                    hydratedArtifacts.push(hydrated);
+                }
+                message.artifacts = hydratedArtifacts;
+                return message;
+            },
+            appendImageGenArtifacts(contentDiv, artifacts = []) {
+                if (!artifacts || artifacts.length === 0) return;
+                const artifactWrapper = document.createElement('div');
+                artifactWrapper.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-bottom:8px;';
+                artifacts.forEach((artifact, artifactIndex) => {
+                    if (artifact.kind === 'video' && artifact.objectUrl) {
+                        const video = document.createElement('video');
+                        video.src = artifact.objectUrl;
+                        video.controls = true;
+                        video.playsInline = true;
+                        video.preload = 'metadata';
+                        video.style.cssText = 'width:100%;max-width:100%;border-radius:10px;background:#000;';
+                        artifactWrapper.appendChild(video);
+                        if (artifact.label || artifact.model) {
+                            const meta = document.createElement('div');
+                            meta.style.cssText = 'font-size:12px;color:var(--text-secondary);';
+                            meta.textContent = artifact.label || artifact.model;
+                            artifactWrapper.appendChild(meta);
+                        }
+                    } else if (artifact.kind === 'image' && artifact.dataUrl) {
+                        const img = document.createElement('img');
+                        img.src = artifact.dataUrl;
+                        img.alt = artifact.label || `generated-image-${artifactIndex + 1}`;
+                        img.style.cssText = 'width:100%;max-width:100%;border-radius:10px;cursor:pointer;';
+                        img.onclick = (e) => {
+                            e.preventDefault();
+                            const dialog = elements.imagePreviewDialog;
+                            const dialogImg = dialog.querySelector('img');
+                            const okBtn = dialog.querySelector('.dialog-ok-btn');
+                            dialogImg.src = img.src;
+                            dialogImg.alt = img.alt;
+                            okBtn.onclick = () => dialog.close();
+                            dialog.showModal();
+                        };
+                        artifactWrapper.appendChild(img);
+                    }
+                });
+                if (artifactWrapper.children.length > 0) {
+                    contentDiv.appendChild(artifactWrapper);
+                }
+            },
+appendImageGenMessage(role, content, index, attachments = null, artifacts = null) {
                 const messageDiv = document.createElement('div');
                 messageDiv.classList.add('message', role);
                 messageDiv.dataset.index = index;
@@ -16307,13 +16658,20 @@ appendImageGenMessage(role, content, index, attachments = null) {
                         contentDiv.appendChild(attachInfo);
                     }
                 }
-                if (role === 'model' && typeof marked !== 'undefined') {
-                    contentDiv.innerHTML = uiUtils._sanitizeAndParseMarkdown(content || '');
-                    uiUtils.addImageClickListeners(contentDiv);
-                } else {
-                    const pre = document.createElement('pre');
-                    pre.textContent = content;
-                    contentDiv.appendChild(pre);
+                if (artifacts && artifacts.length > 0) {
+                    this.appendImageGenArtifacts(contentDiv, artifacts);
+                }
+                if (content || (!artifacts || artifacts.length === 0)) {
+                    if (role === 'model' && typeof marked !== 'undefined') {
+                        const renderedBody = document.createElement('div');
+                        renderedBody.innerHTML = uiUtils._sanitizeAndParseMarkdown(content || '');
+                        contentDiv.appendChild(renderedBody);
+                        uiUtils.addImageClickListeners(renderedBody);
+                    } else {
+                        const pre = document.createElement('pre');
+                        pre.textContent = content;
+                        contentDiv.appendChild(pre);
+                    }
                 }
                 messageDiv.appendChild(contentDiv);
                 
@@ -16376,7 +16734,7 @@ appendImageGenMessage(role, content, index, attachments = null) {
             renderImageGenMessages() {
                 elements.imageGenMessageContainer.innerHTML = '';
                 state.imageGenMessages.forEach((msg, index) => {
-                    this.appendImageGenMessage(msg.role, msg.content, index, msg.attachments);
+                    this.appendImageGenMessage(msg.role, msg.content, index, msg.attachments, msg.artifacts);
                 });
             },
             async deleteImageGenMessage(index) {
@@ -16392,7 +16750,8 @@ appendImageGenMessage(role, content, index, attachments = null) {
                 }
 
                 if (confirmedDelete) {
-                    state.imageGenMessages.splice(index, 1);
+                    const [removedMessage] = state.imageGenMessages.splice(index, 1);
+                    await this.cleanupImageGenArtifactsForMessage(removedMessage);
                     this.renderImageGenMessages();
                 }
             },
@@ -16430,9 +16789,10 @@ appendImageGenMessage(role, content, index, attachments = null) {
             async startNewImageGenChat() {
                 const confirmed = await uiUtils.showCustomConfirm("現在の画像生成セッションをリセットし、新しく開始しますか？");
                 if (confirmed) {
+                    this.revokeImageGenMediaObjectUrls();
                     state.currentImageChatId = null;
                     state.imageGenMessages = [];
-                    state.imageGenTitle = '新規画像生成';
+                    state.imageGenTitle = state.settings.imageGenMode === 'video' ? 'Video Generation' : 'Image Generation';
                     state.isImageGenTitleGenerated = false;
                     state.pendingAttachments = [];
                     elements.imageGenMessageContainer.innerHTML = '';
@@ -16440,10 +16800,234 @@ appendImageGenMessage(role, content, index, attachments = null) {
                     uiUtils.updateAttachmentBadgeVisibility();
                 }
             },
+            setImageGenSendingState(isSending) {
+                state.imageGenIsSending = isSending;
+                if (!elements.imageGenSendBtn) return;
+                elements.imageGenSendBtn.textContent = isSending ? 'Stop' : 'Go';
+                elements.imageGenSendBtn.classList.toggle('sending', isSending);
+            },
+            getImageGenMode() {
+                return (state.settings.imageGenMode || elements.imageGenModeSelect?.value || 'image') === 'video' ? 'video' : 'image';
+            },
+            getCurrentImageGenProvider() {
+                return this.getImageGenMode() === 'video' ? 'llmaggregator' : (state.settings.imageGenProvider || 'gemini');
+            },
+            getCurrentImageGenModel() {
+                return elements.imageGenModelSelect?.value || (this.getImageGenMode() === 'video' ? state.settings.videoGenDefaultModel : state.settings.imageGenDefaultModel);
+            },
+            getImageGenLatestUserMessage() {
+                for (let i = state.imageGenMessages.length - 1; i >= 0; i--) {
+                    if (state.imageGenMessages[i].role === 'user') return state.imageGenMessages[i];
+                }
+                return null;
+            },
+            inferImageGenChatMode(source = state.imageGenMessages) {
+                if (source && !Array.isArray(source) && source.mode) {
+                    return source.mode === 'video' ? 'video' : 'image';
+                }
+                const messages = Array.isArray(source) ? source : (source?.messages || []);
+                return messages.some(message => (message.artifacts || []).some(artifact => artifact.kind === 'video'))
+                    ? 'video'
+                    : 'image';
+            },
+            async truncateImageGenMessagesFrom(startIndex) {
+                if (!Number.isInteger(startIndex) || startIndex < 0 || startIndex >= state.imageGenMessages.length) return;
+                const removedMessages = state.imageGenMessages.splice(startIndex);
+                for (const removedMessage of removedMessages) {
+                    await this.cleanupImageGenArtifactsForMessage(removedMessage);
+                }
+            },
+            getImageGenApiContext(provider = this.getCurrentImageGenProvider()) {
+                if (provider === 'gemini') {
+                    const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('imageGen') : state.settings.imageGenApiKey;
+                    if (!apiKey) throw new Error('Gemini API key is not configured.');
+                    return { provider, apiKey, backendUrl: GEMINI_API_BASE_URL };
+                }
+                if (provider === 'llmaggregator') {
+                    const activeBackend = multiBackendUtils.getActiveBackend();
+                    if (!activeBackend || !activeBackend.url) throw new Error('LLM Aggregator backend URL is not configured.');
+                    if (!isAllowedAggregatorDomain(activeBackend.url)) throw new Error('The selected LLM Aggregator backend is not allowed by the current whitelist.');
+                    const apiKey = multiBackendUtils.getActiveApiKeyForBackend(activeBackend);
+                    if (!apiKey) throw new Error('LLM Aggregator API key is not configured.');
+                    return { provider, apiKey, backendUrl: activeBackend.url.replace(/\/$/, ''), backend: activeBackend };
+                }
+                throw new Error(`Unsupported media generation provider: ${provider}`);
+            },
+            buildImageGenApiMessages() {
+                let messagesToProcess = state.imageGenMessages.filter(m => m.role !== 'error');
+                if (state.settings.imageGenEnableSystemPrompt && state.settings.imageGenSystemPrompt) {
+                    messagesToProcess = [{ role: 'system', content: state.settings.imageGenSystemPrompt }, ...messagesToProcess];
+                }
+                let apiMessages = messagesToProcess.map(m => {
+                    if (m.role === 'system') return { role: 'system', parts: [{ text: m.content }] };
+                    const parts = [];
+                    if (m.content) parts.push({ text: m.content });
+                    if (m.attachments && m.attachments.length > 0) {
+                        m.attachments.forEach(att => {
+                            if (att.textData) parts.push({ text: att.textData });
+                            else if (att.base64Data) parts.push({ inlineData: { mimeType: att.mimeType, data: att.base64Data } });
+                        });
+                    }
+                    return { role: m.role, parts: parts.length > 0 ? parts : [{ text: '' }] };
+                });
+                apiMessages = apiMessages.map(m => m.role === 'system' ? { role: 'user', parts: m.parts } : m);
+                let systemInstruction = null;
+                if (apiMessages[0] && apiMessages[0].role === 'user' && state.settings.imageGenEnableSystemPrompt && state.settings.imageGenSystemPrompt) {
+                    systemInstruction = { role: 'system', parts: [{ text: state.settings.imageGenSystemPrompt }] };
+                    apiMessages.shift();
+                }
+                return { apiMessages, systemInstruction };
+            },
+            buildVideoGenerationPayload(model) {
+                const latestUserMessage = this.getImageGenLatestUserMessage();
+                if (!latestUserMessage || (!latestUserMessage.content && (!latestUserMessage.attachments || latestUserMessage.attachments.length === 0))) {
+                    throw new Error('No video prompt was found.');
+                }
+                const payload = {
+                    model,
+                    prompt: latestUserMessage.content || 'Generate a short cinematic video.',
+                    aspect_ratio: elements.imageGenQuickAspect?.value || state.settings.videoGenAspectRatio || '16:9',
+                    resolution: elements.imageGenQuickResolution?.value || state.settings.videoGenResolution || '720p',
+                    duration: parseInt(elements.imageGenQuickDuration?.value || state.settings.videoGenDuration || '5', 10),
+                    generate_audio: !!state.settings.videoGenGenerateAudio,
+                };
+                const seedText = (state.settings.videoGenSeed || '').trim();
+                if (seedText !== '' && Number.isFinite(Number(seedText))) payload.seed = parseInt(seedText, 10);
+                const imageAttachments = (latestUserMessage.attachments || []).filter(att => att.mimeType && att.mimeType.startsWith('image/') && att.base64Data);
+                if (imageAttachments.length > 0) {
+                    payload.frame_images = [{
+                        type: 'image_url',
+                        image_url: { url: attachmentToDataUrl(imageAttachments[0]) },
+                        frame_type: 'first_frame'
+                    }];
+                    if (imageAttachments[1]) {
+                        payload.frame_images.push({
+                            type: 'image_url',
+                            image_url: { url: attachmentToDataUrl(imageAttachments[1]) },
+                            frame_type: 'last_frame'
+                        });
+                    }
+                    if (imageAttachments.length > 2) {
+                        payload.input_references = imageAttachments.slice(2).map(att => ({
+                            type: 'image_url',
+                            image_url: { url: attachmentToDataUrl(att) }
+                        }));
+                    }
+                }
+                return payload;
+            },
+            async runStillImageGeneration() {
+                const provider = this.getCurrentImageGenProvider();
+                const { apiKey } = this.getImageGenApiContext(provider);
+                const model = this.getCurrentImageGenModel();
+                const aspect = elements.imageGenQuickAspect.value || state.settings.geminiImageAspectRatio;
+                const resolution = elements.imageGenQuickResolution.value || state.settings.geminiImageResolution;
+                const { apiMessages, systemInstruction } = this.buildImageGenApiMessages();
+                const generationConfig = { responseModalities: ['TEXT', 'IMAGE'] };
+                const imageConfig = {};
+                if (aspect) imageConfig.aspectRatio = aspect;
+                if (resolution) imageConfig.resolution = resolution;
+                if (state.settings.geminiImageCount) imageConfig.numberOfImages = parseInt(state.settings.geminiImageCount, 10);
+                if (Object.keys(imageConfig).length > 0) generationConfig.imageConfig = imageConfig;
+                let responseContent = '';
+                if (provider === 'llmaggregator') {
+                    const response = await apiUtils.callDeepSeekApi(apiKey, model, apiMessages, generationConfig, systemInstruction, false, 'llmaggregator', state.imageGenAbortController?.signal);
+                    const data = await response.json();
+                    responseContent = data.choices?.[0]?.message?.content?.trim() || '(No image output was returned.)';
+                } else {
+                    const response = await apiUtils.callGeminiApi(apiKey, model, apiMessages, generationConfig, systemInstruction, false, false, false, state.imageGenAbortController.signal);
+                    const data = await response.json();
+                    const candidate = data.candidates?.[0];
+                    if (candidate?.content?.parts) {
+                        candidate.content.parts.forEach(part => {
+                            if (part.text) responseContent += part.text + '\\n\\n';
+                            else if (part.inlineData) responseContent += `![image](data:${part.inlineData.mimeType};base64,${part.inlineData.data})\\n\\n`;
+                        });
+                        responseContent = responseContent.trim();
+                    } else {
+                        responseContent = '(No image output was returned.)';
+                    }
+                }
+                state.imageGenMessages.push({ role: 'model', content: responseContent, artifacts: [] });
+                this.appendImageGenMessage('model', responseContent, state.imageGenMessages.length - 1, null, []);
+            },
+            async runVideoGeneration() {
+                const { apiKey, backendUrl } = this.getImageGenApiContext('llmaggregator');
+                const model = this.getCurrentImageGenModel();
+                const payload = this.buildVideoGenerationPayload(model);
+                const statusMessage = {
+                    role: 'model',
+                    content: `Video job submitted.\\nModel: ${model}\\nStatus: pending`,
+                    artifacts: [],
+                    timestamp: Date.now(),
+                };
+                state.imageGenMessages.push(statusMessage);
+                this.renderImageGenMessages();
+                const statusIndex = state.imageGenMessages.length - 1;
+
+                let statusData = await apiUtils.submitVideoGenerationRequest(apiKey, backendUrl, payload, state.imageGenAbortController.signal);
+                while (['pending', 'queued', 'in_progress'].includes(statusData.status)) {
+                    statusMessage.content = `Video job submitted.\\nModel: ${model}\\nJob: ${statusData.id}\\nStatus: ${statusData.status}`;
+                    this.renderImageGenMessages();
+                    await interruptibleSleep(IMAGE_GEN_VIDEO_POLL_INTERVAL_MS, state.imageGenAbortController.signal);
+                    statusData = await apiUtils.getVideoGenerationStatus(apiKey, backendUrl, statusData.id, state.imageGenAbortController.signal);
+                }
+                if (statusData.status !== 'completed') {
+                    throw new Error(statusData.error || `Video generation failed with status: ${statusData.status}`);
+                }
+                const videoBlob = await apiUtils.downloadVideoGenerationContent(apiKey, backendUrl, statusData.id, state.imageGenAbortController.signal);
+                const mimeType = videoBlob.type || 'video/mp4';
+                const mediaId = await dbUtils.saveImageGenMediaBlob(videoBlob, {
+                    mimeType,
+                    fileName: `generated_video_${Date.now()}.mp4`,
+                });
+                const objectUrl = URL.createObjectURL(videoBlob);
+                state.imageGenMediaObjectUrls.add(objectUrl);
+                statusMessage.content = `Video ready.\\nModel: ${model}\\nStatus: completed`;
+                statusMessage.artifacts = [{
+                    kind: 'video',
+                    mediaId,
+                    objectUrl,
+                    mimeType,
+                    model,
+                    label: `${model} / ${payload.resolution || ''} / ${payload.duration || ''}s`,
+                    generationId: statusData.generation_id || null,
+                    jobId: statusData.id,
+                }];
+                statusMessage.timestamp = Date.now();
+                state.imageGenMessages[statusIndex] = statusMessage;
+                this.renderImageGenMessages();
+            },
             async handleImageGenSend() {
                 const text = elements.imageGenInput.value.trim();
                 const attachmentsToSend = [...state.pendingAttachments];
                 if ((!text && attachmentsToSend.length === 0) || state.imageGenIsSending) return;
+
+                if (this.getImageGenMode() === 'video') {
+                    this.setImageGenSendingState(true);
+                    state.imageGenAbortController = new AbortController();
+                    state.imageGenMessages.push({ role: 'user', content: text, attachments: attachmentsToSend, artifacts: [] });
+                    this.appendImageGenMessage('user', text, state.imageGenMessages.length - 1, attachmentsToSend, []);
+                    elements.imageGenInput.value = '';
+                    elements.imageGenInput.style.height = '40px';
+                    state.pendingAttachments = [];
+                    uiUtils.updateAttachmentBadgeVisibility();
+                    try {
+                        await this.runVideoGeneration();
+                    } catch (error) {
+                        const errorMsg = error.message || 'Video generation failed.';
+                        state.imageGenMessages.push({ role: 'error', content: errorMsg, artifacts: [] });
+                        this.appendImageGenMessage('error', errorMsg, state.imageGenMessages.length - 1, null, []);
+                    } finally {
+                        this.setImageGenSendingState(false);
+                        try {
+                            await dbUtils.saveImageChat();
+                        } catch (e) {
+                            console.error('Failed to save image generation chat:', e);
+                        }
+                    }
+                    return;
+                }
 
                 state.imageGenIsSending = true;
                 elements.imageGenSendBtn.textContent = '止';
@@ -18644,12 +19228,24 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
 
                 // 画像生成専用設定パネルの保存
                 newSettings.imageGenApiKey = elements.imageGenApiKeyInput.value.trim();
-                newSettings.imageGenProvider = elements.imageGenSettingsProviderSelect ? elements.imageGenSettingsProviderSelect.value : 'gemini';
-                newSettings.imageGenDefaultModel = elements.imageGenSettingsModelSelect.value;
+                newSettings.imageGenMode = elements.imageGenSettingsModeSelect ? elements.imageGenSettingsModeSelect.value : (elements.imageGenModeSelect?.value || 'image');
+                newSettings.imageGenProvider = newSettings.imageGenMode === 'video'
+                    ? 'llmaggregator'
+                    : (elements.imageGenSettingsProviderSelect ? elements.imageGenSettingsProviderSelect.value : 'gemini');
+                if (newSettings.imageGenMode === 'video') {
+                    newSettings.videoGenDefaultModel = elements.imageGenSettingsModelSelect.value;
+                } else {
+                    newSettings.imageGenDefaultModel = elements.imageGenSettingsModelSelect.value;
+                }
                 newSettings.imageGenAdditionalModels = elements.imageGenAdditionalModelsTextarea.value.trim();
                 newSettings.geminiImageAspectRatio = elements.imageGenSettingsAspectSelect.value; // 両方のパネルで同じstateを使用
                 newSettings.geminiImageResolution = elements.imageGenSettingsResolutionSelect.value; 
                 newSettings.geminiImageCount = elements.imageGenSettingsCountSelect.value;
+                if (elements.imageGenVideoDurationSelect) newSettings.videoGenDuration = elements.imageGenVideoDurationSelect.value;
+                if (elements.imageGenVideoResolutionSelect) newSettings.videoGenResolution = elements.imageGenVideoResolutionSelect.value;
+                if (elements.imageGenVideoAspectSelect) newSettings.videoGenAspectRatio = elements.imageGenVideoAspectSelect.value;
+                if (elements.imageGenVideoGenerateAudioCheckbox) newSettings.videoGenGenerateAudio = elements.imageGenVideoGenerateAudioCheckbox.checked;
+                if (elements.imageGenVideoSeedInput) newSettings.videoGenSeed = elements.imageGenVideoSeedInput.value.trim();
                 newSettings.imageGenSystemPrompt = elements.imageGenSystemPromptTextarea.value.trim();
                 newSettings.imageGenEnableSystemPrompt = elements.imageGenEnableSystemPromptCheckbox.checked;
 
@@ -20624,15 +21220,21 @@ _setupGenericCryscroller(config) {
                 try {
                     const chat = await dbUtils.getImageChat(id);
                     if (chat) {
+                        this.revokeImageGenMediaObjectUrls();
                         state.currentImageChatId = chat.id;
                         state.imageGenMessages = chat.messages || [];
+                        for (const message of state.imageGenMessages) {
+                            message.attachments = message.attachments || [];
+                            message.artifacts = message.artifacts || [];
+                            await this.hydrateImageGenMessageArtifacts(message);
+                        }
                         state.imageGenTitle = chat.title || '画像生成履歴';
                         state.isImageGenTitleGenerated = true; // DBからの読み込み時はタイトルは既にあるとみなす
 
                         elements.imageGenMessageContainer.innerHTML = '';
                         state.imageGenMessages.forEach((msg, index) => {
                             if (msg.role !== 'system') {
-                                this.appendImageGenMessage(msg.role, msg.content, index, msg.attachments);
+                                this.appendImageGenMessage(msg.role, msg.content, index, msg.attachments, msg.artifacts);
                             }
                         });
                         
@@ -20935,6 +21537,179 @@ toggleImageGenMessageCollapse(index) {
                     }
                 }
             },
+            async handleImageGenSend() {
+                const text = elements.imageGenInput.value.trim();
+                const attachmentsToSend = [...state.pendingAttachments];
+                if ((!text && attachmentsToSend.length === 0) || state.imageGenIsSending) return;
+
+                const mode = this.getImageGenMode();
+                const errorFallback = mode === 'video' ? 'Video generation failed.' : 'Image generation failed.';
+
+                this.setImageGenSendingState(true);
+                state.imageGenAbortController = new AbortController();
+                state.imageGenMessages.push({ role: 'user', content: text, attachments: attachmentsToSend, artifacts: [] });
+                this.appendImageGenMessage('user', text, state.imageGenMessages.length - 1, attachmentsToSend, []);
+                elements.imageGenInput.value = '';
+                elements.imageGenInput.style.height = '40px';
+                state.pendingAttachments = [];
+                uiUtils.updateAttachmentBadgeVisibility();
+
+                try {
+                    if (mode === 'video') {
+                        await this.runVideoGeneration();
+                    } else {
+                        await this.runStillImageGeneration();
+                    }
+                } catch (error) {
+                    const errorMsg = error?.message || errorFallback;
+                    state.imageGenMessages.push({ role: 'error', content: errorMsg, artifacts: [] });
+                    this.appendImageGenMessage('error', errorMsg, state.imageGenMessages.length - 1, null, []);
+                } finally {
+                    this.setImageGenSendingState(false);
+                    state.imageGenAbortController = null;
+                    try {
+                        await dbUtils.saveImageChat();
+                    } catch (e) {
+                        console.error('Failed to save image generation chat:', e);
+                    }
+                }
+            },
+            async loadImageChat(id) {
+                try {
+                    const chat = await dbUtils.getImageChat(id);
+                    if (!chat) {
+                        uiUtils.showCustomAlert('指定された画像生成チャットが見つかりませんでした。');
+                        return;
+                    }
+
+                    this.revokeImageGenMediaObjectUrls();
+                    state.currentImageChatId = chat.id;
+                    const chatMode = this.inferImageGenChatMode(chat);
+                    state.settings.imageGenMode = chatMode;
+                    uiUtils.syncImageGenModeUI(chatMode);
+                    state.imageGenMessages = chat.messages || [];
+
+                    for (const message of state.imageGenMessages) {
+                        message.attachments = message.attachments || [];
+                        message.artifacts = message.artifacts || [];
+                        await this.hydrateImageGenMessageArtifacts(message);
+                    }
+
+                    state.imageGenTitle = chat.title || '画像生成履歴';
+                    state.isImageGenTitleGenerated = true;
+
+                    elements.imageGenMessageContainer.innerHTML = '';
+                    state.imageGenMessages.forEach((msg, index) => {
+                        if (msg.role !== 'system') {
+                            this.appendImageGenMessage(msg.role, msg.content, index, msg.attachments, msg.artifacts);
+                        }
+                    });
+
+                    if (elements.imageGenTitle) {
+                        elements.imageGenTitle.textContent = state.imageGenTitle;
+                    }
+                } catch (error) {
+                    console.error('画像生成チャット読み込みエラー:', error);
+                    uiUtils.showCustomAlert('画像生成チャットの読み込みに失敗しました。');
+                }
+            },
+            async confirmDeleteImageChat(id, title) {
+                const confirmed = await uiUtils.showCustomConfirm(`「${title}」の画像生成履歴を削除してもよろしいですか？`);
+                if (!confirmed) return;
+
+                try {
+                    const chat = await dbUtils.getImageChat(id);
+                    for (const message of (chat?.messages || [])) {
+                        for (const artifact of (message.artifacts || [])) {
+                            if (artifact.mediaId) {
+                                await dbUtils.deleteImageGenMediaBlob(artifact.mediaId);
+                            }
+                        }
+                    }
+
+                    await dbUtils.deleteImageChat(id);
+                    if (state.currentImageChatId === id) {
+                        this.startNewImageGenChat();
+                    }
+                    await this.renderImageGenHistoryList();
+                } catch (error) {
+                    console.error('画像生成チャットの削除に失敗:', error);
+                    uiUtils.showCustomAlert('削除に失敗しました。');
+                }
+            },
+            async deleteImageGenMessage(index) {
+                if (state.imageGenIsSending) {
+                    await uiUtils.showCustomAlert('送信中は削除できません。');
+                    return;
+                }
+                if (index < 0 || index >= state.imageGenMessages.length) return;
+
+                let confirmedDelete = true;
+                if (!state.settings.disableDeleteMessageConfirmation) {
+                    confirmedDelete = await uiUtils.showCustomConfirm('このメッセージを削除しますか？');
+                }
+                if (!confirmedDelete) return;
+
+                const [removedMessage] = state.imageGenMessages.splice(index, 1);
+                await this.cleanupImageGenArtifactsForMessage(removedMessage);
+
+                if (state.imageGenMessages.length === 0) {
+                    if (state.currentImageChatId) {
+                        await dbUtils.deleteImageChat(state.currentImageChatId);
+                    }
+                    this.startNewImageGenChat();
+                } else {
+                    this.renderImageGenMessages();
+                    await dbUtils.saveImageChat();
+                }
+                await this.renderImageGenHistoryList();
+            },
+            async retryFromImageGenMessage(index) {
+                if (state.imageGenIsSending) {
+                    await uiUtils.showCustomAlert('送信中です。');
+                    return;
+                }
+
+                const userMessage = state.imageGenMessages[index];
+                if (!userMessage || userMessage.role !== 'user') return;
+
+                let confirmed = true;
+                if (!state.settings.disableRetryConfirmation) {
+                    const previewBase = userMessage.content ? userMessage.content.substring(0, 30) : '[添付ファイルのみ]';
+                    const messageContentPreview = previewBase + (previewBase.length === 30 ? '...' : '');
+                    confirmed = await uiUtils.showCustomConfirm(`「${messageContentPreview}」から再生成しますか？\n以降の応答は削除されます。`);
+                }
+                if (!confirmed) return;
+
+                await this.truncateImageGenMessagesFrom(index + 1);
+                this.renderImageGenMessages();
+
+                const mode = this.getImageGenMode();
+                const errorFallback = mode === 'video' ? 'Video generation failed.' : 'Image generation failed.';
+
+                this.setImageGenSendingState(true);
+                state.imageGenAbortController = new AbortController();
+
+                try {
+                    if (mode === 'video') {
+                        await this.runVideoGeneration();
+                    } else {
+                        await this.runStillImageGeneration();
+                    }
+                } catch (error) {
+                    const errorMsg = error?.message || errorFallback;
+                    state.imageGenMessages.push({ role: 'error', content: errorMsg, artifacts: [] });
+                    this.appendImageGenMessage('error', errorMsg, state.imageGenMessages.length - 1, null, []);
+                } finally {
+                    this.setImageGenSendingState(false);
+                    state.imageGenAbortController = null;
+                    try {
+                        await dbUtils.saveImageChat();
+                    } catch (e) {
+                        console.error('画像生成チャット保存失敗', e);
+                    }
+                }
+            },
         };
         const webhookUtils = {
             MAX_WEBHOOKS: 10,
@@ -21143,6 +21918,60 @@ toggleImageGenMessageCollapse(index) {
                     throw error;
                 }
             },
+            async submitVideoGenerationRequest(apiKey, baseUrl, payload, signal) {
+                const endpoint = `${baseUrl.replace(/\/$/, '')}/videos`;
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify(payload),
+                    signal
+                });
+                if (!response.ok) {
+                    let errorMsg = `Video API error (${response.status}): ${response.statusText}`;
+                    try {
+                        const errorData = await response.json();
+                        if (errorData?.error) errorMsg = `Video API error (${response.status}): ${errorData.error}`;
+                    } catch (e) {}
+                    throw new Error(errorMsg);
+                }
+                return response.json();
+            },
+            async getVideoGenerationStatus(apiKey, baseUrl, jobId, signal) {
+                const endpoint = `${baseUrl.replace(/\/$/, '')}/videos/${jobId}`;
+                const response = await fetch(endpoint, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    signal
+                });
+                if (!response.ok) {
+                    let errorMsg = `Video status error (${response.status}): ${response.statusText}`;
+                    try {
+                        const errorData = await response.json();
+                        if (errorData?.error) errorMsg = `Video status error (${response.status}): ${errorData.error}`;
+                    } catch (e) {}
+                    throw new Error(errorMsg);
+                }
+                return response.json();
+            },
+            async downloadVideoGenerationContent(apiKey, baseUrl, jobId, signal, index = 0) {
+                const endpoint = `${baseUrl.replace(/\/$/, '')}/videos/${jobId}/content?index=${index}`;
+                const response = await fetch(endpoint, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    signal
+                });
+                if (!response.ok) {
+                    throw new Error(`Video download error (${response.status}): ${response.statusText}`);
+                }
+                return response.blob();
+            },
             async *handleGeminiStreamingResponse(response) {
                 if (!response.body) {
                     throw new Error("レスポンスボディがありません。");
@@ -21289,7 +22118,7 @@ toggleImageGenMessageCollapse(index) {
                     }
                 }
             },
-async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek') {
+async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemInstruction, useStreaming, provider = 'deepseek', externalSignal = null) {
                 let baseUrl;
                 if (provider === 'llmaggregator') {
                     const activeBackend = multiBackendUtils.getActiveBackend();
@@ -21304,8 +22133,11 @@ async callDeepSeekApi(apiKey, model, messagesForApi, generationConfig, systemIns
     if (!apiKey) {
                     throw new Error(`${provider.toUpperCase()} APIキーが設定されていません。`);
                 }
-                state.abortController = new AbortController();
-                const { signal } = state.abortController;
+                let signal = externalSignal;
+                if (!signal) {
+                    state.abortController = new AbortController();
+                    signal = state.abortController.signal;
+                }
 
                 const endpoint = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
 
