@@ -5515,6 +5515,10 @@ font-size: 1.142em !important;
                 <h1 id="image-gen-title">🎨 画像生成</h1>
                 <div style="flex-grow: 1;"></div>
                 <button id="image-gen-new-btn" class="new-chat-button" title="新規画像生成">新</button>
+                <select id="image-gen-provider-select" class="image-gen-model-select" style="width: auto; margin-right: 5px;">
+                    <option value="gemini">Gemini</option>
+                    <option value="llmaggregator">LLM Agg</option>
+                </select>
                 <select id="image-gen-model-select" class="image-gen-model-select">
                     <option value="gemini-2.5-flash-image">Nano Banana</option>
                     <option value="gemini-3.1-flash-image-preview">Nano Banana 2</option>
@@ -5613,6 +5617,12 @@ font-size: 1.142em !important;
                         style="font-size: 16px; color: var(--text-link); border-bottom: 1px solid var(--border-tertiary); padding-bottom: 5px; margin-bottom: 15px; display: list-item; list-style: revert; cursor:pointer; font-weight: bold;">
                         モデル選択</summary>
                     <div style="margin-top:10px;">
+                        <label for="image-gen-settings-provider">画像生成プロバイダー:</label>
+                        <select id="image-gen-settings-provider" aria-label="画像生成プロバイダー">
+                            <option value="gemini">Gemini (Google)</option>
+                            <option value="llmaggregator">LLM Aggregator</option>
+                        </select>
+                        <br><br>
                         <label for="image-gen-settings-model">画像生成モデル:</label>
                         <select id="image-gen-settings-model" aria-label="画像生成モデル">
                             <option value="gemini-2.5-flash-image">Nano Banana (gemini-2.5-flash-image)</option>
@@ -9231,6 +9241,7 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             imageGenMessageContainer: document.getElementById('image-gen-message-container'),
             imageGenInput: document.getElementById('image-gen-input'),
             imageGenSendBtn: document.getElementById('image-gen-send-btn'),
+            imageGenProviderSelect: document.getElementById('image-gen-provider-select'),
             imageGenModelSelect: document.getElementById('image-gen-model-select'),
             imageGenQuickAspect: document.getElementById('image-gen-quick-aspect'),
             imageGenQuickResolution: document.getElementById('image-gen-quick-resolution'),
@@ -9251,6 +9262,7 @@ elevationHoverOption: document.getElementById('elevation-hover-option'),
             imageGenApiKeysList: document.getElementById('image-gen-api-keys-list'),
             addImageGenApiKeyBtn: document.getElementById('add-image-gen-api-key-btn'),
             imageGenNewApiKeysInput: document.getElementById('image-gen-new-api-keys-input'),
+            imageGenSettingsProviderSelect: document.getElementById('image-gen-settings-provider'),
             imageGenSettingsModelSelect: document.getElementById('image-gen-settings-model'),
             imageGenAdditionalModelsTextarea: document.getElementById('image-gen-additional-models'),
             imageGenSettingsAspectSelect: document.getElementById('image-gen-settings-aspect'),
@@ -9313,6 +9325,7 @@ geminiIncludeThoughts: false,
                 imageGenDefaultAspect: '',
                 imageGenDefaultResolution: '',
                 imageGenDefaultCount: '',
+                imageGenProvider: 'gemini',
                 imageGenApiKey: '',
                 imageGenApiKeys: [],
                 imageGenActiveApiKeyIndex: -1,
@@ -9403,8 +9416,17 @@ deepSeekModelName: DEFAULT_DEEPSEEK_MODEL,
                 xaiReasoningEffort: 'low',
                 llmAggregatorApiBackend: 'https://openrouter.ai/api/v1',
                 llmAggregatorApiKey: '',
-                llmaggregatorBackends: [],
-                llmaggregatorActiveBackendIndex: -1,
+                llmaggregatorBackends: [
+                    {
+                        id: 'default-backend-openrouter',
+                        label: 'OpenRouter',
+                        url: 'https://openrouter.ai/api/v1',
+                        isActive: true,
+                        apiKeys: [],
+                        activeApiKeyIndex: -1
+                    }
+                ],
+                llmaggregatorActiveBackendIndex: 0,
                 llmAggregatorModelName: DEFAULT_LLMAGGREGATOR_MODEL,
                 llmAggregatorAdditionalModels: '',
                 llmAggregatorSystemPrompt: '',
@@ -9881,7 +9903,7 @@ let imageChatStore;
                             let backends = loadedSettings.llmaggregatorBackends || [];
                             if (backends.length === 0) {
                                 const fallbackUrl = loadedSettings.llmAggregatorApiBackend || 'https://openrouter.ai/api/v1';
-                                const fallbackLabel = loadedSettings.llmAggregatorApiBackend ? 'デフォルトURL' : 'OpenRouter';
+                                const fallbackLabel = (loadedSettings.llmAggregatorApiBackend && loadedSettings.llmAggregatorApiBackend !== 'https://openrouter.ai/api/v1') ? 'デフォルトURL' : 'OpenRouter';
                                 backends.push({
                                     id: `migrated-backend-${Date.now()}`,
                                     label: fallbackLabel,
@@ -12251,6 +12273,35 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
         document.body.classList.toggle('elevation-enabled', state.settings.enableElevation);
         document.body.classList.toggle('elevation-hover-enabled', state.settings.enableElevationHover);
     },
+    populateImageGenModelOptions(selectElement, provider) {
+        if (!selectElement) return;
+        selectElement.innerHTML = '';
+        if (provider === 'gemini') {
+            const options = [
+                { value: 'gemini-2.5-flash-image', text: 'Nano Banana (gemini-2.5-flash-image)' },
+                { value: 'gemini-3.1-flash-image-preview', text: 'Nano Banana 2 (gemini-3.1-flash-image-preview)' },
+                { value: 'gemini-3-pro-image-preview', text: 'Nano Banana Pro (gemini-3-pro-image-preview)' }
+            ];
+            options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.value;
+                option.textContent = opt.text;
+                selectElement.appendChild(option);
+            });
+        } else if (provider === 'llmaggregator') {
+            const options = [
+                { value: 'google/gemini-3-pro-image-preview', text: 'Nano Banana Pro (google/gemini-3-pro-image-preview)' },
+                { value: 'google/gemini-3.1-flash-image-preview', text: 'Nano Banana 2 (google/gemini-3.1-flash-image-preview)' },
+                { value: 'bytedance/seedance-2.0', text: 'Seedance 2.0 (bytedance/seedance-2.0)' }
+            ];
+            options.forEach(opt => {
+                const option = document.createElement('option');
+                option.value = opt.value;
+                option.textContent = opt.text;
+                selectElement.appendChild(option);
+            });
+        }
+    },
             
             applySettingsToUI() {
                 this.toggleApiSettingsVisibility(state.settings.apiProvider);
@@ -12368,7 +12419,20 @@ document.body.classList.remove('dark-mode', 'light-mode-forced', 'pastel-pink-mo
 
                 // 画像生成専用設定パネルの読み込み
                 elements.imageGenApiKeyInput.value = state.settings.imageGenApiKey || '';
-                elements.imageGenSettingsModelSelect.value = state.settings.imageGenDefaultModel || 'gemini-2.5-flash-image';
+                if (elements.imageGenSettingsProviderSelect) {
+                    elements.imageGenSettingsProviderSelect.value = state.settings.imageGenProvider || 'gemini';
+                }
+                if (elements.imageGenProviderSelect) {
+                    elements.imageGenProviderSelect.value = state.settings.imageGenProvider || 'gemini';
+                }
+                if (elements.imageGenModelSelect) {
+                    uiUtils.populateImageGenModelOptions(elements.imageGenModelSelect, state.settings.imageGenProvider || 'gemini');
+                }
+                if (elements.imageGenSettingsModelSelect) {
+                    uiUtils.populateImageGenModelOptions(elements.imageGenSettingsModelSelect, state.settings.imageGenProvider || 'gemini');
+                }
+                if (elements.imageGenSettingsModelSelect) elements.imageGenSettingsModelSelect.value = state.settings.imageGenDefaultModel || 'gemini-2.5-flash-image';
+                if (elements.imageGenModelSelect) elements.imageGenModelSelect.value = state.settings.imageGenDefaultModel || 'gemini-2.5-flash-image';
                 elements.imageGenAdditionalModelsTextarea.value = state.settings.imageGenAdditionalModels || '';
                 elements.imageGenSettingsAspectSelect.value = state.settings.geminiImageAspectRatio || '';
                 elements.imageGenSettingsResolutionSelect.value = state.settings.geminiImageResolution || '';
@@ -14511,6 +14575,38 @@ Available commands / objects:
                 elements.backToImageGenFromSettingsBtn.addEventListener('click', () => uiUtils.showScreen('imageGen'));
                 elements.imageGenAttachFileBtn.addEventListener('click', () => uiUtils.showFileUploadDialog());
                 elements.imageGenNewBtn.addEventListener('click', () => appLogic.startNewImageGenChat());
+                if (elements.imageGenProviderSelect) {
+                    elements.imageGenProviderSelect.addEventListener('change', () => {
+                        state.settings.imageGenProvider = elements.imageGenProviderSelect.value;
+                        if (elements.imageGenSettingsProviderSelect) elements.imageGenSettingsProviderSelect.value = state.settings.imageGenProvider;
+                        uiUtils.populateImageGenModelOptions(elements.imageGenModelSelect, state.settings.imageGenProvider);
+                        if (elements.imageGenSettingsModelSelect) uiUtils.populateImageGenModelOptions(elements.imageGenSettingsModelSelect, state.settings.imageGenProvider);
+                        appLogic.saveSettings(false);
+                    });
+                }
+                if (elements.imageGenSettingsProviderSelect) {
+                    elements.imageGenSettingsProviderSelect.addEventListener('change', () => {
+                        state.settings.imageGenProvider = elements.imageGenSettingsProviderSelect.value;
+                        if (elements.imageGenProviderSelect) elements.imageGenProviderSelect.value = state.settings.imageGenProvider;
+                        if (elements.imageGenModelSelect) uiUtils.populateImageGenModelOptions(elements.imageGenModelSelect, state.settings.imageGenProvider);
+                        uiUtils.populateImageGenModelOptions(elements.imageGenSettingsModelSelect, state.settings.imageGenProvider);
+                        appLogic.saveSettings(false);
+                    });
+                }
+                if (elements.imageGenModelSelect) {
+                    elements.imageGenModelSelect.addEventListener('change', () => {
+                        state.settings.imageGenDefaultModel = elements.imageGenModelSelect.value;
+                        if (elements.imageGenSettingsModelSelect) elements.imageGenSettingsModelSelect.value = state.settings.imageGenDefaultModel;
+                        appLogic.saveSettings(false);
+                    });
+                }
+                if (elements.imageGenSettingsModelSelect) {
+                    elements.imageGenSettingsModelSelect.addEventListener('change', () => {
+                        state.settings.imageGenDefaultModel = elements.imageGenSettingsModelSelect.value;
+                        if (elements.imageGenModelSelect) elements.imageGenModelSelect.value = state.settings.imageGenDefaultModel;
+                        appLogic.saveSettings(false);
+                    });
+                }
                 elements.imageGenSendBtn.addEventListener('click', () => {
                     if (state.imageGenIsSending) {
                         if (state.imageGenAbortController) state.imageGenAbortController.abort();
@@ -16360,9 +16456,24 @@ appendImageGenMessage(role, content, index, attachments = null) {
                 state.pendingAttachments =[];
                 uiUtils.updateAttachmentBadgeVisibility();
 
-                const apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('imageGen') : state.settings.imageGenApiKey;
+                const provider = state.settings.imageGenProvider || 'gemini';
+                let apiKey;
+                if (provider === 'gemini') {
+                    apiKey = state.settings.showMultiApiKeys ? multiApiKeyUtils.getActiveApiKey('imageGen') : state.settings.imageGenApiKey;
+                } else if (provider === 'llmaggregator') {
+                    const activeBackend = multiBackendUtils.getActiveBackend();
+                    if (!activeBackend || !activeBackend.url) {
+                        this.appendImageGenMessage('error', 'LLM Aggregatorのバックエンドが設定されていません。', -1);
+                        state.imageGenIsSending = false;
+                        elements.imageGenSendBtn.textContent = '🎨';
+                        elements.imageGenSendBtn.classList.remove('sending');
+                        return;
+                    }
+                    apiKey = multiBackendUtils.getActiveApiKeyForBackend(activeBackend);
+                }
+
                 if (!apiKey) {
-                    this.appendImageGenMessage('error', 'Gemini APIキーが設定されていません。', -1);
+                    this.appendImageGenMessage('error', `${provider === 'gemini' ? 'Gemini' : 'LLM Aggregator'} APIキーが設定されていません。`, -1);
                     state.imageGenIsSending = false;
                     elements.imageGenSendBtn.textContent = '🎨';
                     elements.imageGenSendBtn.classList.remove('sending');
@@ -16415,22 +16526,33 @@ appendImageGenMessage(role, content, index, attachments = null) {
                     
                     state.imageGenAbortController = new AbortController();
                     try {
-                        const response = await apiUtils.callGeminiApi(apiKey, model, apiMessages, generationConfig, systemInstruction, false, false, false, state.imageGenAbortController.signal);
-                        const data = await response.json();
-                    let responseContent = '';
-                    const candidate = data.candidates?.[0];
-
-                    if (candidate?.content?.parts) {
-                        candidate.content.parts.forEach(part => {
-                            if (part.text) responseContent += part.text + '\n\n';
-                            else if (part.inlineData) {
-                                responseContent += `![画像](data:${part.inlineData.mimeType};base64,${part.inlineData.data})\n\n`;
+                        let responseContent = '';
+                        if (provider === 'llmaggregator') {
+                            const response = await apiUtils.callDeepSeekApi(apiKey, model, apiMessages, generationConfig, systemInstruction, false, 'llmaggregator');
+                            const data = await response.json();
+                            const choice = data.choices?.[0];
+                            if (choice && choice.message && choice.message.content) {
+                                responseContent = choice.message.content.trim();
+                            } else {
+                                responseContent = '(画像の生成に失敗しました)';
                             }
-                        });
-                        responseContent = responseContent.trim();
-                    } else {
-                        responseContent = '(画像の生成に失敗しました)';
-                    }
+                        } else {
+                            const response = await apiUtils.callGeminiApi(apiKey, model, apiMessages, generationConfig, systemInstruction, false, false, false, state.imageGenAbortController.signal);
+                            const data = await response.json();
+                            const candidate = data.candidates?.[0];
+
+                            if (candidate?.content?.parts) {
+                                candidate.content.parts.forEach(part => {
+                                    if (part.text) responseContent += part.text + '\n\n';
+                                    else if (part.inlineData) {
+                                        responseContent += `![画像](data:${part.inlineData.mimeType};base64,${part.inlineData.data})\n\n`;
+                                    }
+                                });
+                                responseContent = responseContent.trim();
+                            } else {
+                                responseContent = '(画像の生成に失敗しました)';
+                            }
+                        }
                     
                     state.imageGenMessages.push({ role: 'model', content: responseContent });
                     this.appendImageGenMessage('model', responseContent, state.imageGenMessages.length - 1);
@@ -18522,6 +18644,7 @@ uiUtils.renderChatMessages(shouldMaintainScroll);
 
                 // 画像生成専用設定パネルの保存
                 newSettings.imageGenApiKey = elements.imageGenApiKeyInput.value.trim();
+                newSettings.imageGenProvider = elements.imageGenSettingsProviderSelect ? elements.imageGenSettingsProviderSelect.value : 'gemini';
                 newSettings.imageGenDefaultModel = elements.imageGenSettingsModelSelect.value;
                 newSettings.imageGenAdditionalModels = elements.imageGenAdditionalModelsTextarea.value.trim();
                 newSettings.geminiImageAspectRatio = elements.imageGenSettingsAspectSelect.value; // 両方のパネルで同じstateを使用
@@ -23224,8 +23347,37 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                 return item;
             },
 
-            populateModelOptions(selectElement, provider) {
+            populateModelOptions(selectElement, provider, isImageGen = false) {
                 selectElement.innerHTML = '';
+                if (isImageGen) {
+                    if (provider === 'gemini') {
+                        const options = [
+                            { value: 'gemini-2.5-flash-image', text: 'Nano Banana (gemini-2.5-flash-image)' },
+                            { value: 'gemini-3.1-flash-image-preview', text: 'Nano Banana 2 (gemini-3.1-flash-image-preview)' },
+                            { value: 'gemini-3-pro-image-preview', text: 'Nano Banana Pro (gemini-3-pro-image-preview)' }
+                        ];
+                        options.forEach(opt => {
+                            const option = document.createElement('option');
+                            option.value = opt.value;
+                            option.textContent = opt.text;
+                            selectElement.appendChild(option);
+                        });
+                    } else if (provider === 'llmaggregator') {
+                        const options = [
+                            { value: 'google/gemini-3-pro-image-preview', text: 'Nano Banana Pro (google/gemini-3-pro-image-preview)' },
+                            { value: 'google/gemini-3.1-flash-image-preview', text: 'Nano Banana 2 (google/gemini-3.1-flash-image-preview)' },
+                            { value: 'bytedance/seedance-2.0', text: 'Seedance 2.0 (bytedance/seedance-2.0)' }
+                        ];
+                        options.forEach(opt => {
+                            const option = document.createElement('option');
+                            option.value = opt.value;
+                            option.textContent = opt.text;
+                            selectElement.appendChild(option);
+                        });
+                    }
+                    return;
+                }
+
                 let sourceSelect;
                 switch (provider) {
                     case 'gemini': sourceSelect = elements.geminiModelNameSelect; break;
@@ -23236,9 +23388,11 @@ if (state.settings.disableDeleteApiKeyConfirmation) {
                     case 'llmaggregator': sourceSelect = elements.llmAggregatorModelNameSelect; break;
                     default: return;
                 }
-                sourceSelect.querySelectorAll('optgroup, option').forEach(el => {
-                    selectElement.add(el.cloneNode(true));
-                });
+                if(sourceSelect) {
+                    sourceSelect.querySelectorAll('optgroup, option').forEach(el => {
+                        selectElement.add(el.cloneNode(true));
+                    });
+                }
             },
 
             getDefaultModelForProvider(provider) {
