@@ -1173,7 +1173,7 @@ body.turf-mode {
             touch-action: pan-y;
         }
 
-                .screen {
+        .screen {
             position: absolute;
             top: 0;
             left: 0;
@@ -1181,7 +1181,8 @@ body.turf-mode {
             height: 100%;
             display: flex;
             flex-direction: column;
-            transition: transform 0.3s ease-in-out;
+            transition: transform 0.45s cubic-bezier(0.22, 0.61, 0.36, 1),
+                        opacity 0.45s cubic-bezier(0.22, 0.61, 0.36, 1);
             background-color: var(--bg-primary);
             z-index: 0;
         }
@@ -1193,6 +1194,24 @@ body.turf-mode {
         .screen.active {
             transform: translateX(0);
             z-index: 1;
+        }
+
+        /* 通常チャット→画像生成モード切替時のクロスフェード */
+        .app-container.in-image-gen-mode #chat-screen {
+            opacity: 0 !important;
+            transform: translateX(0) !important;
+            filter: blur(2px) !important;
+            transition: transform 0.55s cubic-bezier(0.22, 0.61, 0.36, 1),
+                        opacity 0.55s cubic-bezier(0.22, 0.61, 0.36, 1),
+                        filter 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) !important;
+        }
+        .app-container:not(.in-image-gen-mode) #chat-screen {
+            opacity: 1;
+            transform: translateX(0);
+            filter: blur(0px);
+            transition: transform 0.55s cubic-bezier(0.22, 0.61, 0.36, 1),
+                        opacity 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) 0.1s,
+                        filter 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) !important;
         }
 
 
@@ -1209,7 +1228,12 @@ body.turf-mode {
         #image-gen-settings-screen {
             opacity: 0;
             visibility: hidden;
-            transition: transform 0.3s ease-in-out, opacity 0.3s ease, visibility 0.3s ease !important;
+            transform: translateX(0);
+            filter: blur(4px);
+            transition: transform 0.55s cubic-bezier(0.22, 0.61, 0.36, 1),
+                        opacity 0.55s cubic-bezier(0.22, 0.61, 0.36, 1),
+                        filter 0.55s cubic-bezier(0.22, 0.61, 0.36, 1),
+                        visibility 0s linear 0.55s !important;
         }
         #image-gen-screen {
             z-index: 50 !important;
@@ -1223,6 +1247,12 @@ body.turf-mode {
         .app-container.in-image-gen-mode #image-gen-settings-screen {
             opacity: 1;
             visibility: visible;
+            transform: translateX(0);
+            filter: blur(0px);
+            transition: transform 0.55s cubic-bezier(0.22, 0.61, 0.36, 1),
+                        opacity 0.55s cubic-bezier(0.22, 0.61, 0.36, 1),
+                        filter 0.55s cubic-bezier(0.22, 0.61, 0.36, 1),
+                        visibility 0s linear 0s !important;
         }
         #image-gen-screen::before {
             content: '';
@@ -13409,17 +13439,21 @@ const allScreens =[elements.chatScreen, elements.historyScreen, elements.setting
                     this.applySettingsToUI();
                 } else if (screenName === 'imageGen') {
                     activeScreen = elements.imageGenScreen;
+                    // チャット画面のインラインtransformをクリアし、CSSクロスフェードに委ねる
+                    elements.chatScreen.style.transform = '';
                     elements.imageGenScreen.style.transform = 'translateX(0)';
                     elements.imageGenHistoryScreen.style.transform = 'translateX(-100%)';
                     elements.imageGenSettingsScreen.style.transform = 'translateX(100%)';
                 } else if (screenName === 'imageGenHistory') {
                     activeScreen = elements.imageGenHistoryScreen;
+                    elements.chatScreen.style.transform = '';
                     elements.imageGenScreen.style.transform = 'translateX(100%)';
                     elements.imageGenHistoryScreen.style.transform = 'translateX(0)';
                     elements.imageGenSettingsScreen.style.transform = 'translateX(200%)';
                     appLogic.renderImageGenHistoryList();
                 } else if (screenName === 'imageGenSettings') {
                     activeScreen = elements.imageGenSettingsScreen;
+                    elements.chatScreen.style.transform = '';
                     elements.imageGenScreen.style.transform = 'translateX(-100%)';
                     elements.imageGenHistoryScreen.style.transform = 'translateX(-200%)';
                     elements.imageGenSettingsScreen.style.transform = 'translateX(0)';
@@ -13434,7 +13468,7 @@ const allScreens =[elements.chatScreen, elements.historyScreen, elements.setting
 
                 requestAnimationFrame(() => {
                     allScreens.forEach(screen => {
-                        screen.style.transition = 'transform 0.3s ease-in-out';
+                        screen.style.transition = 'transform 0.45s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.45s cubic-bezier(0.22, 0.61, 0.36, 1)';
                     });
                     if (activeScreen) {
                         activeScreen.inert = false;
@@ -13453,7 +13487,7 @@ const allScreens =[elements.chatScreen, elements.historyScreen, elements.setting
                                 if (screenName === 'chat' && isChatAtBottom) {
                                     chatMain.scrollTop = chatMain.scrollHeight;
                                 }
-                            }, 305);
+                            }, 560);
                         }
                     }
                     setTimeout(() => {
@@ -13462,7 +13496,7 @@ const allScreens =[elements.chatScreen, elements.historyScreen, elements.setting
                                 screen.classList.add('dormant');
                             }
                         });
-                    }, 350);
+                    }, 600);
                 });
                 state.currentScreen = screenName;
 
