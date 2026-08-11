@@ -939,6 +939,8 @@
           gap 0.2s ease,
           min-height 0.2s ease;
         gap: 8px;
+        /* 絵文字ボタンの有無で画面ごとにヘッダー高がずれるのを防ぐ */
+        min-height: 52px;
       }
 
       body.pastel-rainbow-mode .app-header {
@@ -5736,6 +5738,7 @@
         padding: var(--responsive-header-padding-y)
           var(--responsive-header-padding-x);
         gap: var(--responsive-header-gap);
+        min-height: calc(52px * var(--responsive-scale));
       }
       body.responsive-scaling .app-header h1 {
         font-size: var(--responsive-header-font-size);
@@ -6242,86 +6245,106 @@
         font-size: 10px;
       }
 
-      /* ===== 画像生成 クイック設定リボン ===== */
+      /* ===== 画像生成 クイック設定リボン =====
+         配色はアプリのテーマ変数に依存せず、Stable Diffusion WebUI 風の
+         ダークスレート + オレンジアクセントで固定する。 */
+      #image-gen-ribbon {
+        --sd-bg: #1b1e27;
+        --sd-bg-raised: #242833;
+        --sd-bg-chip: #2d323f;
+        --sd-border: #3a4150;
+        --sd-text: #e6e8ef;
+        --sd-text-dim: #98a0b3;
+        --sd-accent: #ff7a2f;
+        --sd-accent-soft: rgba(255, 122, 47, 0.16);
+      }
+
       .ribbon-trigger {
         touch-action: none;
+        font-variant-numeric: normal;
+        user-select: none;
+        -webkit-user-select: none;
       }
       .ribbon-trigger.armed {
-        filter: brightness(1.15);
+        color: var(--sd-accent, #ff7a2f);
+        text-shadow: 0 0 10px rgba(255, 122, 47, 0.9);
+        transform: scale(0.92);
       }
 
       #image-gen-ribbon-scrim {
         position: absolute;
         inset: 0;
         z-index: 19;
-        background-color: rgba(0, 0, 0, 0.35);
+        background-color: rgba(8, 10, 14, 0.45);
         opacity: 0;
         visibility: hidden;
         transition:
-          opacity 0.25s ease,
-          visibility 0.25s ease;
+          opacity 0.18s ease,
+          visibility 0.18s ease;
       }
       #image-gen-ribbon-scrim.visible {
         visibility: visible;
+        opacity: 1;
       }
 
+      /* ボタンから噴き出す本体 */
       .ribbon-panel {
         position: absolute;
-        left: 0;
-        right: 0;
         z-index: 20;
         display: flex;
         flex-direction: column;
-        max-height: min(64vh, 460px);
-        background-color: var(--bg-tertiary);
-        color: var(--text-primary);
-        border: 1px solid var(--border-secondary);
-        box-shadow: 0 10px 34px var(--shadow-primary);
+        max-height: min(60vh, 440px);
+        border-radius: 12px;
+        background-color: var(--sd-bg);
+        color: var(--sd-text);
+        border: 1px solid var(--sd-border);
+        box-shadow:
+          0 18px 44px rgba(0, 0, 0, 0.55),
+          0 0 0 1px rgba(255, 122, 47, 0.18);
+        font-family: var(--font-family);
         visibility: hidden;
-        will-change: transform;
-        touch-action: none;
-        transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
-      }
-      .ribbon-panel.from-top {
-        top: 0;
-        border-top: none;
-        border-radius: 0 0 16px 16px;
-        transform: translateY(-100%);
-      }
-      .ribbon-panel.from-bottom {
-        bottom: 0;
-        border-bottom: none;
-        border-radius: 16px 16px 0 0;
-        transform: translateY(100%);
-      }
-      .ribbon-panel.visible {
-        visibility: visible;
+        opacity: 0;
+        transform: scale(0.42);
+        transform-origin: var(--erupt-x, 50%) var(--erupt-y, 0%);
+        transition:
+          transform 0.24s cubic-bezier(0.16, 1.1, 0.3, 1),
+          opacity 0.16s ease,
+          visibility 0.24s ease;
       }
       .ribbon-panel.open {
-        transform: translateY(0);
-      }
-      .ribbon-panel.dragging {
-        transition: none;
+        visibility: visible;
+        opacity: 1;
+        transform: scale(1);
       }
 
-      .ribbon-grip {
+      .ribbon-head {
         flex-shrink: 0;
         display: flex;
-        justify-content: center;
         align-items: center;
-        height: 20px;
-        cursor: grab;
-        touch-action: none;
+        gap: 8px;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--sd-border);
+        background-color: var(--sd-bg-raised);
+        border-radius: 12px 12px 0 0;
       }
-      .ribbon-grip::before {
-        content: "";
-        width: 44px;
-        height: 4px;
-        border-radius: 2px;
-        background-color: var(--border-primary);
+      .ribbon-head-title {
+        flex-grow: 1;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--sd-text-dim);
       }
-      .ribbon-panel.from-top .ribbon-grip {
-        order: 99;
+      .ribbon-close {
+        border: none;
+        background: none;
+        color: var(--sd-text-dim);
+        font-size: 15px;
+        line-height: 1;
+        padding: 2px 4px;
+        cursor: pointer;
+      }
+      .ribbon-close:hover {
+        color: var(--sd-accent);
       }
 
       .ribbon-preset-bar {
@@ -6329,12 +6352,14 @@
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 4px 12px 8px;
+        padding: 10px 12px 6px;
       }
       .ribbon-preset-bar > span {
-        font-size: 11px;
-        color: var(--text-secondary);
         flex-shrink: 0;
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--sd-text-dim);
       }
       .ribbon-preset-chips {
         display: flex;
@@ -6349,9 +6374,9 @@
       .ribbon-tabs {
         flex-shrink: 0;
         display: flex;
-        gap: 4px;
+        gap: 2px;
         padding: 0 8px;
-        border-bottom: 1px solid var(--border-tertiary);
+        border-bottom: 1px solid var(--sd-border);
         overflow-x: auto;
         scrollbar-width: none;
       }
@@ -6360,18 +6385,22 @@
       }
       .ribbon-tab {
         flex-shrink: 0;
-        padding: 8px 14px;
+        padding: 9px 14px;
         border: none;
         background: none;
-        color: var(--text-secondary);
-        font-size: 13px;
+        color: var(--sd-text-dim);
+        font-size: 12px;
         font-weight: bold;
+        letter-spacing: 0.04em;
         cursor: pointer;
         border-bottom: 2px solid transparent;
       }
+      .ribbon-tab:hover {
+        color: var(--sd-text);
+      }
       .ribbon-tab.active {
-        color: var(--text-link);
-        border-bottom-color: var(--text-link);
+        color: var(--sd-accent);
+        border-bottom-color: var(--sd-accent);
       }
 
       .ribbon-body {
@@ -6383,9 +6412,11 @@
         margin-top: 14px;
       }
       .ribbon-group-label {
-        font-size: 11px;
-        color: var(--text-secondary);
-        margin-bottom: 6px;
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--sd-text-dim);
+        margin-bottom: 7px;
       }
       .ribbon-chips {
         display: flex;
@@ -6394,27 +6425,45 @@
       }
       .ribbon-chip {
         padding: 7px 12px;
-        border: 1px solid var(--border-primary);
-        border-radius: 999px;
-        background-color: var(--bg-primary);
-        color: var(--text-primary);
+        border: 1px solid var(--sd-border);
+        border-radius: 6px;
+        background-color: var(--sd-bg-chip);
+        color: var(--sd-text);
         font-size: 12px;
         line-height: 1.2;
         cursor: pointer;
         white-space: nowrap;
       }
       .ribbon-chip:hover {
-        border-color: var(--text-link);
+        border-color: var(--sd-accent);
+        color: #fff;
       }
       .ribbon-chip.active {
-        background-color: var(--bg-button);
-        border-color: var(--bg-button);
-        color: var(--text-light);
+        background-color: var(--sd-accent-soft);
+        border-color: var(--sd-accent);
+        color: var(--sd-accent);
+        font-weight: bold;
+      }
+      .ribbon-preset-chips .ribbon-chip {
+        border-radius: 999px;
+        padding: 5px 12px;
       }
       .ribbon-body textarea {
         width: 100%;
         min-height: 90px;
+        margin: 0;
+        padding: 8px;
         resize: vertical;
+        border-radius: 6px;
+        border: 1px solid var(--sd-border);
+        background-color: #12151c;
+        color: var(--sd-text);
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 12px;
+      }
+      .ribbon-body textarea:focus {
+        outline: none;
+        border-color: var(--sd-accent);
       }
 
       #image-gen-ribbon-toast {
@@ -6425,8 +6474,9 @@
         transform: translateX(-50%) translateY(8px);
         padding: 8px 16px;
         border-radius: 999px;
-        background-color: var(--bg-button);
-        color: var(--text-light);
+        background-color: #1b1e27;
+        border: 1px solid #ff7a2f;
+        color: #ffd9c2;
         font-size: 13px;
         white-space: nowrap;
         pointer-events: none;
@@ -7155,9 +7205,9 @@
             class="header-button ribbon-trigger"
             data-ribbon-side="top"
             aria-label="画像生成クイック設定"
-            title="タップ: プリセット切替 / 下へスワイプ: 設定パネル"
+            title="タップ: プリセット切替 / 長押し: 設定パネル"
           >
-            🎛
+            Ⅰ
           </button>
           <button
             id="goto-settings-from-image-gen-btn"
@@ -7199,9 +7249,9 @@
             class="footer-action-button ribbon-trigger"
             data-ribbon-side="bottom"
             aria-label="画像生成クイック設定"
-            title="タップ: プリセット切替 / 上へスワイプ: 設定パネル"
+            title="タップ: プリセット切替 / 長押し: 設定パネル"
           >
-            🎛
+            Ⅰ
           </button>
           <button id="image-gen-send-btn" title="生成">送</button>
         </footer>
@@ -7209,12 +7259,22 @@
         <div id="image-gen-ribbon-scrim"></div>
         <div
           id="image-gen-ribbon"
-          class="ribbon-panel from-bottom"
+          class="ribbon-panel"
           role="dialog"
           aria-label="画像生成クイック設定"
           aria-hidden="true"
         >
-          <div class="ribbon-grip" id="image-gen-ribbon-grip"></div>
+          <div class="ribbon-head">
+            <span class="ribbon-head-title">Quick Settings</span>
+            <button
+              type="button"
+              id="image-gen-ribbon-close"
+              class="ribbon-close"
+              aria-label="閉じる"
+            >
+              ✕
+            </button>
+          </div>
           <div class="ribbon-preset-bar">
             <span>プリセット</span>
             <div id="image-gen-ribbon-presets" class="ribbon-preset-chips"></div>
@@ -15633,7 +15693,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         // 画像生成 クイック設定リボン
         imageGenRibbon: byId("image-gen-ribbon"),
         imageGenRibbonScrim: byId("image-gen-ribbon-scrim"),
-        imageGenRibbonGrip: byId("image-gen-ribbon-grip"),
+        imageGenRibbonCloseBtn: byId("image-gen-ribbon-close"),
         imageGenRibbonTabs: byId("image-gen-ribbon-tabs"),
         imageGenRibbonBody: byId("image-gen-ribbon-body"),
         imageGenRibbonPresets: byId("image-gen-ribbon-presets"),
@@ -30894,6 +30954,17 @@ Available commands / objects:
             });
           };
 
+          // ボタンの表示は現在のプリセット番号 (ローマ数字)
+          const NUMERALS = ["Ⅰ", "Ⅱ", "Ⅲ", "Ⅳ", "Ⅴ", "Ⅵ"];
+          const syncTriggerLabels = () => {
+            const index = state.settings.imageGenPresetIndex || 0;
+            const preset = PRESETS[index];
+            qsa(".ribbon-trigger").forEach((btn) => {
+              btn.textContent = NUMERALS[index] || String(index + 1);
+              btn.title = `プリセット ${NUMERALS[index]}: ${preset ? preset.name : ""} / タップ: 次のプリセット / 長押し: 詳細設定`;
+            });
+          };
+
           const applyPreset = (index) => {
             const preset = PRESETS[index];
             if (!preset) return;
@@ -30903,9 +30974,10 @@ Available commands / objects:
               if (select) select.value = preset[key];
             });
             appLogic.saveSettings(false);
+            syncTriggerLabels();
             render();
             showToast(
-              `${preset.name} / ${preset.aspect || "比率自動"} / ${preset.resolution} / ${preset.count}枚`,
+              `${NUMERALS[index]} ${preset.name} / ${preset.aspect || "比率自動"} / ${preset.resolution} / ${preset.count}枚`,
             );
           };
 
@@ -30927,136 +30999,124 @@ Available commands / objects:
             );
           };
 
-          const setSide = (side) => {
-            panel.classList.toggle("from-top", side === "top");
-            panel.classList.toggle("from-bottom", side !== "top");
+          // パネルを起点ボタンの直下(入りきらない場合は直上)に配置し、
+          // ボタン位置を transform-origin にして「噴き出す」ように見せる
+          const positionPanel = (trigger) => {
+            const screenRect =
+              elements.imageGenScreen.getBoundingClientRect();
+            const btnRect = trigger.getBoundingClientRect();
+            const margin = 8;
+            const width = Math.min(screenRect.width - margin * 2, 520);
+            const height = panel.offsetHeight || 320;
+
+            let left = btnRect.left + btnRect.width / 2 - width / 2;
+            left = Math.min(
+              Math.max(left, screenRect.left + margin),
+              screenRect.right - margin - width,
+            );
+
+            const below = btnRect.bottom + 6;
+            const spaceBelow = screenRect.bottom - below - margin;
+            const eruptDown = spaceBelow >= Math.min(height, 200);
+            const top = eruptDown
+              ? below
+              : Math.max(
+                  screenRect.top + margin,
+                  btnRect.top - 6 - Math.min(height, spaceBelow + height),
+                );
+
+            panel.style.width = `${width}px`;
+            panel.style.left = `${left - screenRect.left}px`;
+            panel.style.right = "auto";
+            if (eruptDown) {
+              panel.style.top = `${top - screenRect.top}px`;
+              panel.style.bottom = "auto";
+            } else {
+              panel.style.top = "auto";
+              panel.style.bottom = `${screenRect.bottom - btnRect.top + 6}px`;
+            }
+            panel.style.setProperty(
+              "--erupt-x",
+              `${btnRect.left + btnRect.width / 2 - left}px`,
+            );
+            panel.style.setProperty("--erupt-y", eruptDown ? "0%" : "100%");
           };
 
-          const openPanel = () => {
+          const openPanel = (trigger) => {
             render();
-            panel.classList.add("visible", "open");
-            panel.style.transform = "";
-            panel.setAttribute("aria-hidden", "false");
+            // visibility:hidden のままでもレイアウトは確定するので先に採寸・配置する
+            positionPanel(trigger);
             elements.imageGenRibbonScrim.classList.add("visible");
-            elements.imageGenRibbonScrim.style.opacity = "1";
+            // 1フレーム分ずらして初期状態から transition を開始させる
+            setTimeout(() => {
+              panel.classList.add("open");
+              panel.setAttribute("aria-hidden", "false");
+            }, 16);
           };
 
           const closePanel = () => {
             panel.classList.remove("open");
-            panel.style.transform = "";
             panel.setAttribute("aria-hidden", "true");
-            elements.imageGenRibbonScrim.style.opacity = "";
-            setTimeout(() => {
-              if (!panel.classList.contains("open")) {
-                panel.classList.remove("visible");
-                elements.imageGenRibbonScrim.classList.remove("visible");
-              }
-            }, 280);
+            elements.imageGenRibbonScrim.classList.remove("visible");
           };
 
-          // 表示直後はレイアウト未確定で 0/1px を返すことがあるため下限を設ける
-          const panelHeight = () => {
-            const measured = panel.getBoundingClientRect().height;
-            return measured > 40
-              ? measured
-              : Math.min(window.innerHeight * 0.6, 440);
-          };
-
-          // 引き出し量 progress(0=閉 1=開) を transform に反映
-          const applyProgress = (side, progress) => {
-            const offset = (1 - progress) * panelHeight();
-            panel.style.transform = `translateY(${side === "top" ? -offset : offset}px)`;
-          };
-
-          // fromOpen=false: 開く向きに引き出す / fromOpen=true: 閉じる向きに押し戻す
-          const attachDrag = (target, fromOpen) => {
-            let startY = 0;
+          // 短押し = プリセット巡回 / 長押し = パネル噴出
+          const LONG_PRESS_MS = 420;
+          const attachTrigger = (trigger) => {
+            let timer = null;
+            let opened = false;
             let startX = 0;
-            let startTime = 0;
-            let dragging = false;
-            let pointerId = null;
-            let currentSide = "bottom";
-            let progress = 0;
+            let startY = 0;
 
-            const onDown = (e) => {
-              if (pointerId !== null) return;
-              pointerId = e.pointerId;
-              startY = e.clientY;
+            const cancel = () => {
+              clearTimeout(timer);
+              timer = null;
+              trigger.classList.remove("armed");
+            };
+
+            trigger.addEventListener("pointerdown", (e) => {
+              if (timer) return;
               startX = e.clientX;
-              startTime = Date.now();
-              dragging = false;
-              currentSide = fromOpen
-                ? panel.classList.contains("from-top")
-                  ? "top"
-                  : "bottom"
-                : target.dataset.ribbonSide || "bottom";
-              progress = fromOpen ? 1 : 0;
-              try {
-                target.setPointerCapture(pointerId);
-              } catch (_) {}
-              target.classList.add("armed");
-            };
-
-            const onMove = (e) => {
-              if (e.pointerId !== pointerId) return;
-              const dy = e.clientY - startY;
-              const dx = e.clientX - startX;
-              // delta > 0 = より開く方向 (上端パネルは下スワイプ, 下端パネルは上スワイプ)
-              const delta = currentSide === "top" ? dy : -dy;
-              if (!dragging) {
-                const trigger = fromOpen ? -delta : delta;
-                if (trigger < 12 || Math.abs(dy) < Math.abs(dx)) return;
-                dragging = true;
-                if (!fromOpen) setSide(currentSide);
-                render();
-                panel.classList.add("visible", "dragging");
-                elements.imageGenRibbonScrim.classList.add("visible");
+              startY = e.clientY;
+              opened = false;
+              trigger.classList.add("armed");
+              timer = setTimeout(() => {
+                opened = true;
+                cancel();
+                openPanel(trigger);
+              }, LONG_PRESS_MS);
+            });
+            trigger.addEventListener("pointermove", (e) => {
+              if (!timer) return;
+              if (
+                Math.abs(e.clientX - startX) + Math.abs(e.clientY - startY) >
+                12
+              )
+                cancel();
+            });
+            trigger.addEventListener("pointerup", () => {
+              if (timer) {
+                cancel();
+                cyclePreset();
               }
-              e.preventDefault();
-              progress = Math.min(
-                1,
-                Math.max(0, (fromOpen ? 1 : 0) + delta / panelHeight()),
-              );
-              applyProgress(currentSide, progress);
-              elements.imageGenRibbonScrim.style.opacity = String(progress);
-            };
-
-            const onUp = (e) => {
-              if (e.pointerId !== pointerId) return;
-              try {
-                target.releasePointerCapture(pointerId);
-              } catch (_) {}
-              pointerId = null;
-              target.classList.remove("armed");
-              panel.classList.remove("dragging");
-
-              if (!dragging) {
-                const moved =
-                  Math.abs(e.clientY - startY) + Math.abs(e.clientX - startX);
-                if (moved < 10 && Date.now() - startTime < 600) {
-                  if (fromOpen) closePanel();
-                  else cyclePreset();
-                }
-                return;
-              }
-              if (progress > 0.4) openPanel();
-              else closePanel();
-            };
-
-            target.addEventListener("pointerdown", onDown);
-            target.addEventListener("pointermove", onMove);
-            target.addEventListener("pointerup", onUp);
-            target.addEventListener("pointercancel", onUp);
+            });
+            trigger.addEventListener("pointercancel", cancel);
+            trigger.addEventListener("pointerleave", cancel);
+            trigger.addEventListener("contextmenu", (e) => e.preventDefault());
           };
 
-          qsa(".ribbon-trigger").forEach((btn) => attachDrag(btn, false));
-          if (elements.imageGenRibbonGrip)
-            attachDrag(elements.imageGenRibbonGrip, true);
+          qsa(".ribbon-trigger").forEach(attachTrigger);
+          if (elements.imageGenRibbonCloseBtn)
+            elements.imageGenRibbonCloseBtn.addEventListener(
+              "click",
+              closePanel,
+            );
           elements.imageGenRibbonScrim.addEventListener("click", closePanel);
           document.addEventListener("keydown", (e) => {
             if (e.key === "Escape" && panel.classList.contains("open"))
               closePanel();
           });
+          syncTriggerLabels();
         },
 
         async saveSettings(showNotice = true) {
