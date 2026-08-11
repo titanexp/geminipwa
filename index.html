@@ -2948,6 +2948,21 @@
         width: 100%;
       }
 
+      /* 危険度が変わる境目の見出し */
+      .dz-section-title {
+        margin: 6px 0 -4px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border-secondary);
+        font-size: 12px;
+        font-weight: bold;
+        color: var(--text-secondary);
+      }
+
+      .dz-section-title--danger {
+        border-top-color: var(--border-danger);
+        color: var(--text-danger, var(--text-secondary));
+      }
+
       .dz-note {
         margin: 0;
         font-size: 11px;
@@ -5258,18 +5273,88 @@
       #history-screen .main-content {
         font-size: calc(14px * var(--history-ui-scale));
       }
-      #history-screen .history-item-title {
-        font-size: 1.072em !important;
-      }
-      #history-screen .history-item-dates {
-        font-size: 0.643em !important;
-      }
-      #history-screen .history-item-actions button {
-        font-size: 1.143em !important;
-        padding: 0.375em 0.5em !important;
-      }
       #history-screen #no-history-message {
         font-size: 1em !important;
+      }
+
+      /* --- 履歴一覧のレイアウト（#history-screen 限定） --- */
+      #history-screen .history-item {
+        padding: 10px 12px;
+        overflow: visible;
+      }
+      #history-screen .history-item-main {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        min-width: 0;
+      }
+      #history-screen .history-item-title {
+        font-size: 1.072em;
+        font-weight: 600;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      #history-screen .history-item-dates {
+        font-size: 0.786em;
+        color: var(--text-secondary);
+        flex: 0 0 auto;
+        white-space: nowrap;
+      }
+      #history-screen .history-item-snippet {
+        margin: 4px 0 0;
+        font-size: 0.857em;
+        line-height: 1.35;
+        color: var(--text-secondary);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+      }
+      #history-screen .history-item-more {
+        flex: 0 0 auto;
+        align-self: center;
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        font-size: 1.143em;
+        line-height: 1;
+        padding: 4px 6px;
+        border-radius: 6px;
+      }
+      #history-screen .history-item-more:hover {
+        background-color: var(--bg-tertiary);
+        color: var(--text-primary);
+      }
+      #history-screen .history-item.actions-open .history-item-more {
+        color: var(--text-primary);
+      }
+      #history-screen .history-item-actions {
+        display: none;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid var(--border-secondary);
+      }
+      #history-screen .history-item.actions-open .history-item-actions {
+        display: flex;
+      }
+      #history-screen .history-item-actions button {
+        font-size: 0.929em;
+        padding: 0.4em 0.75em;
+        background-color: var(--bg-tertiary);
+        color: var(--text-primary);
+      }
+      #history-screen .history-item-actions button:hover {
+        background-color: var(--bg-button-action);
+      }
+      #history-screen .history-item-actions .js-delete-btn {
+        margin-left: auto;
+        background-color: var(--bg-button-delete);
+      }
+      #history-screen .history-item-actions .js-delete-btn:hover {
+        background-color: var(--bg-button-delete-hover);
       }
 
       /* --- チャット画面文字サイズ調整用CSS --- */
@@ -5926,6 +6011,12 @@
         letter-spacing: 0.5px;
         margin-bottom: 2px;
       }
+      #perf-monitor-panel .perf-value,
+      #perf-monitor-panel #perf-boot-details,
+      #perf-monitor-panel #perf-spike-log {
+        user-select: text;
+        -webkit-user-select: text;
+      }
       #perf-monitor-panel .perf-value {
         color: #0f0;
         white-space: nowrap;
@@ -6082,6 +6173,14 @@
       }
       #console-monitor-panel .log-entry.cmd {
         color: #0ff;
+      }
+      #console-monitor-panel .log-entry.group {
+        color: #0ff;
+        font-weight: bold;
+        border-bottom-style: solid;
+      }
+      #console-monitor-panel .console-header-actions button.active {
+        background-color: rgba(0, 255, 255, 0.3);
       }
       #console-monitor-panel .console-input-area {
         display: flex;
@@ -6520,6 +6619,7 @@
         let watchdogTimer = null;
         let lastProgressAt = Date.now();
         let recoveryStarted = false;
+        let blockedNotified = false;
 
         const scheduleWatchdog = () => {
           clearTimeout(watchdogTimer);
@@ -6531,6 +6631,15 @@
           scheduleWatchdog();
         };
 
+        // 起動が「壊れている」のではなく「他タブ待ち」で止まっている状態。
+        // キャッシュ削除やデータ消去は無意味なので、自動復旧は止めて待つ。
+        window.initializationBlocked = function (message) {
+          clearTimeout(watchdogTimer);
+          if (blockedNotified) return;
+          blockedNotified = true;
+          alert(message);
+        };
+
         window.initializationSuccess = function () {
           clearTimeout(watchdogTimer);
           sessionStorage.removeItem(RECOVERY_ATTEMPT_KEY);
@@ -6538,6 +6647,7 @@
 
         window.initializationFailure = function () {
           clearTimeout(watchdogTimer);
+          sessionStorage.removeItem(RECOVERY_ATTEMPT_KEY);
         };
 
         scheduleWatchdog();
@@ -6854,7 +6964,7 @@
           <div class="perf-value" id="perf-network">--</div>
         </div>
         <div class="perf-section">
-          <div class="perf-label">INDEXEDDB OPS</div>
+          <div class="perf-label">INDEXEDDB TRANSACTIONS</div>
           <div class="perf-value" id="perf-idb">--</div>
         </div>
         <div class="perf-section">
@@ -6910,6 +7020,8 @@
       <div class="console-header">
         <span>💻 CONSOLE</span>
         <div class="console-header-actions">
+          <button id="console-filter-btn" title="エラー/警告のみ表示">⚠</button>
+          <button id="console-copy-btn" title="ログをコピー">📋</button>
           <button id="console-minimize-btn" title="最小化">_</button>
           <button id="console-close-btn" title="閉じる">✕</button>
         </div>
@@ -7973,33 +8085,32 @@
         <main class="main-content">
           <ul id="history-list" class="history-list">
             <li class="js-history-item-template history-item">
-              <div class="history-item-details">
+              <div class="history-item-main">
                 <span class="history-item-title"></span>
-              </div>
-              <div class="history-item-bottom-row">
-                <div class="history-item-dates">
-                  <span class="created-date"></span>
+                <span class="history-item-dates">
                   <span class="updated-date"></span>
-                </div>
-                <div class="history-item-actions">
-                  <button
-                    class="js-link-session-btn"
-                    title="セッションをリンク/解除"
-                    style="
-                      font-size: 16px;
-                      padding: 6px 8px;
-                      background-color: var(--bg-button-action);
-                    "
-                  >
-                    🔗
-                  </button>
-                  <button class="js-edit-title-btn" title="タイトル編集">
-                    ✎
-                  </button>
-                  <button class="js-export-btn" title="出力">出力</button>
-                  <button class="js-duplicate-btn" title="複製">複製</button>
-                  <button class="js-delete-btn" title="削除">削除</button>
-                </div>
+                </span>
+                <button
+                  class="js-more-btn history-item-more"
+                  type="button"
+                  title="操作メニュー"
+                  aria-label="操作メニュー"
+                  aria-expanded="false"
+                >
+                  ⋯
+                </button>
+              </div>
+              <p class="history-item-snippet hidden"></p>
+              <div class="history-item-actions">
+                <button class="js-link-session-btn" title="セッションをリンク/解除">
+                  🔗 リンク
+                </button>
+                <button class="js-edit-title-btn" title="タイトル編集">
+                  ✎ 名称変更
+                </button>
+                <button class="js-export-btn" title="出力">出力</button>
+                <button class="js-duplicate-btn" title="複製">複製</button>
+                <button class="js-delete-btn" title="削除">削除</button>
               </div>
             </li>
           </ul>
@@ -14239,6 +14350,7 @@
                 <input
                   type="checkbox"
                   id="disable-load-chat-confirmation-while-sending-toggle"
+                  data-no-bulk-toggle
                 />
                 メッセージ送信中に別チャットを読み込む際の確認ダイアログを表示しない
                 (非推奨)
@@ -14291,34 +14403,48 @@
             <details id="settings-group-danger-zone-details">
               <summary>※取り扱い注意項目※</summary>
               <div class="dz-body">
-                <div class="dz-item">
-                  <label class="checkbox-label">
-                    <input
-                      type="checkbox"
-                      id="disable-save-settings-confirmation-toggle"
-                    />
-                    「設定を保存しました」通知を無効にする
-                  </label>
-                  <p class="dz-note">※ 設定保存時の確認ダイアログを表示しません。</p>
-                </div>
-
-                <div class="dz-item">
-                  <label class="checkbox-label">
-                    <input type="checkbox" id="auto-save-settings-toggle" />
-                    設定を即時反映する
-                  </label>
-                  <p class="dz-note">
-                    ※
-                    「設定を保存」ボタンを押さずとも、設定の変更が直ちに適用されます。
-                  </p>
-                </div>
+                <details id="settings-group-save-behavior" class="dz-card">
+                  <summary>⚙️ 保存の挙動</summary>
+                  <div class="dz-card-body">
+                    <div class="dz-item">
+                      <label class="checkbox-label">
+                        <input
+                          type="checkbox"
+                          id="disable-save-settings-confirmation-toggle"
+                        />
+                        「設定を保存しました」通知を無効にする
+                      </label>
+                      <p class="dz-note">
+                        ※
+                        保存時に画面上部へ出るトースト通知を出しません。保存自体は通常どおり行われます。
+                      </p>
+                    </div>
+                    <hr class="dz-divider" />
+                    <div class="dz-item">
+                      <label class="checkbox-label">
+                        <input type="checkbox" id="auto-save-settings-toggle" />
+                        設定を即時反映する
+                      </label>
+                      <p class="dz-note">
+                        ※
+                        「設定を保存」ボタンを押さずとも、設定の変更が直ちに適用・保存されます。<br />
+                        ※
+                        オンの間は、このパネル内の変更も確認なしでそのまま保存されます。
+                      </p>
+                    </div>
+                  </div>
+                </details>
 
                 <details id="settings-group-security" class="dz-card">
                   <summary>🔒 セキュリティ (APIキー表示)</summary>
                   <div class="dz-card-body">
                     <div class="dz-item">
                       <label class="checkbox-label">
-                        <input type="checkbox" id="unmask-api-keys-toggle" />
+                        <input
+                          type="checkbox"
+                          id="unmask-api-keys-toggle"
+                          data-no-bulk-toggle
+                        />
                         APIキーの黒塗りを解除する (常に表示)
                       </label>
                       <p class="dz-note">
@@ -14334,6 +14460,7 @@
                         <input
                           type="checkbox"
                           id="disable-llm-url-whitelist-toggle"
+                          data-no-bulk-toggle
                         />
                         LLM Aggregator URLのホワイトリスト制限を無効化
                       </label>
@@ -14347,7 +14474,7 @@
                   </div>
                 </details>
 
-                <hr class="dz-divider" />
+                <p class="dz-section-title">🔧 復旧（データは消えません）</p>
 
                 <div class="dz-item">
                   <button id="force-recovery-btn" class="orange-button">
@@ -14359,6 +14486,10 @@
                     ※ ユーザーデータ（チャット履歴・設定）は保持されます。
                   </p>
                 </div>
+
+                <p class="dz-section-title dz-section-title--danger">
+                  🗑️ データ削除（取り消しできません）
+                </p>
 
                 <div class="dz-item">
                   <button id="clear-history-btn" class="orange-button">
@@ -14544,32 +14675,6 @@
         <button value="ok" class="dialog-ok-btn">閉じる</button>
       </div>
     </dialog>
-    <dialog id="initFailureDialog" class="custom-dialog">
-      <p id="initFailureMessage" class="dialog-message"></p>
-      <div class="dialog-actions">
-        <button
-          id="initFailureCopyBtn"
-          class="history-action-button"
-          style="
-            margin-right: auto;
-            background-color: var(--bg-button-copy);
-            color: var(--text-light);
-          "
-        >
-          コピー
-        </button>
-        <button
-          id="initFailureExportBtn"
-          value="export"
-          class="history-action-button gold"
-        >
-          全出力
-        </button>
-        <button id="initFailureOkBtn" value="ok" class="dialog-ok-btn">
-          OK
-        </button>
-      </div>
-    </dialog>
 
     <script>
       const DB_NAME = "GeminiPWA_DB";
@@ -14582,6 +14687,29 @@
       const CHATS_STORE = "chats";
       const CHAT_UPDATEDAT_INDEX = "updatedAtIndex";
       const CHAT_CREATEDAT_INDEX = "createdAtIndex";
+      // Single source of truth for the IndexedDB schema. dbUtils uses this both to
+      // create missing stores/indexes and to decide whether a version upgrade is
+      // needed at all, so keep new stores/indexes here only.
+      const DB_SCHEMA = [
+        { name: SETTINGS_STORE, options: { keyPath: "key" }, indexes: [] },
+        {
+          name: CHATS_STORE,
+          options: { keyPath: "id", autoIncrement: true },
+          indexes: [
+            { name: CHAT_UPDATEDAT_INDEX, keyPath: "updatedAt" },
+            { name: CHAT_CREATEDAT_INDEX, keyPath: "createdAt" },
+          ],
+        },
+        {
+          name: IMAGE_CHATS_STORE,
+          options: { keyPath: "id", autoIncrement: true },
+          indexes: [
+            { name: CHAT_UPDATEDAT_INDEX, keyPath: "updatedAt" },
+            { name: CHAT_CREATEDAT_INDEX, keyPath: "createdAt" },
+          ],
+        },
+        { name: IMAGE_GEN_MEDIA_STORE, options: { keyPath: "id" }, indexes: [] },
+      ];
       const API_PROVIDERS = [
         { value: "gemini", text: "Gemini (Google)" },
         { value: "deepseek", text: "DeepSeek" },
@@ -16547,6 +16675,84 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           };
         },
 
+        _isSchemaComplete(db) {
+          return DB_SCHEMA.every((store) => {
+            if (!db.objectStoreNames.contains(store.name)) return false;
+            if (store.indexes.length === 0) return true;
+            try {
+              const objectStore = db
+                .transaction([store.name], "readonly")
+                .objectStore(store.name);
+              return store.indexes.every((index) =>
+                objectStore.indexNames.contains(index.name),
+              );
+            } catch (error) {
+              return false;
+            }
+          });
+        },
+
+        _applySchema(db, transaction) {
+          DB_SCHEMA.forEach((store) => {
+            const objectStore = db.objectStoreNames.contains(store.name)
+              ? transaction.objectStore(store.name)
+              : db.createObjectStore(store.name, store.options);
+            store.indexes.forEach((index) => {
+              if (!objectStore.indexNames.contains(index.name)) {
+                objectStore.createIndex(index.name, index.keyPath, {
+                  unique: false,
+                });
+              }
+            });
+          });
+        },
+
+        _openWithUpgrade(version, resolve, reject) {
+          let request;
+          try {
+            request = indexedDB.open(DB_NAME, version);
+          } catch (error) {
+            this._initPromise = null;
+            reject(`IndexedDBエラー: ${error}`);
+            return;
+          }
+
+          request.onupgradeneeded = (event) => {
+            this._applySchema(event.target.result, event.target.transaction);
+          };
+
+          // 他タブが同じDBを開いていると upgrade は待たされる。ここで何も
+          // しないと「応答なし」に見えて起動失敗の復旧処理まで走ってしまうので、
+          // 原因と対処を伝えたうえで、閉じられ次第そのまま続行させる。
+          request.onblocked = () => {
+            if (typeof window.initializationBlocked === "function") {
+              window.initializationBlocked(
+                "データベースの更新が、別のタブで開いているこのアプリに妨げられています。\n" +
+                  "他のタブを閉じると、そのまま自動で起動を続行します。",
+              );
+            }
+          };
+
+          request.onerror = () => {
+            const error = request.error;
+            if (this._isVersionError(error)) {
+              this._openExistingDbAfterVersionError(error, resolve, reject);
+              return;
+            }
+            this._initPromise = null;
+            reject(`IndexedDBエラー: ${error}`);
+          };
+
+          request.onsuccess = (event) => {
+            if (typeof window.initializationProgress === "function") {
+              window.initializationProgress("DB Schema Upgrade");
+            }
+            this._attachDatabaseHandlers(event.target.result);
+            this._initPromise = null;
+            resolve(state.db);
+          };
+        },
+
         async openDB() {
           if (state.db) {
             try {
@@ -16561,83 +16767,45 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           if (this._initPromise) return this._initPromise;
 
           this._initPromise = new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            // まずバージョンを指定せずに開く。この開き方は upgrade を起こさないため、
+            // 他タブによるブロックも、コードより新しいDBに対する VersionError も
+            // 発生しない。スキーマが揃っていればそのまま使う。
+            let probe;
+            try {
+              probe = indexedDB.open(DB_NAME);
+            } catch (error) {
+              this._initPromise = null;
+              reject(`IndexedDBエラー: ${error}`);
+              return;
+            }
 
-            request.onerror = (event) => {
-              const error = event.target.error;
-              if (this._isVersionError(error)) {
-                this._openExistingDbAfterVersionError(
-                  error,
-                  resolve,
-                  reject,
-                );
+            probe.onerror = () => {
+              this._initPromise = null;
+              reject(`IndexedDBエラー: ${probe.error}`);
+            };
+
+            probe.onsuccess = (event) => {
+              const db = event.target.result;
+
+              if (this._isSchemaComplete(db)) {
+                const openedWithNewerVersion = db.version > DB_VERSION;
+                this._attachDatabaseHandlers(db, {
+                  openedWithNewerVersion,
+                  compatibilityWarning: openedWithNewerVersion
+                    ? `IndexedDBの既存バージョン(${db.version})が、このコードのDB_VERSION(${DB_VERSION})より新しいため、` +
+                      "スキーマ更新を行わずに互換モードで開きました。"
+                    : null,
+                });
+                this._initPromise = null;
+                resolve(state.db);
                 return;
               }
 
-              this._initPromise = null;
-              reject(`IndexedDBエラー: ${error}`);
-            };
-
-            request.onsuccess = (event) => {
-              this._attachDatabaseHandlers(event.target.result);
-              this._initPromise = null;
-              resolve(state.db);
-            };
-
-            request.onupgradeneeded = (event) => {
-              const db = event.target.result;
-              if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
-                db.createObjectStore(SETTINGS_STORE, { keyPath: "key" });
-              }
-              let chatStore;
-              if (!db.objectStoreNames.contains(CHATS_STORE)) {
-                chatStore = db.createObjectStore(CHATS_STORE, {
-                  keyPath: "id",
-                  autoIncrement: true,
-                });
-              } else {
-                chatStore = event.target.transaction.objectStore(CHATS_STORE);
-              }
-              if (
-                chatStore &&
-                !chatStore.indexNames.contains(CHAT_UPDATEDAT_INDEX)
-              ) {
-                chatStore.createIndex(CHAT_UPDATEDAT_INDEX, "updatedAt", {
-                  unique: false,
-                });
-              }
-              if (
-                chatStore &&
-                !chatStore.indexNames.contains(CHAT_CREATEDAT_INDEX)
-              ) {
-                chatStore.createIndex(CHAT_CREATEDAT_INDEX, "createdAt", {
-                  unique: false,
-                });
-              }
-              let imageChatStore;
-              if (!db.objectStoreNames.contains(IMAGE_CHATS_STORE)) {
-                imageChatStore = db.createObjectStore(IMAGE_CHATS_STORE, {
-                  keyPath: "id",
-                  autoIncrement: true,
-                });
-                imageChatStore.createIndex(CHAT_UPDATEDAT_INDEX, "updatedAt", {
-                  unique: false,
-                });
-              } else {
-                imageChatStore =
-                  event.target.transaction.objectStore(IMAGE_CHATS_STORE);
-              }
-              if (
-                imageChatStore &&
-                !imageChatStore.indexNames.contains(CHAT_CREATEDAT_INDEX)
-              ) {
-                imageChatStore.createIndex(CHAT_CREATEDAT_INDEX, "createdAt", {
-                  unique: false,
-                });
-              }
-              if (!db.objectStoreNames.contains(IMAGE_GEN_MEDIA_STORE)) {
-                db.createObjectStore(IMAGE_GEN_MEDIA_STORE, { keyPath: "id" });
-              }
+              // 足りないストア/インデックスがあるときだけ upgrade する。
+              // 既存DBの方が新しい場合でも upgrade できるようにバージョンを決める。
+              const upgradeVersion = Math.max(DB_VERSION, db.version + 1);
+              db.close();
+              this._openWithUpgrade(upgradeVersion, resolve, reject);
             };
           });
           return this._initPromise;
@@ -19561,6 +19729,19 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             return `${String(d.getFullYear()).slice(-2)}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
           }
         },
+        formatRelativeDate(timestamp) {
+          if (!timestamp) return "";
+          const diff = Date.now() - timestamp;
+          if (diff < 0) return this.formatDate(timestamp);
+          const min = Math.floor(diff / 60000);
+          if (min < 1) return "たった今";
+          if (min < 60) return `${min}分前`;
+          const hour = Math.floor(min / 60);
+          if (hour < 24) return `${hour}時間前`;
+          const day = Math.floor(hour / 24);
+          if (day < 7) return `${day}日前`;
+          return this.formatDate(timestamp);
+        },
         async renderHistoryList() {
           try {
             const chats = await dbUtils.getAllChats(
@@ -19585,6 +19766,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 li.classList.remove("js-history-item-template");
                 li.dataset.chatId = chat.id;
 
+                const snippetEl = li.querySelector(".history-item-snippet");
                 if (
                   state.settings.showHistoryPreviewBubble &&
                   chat.messages &&
@@ -19595,13 +19777,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                     lastMsg &&
                     (lastMsg.role === "user" || lastMsg.role === "model")
                   ) {
-                    const previewLayer = document.createElement("div");
-                    previewLayer.classList.add(
-                      "history-item-preview-layer",
-                      lastMsg.role === "user" ? "align-right" : "align-left",
-                    );
-                    const bubble = document.createElement("div");
-                    bubble.classList.add("history-preview-bubble");
                     let previewText = lastMsg.content;
                     if (
                       !previewText &&
@@ -19614,9 +19789,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                     }
                     if (previewText.length > 300)
                       previewText = previewText.substring(0, 300) + "...";
-                    bubble.textContent = previewText;
-                    previewLayer.appendChild(bubble);
-                    li.insertBefore(previewLayer, li.firstChild);
+                    snippetEl.textContent = `${lastMsg.role === "user" ? "あなた: " : "AI: "}${previewText}`;
+                    snippetEl.classList.remove("hidden");
                   }
                 }
 
@@ -19625,13 +19799,31 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 titleEl.textContent = titleText;
                 titleEl.title = titleText;
 
-                li.querySelector(".created-date").textContent =
-                  `作成: ${this.formatDate(chat.createdAt)}`;
-                li.querySelector(".updated-date").textContent =
-                  `更新: ${this.formatDate(chat.updatedAt)}`;
+                const dateEl = li.querySelector(".updated-date");
+                dateEl.textContent = this.formatRelativeDate(chat.updatedAt);
+                dateEl.title = `作成: ${this.formatDate(chat.createdAt)}\n更新: ${this.formatDate(chat.updatedAt)}`;
+
+                const moreBtn = li.querySelector(".js-more-btn");
+                moreBtn.onclick = (e) => {
+                  e.stopPropagation();
+                  const willOpen = !li.classList.contains("actions-open");
+                  elements.historyList
+                    .querySelectorAll(".history-item.actions-open")
+                    .forEach((other) => {
+                      other.classList.remove("actions-open");
+                      other
+                        .querySelector(".js-more-btn")
+                        ?.setAttribute("aria-expanded", "false");
+                    });
+                  li.classList.toggle("actions-open", willOpen);
+                  moreBtn.setAttribute("aria-expanded", String(willOpen));
+                };
 
                 li.onclick = (event) => {
-                  if (!event.target.closest(".history-item-actions button")) {
+                  if (
+                    !event.target.closest(".history-item-actions button") &&
+                    !event.target.closest(".js-more-btn")
+                  ) {
                     appLogic.loadChat(chat.id);
                     this.showScreen("chat");
                   }
@@ -22127,39 +22319,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             }
           });
         },
-        async showInitializationFailureDialog(message) {
-          const dialog = byId("initFailureDialog");
-          const dialogMessage = byId("initFailureMessage");
-          const exportBtn = byId("initFailureExportBtn");
-          const okBtn = byId("initFailureOkBtn");
-          const copyBtn = byId("initFailureCopyBtn");
-
-          dialogMessage.textContent = message;
-
-          const newExportBtn = exportBtn.cloneNode(true);
-          exportBtn.parentNode.replaceChild(newExportBtn, exportBtn);
-          const newOkBtn = okBtn.cloneNode(true);
-          okBtn.parentNode.replaceChild(newOkBtn, okBtn);
-          const newCopyBtn = copyBtn.cloneNode(true);
-          copyBtn.parentNode.replaceChild(newCopyBtn, copyBtn);
-
-          newCopyBtn.onclick = async () => {
-            try {
-              await navigator.clipboard.writeText(message);
-              const originalText = newCopyBtn.textContent;
-              newCopyBtn.textContent = "完了";
-              setTimeout(() => {
-                newCopyBtn.textContent = originalText;
-              }, 1500);
-            } catch (e) {}
-          };
-
-          newExportBtn.onclick = () => dialog.close("export");
-          newOkBtn.onclick = () => dialog.close("ok");
-
-          return this.showCustomDialog(dialog, newOkBtn);
-        },
-
         updateAttachmentBadgeVisibility() {
           const hasAttachments = state.pendingAttachments.length > 0;
           elements.attachFileBtn.classList.toggle(
@@ -22820,7 +22979,11 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
         },
         toggleAllSettingsCheckboxes(checked) {
-          const checkboxes = qsa('#settings-screen input[type="checkbox"]');
+          // data-no-bulk-toggle が付いた項目（セキュリティ設定・非推奨設定）は
+          // 一括操作の巻き添えで変更されないよう除外する
+          const checkboxes = qsa(
+            '#settings-screen input[type="checkbox"]:not([data-no-bulk-toggle])',
+          );
           checkboxes.forEach((cb) => {
             if (cb.checked !== checked) {
               cb.checked = checked;
@@ -23482,97 +23645,253 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               window.initializationFailure(error);
             }
 
-            const failureMessage = `アプリの初期化に失敗しました: ${
-              error.message || error
-            }`;
-            let userChoice = "ok";
-            try {
-              userChoice =
-                await uiUtils.showInitializationFailureDialog(failureMessage);
-            } catch (dialogError) {
-              console.warn(
-                "Initialization failure dialog could not be shown:",
-                dialogError,
-              );
-            }
-            if (userChoice === "export") {
-              await this.safeExportAllSessions();
-            }
             await this._showFatalErrorScreen(error);
           }
         },
         async _showFatalErrorScreen(error) {
+          // この画面が出ている間は、遅れて届く例外でグローバルの自動復旧
+          // (キャッシュ/ストレージ消去＋リロード) が走らないようにする。
+          if (typeof errorRecovery !== "undefined") {
+            errorRecovery.suppressAutoRecovery = true;
+          }
+
+          try {
+            await this._renderFatalErrorScreen(error);
+          } catch (renderError) {
+            console.error(
+              "Fatal error screen could not be rendered:",
+              renderError,
+            );
+            this._showFatalErrorFallback(error);
+          }
+        },
+        _showFatalErrorFallback(error) {
+          try {
+            const container = document.createElement("div");
+            container.style.cssText =
+              "padding:20px;font-family:sans-serif;color:#111;background:#fff;";
+
+            const heading = document.createElement("h2");
+            heading.textContent = "アプリの起動に失敗しました。";
+            container.appendChild(heading);
+
+            const description = document.createElement("p");
+            description.textContent =
+              "復旧画面の表示にも失敗しました。下のボタンで再読み込みを試すか、ブラウザの設定からこのサイトのデータを削除してください。";
+            container.appendChild(description);
+
+            const detail = document.createElement("p");
+            detail.style.cssText =
+              "font-size:12px;word-break:break-all;color:#555;";
+            detail.textContent = `エラー詳細: ${
+              (error && error.message) || String(error)
+            }`;
+            container.appendChild(detail);
+
+            const reloadButton = document.createElement("button");
+            reloadButton.textContent = "🔄 再読み込み";
+            reloadButton.style.cssText =
+              "padding:10px 16px;font-size:14px;cursor:pointer;";
+            reloadButton.addEventListener("click", () => {
+              if (typeof recoveryUtils !== "undefined") {
+                recoveryUtils.reload("fatal-screen-fallback");
+              } else {
+                window.location.reload();
+              }
+            });
+            container.appendChild(reloadButton);
+
+            document.body.replaceChildren(container);
+          } catch (fallbackError) {
+            alert(
+              `アプリの起動に失敗しました。\n\nエラー詳細: ${
+                (error && error.message) || String(error)
+              }`,
+            );
+          }
+        },
+        async _renderFatalErrorScreen(error) {
           const errorHtml = `
-                <div style="padding: 20px; text-align: center; color: var(--text-primary); height: 100%; overflow-y: auto; display: flex; flex-direction: column; justify-content: center;">
-                    <div>
-                        <h2 style="color: var(--text-error); margin-bottom: 15px;">アプリの起動に失敗しました。</h2>
-                        <p style="font-size: 14px; margin-bottom: 25px;">
-                            IndexedDBへの書き込みや読み込みが正常に機能しない、あるいはデータが破損している可能性があります。<br>
-                            以下のボタンで問題を解決できる場合があります。起動処理が途中で止まった場合は自動復旧も試みますが、この画面が表示された後は手動操作を優先します。
-                        </p>
-                        <div style="display: flex; flex-direction: column; gap: 20px; max-width: 450px; margin: 0 auto; text-align: left;">
-                            
-                            <div>
-                                <button id="recovery-export-all-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-gold); color: var(--text-button-gold); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">全出力 (全セッションをJSON出力)</button>
-                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
-                                    ※ アプリが起動できなくても、履歴データが無事な場合に全チャット履歴をファイルとして出力します。
-                                </p>
-                            </div>
+            <style>
+              #fatal-screen {
+                height: 100%;
+                overflow-y: auto;
+                display: flex;
+                justify-content: center;
+                align-items: flex-start;
+                padding: 32px 16px;
+                background: var(--bg-secondary);
+                color: var(--text-primary);
+                font-size: 14px;
+                line-height: 1.6;
+                -webkit-text-size-adjust: 100%;
+              }
+              #fatal-screen .fs-card {
+                width: 100%;
+                max-width: 440px;
+                background: var(--bg-primary);
+                border: 1px solid var(--border-secondary);
+                border-radius: 12px;
+                padding: 28px 24px;
+              }
+              #fatal-screen .fs-icon { font-size: 32px; line-height: 1; }
+              #fatal-screen h1 {
+                font-size: 19px;
+                font-weight: 600;
+                margin: 12px 0 8px;
+              }
+              #fatal-screen .fs-lead {
+                margin: 0 0 20px;
+                color: var(--text-secondary);
+              }
+              #fatal-screen .fs-btn {
+                display: block;
+                width: 100%;
+                padding: 11px 14px;
+                margin-bottom: 8px;
+                border: 1px solid transparent;
+                border-radius: 8px;
+                font-size: 14px;
+                font-family: inherit;
+                cursor: pointer;
+                background: none;
+                color: var(--text-primary);
+              }
+              #fatal-screen .fs-btn:disabled { opacity: 0.5; cursor: default; }
+              #fatal-screen .fs-btn-primary {
+                background: var(--bg-button);
+                color: var(--text-light);
+                font-weight: 600;
+              }
+              #fatal-screen .fs-btn-secondary {
+                border-color: var(--border-primary);
+              }
+              #fatal-screen .fs-btn-danger {
+                border-color: var(--bg-button-delete);
+                color: var(--bg-button-delete);
+              }
+              #fatal-screen .fs-status {
+                min-height: 20px;
+                margin: 4px 0 0;
+                font-size: 12px;
+                color: var(--text-secondary);
+              }
+              #fatal-screen .fs-details {
+                border-top: 1px solid var(--border-tertiary);
+                padding: 12px 0 4px;
+                margin-top: 12px;
+              }
+              #fatal-screen .fs-details + .fs-details { margin-top: 0; }
+              #fatal-screen summary {
+                cursor: pointer;
+                font-size: 13px;
+                color: var(--text-secondary);
+                list-style-position: outside;
+              }
+              #fatal-screen .fs-details[open] > summary { margin-bottom: 10px; }
+              #fatal-screen .fs-note {
+                margin: 0 0 10px;
+                font-size: 12px;
+                color: var(--text-secondary);
+              }
+              #fatal-screen pre {
+                margin: 0 0 8px;
+                padding: 10px;
+                background: var(--bg-secondary);
+                border-radius: 6px;
+                font-size: 11.5px;
+                white-space: pre-wrap;
+                word-break: break-all;
+                max-height: 200px;
+                overflow-y: auto;
+              }
+              #fatal-screen #recovery-console-log {
+                height: 120px;
+                overflow-y: auto;
+                margin-bottom: 8px;
+              }
+              #fatal-screen .fs-console-row { display: flex; gap: 6px; }
+              #fatal-screen #recovery-console-input {
+                flex: 1;
+                min-width: 0;
+                padding: 8px;
+                border: 1px solid var(--border-primary);
+                border-radius: 6px;
+                background: var(--bg-input);
+                color: var(--text-primary);
+                font-family: monospace;
+                font-size: 12px;
+              }
+              #fatal-screen .fs-btn-inline {
+                width: auto;
+                margin: 0;
+                padding: 8px 14px;
+                border-color: var(--border-primary);
+              }
+            </style>
+            <div id="fatal-screen">
+              <div class="fs-card">
+                <div class="fs-icon">⚠️</div>
+                <h1>アプリを起動できませんでした</h1>
+                <p class="fs-lead">
+                  保存データの読み込みに問題が起きている可能性があります。まずは修復を試してください。チャット履歴と設定は消えません。
+                </p>
 
-                            <div>
-                                <button id="recovery-update-app-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-update); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">アプリを更新 (キャッシュクリア)</button>
-                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
-                                    ※ サーバー側のhtmlファイルなどはブラウザにキャッシュされるため、このボタンで明示的にサーバーから再取得しない限り更新されない。
-                                </p>
-                            </div>
+                <button id="recovery-force-reload-btn" class="fs-btn fs-btn-primary">再起動して修復する</button>
+                <button id="recovery-export-all-btn" class="fs-btn fs-btn-secondary">チャット履歴をバックアップ</button>
+                <p id="recovery-status" class="fs-status"></p>
 
-                            <div>
-                                <button id="recovery-force-reload-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-edit); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">🔄 強制復旧 (キャッシュクリア&リロード)</button>
-                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
-                                    ※ アプリが不安定な場合に使用。全キャッシュをクリアして強制的に再起動します。「アプリを更新」の処理に加えて、ブラウザが保持しているこの「GeminiPWA」アプリに関連する他の種類のキャッシュも可能な限り削除します。<br>※ ユーザーデータ（チャット履歴・設定）は保持されます。
-                                </p>
-                            </div>
+                <details class="fs-details">
+                  <summary>エラー詳細</summary>
+                  <pre id="recovery-error-details"></pre>
+                  <button id="recovery-copy-error-btn" class="fs-btn fs-btn-inline">コピー</button>
+                </details>
 
-                            <div>
-                                <button id="recovery-clear-history-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-edit); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">全履歴削除</button>
-                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
-                                    ※ ブラウザに保存されているチャット履歴を全て削除します。設定は保持されます。
-                                </p>
-                            </div>
+                <details class="fs-details">
+                  <summary>データを削除して復旧する</summary>
+                  <p class="fs-note">
+                    上の修復で直らない場合のみ使用してください。削除したデータは元に戻せません。先にバックアップを取ることを強くおすすめします。
+                  </p>
+                  <button id="recovery-clear-history-btn" class="fs-btn fs-btn-danger">チャット履歴をすべて削除（設定は保持）</button>
+                  <button id="recovery-clear-data-btn" class="fs-btn fs-btn-danger">すべてのデータを削除（履歴・設定）</button>
+                </details>
 
-                            <div>
-                                <button id="recovery-clear-data-btn" style="width: 100%; padding: 10px; background-color: var(--bg-button-delete); color: var(--text-light); border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">⚠⚠⚠全データクリア (履歴と設定)⚠⚠⚠</button>
-                                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 5px;">
-                                    ※ ブラウザに保存されている設定や履歴を全て削除。<br>！！間違えて押そうとしていないか注意！！
-                                </p>
-                            </div>
-                            
-                        </div>
-                        <p style="font-size: 12px; margin-top: 30px; color: var(--text-secondary); max-width: 600px; margin-left: auto; margin-right: auto; word-wrap: break-word;">エラー詳細: <span id="recovery-error-details"></span></p>
-                        <p id="recovery-status" style="font-size: 12px; min-height: 18px; margin-top: 8px; color: var(--text-secondary);"></p>
-                        <div style="margin-top: 20px; max-width: 600px; margin-left: auto; margin-right: auto; text-align: left; background: rgba(0,0,0,0.8); border: 1px solid #0ff; padding: 10px; border-radius: 5px;">
-                            <div id="recovery-console-log" style="height: 100px; overflow-y: auto; color: #0f0; font-family: monospace; font-size: 11px; margin-bottom: 5px; white-space: pre-wrap; word-break: break-all;">[Recovery Console]
-Available commands / objects:
-- window.location.reload()
-- localStorage.clear()
-- indexedDB.deleteDatabase('GeminiPWA_DB')
-- state, dbUtils, appLogic, uiUtils, recoveryUtils, errorRecovery
-</div>
-                            <div style="display: flex; gap: 5px;">
-                                <input type="text" id="recovery-console-input" style="flex-grow: 1; background: #000; color: #0f0; border: 1px solid #0ff; padding: 5px; font-family: monospace; font-size: 11px;" placeholder="JavaScriptを入力...">
-                                <button id="recovery-console-btn" style="background: #004444; color: #0ff; border: 1px solid #0ff; padding: 5px 10px; cursor: pointer; font-size: 11px;">実行</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
+                <details class="fs-details">
+                  <summary>開発者コンソール</summary>
+                  <pre id="recovery-console-log">利用可能: state, dbUtils, appLogic, uiUtils, recoveryUtils, errorRecovery
+</pre>
+                  <div class="fs-console-row">
+                    <input type="text" id="recovery-console-input" placeholder="JavaScriptを入力..." />
+                    <button id="recovery-console-btn" class="fs-btn fs-btn-inline">実行</button>
+                  </div>
+                </details>
+              </div>
+            </div>
+          `;
 
           elements.appContainer.innerHTML = errorHtml;
 
+          const errorText =
+            (error && (error.stack || error.message)) || String(error);
           const errorDetailsEl = byId("recovery-error-details");
           if (errorDetailsEl) {
-            errorDetailsEl.textContent = error.message || String(error);
+            errorDetailsEl.textContent = errorText;
           }
+          byId("recovery-copy-error-btn").addEventListener(
+            "click",
+            async (e) => {
+              const button = e.currentTarget;
+              try {
+                await navigator.clipboard.writeText(errorText);
+                button.textContent = "コピーしました";
+                setTimeout(() => {
+                  button.textContent = "コピー";
+                }, 1500);
+              } catch (copyError) {
+                button.textContent = "コピーできません";
+              }
+            },
+          );
 
           const setRecoveryStatus = (message, isError = false) => {
             const statusEl = byId("recovery-status");
@@ -23602,39 +23921,26 @@ Available commands / objects:
             }
           };
 
-          byId("recovery-export-all-btn").addEventListener("click", () =>
-            this.safeExportAllSessions(),
-          );
-          byId("recovery-update-app-btn").addEventListener("click", () => {
-            if (
-              !confirm(
-                "アプリのキャッシュをクリアしてサーバーから再取得しますか？\n\nチャット履歴と設定は保持されます。",
-              )
-            ) {
-              return;
+          byId("recovery-export-all-btn").addEventListener("click", async () => {
+            const button = byId("recovery-export-all-btn");
+            if (button) button.disabled = true;
+            setRecoveryStatus("全セッションを出力しています...");
+            try {
+              const exported = await this.safeExportAllSessions(true);
+              setRecoveryStatus(
+                exported
+                  ? "出力処理が完了しました。"
+                  : "出力に失敗しました。",
+                !exported,
+              );
+            } finally {
+              if (button) button.disabled = false;
             }
-
-            runRecoveryAction(
-              "recovery-update-app-btn",
-              "キャッシュをクリアして再読み込みしています...",
-              async () => {
-                await recoveryUtils.clearCaches();
-                recoveryUtils.reload("update-app");
-              },
-            );
           });
           byId("recovery-force-reload-btn").addEventListener("click", () => {
-            if (
-              !confirm(
-                "強制復旧を実行しますか？\n\n全キャッシュをクリアし、復旧用の一時状態を削除して再起動します。チャット履歴と設定は保持されます。",
-              )
-            ) {
-              return;
-            }
-
             runRecoveryAction(
               "recovery-force-reload-btn",
-              "強制復旧を実行しています...",
+              "キャッシュをクリアして再起動しています...",
               async () => {
                 if (typeof errorRecovery !== "undefined") {
                   errorRecovery.clearStorageSelectively();
@@ -24100,7 +24406,10 @@ Available commands / objects:
           }
           if (elements.debugExpandAllBtn) {
             elements.debugExpandAllBtn.addEventListener("click", () => {
+              // 取り扱い注意パネル配下は開いたまま永続化されると保護が無効になるため除外
+              const dangerZone = byId("settings-group-danger-zone-details");
               qsa("#settings-screen details").forEach((el) => {
+                if (dangerZone && dangerZone.contains(el)) return;
                 el.open = true;
                 if (el.id)
                   state.settings.settingsUIDetailsOpenStates[el.id] = true;
@@ -28150,7 +28459,9 @@ Available commands / objects:
                 .closest(".history-item")
                 ?.querySelector(".updated-date");
               if (dateElement)
-                dateElement.textContent = `更新: ${uiUtils.formatDate(Date.now())}`;
+                dateElement.textContent = dateElement.closest("#history-screen")
+                  ? uiUtils.formatRelativeDate(Date.now())
+                  : `更新: ${uiUtils.formatDate(Date.now())}`;
 
               if (state.currentChatId === chatId) {
                 uiUtils.updateChatTitle(finalTitle);
@@ -30405,19 +30716,21 @@ Available commands / objects:
           }
           return { messages };
         },
-        async safeExportAllSessions() {
+        async safeExportAllSessions(skipConfirm = false) {
           try {
-            await this.exportAllSessions();
+            await this.exportAllSessions(skipConfirm);
+            return true;
           } catch (error) {
             alert(
               `エクスポートに失敗しました。データベースにアクセスできない可能性があります。\n\nエラー詳細: ${error.message}`,
             );
+            return false;
           }
         },
 
-        async exportAllSessions() {
+        async exportAllSessions(skipConfirm = false) {
           let confirmed = true;
-          if (byId("history-screen") && !qs("#initFailureDialog[open]")) {
+          if (!skipConfirm && byId("history-screen")) {
             confirmed = await uiUtils.showCustomConfirm(
               "全てのセッションを1つのJSONファイルとしてエクスポートしますか？",
             );
@@ -37481,6 +37794,7 @@ Available commands / objects:
         maxErrors: 3,
         lastErrorTime: 0,
         isRecovering: false,
+        suppressAutoRecovery: false,
         errorLog: [],
         maxLogSize: 20,
 
@@ -37580,15 +37894,24 @@ Available commands / objects:
 
           this.logError(type, errorInfo);
 
-          if (
-            typeof consoleMonitor !== "undefined" &&
-            consoleMonitor._enabled
-          ) {
-            let msg =
-              errorInfo.message ||
-              errorInfo.reason ||
-              JSON.stringify(errorInfo);
-            consoleMonitor.log(`${type}: ${msg}`, "error");
+          // パネルが閉じていてもバッファに残すため record を使う
+          if (window.consoleMonitor) {
+            const detail = errorInfo.message || errorInfo.reason;
+            const lines = [
+              `${type}: ${window.consoleMonitor._formatValue(
+                detail !== undefined && detail !== null ? detail : errorInfo,
+              )}`,
+            ];
+            if (errorInfo.filename) {
+              lines.push(
+                `  at ${errorInfo.filename}:${errorInfo.lineno}:${errorInfo.colno}`,
+              );
+            }
+            const stack =
+              (errorInfo.error && errorInfo.error.stack) ||
+              (errorInfo.reason && errorInfo.reason.stack);
+            if (stack) lines.push(String(stack));
+            window.consoleMonitor.record(lines.join("\n"), "error");
           }
 
           const isCriticalError = this.isCriticalError(errorInfo);
@@ -37616,7 +37939,7 @@ Available commands / objects:
         },
 
         async triggerForceReload(errorType, errorInfo, isCritical) {
-          if (this.isRecovering) return;
+          if (this.isRecovering || this.suppressAutoRecovery) return;
           this.isRecovering = true;
 
           const reason = isCritical
@@ -37746,6 +38069,7 @@ Available commands / objects:
         },
 
         manualRecovery() {
+          this.suppressAutoRecovery = false;
           this.triggerForceReload(
             "Manual Recovery",
             { reason: "User triggered" },
@@ -39036,13 +39360,18 @@ Available commands / objects:
       const perfMonitor = {
         _bootMarks: [],
         _lastBootMarkTime: 0,
+        _maxBootMarks: 100,
         recordBootMark(label) {
           const now = performance.now();
-          if (this._lastBootMarkTime !== 0)
+          if (this._lastBootMarkTime !== 0) {
             this._bootMarks.push({
               label,
               duration: now - this._lastBootMarkTime,
             });
+            // RenderChat系はチャットを開く度に呼ばれるので上限を設ける
+            if (this._bootMarks.length > this._maxBootMarks)
+              this._bootMarks.shift();
+          }
           this._lastBootMarkTime = now;
         },
         _enabled: false,
@@ -39059,9 +39388,7 @@ Available commands / objects:
         _clsObserver: null,
         _idbOpsCount: 0,
         _startTime: Date.now(),
-        _isDragging: false,
-        _dragOffsetX: 0,
-        _dragOffsetY: 0,
+        _lastRafTime: 0,
         _droppedFrames: 0,
         _spikes: [],
         _lastMemoryUsed: 0,
@@ -39119,15 +39446,12 @@ Available commands / objects:
         },
 
         _patchIdbOps() {
-          const originalSaveSetting = dbUtils.saveSetting.bind(dbUtils);
-          dbUtils.saveSetting = async (...args) => {
+          // saveSetting/saveChatだけを数えると読み取り系や画像・動画履歴の操作が
+          // 丸ごと漏れるため、全操作が通る _getStore を1箇所だけラップする
+          const originalGetStore = dbUtils._getStore.bind(dbUtils);
+          dbUtils._getStore = (...args) => {
             this._idbOpsCount++;
-            return originalSaveSetting(...args);
-          };
-          const originalSaveChat = dbUtils.saveChat.bind(dbUtils);
-          dbUtils.saveChat = async (...args) => {
-            this._idbOpsCount++;
-            return originalSaveChat(...args);
+            return originalGetStore(...args);
           };
         },
 
@@ -39142,12 +39466,9 @@ Available commands / objects:
           if (this._spikes.length > 5) this._spikes.pop();
           this._updateSpikeLogDisplay();
 
-          // Console Monitor が有効ならそちらにも流す
-          if (
-            typeof consoleMonitor !== "undefined" &&
-            consoleMonitor._enabled
-          ) {
-            consoleMonitor.log(
+          // Console Monitor にも流す(閉じていてもバッファには残す)
+          if (window.consoleMonitor) {
+            window.consoleMonitor.record(
               `[SPIKE] ${message}`,
               level === "critical" ? "error" : "warn",
             );
@@ -39162,12 +39483,15 @@ Available commands / objects:
             container.style.color = "#0f0";
             return;
           }
-          container.innerHTML = this._spikes
-            .map((s) => {
-              const color = s.level === "critical" ? "#f55" : "#fd0";
-              return `<div style="color:${color}; margin-bottom:2px;">[${s.time}] ${s.message}</div>`;
-            })
-            .join("");
+          container.innerHTML = "";
+          container.style.color = "";
+          this._spikes.forEach((s) => {
+            const row = document.createElement("div");
+            row.style.color = s.level === "critical" ? "#f55" : "#fd0";
+            row.style.marginBottom = "2px";
+            row.textContent = `[${s.time}] ${s.message}`;
+            container.appendChild(row);
+          });
         },
 
         start() {
@@ -39229,13 +39553,24 @@ Available commands / objects:
         },
 
         _startFpsCounter() {
-          let lastTime = performance.now();
+          this._lastRafTime = performance.now();
           const tick = (now) => {
             if (!this._enabled) return;
-            const frameTime = now - lastTime;
-            this._lastFrameTime = frameTime;
-            lastTime = now;
+            const frameTime = now - this._lastRafTime;
+            this._lastRafTime = now;
             this._frameCount++;
+
+            // タブ非表示中はrAFが止まるため、復帰直後の巨大なframeTimeは
+            // 実際のjankではない。計測にもスパイクにも算入しない。
+            if (frameTime > 1000) {
+              // FPS集計窓もリセットしないと復帰直後に異常な低FPSが出る
+              this._frameCount = 0;
+              this._lastFpsTime = now;
+              this._rafId = requestAnimationFrame(tick);
+              return;
+            }
+
+            this._lastFrameTime = frameTime;
 
             // グラフィック負荷のスパイク検知 (33ms = 30fps割れ)
             if (frameTime > 33) {
@@ -39274,22 +39609,37 @@ Available commands / objects:
         },
 
         _startObservers() {
-          if (typeof PerformanceObserver !== "undefined") {
+          if (typeof PerformanceObserver === "undefined") return;
+
+          // buffered: true でパネルを開く前(=起動中)に発生した分も拾う。
+          // これが無いと起動時のlongtask/layout-shiftが全て失われる。
+          const observe = (observer, entryType) => {
             try {
-              this._longTaskObserver = new PerformanceObserver((list) => {
-                this._longTaskCount += list.getEntries().length;
-              });
-              this._longTaskObserver.observe({ entryTypes: ["longtask"] });
-            } catch (e) {}
-            try {
-              this._clsObserver = new PerformanceObserver((list) => {
-                for (const entry of list.getEntries()) {
-                  if (!entry.hadRecentInput) this._clsValue += entry.value;
-                }
-              });
-              this._clsObserver.observe({ entryTypes: ["layout-shift"] });
-            } catch (e) {}
-          }
+              observer.observe({ type: entryType, buffered: true });
+              return true;
+            } catch (e) {
+              try {
+                observer.observe({ entryTypes: [entryType] });
+                return true;
+              } catch (e2) {
+                return false;
+              }
+            }
+          };
+
+          this._longTaskObserver = new PerformanceObserver((list) => {
+            this._longTaskCount += list.getEntries().length;
+          });
+          if (!observe(this._longTaskObserver, "longtask"))
+            this._longTaskObserver = null;
+
+          this._clsObserver = new PerformanceObserver((list) => {
+            for (const entry of list.getEntries()) {
+              if (!entry.hadRecentInput) this._clsValue += entry.value;
+            }
+          });
+          if (!observe(this._clsObserver, "layout-shift"))
+            this._clsObserver = null;
         },
 
         _updateFpsDisplay(fps) {
@@ -39458,7 +39808,8 @@ Available commands / objects:
           }
 
           const idbEl = byId("perf-idb");
-          if (idbEl) idbEl.textContent = `${this._idbOpsCount} ops since start`;
+          if (idbEl)
+            idbEl.textContent = `${this._idbOpsCount} tx since start`;
 
           const upEl = byId("perf-uptime");
           if (upEl) {
@@ -39472,9 +39823,16 @@ Available commands / objects:
       };
       const consoleMonitor = {
         _enabled: false,
-        _isDragging: false,
-        _dragOffsetX: 0,
-        _dragOffsetY: 0,
+        // パネルが閉じていても記録し続けるリングバッファ。
+        // 「エラーが出た後にコンソールを開く」で過去ログを追えるようにするため。
+        _buffer: [],
+        _maxBuffer: 300,
+        _maxEntries: 500,
+        _history: [],
+        _historyIndex: -1,
+        _groupDepth: 0,
+        _filter: null,
+        _hooked: false,
         get panel() {
           return byId("console-monitor-panel");
         },
@@ -39512,6 +39870,14 @@ Available commands / objects:
               }
             });
 
+          const copyBtn = byId("console-copy-btn");
+          if (copyBtn)
+            copyBtn.addEventListener("click", () => this.copyLogs());
+
+          const filterBtn = byId("console-filter-btn");
+          if (filterBtn)
+            filterBtn.addEventListener("click", () => this.toggleFilter());
+
           const submitBtn = byId("console-submit-btn");
           const inputField = byId("console-input");
 
@@ -39519,31 +39885,120 @@ Available commands / objects:
             submitBtn.addEventListener("click", () =>
               this.executeCommand(inputField.value),
             );
-            inputField.addEventListener("keypress", (e) => {
-              if (e.key === "Enter") {
+            inputField.addEventListener("keydown", (e) => {
+              // IME変換確定のEnterで誤送信しないようにする
+              if (e.key === "Enter" && !e.isComposing) {
                 e.preventDefault();
                 this.executeCommand(inputField.value);
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                this._recallHistory(1);
+              } else if (e.key === "ArrowDown") {
+                e.preventDefault();
+                this._recallHistory(-1);
               }
             });
           }
 
           this._initDrag();
+          this._hookConsole();
+        },
 
-          const origError = console.error;
-          console.error = (...args) => {
-            origError(...args);
-            if (this._enabled) this.log(args.join(" "), "error");
+        _hookConsole() {
+          if (this._hooked) return;
+          this._hooked = true;
+
+          const levelMap = {
+            log: "normal",
+            info: "info",
+            debug: "info",
+            warn: "warn",
+            error: "error",
+            trace: "warn",
           };
-          const origWarn = console.warn;
-          console.warn = (...args) => {
-            origWarn(...args);
-            if (this._enabled) this.log(args.join(" "), "warn");
+
+          Object.keys(levelMap).forEach((method) => {
+            const orig = console[method]
+              ? console[method].bind(console)
+              : () => {};
+            console[method] = (...args) => {
+              orig(...args);
+              // ここで例外を出すとconsole自体が壊れるので必ず握り潰す
+              try {
+                this.record(this._formatArgs(args), levelMap[method]);
+              } catch (e) {
+                /* noop */
+              }
+            };
+          });
+
+          ["group", "groupCollapsed"].forEach((method) => {
+            const orig = console[method]
+              ? console[method].bind(console)
+              : () => {};
+            console[method] = (...args) => {
+              orig(...args);
+              try {
+                this.record(`▼ ${this._formatArgs(args)}`, "group");
+                this._groupDepth++;
+              } catch (e) {
+                /* noop */
+              }
+            };
+          });
+
+          const origGroupEnd = console.groupEnd
+            ? console.groupEnd.bind(console)
+            : () => {};
+          console.groupEnd = () => {
+            origGroupEnd();
+            if (this._groupDepth > 0) this._groupDepth--;
           };
-          const origLog = console.log;
-          console.log = (...args) => {
-            origLog(...args);
-            if (this._enabled) this.log(args.join(" "), "info");
-          };
+        },
+
+        _formatArgs(args) {
+          return args.map((a) => this._formatValue(a)).join(" ");
+        },
+
+        _formatValue(value) {
+          if (typeof value === "string") return value;
+          if (value instanceof Error) {
+            return value.stack || `${value.name}: ${value.message}`;
+          }
+          if (value === null || typeof value !== "object") {
+            return String(value);
+          }
+          try {
+            const seen = new WeakSet();
+            const json = JSON.stringify(
+              value,
+              (key, val) => {
+                if (typeof val === "object" && val !== null) {
+                  if (seen.has(val)) return "[Circular]";
+                  seen.add(val);
+                }
+                return val;
+              },
+              2,
+            );
+            if (json === undefined) return String(value);
+            return json.length > 2000 ? `${json.slice(0, 2000)}… (truncated)` : json;
+          } catch (e) {
+            return String(value);
+          }
+        },
+
+        _recallHistory(direction) {
+          const inputField = byId("console-input");
+          if (!inputField || this._history.length === 0) return;
+          const next = this._historyIndex + direction;
+          if (next < -1 || next >= this._history.length) return;
+          this._historyIndex = next;
+          inputField.value = next === -1 ? "" : this._history[next];
+          inputField.setSelectionRange(
+            inputField.value.length,
+            inputField.value.length,
+          );
         },
 
         _initDrag() {
@@ -39562,6 +40017,8 @@ Available commands / objects:
             const minBtn = byId("console-minimize-btn");
             if (minBtn) minBtn.textContent = "_";
           }
+          // 開く前に溜まっていたログを流し込む
+          this._rerender();
           this.log("Console initialized. Type /help for commands.", "cmd");
         },
 
@@ -39570,33 +40027,108 @@ Available commands / objects:
           if (this.panel) this.panel.classList.add("hidden");
         },
 
+        // 公開API: パネルが閉じていてもバッファには必ず残す
+        record(message, type = "normal") {
+          const entry = {
+            time: new Date().toLocaleTimeString("en-GB", {
+              hour12: false,
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+            }),
+            type,
+            depth: this._groupDepth,
+            message:
+              typeof message === "string"
+                ? message
+                : this._formatValue(message),
+          };
+
+          this._buffer.push(entry);
+          if (this._buffer.length > this._maxBuffer) this._buffer.shift();
+
+          if (this._enabled) this._render(entry);
+        },
+
         log(message, type = "normal") {
+          this.record(message, type);
+        },
+
+        _passesFilter(entry) {
+          if (!this._filter) return true;
+          return (
+            entry.type === "error" || entry.type === "warn" || entry.type === "cmd"
+          );
+        },
+
+        _render(entry) {
           const logArea = byId("console-log-area");
-          if (!logArea) return;
+          if (!logArea || !this._passesFilter(entry)) return;
 
-          const entry = document.createElement("div");
-          entry.className = `log-entry ${type}`;
-
-          const time = new Date().toLocaleTimeString("en-GB", {
-            hour12: false,
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          });
-
-          let displayMsg = message;
-          if (typeof message === "object") {
-            try {
-              displayMsg = JSON.stringify(message, null, 2);
-            } catch (e) {
-              displayMsg = String(message);
-            }
+          // 追記でDOMが無限に膨らむのを防ぐ
+          while (logArea.childElementCount >= this._maxEntries) {
+            logArea.removeChild(logArea.firstElementChild);
           }
 
-          entry.textContent = `[${time}] ${displayMsg}`;
-          logArea.appendChild(entry);
+          // 追記前に判定しないと常に最下部扱いになる
+          const stickToBottom =
+            logArea.scrollHeight - logArea.scrollTop - logArea.clientHeight < 24;
 
+          const el = document.createElement("div");
+          el.className = `log-entry ${entry.type}`;
+          if (entry.depth > 0) el.style.paddingLeft = `${entry.depth * 10}px`;
+          el.textContent = `[${entry.time}] ${entry.message}`;
+          logArea.appendChild(el);
+
+          if (stickToBottom) logArea.scrollTop = logArea.scrollHeight;
+        },
+
+        _rerender() {
+          const logArea = byId("console-log-area");
+          if (!logArea) return;
+          logArea.innerHTML = "";
+          const visible = this._buffer.filter((e) => this._passesFilter(e));
+          visible.slice(-this._maxEntries).forEach((entry) => {
+            const el = document.createElement("div");
+            el.className = `log-entry ${entry.type}`;
+            if (entry.depth > 0) el.style.paddingLeft = `${entry.depth * 10}px`;
+            el.textContent = `[${entry.time}] ${entry.message}`;
+            logArea.appendChild(el);
+          });
           logArea.scrollTop = logArea.scrollHeight;
+        },
+
+        toggleFilter() {
+          this._filter = this._filter ? null : "problems";
+          const btn = byId("console-filter-btn");
+          if (btn) btn.classList.toggle("active", !!this._filter);
+          this._rerender();
+          this.log(
+            this._filter
+              ? "Filter: errors and warnings only"
+              : "Filter: all messages",
+            "cmd",
+          );
+        },
+
+        async copyLogs() {
+          const text = this._buffer
+            .map((e) => `[${e.time}] ${"  ".repeat(e.depth)}${e.message}`)
+            .join("\n");
+          try {
+            await navigator.clipboard.writeText(text);
+            this.log(`Copied ${this._buffer.length} entries.`, "cmd");
+          } catch (e) {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            const ok = document.execCommand("copy");
+            document.body.removeChild(ta);
+            this.log(ok ? "Copied to clipboard." : "Copy failed.", ok ? "cmd" : "error");
+          }
         },
 
         async executeCommand(cmdString) {
@@ -39606,22 +40138,53 @@ Available commands / objects:
           const cmd = cmdString.trim();
           if (!cmd) return;
 
+          if (this._history[0] !== cmd) this._history.unshift(cmd);
+          if (this._history.length > 50) this._history.pop();
+          this._historyIndex = -1;
+
           this.log(`> ${cmd}`, "cmd");
 
           const parts = cmd.split(" ");
           const mainCmd = parts[0].toLowerCase();
 
           switch (mainCmd) {
-            case "/help":
+            case "/help": {
               this.log(
-                "Available commands:\n/clear - Clear console\n/clear-cache - Clear SW and browser cache, then reload\n/reset-data - Delete all IndexedDB data and reload\n/reload - Reload page\n/state - Dump current app state\n/eval [js] - Evaluate JavaScript (Use with caution)",
+                "Available commands:\n/clear - Clear console\n/copy - Copy all buffered logs to clipboard\n/filter - Toggle errors+warnings only\n/errors [n] - Show last n captured errors (default 5)\n/clear-cache - Clear SW and browser cache, then reload\n/reset-data - Delete all IndexedDB data and reload\n/reload - Reload page\n/state - Dump current app state\n/eval [js] - Evaluate JavaScript (Use with caution)\n(↑/↓ で入力履歴)",
                 "info",
               );
               break;
-            case "/clear":
+            }
+            case "/clear": {
+              this._buffer = [];
+              this._groupDepth = 0;
               const logArea = byId("console-log-area");
               if (logArea) logArea.innerHTML = "";
               break;
+            }
+            case "/copy": {
+              await this.copyLogs();
+              break;
+            }
+            case "/filter": {
+              this.toggleFilter();
+              break;
+            }
+            case "/errors": {
+              const limit = parseInt(parts[1], 10) || 5;
+              const log =
+                (typeof errorRecovery !== "undefined" &&
+                  errorRecovery.errorLog) ||
+                [];
+              if (log.length === 0) {
+                this.log("No errors recorded.", "info");
+              } else {
+                log.slice(0, limit).forEach((e) => {
+                  this.log(`${e.timestamp} [${e.type}] ${e.info}`, "error");
+                });
+              }
+              break;
+            }
             case "/clear-cache":
               this.log("Clearing cache and reloading...", "warn");
               if (typeof errorRecovery !== "undefined") {
@@ -39630,60 +40193,65 @@ Available commands / objects:
                 this.log("errorRecovery is not defined.", "error");
               }
               break;
-            case "/reset-data":
+            case "/reset-data": {
               this.log("Deleting all data...", "error");
               try {
                 await dbUtils.clearAllData();
                 localStorage.clear();
                 sessionStorage.clear();
-                window.location.reload(true);
+                window.location.reload();
               } catch (e) {
                 this.log(`Reset failed: ${e.message}`, "error");
               }
               break;
-            case "/reload":
-              window.location.reload(true);
+            }
+            case "/reload": {
+              window.location.reload();
               break;
-            case "/state":
+            }
+            case "/state": {
               this.log(
-                {
+                this._formatValue({
                   currentScreen: state.currentScreen,
                   currentChatId: state.currentChatId,
                   messageCount: state.currentMessages.length,
                   isSending: state.isSending,
                   apiProvider: state.settings.apiProvider,
-                },
+                }),
                 "info",
               );
               break;
-            case "/eval":
+            }
+            case "/eval": {
               const code = parts.slice(1).join(" ");
               if (!code) {
                 this.log("Usage: /eval [js code]", "warn");
                 break;
               }
               try {
-                const result = eval(code);
-                this.log(result, "normal");
+                this.log(this._formatValue(eval(code)), "normal");
               } catch (e) {
-                this.log(e.message, "error");
+                this.log(this._formatValue(e), "error");
               }
               break;
-            default:
+            }
+            default: {
               if (mainCmd.startsWith("/")) {
                 this.log(`Unknown command: ${mainCmd}. Type /help`, "warn");
               } else {
                 try {
-                  const result = eval(cmd);
-                  this.log(result, "normal");
+                  this.log(this._formatValue(eval(cmd)), "normal");
                 } catch (e) {
-                  this.log(e.message, "error");
+                  this.log(this._formatValue(e), "error");
                 }
               }
               break;
+            }
           }
         },
       };
+
+      window.consoleMonitor = consoleMonitor;
 
       tokenMonitor.init();
       consoleMonitor.init();
