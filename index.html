@@ -6556,11 +6556,16 @@
     ></script>
   </head>
 
-  <body>
+  <!-- DB名は起動ウォッチドッグ(下のIIFE)と本体スクリプトの両方が必要とする。
+       本体が構文エラーで起動できない場合でもIIFEは動かねばならず、本体の定数を
+       参照できない。両者が読める唯一の置き場としてここに持たせる。 -->
+  <body data-db-name="GeminiPWA_DB">
     <script>
       (function () {
         const TIMEOUT = 30000;
         const CACHE_CLEAR_TIMEOUT = 5000;
+        // 本体スクリプトと同じ値を body の data 属性から読む。詳細は body タグの注記。
+        const DB_NAME = document.body.dataset.dbName || "GeminiPWA_DB";
         const RECOVERY_ATTEMPT_KEY = "GeminiPWA_RecoveryAttempt";
         // 3段階の復旧を試し尽くしてもなお起動できない場合は、原因がデータでは
         // ないと判断して自動復旧そのものを止める。ここで打ち止めにしないと、
@@ -6574,9 +6579,14 @@
         if (Number.isNaN(recoveryAttempt)) recoveryAttempt = 0;
 
         let watchdogTimer = null;
-        let lastProgressAt = Date.now();
         let recoveryStarted = false;
         let blockedNotified = false;
+        // 起動完了後にウォッチドッグを再武装させないための打ち止めフラグ。
+        // initializationProgress は起動中の処理から呼ばれるが、その一部
+        // (loadChat 等) は起動後もユーザー操作で何度でも走る。フラグが無いと
+        // チャットを開くたびに30秒タイマーが張られ、次の進捗が来ないまま
+        // 期限切れになって「起動に失敗」扱いのキャッシュ削除＋リロードが走る。
+        let finished = false;
 
         const scheduleWatchdog = () => {
           clearTimeout(watchdogTimer);
@@ -6586,14 +6596,15 @@
         let lastProgressLabel = "起動開始";
 
         window.initializationProgress = function (label) {
+          if (finished) return;
           if (label) lastProgressLabel = String(label);
-          lastProgressAt = Date.now();
           scheduleWatchdog();
         };
 
         // 起動が「壊れている」のではなく「他タブ待ち」で止まっている状態。
         // キャッシュ削除やデータ消去は無意味なので、自動復旧は止めて待つ。
         window.initializationBlocked = function (message) {
+          if (finished) return;
           clearTimeout(watchdogTimer);
           if (blockedNotified) return;
           blockedNotified = true;
@@ -6601,6 +6612,7 @@
         };
 
         window.initializationSuccess = function () {
+          finished = true;
           clearTimeout(watchdogTimer);
           sessionStorage.removeItem(RECOVERY_ATTEMPT_KEY);
           // キャッシュバスト用のクエリを残したままにすると、以降の
@@ -6619,18 +6631,19 @@
         };
 
         window.initializationFailure = function () {
+          finished = true;
           clearTimeout(watchdogTimer);
           sessionStorage.removeItem(RECOVERY_ATTEMPT_KEY);
         };
 
         scheduleWatchdog();
 
+        // 進捗があれば scheduleWatchdog がタイマーを張り直すので、この関数に
+        // 到達した時点で「直近 TIMEOUT ms のあいだ進捗が無かった」は確定して
+        // いる(setTimeout は早発火せず、遅発火するだけ)。経過時間の再確認は
+        // 不要なので置かない。
         function checkInitializationTimeout() {
-          if (recoveryStarted) return;
-          if (Date.now() - lastProgressAt < TIMEOUT) {
-            scheduleWatchdog();
-            return;
-          }
+          if (finished || recoveryStarted) return;
           handleInitializationFailure();
         }
 
@@ -6652,6 +6665,19 @@
             );
             await clearAllCachesAndReload();
           } else if (recoveryAttempt === MAX_RECOVERY_ATTEMPTS) {
+            // 本体スクリプトが最後まで評価されていない = 構文エラーや配信事故で
+            // そもそもアプリのコードが動いていない。原因はデータではないので、
+            // 消しても直らないうえに履歴だけが失われる。ここで打ち止めにする。
+            if (!window.__mainScriptParsed) {
+              alert(
+                "アプリ本体のプログラムを読み込めませんでした。\n" +
+                  "保存データの問題ではないため、データ消去は行いません。\n\n" +
+                  "配信元の不具合か、通信・キャッシュの破損が原因の可能性があります。\n" +
+                  "時間をおいて手動で再読み込みしてください。\n\n" +
+                  `最後に完了した処理: ${lastProgressLabel}`,
+              );
+              return;
+            }
             const confirmed = confirm(
               "複数回の再起動に失敗しました。アプリのデータが破損している可能性があります。\n\n" +
                 "すべてのデータ（設定とチャット履歴）を消去してアプリをリセットしますか？\n" +
@@ -6778,7 +6804,7 @@
           try {
             await new Promise((resolve) => {
               const timeoutId = setTimeout(resolve, 3000);
-              const deleteRequest = indexedDB.deleteDatabase("GeminiPWA_DB");
+              const deleteRequest = indexedDB.deleteDatabase(DB_NAME);
               deleteRequest.onsuccess = () => {
                 clearTimeout(timeoutId);
                 resolve();
@@ -14667,7 +14693,8 @@
     </dialog>
 
     <script>
-      const DB_NAME = "GeminiPWA_DB";
+      // 起動ウォッチドッグ側と同じ値を共有する。詳細は body タグの注記。
+      const DB_NAME = document.body.dataset.dbName || "GeminiPWA_DB";
       // DB_VERSION is only for IndexedDB schema migrations. Do not change it for
       // app/UI releases; lowering it can block users from opening existing data.
       const DB_VERSION = 8;
@@ -14744,6 +14771,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
       const DEFAULT_AI_NAME_BUBBLE_OPACITY = 0.8;
       const CHAT_TITLE_LENGTH = 15;
       const TEXTAREA_MAX_HEIGHT = 120;
+      const ABORT_SETTLE_TIMEOUT_MS = 5000;
+      // ストリーミング中の再描画間隔の下限（約30fps）
+      const STREAM_RENDER_INTERVAL_MS = 33;
       const GEMINI_API_BASE_URL =
         "https://generativelanguage.googleapis.com/v1beta/models/";
       const DEEPSEEK_API_DEFAULT_BASE_URL =
@@ -14763,6 +14793,21 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
       function isImageGenerationModel(modelName) {
         if (!modelName) return false;
         return IMAGE_GENERATION_MODELS.some((m) => modelName.includes(m));
+      }
+
+      // 思考要約をデフォルトで開くかどうかは描画・削除の複数箇所で判定する。
+      // 同じ条件式を写すとプロバイダ追加時に取りこぼすため一本化する。
+      const THOUGHT_EXPAND_SETTING_KEY_BY_PROVIDER = {
+        gemini: "geminiExpandThoughtsByDefault",
+        deepseek: "deepSeekExpandThoughtsByDefault",
+        claude: "claudeExpandThoughtsByDefault",
+        xai: "xaiExpandThoughtsByDefault",
+        llmaggregator: "llmAggregatorExpandThoughtsByDefault",
+      };
+
+      function shouldExpandThoughtsByDefault(provider) {
+        const key = THOUGHT_EXPAND_SETTING_KEY_BY_PROVIDER[provider];
+        return key ? !!state.settings[key] : false;
       }
 
       const LIGHT_THEME_COLOR = "#4a90e2";
@@ -16271,6 +16316,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         responseStartTime: 0,
         isSummarizing: false,
         abortController: null,
+        // 送信中フラグが降りるまで解決しない Promise。中断してから
+        // state.currentMessages を差し替える側が決着を待つために使う。
+        sendSettledPromise: null,
+        sendSettledResolve: null,
         imageGenAbortController: null,
         partialStreamContent: "",
         partialThoughtStreamContent: "",
@@ -16571,7 +16620,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
       layoutBus.subscribe(updateMessageMaxWidthVar);
 
-      const sleep = (ms) => {
+      // 見た目のための「間」。タブが非表示なら誰も見ていないので待たずに畳む。
+      // 汎用の sleep ではない: リトライのバックオフや API のレート制御に使うと、
+      // 非表示タブで待ち時間ゼロの連打になる。そちらには使わないこと。
+      const uiDelay = (ms) => {
         if (document.hidden) return Promise.resolve();
         return new Promise((resolve) => setTimeout(resolve, ms));
       };
@@ -16685,6 +16737,17 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         } else {
           apply();
         }
+      }
+
+      // 起動計測と起動ウォッチドッグへの通知をまとめる。両者は同じ「どこまで
+      // 進んだか」を必要とするのに、これまで perfMonitor 側にしか通知されて
+      // いない地点があり、そこが長引くと無進捗と誤判定されていた。
+      // 起動後の呼び出しは initializationProgress 側の打ち止めで無視される。
+      function bootMark(label) {
+        if (typeof window.initializationProgress === "function")
+          window.initializationProgress(label);
+        if (typeof perfMonitor !== "undefined" && perfMonitor.recordBootMark)
+          perfMonitor.recordBootMark(label);
       }
 
       function registerServiceWorker() {
@@ -16864,11 +16927,16 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           // 他タブが同じDBを開いていると upgrade は待たされる。ここで何も
           // しないと「応答なし」に見えて起動失敗の復旧処理まで走ってしまうので、
           // 原因と対処を伝えたうえで、閉じられ次第そのまま続行させる。
+          // 通知は alert で、同期にメインスレッドを止める。この表示が出ている
+          // 間は他タブを閉じても upgrade は再開しないため、「タブを閉じれば
+          // 自動で続行する」とだけ案内すると、待っても動かないように見える。
+          // 表示を閉じる操作までを手順に含めて伝える。
           request.onblocked = () => {
             if (typeof window.initializationBlocked === "function") {
               window.initializationBlocked(
                 "データベースの更新が、別のタブで開いているこのアプリに妨げられています。\n" +
-                  "他のタブを閉じると、そのまま自動で起動を続行します。",
+                  "他のタブを閉じてから、この表示を閉じてください。\n" +
+                  "そのまま自動で起動を続行します。",
               );
             }
           };
@@ -18212,7 +18280,25 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
        * @param {string} namesList - カンマ区切りの固有名詞リスト
        * @returns {Map<string, string>} 正規化された名前をキー、元の名前を値とするマップ
        */
+      // 画像URL置換の詳細ログはストリーミング中に1文字ごと出てしまうため既定で無効。
+      // 調査時は window.__imgDebug = true で有効化する。
+      const imgLog = (...args) => {
+        if (window.__imgDebug) console.log(...args);
+      };
+
+      // ストリーミング中は画像URLのマッチごとに呼ばれるため、リスト文字列で memo 化する。
+      let _normalizationMapCache = { key: null, map: null };
+
       function getNormalizationMap(namesList) {
+        if (_normalizationMapCache.key === (namesList || "")) {
+          return _normalizationMapCache.map;
+        }
+        const map = buildNormalizationMap(namesList);
+        _normalizationMapCache = { key: namesList || "", map };
+        return map;
+      }
+
+      function buildNormalizationMap(namesList) {
         const map = new Map();
         if (!namesList) return map;
         const names = namesList
@@ -18281,7 +18367,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         // 1. NFKC正規化
         let normalized = input.normalize("NFKC");
         if (normalized !== input) {
-          console.log(`  > Step 1 (NFKC): "${normalized}"`);
+          imgLog(`  > Step 1 (NFKC): "${normalized}"`);
         }
 
         // 2. ローマ字 -> カタカナ (条件付き)
@@ -18289,26 +18375,26 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         if (performRomajiConversion) {
           katakana = romajiToKatakana(normalized);
           if (katakana !== normalized) {
-            console.log(`  > Step 2 (Romaji to Katakana): "${katakana}"`);
+            imgLog(`  > Step 2 (Romaji to Katakana): "${katakana}"`);
           }
         } else {
-          console.log(`  > Step 2 (Romaji to Katakana): Skipped`);
+          imgLog(`  > Step 2 (Romaji to Katakana): Skipped`);
         }
 
         // 3. カタカナ -> ひらがな
         let hiragana = katakanaToHiragana(katakana);
         if (hiragana !== katakana) {
-          console.log(`  > Step 3 (Katakana to Hiragana): "${hiragana}"`);
+          imgLog(`  > Step 3 (Katakana to Hiragana): "${hiragana}"`);
         }
 
         // 4. 小文字化して比較
         const lowercased = hiragana.toLowerCase();
-        console.log(`  > Step 4 (Lookup Key): "${lowercased}"`);
+        imgLog(`  > Step 4 (Lookup Key): "${lowercased}"`);
 
         // 5. 完全一致のチェック
         if (normalizationMap.has(lowercased)) {
           const result = normalizationMap.get(lowercased);
-          console.log(`  > Exact match found! Replacing with: "${result}"`);
+          imgLog(`  > Exact match found! Replacing with: "${result}"`);
           console.groupEnd();
           return result;
         }
@@ -18316,7 +18402,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         // ▼▼▼ ここからがFuzzy Searchのロジックです ▼▼▼
         // 6. Fuzzy Searchのチェック (設定が有効な場合のみ)
         if (state.settings.enableFuzzySearchNormalization) {
-          console.log("  > No exact match. Starting Fuzzy Search...");
+          imgLog("  > No exact match. Starting Fuzzy Search...");
           const threshold = state.settings.fuzzySearchThreshold;
           let bestMatch = null;
           let minDistance = Infinity;
@@ -18331,13 +18417,13 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             }
           }
 
-          console.log(
+          imgLog(
             `  > Closest match: "${bestMatch}" with distance: ${minDistance}`,
           );
 
           // 閾値以下であれば、最も近い候補を採用
           if (bestMatch && minDistance <= threshold) {
-            console.log(
+            imgLog(
               `  > Fuzzy match found (distance <= threshold ${threshold})! Replacing with: "${bestMatch}"`,
             );
             console.groupEnd();
@@ -18346,7 +18432,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         }
         // ▲▲▲ ここまでがFuzzy Searchのロジックです ▲▲▲
 
-        console.log(`  > No match found. Returning original cleaned value.`);
+        imgLog(`  > No match found. Returning original cleaned value.`);
         console.groupEnd();
         return input; // 完全一致もFuzzy Searchもヒットしなかった場合は元の入力を返す
       }
@@ -18379,7 +18465,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
             // ベースURLが確定した場合のみ置換処理を実行
             if (baseUrl) {
-              console.log(
+              imgLog(
                 `[Markdown Img] Using Base URL for replacement: ${baseUrl}`,
               );
               // --- ステップ0: Markdown構文の軽微なエラーを修正 ---
@@ -18465,8 +18551,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                         ? pathname.substring(lastSlashIndex + 1)
                         : pathname;
 
-                    console.log("Original Path:", pathPart);
-                    console.log("Original Filename:", filenamePart);
+                    imgLog("Original Path:", pathPart);
+                    imgLog("Original Filename:", filenamePart);
 
                     // 3a. まずパスとファイル名から不要な記号をクリーニング
                     pathPart = pathPart
@@ -18513,8 +18599,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                     nameWithoutExt = nameWithoutExt.replace(/[\s　.-]/g, "");
                     extension = extension.replace(/[\s　-]/g, "");
 
-                    console.log("Cleaned Path for normalization:", pathPart);
-                    console.log(
+                    imgLog("Cleaned Path for normalization:", pathPart);
+                    imgLog(
                       "Cleaned Filename (no ext) for normalization:",
                       nameWithoutExt,
                     );
@@ -18559,8 +18645,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                       urlObject.origin +
                       cleanedPathname.replace(/\/{2,}/g, "/");
 
-                    console.log("Final Pathname:", cleanedPathname);
-                    console.log("Final URL:", newUrl);
+                    imgLog("Final Pathname:", cleanedPathname);
+                    imgLog("Final URL:", newUrl);
                     console.groupEnd();
                     // ▲▲▲ ここまで変更 ▲▲▲
 
@@ -18577,7 +18663,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               );
             }
           } else {
-            console.log(
+            imgLog(
               "[Markdown Img] No Base URL available (neither chat-specific nor global). Skipping replacement.",
             );
           }
@@ -18715,12 +18801,14 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               );
             }
           }
-          if (typeof perfMonitor !== "undefined" && perfMonitor.recordBootMark)
-            perfMonitor.recordBootMark("RenderChat: Create Fragments");
+          // 上のループは全メッセージ分の Markdown 解析と DOM 生成を一括で行う
+          // 同期処理で、履歴が巨大だと単独で数十秒かかりうる。その間タイマーは
+          // 発火できないため、直後にここで進捗を通知して期限切れのウォッチドッグを
+          // 「実行される前に」張り直す。
+          bootMark("RenderChat: Create Fragments");
 
           elements.messageContainer.appendChild(fragment);
-          if (typeof perfMonitor !== "undefined" && perfMonitor.recordBootMark)
-            perfMonitor.recordBootMark("RenderChat: Append to DOM");
+          bootMark("RenderChat: Append to DOM");
 
           if (maintainScroll && oldScrollTop !== null) {
             requestAnimationFrame(() => {
@@ -18802,16 +18890,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             initialThoughtOpenState = messageData.thoughtSummaryOpen;
           } else if (includeThoughtsForProvider) {
             initialThoughtOpenState =
-              (messageApiProvider === "gemini" &&
-                state.settings.geminiExpandThoughtsByDefault) ||
-              (messageApiProvider === "deepseek" &&
-                state.settings.deepSeekExpandThoughtsByDefault) ||
-              (messageApiProvider === "claude" &&
-                state.settings.claudeExpandThoughtsByDefault) ||
-              (messageApiProvider === "xai" &&
-                state.settings.xaiExpandThoughtsByDefault) ||
-              (messageApiProvider === "llmaggregator" &&
-                state.settings.llmAggregatorExpandThoughtsByDefault);
+              shouldExpandThoughtsByDefault(messageApiProvider);
           }
 
           if (
@@ -18838,9 +18917,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 if (
                   !state.isSending &&
                   !state.isAiToAiChatProcessing &&
-                  !isStreamingPlaceholder
+                  !isStreamingPlaceholder &&
+                  state.currentChatId
                 ) {
-                  dbUtils.saveChat();
+                  dbUtils.saveChat().catch(console.error);
                 }
               }
             });
@@ -19639,12 +19719,16 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               uniqueId + "-svg",
               mermaidCode,
             );
-            diagramDiv.innerHTML =
-              typeof DOMPurify !== "undefined"
-                ? DOMPurify.sanitize(svg, {
-                    USE_PROFILES: { svg: true, svgFilters: true, html: true },
-                  })
-                : svg;
+            // DOMPurify が未ロードのときに生SVGを挿入すると、AI応答由来の内容が
+            // 無検査で innerHTML に入る。描画を諦める方に倒す。
+            if (typeof DOMPurify === "undefined") {
+              throw new Error(
+                "サニタイザ(DOMPurify)を読み込めないため、図表を描画できません。",
+              );
+            }
+            diagramDiv.innerHTML = DOMPurify.sanitize(svg, {
+              USE_PROFILES: { svg: true, svgFilters: true, html: true },
+            });
 
             const svgElement = diagramDiv.querySelector("svg");
             if (svgElement) {
@@ -19664,11 +19748,47 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
           preElement.parentNode.replaceChild(container, preElement);
         },
-        async updateStreamingMessage(
-          index,
-          newCharOrChunk,
-          isThoughtSummary = false,
-        ) {
+        // 1文字ごとに呼ばれるが、実描画は蓄積済み全文の再パースなので
+        // そのまま毎回走らせると応答長に対して O(n^2) になる。描画は
+        // STREAM_RENDER_INTERVAL_MS 間隔にまとめ、末尾は必ず反映させる。
+        _streamRenderTimers: { content: null, thought: null },
+        _streamRenderLast: { content: 0, thought: 0 },
+
+        updateStreamingMessage(index, newCharOrChunk, isThoughtSummary = false) {
+          const key = isThoughtSummary ? "thought" : "content";
+          const now = performance.now();
+          const wait =
+            STREAM_RENDER_INTERVAL_MS - (now - this._streamRenderLast[key]);
+
+          if (wait <= 0) {
+            if (this._streamRenderTimers[key]) {
+              clearTimeout(this._streamRenderTimers[key]);
+              this._streamRenderTimers[key] = null;
+            }
+            this._streamRenderLast[key] = now;
+            this._renderStreamingMessageNow(index, isThoughtSummary);
+            return;
+          }
+
+          if (this._streamRenderTimers[key]) return;
+          this._streamRenderTimers[key] = setTimeout(() => {
+            this._streamRenderTimers[key] = null;
+            this._streamRenderLast[key] = performance.now();
+            this._renderStreamingMessageNow(index, isThoughtSummary);
+          }, wait);
+        },
+
+        _cancelPendingStreamRenders() {
+          for (const key of ["content", "thought"]) {
+            if (this._streamRenderTimers[key]) {
+              clearTimeout(this._streamRenderTimers[key]);
+              this._streamRenderTimers[key] = null;
+            }
+            this._streamRenderLast[key] = 0;
+          }
+        },
+
+        _renderStreamingMessageNow(index, isThoughtSummary) {
           const messageDiv = byId(`streaming-message-${index}`);
           if (!messageDiv || typeof marked === "undefined") return;
 
@@ -19676,18 +19796,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           let accumulatedContentForDisplay;
 
           const selectedApiProvider = state.settings.apiProvider;
-          const streamSpeed =
-            selectedApiProvider === "gemini"
-              ? state.settings.geminiStreamingSpeed
-              : selectedApiProvider === "deepseek"
-                ? state.settings.deepSeekStreamingSpeed
-                : selectedApiProvider === "claude"
-                  ? state.settings.claudeStreamingSpeed
-                  : selectedApiProvider === "xai"
-                    ? state.settings.xaiStreamingSpeed
-                    : selectedApiProvider === "llmaggregator"
-                      ? state.settings.llmAggregatorStreamingSpeed
-                      : state.settings.openaiStreamingSpeed;
 
           if (isThoughtSummary) {
             if (
@@ -19765,6 +19873,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
         },
         finalizeStreamingMessage(index) {
+          // 保留中の間引き描画が確定後に走ると古い内容で上書きしてしまう。
+          this._cancelPendingStreamRenders();
           const messageDiv = byId(`streaming-message-${index}`);
           if (messageDiv) {
             const finalMessageData = state.currentMessages[index];
@@ -20974,8 +21084,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             state.settings.llmAggregatorEnableDummyModel;
           elements.llmAggregatorConcatDummyModelCheckbox.checked =
             state.settings.llmAggregatorConcatDummyModel;
-          if (typeof perfMonitor !== "undefined" && perfMonitor.recordBootMark)
-            perfMonitor.recordBootMark("SettingsUI: API Values");
+          bootMark("SettingsUI: API Values");
 
           elements.enterToSendCheckbox.checked = state.settings.enterToSend;
           elements.headerTapScrollToTopToggle.checked =
@@ -21399,8 +21508,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           this.updateOpenAIUserModelOptions();
           this.updateXaiUserModelOptions();
           this.updateLlmAggregatorUserModelOptions();
-          if (typeof perfMonitor !== "undefined" && perfMonitor.recordBootMark)
-            perfMonitor.recordBootMark("SettingsUI: Checkboxes & Selects");
+          bootMark("SettingsUI: Checkboxes & Selects");
           this.updateBackgroundSettingsUI();
           this.updateIconSettingsUI();
           this.applyTheme();
@@ -22253,6 +22361,16 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         },
         setSendingState(sending) {
           state.isSending = sending;
+          if (sending && !state.sendSettledResolve) {
+            state.sendSettledPromise = new Promise((resolve) => {
+              state.sendSettledResolve = resolve;
+            });
+          } else if (!sending && state.sendSettledResolve) {
+            const resolve = state.sendSettledResolve;
+            state.sendSettledResolve = null;
+            state.sendSettledPromise = null;
+            resolve();
+          }
           if (sending) {
             elements.sendButton.textContent = "止";
             elements.sendButton.classList.add("sending");
@@ -22291,21 +22409,25 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               state.isAiToAiChatProcessing ? "assertive" : "polite",
             );
 
-            let baseText = "応答中";
-            if (state.isAiToAiChatProcessing)
-              baseText = state.aiToAiProcessingMessage;
-            else if (state.isSummarizingForRetry)
-              baseText = "リトライ前の履歴を要約中...";
-            else if (state.isProofreading) baseText = "校正中...";
-            else if (state.isSummarizing) baseText = "要約中...";
+            // タイマーは動作中に張り直さないため、ラベルをクロージャに
+            // 焼き付けると「送信中→バックグラウンド要約」のように状態が
+            // 遷移しても表示が古いままになる。毎回引き直す。
+            const currentBaseText = () => {
+              if (state.isAiToAiChatProcessing)
+                return state.aiToAiProcessingMessage;
+              if (state.isSummarizingForRetry)
+                return "リトライ前の履歴を要約中...";
+              if (state.isProofreading) return "校正中...";
+              if (state.isSummarizing) return "要約中...";
+              return "応答中";
+            };
 
             if (state.settings.showResponseTimer) {
               if (!state.responseTimerId) {
                 state.responseStartTime = Date.now();
-                state.responseTimerId = setInterval(() => {
-                  const now = Date.now();
+                const renderTimerText = () => {
                   const elapsed = (
-                    (now - state.responseStartTime) /
+                    (Date.now() - state.responseStartTime) /
                     1000
                   ).toFixed(1);
                   if (
@@ -22317,22 +22439,18 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   ) {
                     elements.loadingIndicator.textContent = `${elapsed}s`;
                   } else {
-                    elements.loadingIndicator.textContent = `${baseText} (${elapsed}s)`;
+                    elements.loadingIndicator.textContent = `${currentBaseText()} (${elapsed}s)`;
                   }
-                }, 100);
-                elements.loadingIndicator.textContent =
-                  state.isSending &&
-                  !state.isSummarizing &&
-                  !state.isProofreading
-                    ? "0.0s"
-                    : `${baseText} (0.0s)`;
+                };
+                state.responseTimerId = setInterval(renderTimerText, 100);
+                renderTimerText();
               }
             } else {
               if (state.responseTimerId) {
                 clearInterval(state.responseTimerId);
                 state.responseTimerId = null;
               }
-              elements.loadingIndicator.textContent = baseText;
+              elements.loadingIndicator.textContent = currentBaseText();
             }
           } else {
             if (state.responseTimerId) {
@@ -22384,8 +22502,20 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             }
           });
         },
+        // DOMPurify は CDN 由来なので、不達・SRI不一致・プロキシ遮断で未定義に
+        // なりうる。これらのダイアログは復旧通知やDB競合通知そのものが使う経路
+        // であり、ここで ReferenceError を投げると障害時の告知手段ごと失われる。
+        // 未ロード時は整形を諦めてプレーンテキストで必ず表示する。
+        _setDialogMessage(element, message) {
+          if (!element) return;
+          if (typeof DOMPurify === "undefined") {
+            element.textContent = message == null ? "" : String(message);
+            return;
+          }
+          element.innerHTML = DOMPurify.sanitize(message);
+        },
         async showCustomAlert(message) {
-          elements.alertMessage.innerHTML = DOMPurify.sanitize(message);
+          this._setDialogMessage(elements.alertMessage, message);
           const newOkBtn = elements.alertOkBtn.cloneNode(true);
           elements.alertOkBtn.parentNode.replaceChild(
             newOkBtn,
@@ -22400,7 +22530,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           );
         },
         async showCustomConfirm(message) {
-          elements.confirmMessage.innerHTML = DOMPurify.sanitize(message);
+          this._setDialogMessage(elements.confirmMessage, message);
           const newOkBtn = elements.confirmOkBtn.cloneNode(true);
           elements.confirmOkBtn.parentNode.replaceChild(
             newOkBtn,
@@ -22425,7 +22555,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           return result === "ok";
         },
         async showCustomPrompt(message, defaultValue = "") {
-          elements.promptMessage.innerHTML = DOMPurify.sanitize(message);
+          this._setDialogMessage(elements.promptMessage, message);
           elements.promptInput.value = defaultValue;
           const newOkBtn = elements.promptOkBtn.cloneNode(true);
           elements.promptOkBtn.parentNode.replaceChild(
@@ -23638,19 +23768,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           console.groupEnd();
         },
         async initializeApp() {
-          if (typeof perfMonitor !== "undefined" && perfMonitor.recordBootMark)
-            perfMonitor._lastBootMarkTime =
-              performance.timeOrigin || performance.now();
-          const mark = (label) => {
-            if (typeof window.initializationProgress === "function") {
-              window.initializationProgress(label);
-            }
-            if (
-              typeof perfMonitor !== "undefined" &&
-              perfMonitor.recordBootMark
-            )
-              perfMonitor.recordBootMark(label);
-          };
+          if (typeof perfMonitor !== "undefined" && perfMonitor.startBootMarks)
+            perfMonitor.startBootMarks();
+          const mark = bootMark;
           mark("Page Load ~ Init");
 
           try {
@@ -23728,7 +23848,12 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               } catch (e) {}
             }
 
-            setTimeout(async () => {
+            // 背景の段階ロード。loadBg 内の失敗は握り潰しているが、
+            // updateBackgroundSettingsUI が投げると未捕捉の rejection になり、
+            // errorRecovery の連続エラー判定に積まれる。背景設定が壊れている
+            // 場合は毎起動で再現するため、キャッシュ削除＋リロードを往復する
+            // ことになる。起動の本筋ではないので、ここで必ず握り潰す。
+            const loadStagedBackgrounds = async () => {
               const loadBg = (blob, currentUrl, cssVarName) => {
                 if (blob instanceof Blob) {
                   try {
@@ -23773,7 +23898,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               uiUtils.updateBackgroundSettingsUI();
 
               // 優先度3: 画像生成履歴画面 (少し遅らせて負荷を分散)
-              await sleep(400);
+              await uiDelay(400);
               state.imageGenHistoryBackgroundImageUrl = loadBg(
                 state.settings.imageGenHistoryBackgroundImageBlob,
                 state.imageGenHistoryBackgroundImageUrl,
@@ -23782,13 +23907,18 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               uiUtils.updateBackgroundSettingsUI();
 
               // 優先度4 (最低序列): 画像生成設定画面
-              await sleep(400);
+              await uiDelay(400);
               state.imageGenSettingsBackgroundImageUrl = loadBg(
                 state.settings.imageGenSettingsBackgroundImageBlob,
                 state.imageGenSettingsBackgroundImageUrl,
                 "--image-gen-settings-background-image",
               );
               uiUtils.updateBackgroundSettingsUI();
+            };
+            setTimeout(() => {
+              loadStagedBackgrounds().catch((e) =>
+                console.warn("背景画像の遅延ロードに失敗しました:", e),
+              );
             }, 800);
 
             mark("Base UI Styling");
@@ -23801,10 +23931,20 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             if (state.settings.isConsoleMonitorOpen) {
               consoleMonitor.start();
             }
-            if (state.settings.isTokenMonitorOpen) {
+            // perf/console の start() と違い、この2つは反転する toggle() しか
+            // 持たない。「起動時点では必ず非表示」という暗黙の前提に乗ると、
+            // 将来 init() が可視状態に触れた瞬間に意味が反転して隠れてしまう。
+            // 現在状態を見てから呼び、冪等にしておく。
+            if (
+              state.settings.isTokenMonitorOpen &&
+              !state.isTokenMonitorVisible
+            ) {
               tokenMonitor.toggle();
             }
-            if (state.settings.isTwinEngineSummaryOpen) {
+            if (
+              state.settings.isTwinEngineSummaryOpen &&
+              !state.isTwinEngineSummaryVisible
+            ) {
               appLogic.toggleTwinEngineSummary();
             }
             [
@@ -27102,7 +27242,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               "送信中です。中断して新規チャットを開始しますか？",
             );
             if (!confirmed) return;
-            this.abortRequest();
+            await this.abortRequest();
           }
           if (state.editingMessageIndex !== null) {
             const confirmed = await uiUtils.showCustomConfirm(
@@ -27137,19 +27277,17 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           uiUtils.showScreen("chat");
         },
         startNewChat() {
-          state.currentChatId = null;
-          state.settings.lastOpenedChatId = null;
-          dbUtils.saveSetting("lastOpenedChatId", null);
-          state.currentMessages = [];
-          state.currentChatBaseUrl = null;
-          if (
-            state.settings.commonSystemPrompt &&
-            state.settings.commonSystemPrompt.trim() !== ""
-          ) {
-          }
-
+          // 累計は calculateSessionStats() が state.currentMessages から算出するため、
+          // 履歴をクリアする前に回収しないと常に0加算になる。
           if (state.currentMessages.length > 0)
             tokenMonitor.addCurrentSessionToCumulative();
+
+          state.currentChatId = null;
+          state.settings.lastOpenedChatId = null;
+          dbUtils.saveSetting("lastOpenedChatId", null).catch(() => {});
+          state.currentMessages = [];
+          state.currentChatBaseUrl = null;
+
           if (state.isTokenMonitorVisible)
             setTimeout(() => tokenMonitor.updateDisplay(), 100);
 
@@ -28430,7 +28568,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               );
             }
             if (!confirmedLoad) return;
-            this.abortRequest();
+            // 中断側の後始末(部分応答の確定と保存)が終わる前に
+            // state.currentMessages を差し替えると、旧セッションの応答が
+            // 新しいチャットに紛れ込みうる。決着を待ってから進む。
+            await this.abortRequest();
           }
           if (state.editingMessageIndex !== null) {
             const confirmedEdit = await uiUtils.showCustomConfirm(
@@ -28458,13 +28599,12 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
 
           try {
-            const mark = (l) => {
-              if (
-                typeof perfMonitor !== "undefined" &&
-                perfMonitor.recordBootMark
-              )
-                perfMonitor.recordBootMark(l);
-            };
+            // 起動時の loadChat は initializeApp の "Panels Initialization" と
+            // "Load Chat & Render" の間に挟まる。巨大な履歴だとこの区間だけで
+            // 起動ウォッチドッグの30秒を超えうるため、bootMark 経由で進捗を
+            // 通知しタイマーを張り直す。これが無いと、壊れていないのに
+            // 「キャッシュ削除→リロード→最終的に全データ消去の確認」まで進む。
+            const mark = bootMark;
             const chat = await dbUtils.getChat(id);
             mark("LoadChat: DB Fetch");
             if (chat) {
@@ -28589,7 +28729,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               "送信中です。中断してチャットを複製しますか？",
             );
             if (!conf) return;
-            this.abortRequest();
+            await this.abortRequest();
           }
           if (state.editingMessageIndex !== null) {
             const conf = await uiUtils.showCustomConfirm(
@@ -29002,7 +29142,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           retryUserMessageIndex = -1,
           sourceSessionContext = null,
           isTopLevelCall = true,
-          retryCount = 0,
         ) {
           if (!sourceSessionContext && isTopLevelCall) {
             await this.commitAllOpenEdits();
@@ -29139,7 +29278,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 uiUtils.updateAttachmentBadgeVisibility();
               }
               await dbUtils.saveChat();
-              await sleep(300 + Math.random() * 400);
+              await uiDelay(300 + Math.random() * 400);
             }
 
             let dummyResponseContent = "";
@@ -29401,9 +29540,13 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               sourceSessionContext?.systemPromptSendMode ??
               state.settings.geminiSystemPromptSendMode;
           } else if (p === "deepseek" || p === "llmaggregator") {
+            // deepseek の実設定キーは deepSeekIncludeDeepSeekThoughts のため
+            // `${prefix}IncludeThoughts` では引けない。
             contextDeepSeekIncludeThoughts =
               sourceSessionContext?.includeThoughts ??
-              state.settings[`${prefix}IncludeThoughts`];
+              (p === "deepseek"
+                ? state.settings.deepSeekIncludeDeepSeekThoughts
+                : state.settings.llmAggregatorIncludeThoughts);
             if (p === "llmaggregator")
               contextLlmAggregatorTopK =
                 sourceSessionContext?.topK ?? state.settings.llmAggregatorTopK;
@@ -29463,11 +29606,22 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             }
           }
 
+          // AbortController は API 関数任せにせず、ここで用意する。API 関数内で
+          // 生成していた頃は、送信ボタンが「止」になってから fetch が始まるまで
+          // (直前のDB保存の await の間) state.abortController が null で、その間の
+          // 中断操作が握り潰されていた。入れ子呼び出し(校正など)は親の signal を
+          // 引き継ぎ、親を中断すれば道連れで止まるようにする。
+          const sendAbortController = new AbortController();
+          const sendSignal =
+            sourceSessionContext?._abortSignal || sendAbortController.signal;
           if (!isBackgroundProcess && isTopLevelCall) {
+            state.abortController = sendAbortController;
             uiUtils.setSendingState(true);
           }
-          state.partialStreamContent = "";
-          state.partialThoughtStreamContent = "";
+          if (!isBackgroundProcess) {
+            state.partialStreamContent = "";
+            state.partialThoughtStreamContent = "";
+          }
 
           let userMessageIndex = isRetry ? retryUserMessageIndex : -1;
           let existingSiblingGroupId = null;
@@ -29658,46 +29812,12 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               }
 
               const chatToSave = {
-                messages: currentContextMessages.map((msg) => ({
-                  role: msg.role,
-                  content: msg.content,
-                  timestamp: msg.timestamp,
-                  thoughtSummary: msg.thoughtSummary || null,
-                  deepSeekThoughtSummary: msg.deepSeekThoughtSummary || null,
-                  xaiThoughtSummary: msg.xaiThoughtSummary || null,
-                  generatedByApiProvider: msg.generatedByApiProvider || null,
-                  ...(msg.finishReason && { finishReason: msg.finishReason }),
-                  ...(msg.safetyRatings && {
-                    safetyRatings: msg.safetyRatings,
-                  }),
-                  ...(msg.error && { error: msg.error }),
-                  ...(msg.isCascaded !== undefined && {
-                    isCascaded: msg.isCascaded,
-                  }),
-                  ...(msg.isSelected !== undefined && {
-                    isSelected: msg.isSelected,
-                  }),
-                  ...(msg.siblingGroupId !== undefined && {
-                    siblingGroupId: msg.siblingGroupId,
-                  }),
-                  ...(msg.groundingMetadata && {
-                    groundingMetadata: msg.groundingMetadata,
-                  }),
-                  ...(msg.attachments &&
-                    msg.attachments.length > 0 && {
-                      attachments: msg.attachments.map((att) => ({
-                        name: att.name,
-                        mimeType: att.mimeType,
-                        textData: att.textData,
-                      })),
-                    }),
-                  ...(msg.usageMetadata && {
-                    usageMetadata: msg.usageMetadata,
-                  }),
-                  ...(msg.thoughtSummaryOpen !== undefined && {
-                    thoughtSummaryOpen: msg.thoughtSummaryOpen,
-                  }),
-                })),
+                // 独自にシリアライズすると normalizeMessagesForSave と挙動が
+                // ズレる。以前はここで添付の base64Data を落としていたため、
+                // 応答完了前にタブを閉じると画像添付だけが履歴から消えていた。
+                messages: dbUtils.normalizeMessagesForSave(
+                  currentContextMessages,
+                ),
                 twinEngineSummaryContent:
                   state.twinEngineSummaryContent || "",
                 updatedAt: Date.now(),
@@ -30030,7 +30150,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                     contextXaiIncludeThoughts &&
                     state.settings.xaiExpandThoughtsByDefault) ||
                   (selectedApiProvider === "llmaggregator" &&
-                    state.settings.llmAggregatorIncludeThoughts &&
+                    contextDeepSeekIncludeThoughts &&
                     state.settings.llmAggregatorExpandThoughtsByDefault),
               };
 
@@ -30134,7 +30254,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                           true,
                         );
                         if (currentContextStreamSpeed > 0)
-                          await sleep(currentContextStreamSpeed);
+                          await uiDelay(currentContextStreamSpeed);
                       }
                     }
                   }
@@ -30151,7 +30271,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                           false,
                         );
                         if (currentContextStreamSpeed > 0)
-                          await sleep(currentContextStreamSpeed);
+                          await uiDelay(currentContextStreamSpeed);
                       }
                     }
                   }
@@ -30231,272 +30351,13 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 modelResponseRawContent = state.partialStreamContent;
               }
 
-              let finalContent = modelResponseRawContent;
-              const finishReason = modelResponseMetadata.finishReason;
-              const isRetryableFinishReason = [
-                "SAFETY",
-                "RECITATION",
-                "PROHIBITED_CONTENT",
-                "OTHER",
-              ].includes(finishReason);
-              if (
-                !isBackgroundProcess &&
-                state.settings.showProofreadingSettings &&
-                state.settings.enableProofreading &&
-                finalContent &&
-                !isRetryableFinishReason &&
-                finishReason !== "ERROR" &&
-                finishReason !== "ABORTED"
-              ) {
-                if (useStreamingForThisCall && modelMessageObjectForStream) {
-                  const tempMessageIndex = state.currentMessages.indexOf(
-                    modelMessageObjectForStream,
-                  );
-                  if (tempMessageIndex !== -1) {
-                    const msgToUpdate = state.currentMessages[tempMessageIndex];
-                    msgToUpdate.content = finalContent;
-                    msgToUpdate.timestamp = Date.now();
-                    msgToUpdate.finishReason =
-                      modelResponseMetadata.finishReason;
-                    msgToUpdate.safetyRatings =
-                      modelResponseMetadata.safetyRatings;
-                    msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
-                    uiUtils.finalizeStreamingMessage(tempMessageIndex);
-                    await dbUtils.saveChat();
-                  }
-                }
-
-                try {
-                  state.isProofreading = true;
-                  uiUtils.updateLoadingIndicator();
-                  const proofreadContent =
-                    await this.proofreadText(finalContent);
-                  finalContent = proofreadContent; // finalContentを校正済みのものに更新
-
-                  if (modelMessageObjectForStream) {
-                    const finalModelMessageIndex =
-                      state.currentMessages.indexOf(
-                        modelMessageObjectForStream,
-                      );
-                    if (finalModelMessageIndex !== -1) {
-                      state.currentMessages[finalModelMessageIndex].content =
-                        finalContent;
-                      uiUtils.updateFinalizedMessageContent(
-                        finalModelMessageIndex,
-                        finalContent,
-                      );
-                      await dbUtils.saveChat(); // DBも更新
-                    }
-                  }
-                } catch (proofreadError) {
-                  console.error(
-                    "校正処理中にエラーが発生しました:",
-                    proofreadError,
-                  );
-                  const errorMessage = `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
-                  finalContent += errorMessage;
-
-                  if (modelMessageObjectForStream) {
-                    const finalModelMessageIndex =
-                      state.currentMessages.indexOf(
-                        modelMessageObjectForStream,
-                      );
-                    if (finalModelMessageIndex !== -1) {
-                      state.currentMessages[finalModelMessageIndex].content =
-                        finalContent;
-                      uiUtils.updateFinalizedMessageContent(
-                        finalModelMessageIndex,
-                        finalContent,
-                      );
-                      await dbUtils.saveChat();
-                    }
-                  }
-                } finally {
-                  state.isProofreading = false;
-                  uiUtils.updateLoadingIndicator();
-                }
-              }
-
-              if (
-                finalContent ||
-                modelThoughtSummaryContent ||
-                modelResponseMetadata.finishReason
-              ) {
-                if (useStreamingForThisCall && modelMessageObjectForStream) {
-                  const finalModelMessageIndex = state.currentMessages.indexOf(
-                    modelMessageObjectForStream,
-                  );
-                  if (finalModelMessageIndex !== -1) {
-                    const msgToUpdate =
-                      state.currentMessages[finalModelMessageIndex];
-                    msgToUpdate.content = finalContent;
-                    msgToUpdate.timestamp = Date.now();
-                    msgToUpdate.finishReason =
-                      modelResponseMetadata.finishReason;
-                    msgToUpdate.safetyRatings =
-                      modelResponseMetadata.safetyRatings;
-                    msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
-                    if (
-                      selectedApiProvider === "gemini" &&
-                      contextGeminiIncludeThoughts
-                    ) {
-                      if (modelThoughtSummaryContent) {
-                        msgToUpdate.thoughtSummary = modelThoughtSummaryContent;
-                      }
-                      msgToUpdate.groundingMetadata = currentGroundingMetadata;
-                    } else if (
-                      (selectedApiProvider === "deepseek" ||
-                        selectedApiProvider === "llmaggregator") &&
-                      contextDeepSeekIncludeThoughts &&
-                      modelThoughtSummaryContent
-                    ) {
-                      msgToUpdate.deepSeekThoughtSummary =
-                        modelThoughtSummaryContent || null;
-                    } else if (
-                      selectedApiProvider === "claude" &&
-                      contextClaudeIncludeThoughts &&
-                      modelThoughtSummaryContent
-                    ) {
-                      msgToUpdate.thoughtSummary =
-                        modelThoughtSummaryContent || null;
-                    } else if (
-                      selectedApiProvider === "xai" &&
-                      contextXaiIncludeThoughts &&
-                      modelThoughtSummaryContent
-                    ) {
-                      msgToUpdate.xaiThoughtSummary =
-                        modelThoughtSummaryContent || null;
-                    }
-
-                    uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
-                    await dbUtils.saveChat();
-                  }
-                } else {
-                  const newModelMessage = {
-                    role: "model",
-                    content: finalContent,
-                    timestamp: Date.now(),
-                    ...modelResponseMetadata,
-                    usageMetadata: finalUsageMetadataFromStream,
-                    generatedByApiProvider: selectedApiProvider,
-                  };
-                  if (
-                    selectedApiProvider === "gemini" &&
-                    contextGeminiIncludeThoughts
-                  ) {
-                    newModelMessage.thoughtSummary =
-                      modelThoughtSummaryContent || null;
-                    newModelMessage.groundingMetadata =
-                      currentGroundingMetadata;
-                  } else if (
-                    (selectedApiProvider === "deepseek" ||
-                      selectedApiProvider === "llmaggregator") &&
-                    contextDeepSeekIncludeThoughts &&
-                    modelThoughtSummaryContent
-                  ) {
-                    newModelMessage.deepSeekThoughtSummary =
-                      modelThoughtSummaryContent || null;
-                  } else if (
-                    selectedApiProvider === "claude" &&
-                    contextClaudeIncludeThoughts &&
-                    modelThoughtSummaryContent
-                  ) {
-                    newModelMessage.thoughtSummary =
-                      modelThoughtSummaryContent || null;
-                  } else if (
-                    selectedApiProvider === "xai" &&
-                    contextXaiIncludeThoughts &&
-                    modelThoughtSummaryContent
-                  ) {
-                    newModelMessage.xaiThoughtSummary =
-                      modelThoughtSummaryContent || null;
-                  }
-                  newModelMessage.thoughtSummaryOpen =
-                    (selectedApiProvider === "gemini" &&
-                      state.settings.geminiExpandThoughtsByDefault) ||
-                    (selectedApiProvider === "deepseek" &&
-                      state.settings.deepSeekExpandThoughtsByDefault) ||
-                    (selectedApiProvider === "claude" &&
-                      state.settings.claudeExpandThoughtsByDefault) ||
-                    (selectedApiProvider === "xai" &&
-                      state.settings.xaiExpandThoughtsByDefault) ||
-                    (selectedApiProvider === "llmaggregator" &&
-                      state.settings.llmAggregatorExpandThoughtsByDefault);
-
-                  const targetUserIndexForCascade = userMessageIndex;
-                  if (
-                    targetUserIndexForCascade !== -1 &&
-                    !isBackgroundProcess
-                  ) {
-                    if (siblingGroupIdToUse === null) {
-                      siblingGroupIdToUse = `gid-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-                    }
-                    newModelMessage.isCascaded = true;
-                    newModelMessage.isSelected = true;
-                    newModelMessage.siblingGroupId = siblingGroupIdToUse;
-
-                    if (
-                      isRetry &&
-                      firstResponseIndexForRetry !== -1 &&
-                      state.currentMessages[firstResponseIndexForRetry] &&
-                      !state.currentMessages[firstResponseIndexForRetry]
-                        .isCascaded
-                    ) {
-                      state.currentMessages[
-                        firstResponseIndexForRetry
-                      ].isCascaded = true;
-                      state.currentMessages[
-                        firstResponseIndexForRetry
-                      ].siblingGroupId = siblingGroupIdToUse;
-                    }
-                  }
-
-                  const newModelIndex = state.currentMessages.length;
-                  state.currentMessages.push(newModelMessage);
-                  state.messageCollapsedStates.set(newModelIndex, false);
-                  state.thoughtSummaryOpenStates.set(
-                    newModelIndex,
-                    newModelMessage.thoughtSummaryOpen,
-                  );
-                  uiUtils.renderChatMessages();
-                  await dbUtils.saveChat();
-                }
-              } else {
-                if (
-                  useStreamingForThisCall &&
-                  !isBackgroundProcess &&
-                  modelMessageObjectForStream
-                ) {
-                  const tempPlaceholderIndex = state.currentMessages.indexOf(
-                    modelMessageObjectForStream,
-                  );
-                  const placeholderElement = byId(
-                    `streaming-message-${tempPlaceholderIndex}`,
-                  );
-                  if (placeholderElement) placeholderElement.remove();
-                  if (tempPlaceholderIndex !== -1)
-                    state.currentMessages.splice(tempPlaceholderIndex, 1);
-                }
-              }
-
-              if (!isBackgroundProcess) {
-                const currentUserTurnCountAfterSend =
-                  state.currentMessages.filter(
-                    (msg) => msg.role === "user",
-                  ).length;
-                const currentSummarizeAfterTurns =
-                  state.settings.twinEngineSummarizeAfterTurns || 0;
-                if (
-                  state.settings.showTwinEngineSettings &&
-                  state.settings.twinEngineEnableFullAuto &&
-                  currentUserTurnCountAfterSend > currentSummarizeAfterTurns
-                ) {
-                  setTimeout(
-                    () => this.triggerTwinEngineSummaryInBackground(),
-                    0,
-                  );
-                }
-              }
+              // 応答の確定 (メッセージへの書き戻し・校正・保存・webhook) と
+              // 自動要約のトリガは、ストリーミング/非ストリーミング共通の後段
+              // (この try の末尾) に一本化してある。ここでも確定させると後段が
+              // 同じ処理をもう一度行う。特に校正は API を2回叩いたうえ、
+              // 後段が校正前の modelResponseRawContent から校正をやり直すため、
+              // 画面には1回目・DBには2回目の結果が入り表示と保存が食い違う。
+              // 中断判定だけはここに必要。後段の処理に入る前に抜ける。
               if (
                 modelResponseMetadata.finishReason === "ABORTED" ||
                 state.abortController?.signal.aborted
@@ -31006,10 +30867,20 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             uiUtils.updateChatScreenElementVisibility();
           }
         },
+        // 中断は abort() を呼んだ時点では完了していない。呼び出し側が
+        // state.currentMessages を差し替える場合は戻り値を await すること。
+        // 万一 setSendingState(false) に到達しない経路があっても UI を
+        // 永久に止めないよう、待ち時間には上限を設ける。
         abortRequest() {
+          const settled = state.sendSettledPromise;
           if (state.abortController) {
             state.abortController.abort();
           }
+          if (!settled) return Promise.resolve();
+          return Promise.race([
+            settled,
+            new Promise((resolve) => setTimeout(resolve, ABORT_SETTLE_TIMEOUT_MS)),
+          ]);
         },
         async handleHistoryImport(file) {
           // 環境によっては file.type が空になるため、拡張子も判定材料にする
@@ -32864,12 +32735,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               });
             }
             if (chatUpdated) {
-              await new Promise((resolve, reject) => {
-                const store = dbUtils._getStore(CHATS_STORE, "readwrite");
-                const request = store.put(chat);
-                request.onsuccess = () => resolve();
-                request.onerror = (e) => reject(e.target.error);
-              });
+              // _getStore 直叩きだと put 成功だけ見てコミットの abort を
+              // 見逃す。base64 を含む大きなレコードを扱う経路なので、
+              // 容量超過で消えたつもりのデータが残る事故になりうる。
+              await dbUtils.writeChat(chat);
             }
           }
         },
@@ -33367,21 +33236,28 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               (m) => m.role === "user",
             );
 
+            // 新インデックス → 旧インデックスの対応表。削除件数から逆算すると
+            // 2件以上の削除（兄弟グループ一括削除）でズレるため、削除前の
+            // 生き残りインデックスをそのまま並べて対応させる。
+            const deletedIndexSet = new Set(indicesToDelete);
+            const survivingOldIndices = state.currentMessages
+              .map((_, i) => i)
+              .filter((i) => !deletedIndexSet.has(i));
+
+            const oldCollapsedStates = new Map(state.messageCollapsedStates);
+            const oldThoughtOpenStates = new Map(
+              state.thoughtSummaryOpenStates,
+            );
+
             indicesToDelete
               .sort((a, b) => b - a)
               .forEach((idx) => {
                 state.currentMessages.splice(idx, 1);
-                state.messageCollapsedStates.delete(idx);
-                state.thoughtSummaryOpenStates.delete(idx);
               });
 
-            const oldCollapsedStates = new Map(state.messageCollapsedStates);
             state.messageCollapsedStates.clear();
             state.currentMessages.forEach((msg, newIdx) => {
-              const oldIdxEquivalent =
-                newIdx >= Math.min(...indicesToDelete)
-                  ? newIdx + indicesToDelete.filter((i) => i <= newIdx).length
-                  : newIdx;
+              const oldIdxEquivalent = survivingOldIndices[newIdx];
               if (oldCollapsedStates.has(oldIdxEquivalent)) {
                 state.messageCollapsedStates.set(
                   newIdx,
@@ -33391,15 +33267,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 state.messageCollapsedStates.set(newIdx, false);
               }
             });
-            const oldThoughtOpenStates = new Map(
-              state.thoughtSummaryOpenStates,
-            );
             state.thoughtSummaryOpenStates.clear();
             state.currentMessages.forEach((msg, newIdx) => {
-              const oldIdxEquivalent =
-                newIdx >= Math.min(...indicesToDelete)
-                  ? newIdx + indicesToDelete.filter((i) => i <= newIdx).length
-                  : newIdx;
+              const oldIdxEquivalent = survivingOldIndices[newIdx];
               if (oldThoughtOpenStates.has(oldIdxEquivalent)) {
                 state.thoughtSummaryOpenStates.set(
                   newIdx,
@@ -33410,12 +33280,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   msg?.generatedByApiProvider || state.settings.apiProvider;
                 state.thoughtSummaryOpenStates.set(
                   newIdx,
-                  (messageApiProvider === "gemini" &&
-                    state.settings.geminiExpandThoughtsByDefault) ||
-                    (messageApiProvider === "deepseek" &&
-                      state.settings.deepSeekExpandThoughtsByDefault) ||
-                    (messageApiProvider === "claude" &&
-                      state.settings.claudeExpandThoughtsByDefault),
+                  shouldExpandThoughtsByDefault(messageApiProvider),
                 );
               }
             });
@@ -33530,14 +33395,14 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 await uiUtils.showCustomAlert(
                   `リトライ前の要約処理中にエラーが発生しました: ${error.message}`,
                 );
+                return;
+              } finally {
+                // 成功時にもここを通さないと userInput.disabled が戻らず、
+                // 入力欄が固まったままになる。
                 state.isSummarizingForRetry = false;
                 uiUtils.updateLoadingIndicator();
                 elements.sendButton.disabled = false;
                 elements.userInput.disabled = false;
-                return;
-              } finally {
-                state.isSummarizingForRetry = false;
-                uiUtils.updateLoadingIndicator();
               }
             }
 
@@ -33784,12 +33649,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   msg?.generatedByApiProvider || state.settings.apiProvider;
                 state.thoughtSummaryOpenStates.set(
                   newIdx,
-                  (messageApiProvider === "gemini" &&
-                    state.settings.geminiExpandThoughtsByDefault) ||
-                    (messageApiProvider === "deepseek" &&
-                      state.settings.deepSeekExpandThoughtsByDefault) ||
-                    (messageApiProvider === "claude" &&
-                      state.settings.claudeExpandThoughtsByDefault),
+                  shouldExpandThoughtsByDefault(messageApiProvider),
                 );
               }
             });
@@ -34068,7 +33928,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               state.settings.persistMessageCollapseState &&
               state.currentChatId
             ) {
-              dbUtils.saveChat();
+              // 表示操作をブロックしないので待たないが、失敗を握り潰さないと
+              // unhandled rejection になる。折り畳み状態の保存失敗は致命的でない。
+              dbUtils.saveChat().catch(console.error);
             }
 
             toggleButtons.forEach((button) => {
@@ -34108,7 +33970,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               state.settings.persistMessageCollapseState &&
               state.currentChatId
             ) {
-              dbUtils.saveChat();
+              dbUtils.saveChat().catch(console.error);
             }
 
             if (toggleButtons) {
@@ -37307,12 +37169,18 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           generationConfig,
           systemInstruction,
           useStreaming,
+          externalSignal = null,
         ) {
           if (!apiKey) {
             throw new Error("Claude APIキーが設定されていません。");
           }
-          state.abortController = new AbortController();
-          const { signal } = state.abortController;
+          let signal;
+          if (externalSignal) {
+            signal = externalSignal;
+          } else {
+            state.abortController = new AbortController();
+            signal = state.abortController.signal;
+          }
 
           const baseUrl = CLAUDE_API_BASE_URL;
 
@@ -37646,6 +37514,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           systemInstruction,
           useStreaming,
           enableVision,
+          externalSignal = null,
         ) {
           let baseUrl;
 
@@ -37668,8 +37537,13 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             throw new Error(`${provider} のAPIキーが設定されていません。`);
           }
 
-          state.abortController = new AbortController();
-          const { signal } = state.abortController;
+          let signal;
+          if (externalSignal) {
+            signal = externalSignal;
+          } else {
+            state.abortController = new AbortController();
+            signal = state.abortController.signal;
+          }
 
           const headers = {
             "Content-Type": "application/json",
@@ -37813,12 +37687,18 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           systemInstruction,
           useStreaming,
           enableVision,
+          externalSignal = null,
         ) {
           if (!apiKey) {
             throw new Error("xAI APIキーが設定されていません。");
           }
-          state.abortController = new AbortController();
-          const { signal } = state.abortController;
+          let signal;
+          if (externalSignal) {
+            signal = externalSignal;
+          } else {
+            state.abortController = new AbortController();
+            signal = state.abortController.signal;
+          }
 
           const headers = {
             "Content-Type": "application/json",
@@ -38753,8 +38633,16 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             this.errorCount = 0;
           }
 
-          this.errorCount++;
-          this.lastErrorTime = now;
+          // 一過性エラーは記録だけして連続エラーカウンタには入れない。
+          // isCriticalError が通信断や単発 TypeError を除外しているのと同じ理由で、
+          // リロードしても直らないものにリロードで応じてはいけない。カウンタに
+          // 入れてしまうと、回線が不安定なだけで60秒に3回に達し、結局
+          // 「入力中の内容を巻き添えにするキャッシュ削除＋リロード」が走っていた。
+          const isTransient = this.isTransientError(errorInfo);
+          if (!isTransient) {
+            this.errorCount++;
+            this.lastErrorTime = now;
+          }
 
           this.logError(type, errorInfo);
 
@@ -38780,9 +38668,30 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
           const isCriticalError = this.isCriticalError(errorInfo);
 
-          if (this.errorCount >= this.maxErrors || isCriticalError) {
+          if (
+            (!isTransient && this.errorCount >= this.maxErrors) ||
+            isCriticalError
+          ) {
             this.triggerForceReload(type, errorInfo, isCriticalError);
           }
+        },
+
+        // リロードでは解消しない、かつ発生してもアプリの整合性を壊さない種類。
+        // ユーザーによる送信中断、通信断、拡張機能やクロスオリジンCDN由来の
+        // 追跡不能なエラー、ResizeObserver の良性ループ通知など。
+        isTransientError(errorInfo) {
+          const transientPatterns = [
+            /AbortError/i,
+            /The user aborted a request/i,
+            /Failed to fetch/i,
+            /NetworkError/i,
+            /Load failed/i,
+            /ERR_(INTERNET_DISCONNECTED|NETWORK_CHANGED|CONNECTION_)/i,
+            /ResizeObserver loop/i,
+            /Script error/i,
+          ];
+          const message = this.serializeErrorInfo(errorInfo);
+          return transientPatterns.some((pattern) => pattern.test(message));
         },
 
         isCriticalError(errorInfo) {
@@ -38911,6 +38820,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         },
 
         manualRecovery() {
+          // 打ち止め時 (showRecoveryStalledNotification) は自動復旧の再発を防ぐため
+          // isRecovering を立てたままにしてある。その打ち止めメッセージ自身が手動復旧を
+          // 案内しているので、ここで降ろさないと「強制復旧」ボタンが無反応になる。
+          this.isRecovering = false;
           this.suppressAutoRecovery = false;
           // ユーザーが明示的に要求した復旧は、自動リロードの打ち止めに縛られない。
           this.resetReloadCount();
@@ -39792,16 +39705,18 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
       };
       let _AiTokenizerClass = null;
       const _aiTokenizerEncodings = {};
+      // head の CDN スクリプトと同様、バージョンは固定する。@latest のままだと
+      // 上流の更新がそのまま本番に流れ込み、トークン計算が予告なく変わる。
       async function getAiTokenizerClass() {
         if (_AiTokenizerClass) return _AiTokenizerClass;
-        const m = await import("https://esm.sh/ai-tokenizer@latest");
+        const m = await import("https://esm.sh/ai-tokenizer@1.0.6");
         _AiTokenizerClass = m.Tokenizer || m.default;
         return _AiTokenizerClass;
       }
       async function getAiTokenizerEncoding(n) {
         if (_aiTokenizerEncodings[n]) return _aiTokenizerEncodings[n];
         const m = await import(
-          `https://esm.sh/ai-tokenizer@latest/encoding/${n}`
+          `https://esm.sh/ai-tokenizer@1.0.6/encoding/${n}`
         );
         _aiTokenizerEncodings[n] = m;
         return m;
@@ -40204,10 +40119,18 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
       const perfMonitor = {
         _bootMarks: [],
         _lastBootMarkTime: 0,
+        _hasBootBaseline: false,
         _maxBootMarks: 100,
+        // 基準時刻は performance.now() と同じ時間軸で持つ。ページ読込時点は
+        // その軸では 0 であり、0 を「基準なし」の番兵に使うと基準として渡せない。
+        // 「基準を張ったか」は専用フラグで表す。
+        startBootMarks(baseline = 0) {
+          this._lastBootMarkTime = baseline;
+          this._hasBootBaseline = true;
+        },
         recordBootMark(label) {
           const now = performance.now();
-          if (this._lastBootMarkTime !== 0) {
+          if (this._hasBootBaseline) {
             this._bootMarks.push({
               label,
               duration: now - this._lastBootMarkTime,
@@ -40217,6 +40140,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               this._bootMarks.shift();
           }
           this._lastBootMarkTime = now;
+          this._hasBootBaseline = true;
         },
         _enabled: false,
         _intervalId: null,
@@ -41106,6 +41030,11 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
       errorRecovery.init();
 
       window.errorRecovery = errorRecovery;
+
+      // ここまで到達した = 本体スクリプトの構文解析と定義評価が通った。
+      // 起動ウォッチドッグは、この印の有無で「データ破損の疑い」と
+      // 「アプリのコード自体が動いていない」を区別する。
+      window.__mainScriptParsed = true;
 
       appLogic.initializeApp();
     </script>
