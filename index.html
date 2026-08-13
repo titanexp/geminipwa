@@ -1205,6 +1205,9 @@
       .main-content {
         flex-grow: 1;
         overflow-y: auto;
+        /* overflow-y を auto にすると overflow-x の初期値 visible は auto に
+           計算されるため、明示しないと全パネルが横スクロール可能になる。 */
+        overflow-x: hidden;
         padding: 15px;
         position: relative;
         z-index: 1;
@@ -1300,7 +1303,8 @@
         z-index: 1;
         background-color: transparent;
         overflow-y: auto;
-        touch-action: pan-x pan-y pinch-zoom;
+        overflow-x: hidden;
+        touch-action: pan-y pinch-zoom;
       }
       #image-gen-screen .chat-input-area {
         z-index: 2;
@@ -1394,8 +1398,10 @@
         z-index: 1;
         background-color: transparent;
         overflow-y: scroll;
-        overflow-x: auto;
-        touch-action: pan-x pan-y pinch-zoom;
+        overflow-x: hidden;
+        /* pan-x があるとタッチでパネル内を横に振れてしまう。横スクロールは
+           pre / table など内側の要素に持たせる。 */
+        touch-action: pan-y pinch-zoom;
         flex-grow: 1;
       }
 
@@ -3600,6 +3606,11 @@
         margin: 1em 0;
         width: auto;
         border: 1px solid var(--border-secondary);
+        /* パネル側の横スクロールを止めたぶん、幅の広い表は表自身をスクロール
+           させないと見切れる (pre と同じ扱い)。 */
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
       }
 
       .message-content th,
@@ -9323,7 +9334,7 @@
                   margin-top: 5px;
                 "
               >
-                APIキーは不要で、バックエンドへの接続も行いません。ユーザーがメッセージを送信すると、常に空の応答を返します。
+                APIキーは不要で、バックエンドへの接続も行いません。応答は以下の設定から組み立てられ、どれも有効にしていなければ空の応答を返します。
               </p>
               <hr style="margin: 15px 0" />
               <label for="dummy-dummy-model">ダミー Model プロンプト:</label>
@@ -9340,6 +9351,34 @@
                 このダミーModelプロンプトを有効にする
               </label>
             </div>
+            <div style="margin-top: 15px">
+              <label class="checkbox-label">
+                <input type="checkbox" id="dummy-streaming-output" />
+                ストリーミング出力を使用する
+              </label>
+              <p
+                style="
+                  font-size: 11px;
+                  color: var(--text-secondary);
+                  margin-top: -5px;
+                  margin-bottom: 10px;
+                "
+              >
+                ※
+                応答を実プロバイダと同じストリーミング表示経路で流します(挙動検証用)。
+              </p>
+              <label for="dummy-streaming-speed"
+                >文字送り速度 (ミリ秒/文字):</label
+              >
+              <input
+                type="number"
+                id="dummy-streaming-speed"
+                min="0"
+                step="1"
+                placeholder="例: 30 (0で無効)"
+                aria-label="Dummy AI 文字送り速度"
+              />
+            </div>
             <label class="checkbox-label" style="margin-top: 15px">
               <input type="checkbox" id="dummy-error-debug-mode" />
               エラーログを応答する (デバッグモード)
@@ -9353,8 +9392,17 @@
               "
             >
               ※
-              チェック時、これまでに発生したJavaScriptエラーのログを応答します。
+              チェック時、これまでに発生したJavaScriptエラーのログを応答します。<br />
+              ※
+              ログはリロードを跨いで保持されます (最大20件)。前回起動時のものには印が付きます。
             </p>
+            <button
+              type="button"
+              id="dummy-clear-error-log-btn"
+              class="settings-action-button"
+            >
+              エラーログをクリア
+            </button>
 
             <details style="margin-top: 15px">
               <summary
@@ -9386,6 +9434,8 @@
                 >
                   ※
                   有効時、Twin-engineが起動するタイミングで、要約AIに送信されるはずの完全なプロンプトを応答として返します。<br />
+                  ※
+                  この間、上の「ダミー Model プロンプト」と「エラーログを応答する」は応答に含まれません。<br />
                   ※ この機能はデバッグ専用です。
                 </p>
               </div>
@@ -14774,6 +14824,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
       const ABORT_SETTLE_TIMEOUT_MS = 5000;
       // ストリーミング中の再描画間隔の下限（約30fps）
       const STREAM_RENDER_INTERVAL_MS = 33;
+      // 折り畳み状態の永続化をまとめる待ち時間（連打時の書き込み抑制）
+      const COLLAPSE_STATE_SAVE_DEBOUNCE_MS = 500;
       const GEMINI_API_BASE_URL =
         "https://generativelanguage.googleapis.com/v1beta/models/";
       const DEEPSEEK_API_DEFAULT_BASE_URL =
@@ -15737,7 +15789,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         ),
         imagePreviewDialog: byId("imagePreviewDialog"),
         dummyErrorDebugModeCheckbox: byId("dummy-error-debug-mode"),
+        dummyClearErrorLogBtn: byId("dummy-clear-error-log-btn"),
         dummyTwinEngineDebugModeCheckbox: byId("dummy-twin-engine-debug-mode"),
+        dummyStreamingOutputCheckbox: byId("dummy-streaming-output"),
+        dummyStreamingSpeedInput: byId("dummy-streaming-speed"),
         dummyDummyModelInput: byId("dummy-dummy-model"),
         dummyEnableDummyModelCheckbox: byId("dummy-enable-dummy-model"),
         geminiApiKeysList: byId("gemini-api-keys-list"),
@@ -16251,6 +16306,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             dummy: true,
           },
           dummyErrorDebugMode: false,
+          dummyStreamingOutput: false,
+          dummyStreamingSpeed: DEFAULT_STREAMING_SPEED,
           dummyDummyModel: "",
           dummyEnableDummyModel: false,
           dummyTwinEngineDebugMode: false,
@@ -16312,6 +16369,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         aiIconUrl: null,
 
         isSending: false,
+        // isSending は fetch 直前まで立たないため、handleSend 入口から
+        // setSendingState(true) までの await 区間(編集の確定保存など)を
+        // 素通りしてしまう。その区間を塞ぐための同期フラグ。
+        sendInFlight: false,
         responseTimerId: null,
         responseStartTime: 0,
         isSummarizing: false,
@@ -16321,6 +16382,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         sendSettledPromise: null,
         sendSettledResolve: null,
         imageGenAbortController: null,
+        // AI間会話のステップ1(背景送信)専用。abortRequest から中断できるようにする。
+        aiToAiAbortController: null,
         partialStreamContent: "",
         partialThoughtStreamContent: "",
         editingMessageIndex: null,
@@ -16341,7 +16404,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         twinEngineSummarySaveTimer: null,
         areAllMessagesHidden: false,
         messageCollapsedStates: new Map(),
-        thoughtSummaryOpenStates: new Map(),
         linkedSessionIds: [],
         isAiToAiChatProcessing: false,
         aiToAiProcessingMessage: "AI間会話処理中...",
@@ -16567,6 +16629,15 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
       // これらのプレーンテキスト用途では長さ制限だけを行う。
       const clampText = (text, maxLength = 255) =>
         typeof text === "string" ? text.substring(0, maxLength) : "";
+
+      // 「今メインチャットの送信が走っているか」の唯一の判定。
+      // isSending は fetch 直前まで、sendInFlight は handleSend 入口から立つので、
+      // 送信を弾く側は必ず両方を見る必要がある(片方だけ見ると隙間を素通りする)。
+      // 判定をコピーして回ると新しい入口を足した人が片方を書き忘れるため、
+      // ここ1箇所に寄せる。
+      function isSendBusy() {
+        return state.isSending || state.sendInFlight;
+      }
 
       function isAllowedAggregatorDomain(urlStr) {
         if (state.settings.disableLlmUrlWhitelist) return true;
@@ -17386,7 +17457,23 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           });
         },
 
-        async saveChat(optionalTitle = null) {
+        // 保存は1本に直列化する。currentChatId が null の新規チャットで
+        // saveChat が同時に走ると、両方が store.get で「既存なし」と判断して
+        // id 無しの put を発行し、同じ会話がDBに2件できてしまう。送信経路は
+        // sendInFlight で塞がれているが、編集確定・タイトル更新・設定変更からの
+        // 保存は互いに並走しうるため、入口で並べ直す。
+        // _saveChatChain は catch 済みで、絶対に reject しない(鎖に失敗を残すと
+        // 一度の保存失敗で以降の保存が全部道連れになる)。呼び出し元には
+        // catch していない run の方を返すので、エラーは今まで通り伝わる。
+        _saveChatChain: Promise.resolve(),
+        saveChat(optionalTitle = null) {
+          const run = this._saveChatChain.then(() =>
+            this._saveChatInner(optionalTitle),
+          );
+          this._saveChatChain = run.catch(() => {});
+          return run;
+        },
+        async _saveChatInner(optionalTitle = null) {
           await this.openDB();
           if (!state.currentMessages || state.currentMessages.length === 0) {
             return state.currentChatId;
@@ -18816,6 +18903,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             });
           }
         },
+        // targetContainer は renderChatMessages が一括描画する時だけ
+        // DocumentFragment を渡す。省略時は従来通りライブDOMへ直接追加する。
         appendMessage(
           role,
           content,
@@ -18823,6 +18912,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           isStreamingPlaceholder = false,
           cascadeInfo = null,
           attachments = null,
+          targetContainer = null,
         ) {
           const messageDiv = document.createElement("div");
           messageDiv.classList.add("message", role);
@@ -19321,7 +19411,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           if (isStreamingPlaceholder) {
             messageDiv.id = `streaming-message-${index}`;
           }
-          elements.messageContainer.appendChild(messageDiv);
+          (targetContainer || elements.messageContainer).appendChild(
+            messageDiv,
+          );
         },
 
         renderCitations(messageData, containerDiv) {
@@ -19795,7 +19887,13 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           let targetContentDiv;
           let accumulatedContentForDisplay;
 
-          const selectedApiProvider = state.settings.apiProvider;
+          // このメッセージを生成しているプロバイダで判定する。state.settings を
+          // 直読みすると、ストリーミング中に設定を切り替えられた時点で thought の
+          // 描画条件が変わり、途中から出なくなる。finalizeStreamingMessage は
+          // 既に generatedByApiProvider を見ており、そちらに揃える。
+          const selectedApiProvider =
+            state.currentMessages[index]?.generatedByApiProvider ||
+            state.settings.apiProvider;
 
           if (isThoughtSummary) {
             if (
@@ -19955,7 +20053,15 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
             const msgData = state.currentMessages[index];
             if (msgData && msgData.role === "model" && msgData.isCascaded) {
-              const siblings = appLogic.getCascadedSiblings(index);
+              // カスケードUI (◀ n/N ▶ と非選択応答の非表示) を組めるのは
+              // renderChatMessages だけ。ストリーミング中の appendMessage は
+              // cascadeInfo を渡さないため、確定時に再描画しないと切り替え
+              // UI が付かない。数えるのは「グループの総数」なので自分も含める。
+              // 除外していた頃は 2件目 (= 初回リトライ) だけ再描画されず、
+              // 新応答に n/N が出ないまま、isSelected を降ろした旧応答も
+              // retrying-hidden を外された時点で画面に残り、2件が同時に
+              // 見える状態になっていた (3件目以降でようやく直る)。
+              const siblings = appLogic.getCascadedSiblings(index, true);
               if (siblings.length > 1) {
                 this.renderChatMessages();
               }
@@ -19995,11 +20101,19 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             contentDiv.appendChild(pre);
           }
         },
-        displayError(message, isApiError = false) {
+        // エラーを表示するだけ。送信状態は触らない。
+        // 以前はここで setSendingState(false) を呼んでいたが、送信を継続する
+        // 経路 (ユーザー発言の保存に失敗しても API 呼び出しは続ける箇所) から
+        // 呼ばれると、送信中のまま isSending/sendInFlight が降りてボタンが
+        // 「送」に戻り、多重送信ガードが抜けて2発目が state.abortController を
+        // 上書き(先発が中断不能になる)していた。状態の後始末は、それを持って
+        // いる呼び出し元の finally に任せる。
+        displayError(message) {
           const errorIndex = state.currentMessages.length;
           this.appendMessage("error", `エラー: ${message}`, errorIndex);
-          elements.loadingIndicator.classList.add("hidden");
-          this.setSendingState(false);
+          // 実際の状態に合わせる。無条件に隠すと、背景処理が続いている間も
+          // インジケータだけが消える。
+          this.updateLoadingIndicator();
           this.scrollToBottom();
         },
         scrollToTop() {
@@ -21344,12 +21458,21 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             state.settings.apiProviderCycle.llmaggregator;
           elements.apiProviderCycleDummyCheckbox.checked =
             state.settings.apiProviderCycle.dummy;
+          elements.dummyStreamingOutputCheckbox.checked =
+            state.settings.dummyStreamingOutput;
+          elements.dummyStreamingSpeedInput.value =
+            state.settings.dummyStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
           elements.dummyDummyModelInput.value =
             state.settings.dummyDummyModel || "";
           elements.dummyEnableDummyModelCheckbox.checked =
             state.settings.dummyEnableDummyModel;
           elements.dummyTwinEngineDebugModeCheckbox.checked =
             state.settings.dummyTwinEngineDebugMode;
+          // ここを書き忘れると、保存時に読まれるのは常に未チェックの
+          // チェックボックスなので、設定を保存するたびに黙って false へ
+          // 戻る (state 側は有効なまま残るので表示と挙動もずれる)。
+          elements.dummyErrorDebugModeCheckbox.checked =
+            state.settings.dummyErrorDebugMode;
 
           elements.enableProofreadingCheckbox.checked =
             state.settings.enableProofreading;
@@ -22359,28 +22482,50 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           });
           state.currentScreen = screenName;
         },
-        setSendingState(sending) {
-          state.isSending = sending;
-          if (sending && !state.sendSettledResolve) {
-            state.sendSettledPromise = new Promise((resolve) => {
-              state.sendSettledResolve = resolve;
-            });
-          } else if (!sending && state.sendSettledResolve) {
+        // 送信ボタンの見た目だけを切り替える。isSending が立つより早く
+        // (handleSend 入口の時点で) 「止」にできるよう setSendingState から
+        // 分離した。ボタンの見た目を触るのはこの関数だけにする。
+        setSendButtonBusy(busy) {
+          if (busy) {
+            elements.sendButton.textContent = "止";
+            elements.sendButton.classList.add("sending");
+            elements.sendButton.title = "停止";
+            elements.sendButton.disabled = false;
+          } else {
+            elements.sendButton.textContent = "送";
+            elements.sendButton.classList.remove("sending");
+            elements.sendButton.title = "送信";
+          }
+        },
+        // sendInFlight と、それに連動する sendSettledPromise を切り替える。
+        // sendSettledPromise を setSendingState(true) で作っていた頃は、
+        // handleSend 入口から setSendingState(true) までの区間 (sendInFlight
+        // だけが立っている区間) で null のままだった。abortRequest はこれを
+        // 「決着済み」と読んで即 resolve するため、送信中なのに待たずに
+        // state.currentMessages を差し替えられてしまっていた。送信中かどうかの
+        // 唯一の同期的な真実は sendInFlight なので、生成もそちらに合わせる。
+        setSendInFlight(inFlight) {
+          state.sendInFlight = inFlight;
+          if (inFlight) {
+            if (!state.sendSettledResolve) {
+              state.sendSettledPromise = new Promise((resolve) => {
+                state.sendSettledResolve = resolve;
+              });
+            }
+          } else if (state.sendSettledResolve) {
             const resolve = state.sendSettledResolve;
             state.sendSettledResolve = null;
             state.sendSettledPromise = null;
             resolve();
           }
+        },
+        setSendingState(sending) {
+          state.isSending = sending;
+          this.setSendInFlight(sending);
+          this.setSendButtonBusy(sending);
           if (sending) {
-            elements.sendButton.textContent = "止";
-            elements.sendButton.classList.add("sending");
-            elements.sendButton.title = "停止";
-            elements.sendButton.disabled = false;
             if (elements.aiToAiChatBtn) elements.aiToAiChatBtn.disabled = true;
           } else {
-            elements.sendButton.textContent = "送";
-            elements.sendButton.classList.remove("sending");
-            elements.sendButton.title = "送信";
             if (elements.aiToAiChatBtn) {
               const showAiToAiBtn =
                 state.settings.enableSessionLinking &&
@@ -22934,13 +23079,18 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           state.aiToAiProcessingMessage = message;
 
           if (processing) {
-            elements.sendButton.disabled = true;
+            // 送信ボタンは中断用に開けておく。塞いでいた頃はステップ1
+            // (背景送信)の間だけ中断手段が一切無かった。
+            this.setSendButtonBusy(true);
             elements.userInput.disabled = true;
             elements.attachFileBtn.disabled = true;
             elements.pasteToInputBtn.disabled = true;
             elements.rollDiceBtn.disabled = true;
             if (elements.aiToAiChatBtn) elements.aiToAiChatBtn.disabled = true;
           } else {
+            // ステップ1で失敗・中断した場合は setSendingState を通らないため、
+            // ここで見た目を戻さないと「止」のままになる。
+            this.setSendButtonBusy(false);
             elements.sendButton.disabled =
               elements.userInput.value.trim() === "" &&
               state.pendingAttachments.length === 0;
@@ -24784,8 +24934,19 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             this.cycleActiveApiKey(),
           );
           elements.sendButton.addEventListener("click", () => {
-            if (state.isSending) this.abortRequest();
-            else this.handleSend();
+            // AI間会話中は isSending が立たない区間(ステップ1)があるため、
+            // 先に判定する。ここを送信として扱うと二重に走る。
+            //
+            // 送信側と同じ isSendBusy() を使う。isSending だけを見ていた頃は、
+            // handleSend 入口から setSendingState(true) までの区間
+            // (commitAllOpenEdits の saveChat など) でボタンが「送」のまま
+            // 押しても入口ガードで無言 return するだけになり、送信も中断も
+            // できない死に区間ができていた。
+            if (state.isAiToAiChatProcessing || isSendBusy()) {
+              this.abortRequest();
+            } else {
+              this.handleSend();
+            }
           });
           elements.userInput.addEventListener("input", () =>
             uiUtils.adjustTextareaHeight(),
@@ -24797,13 +24958,22 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               !e.shiftKey
             ) {
               e.preventDefault();
+              // ガードはクリック側 (sendButton) と同じ条件にする。isSending だけを
+              // 見ていると、AI間会話のステップ1のように isSending が立たない区間で
+              // Enter が通ってしまう。この区間は sendInFlight も立たないため
+              // _handleSendCore の入口ガードも抜け、AI間会話に割り込んで通常送信が
+              // 走っていた。なお Enter は中断操作には割り当てない (誤爆すると
+              // 応答が消えるため)。送信中は何もしない。
+              if (state.isAiToAiChatProcessing || isSendBusy()) {
+                return;
+              }
               const canSend =
                 state.settings.apiProvider === "dummy" ||
                 !(
                   elements.userInput.value.trim() === "" &&
                   state.pendingAttachments.length === 0
                 );
-              if (canSend && !state.isSending) {
+              if (canSend) {
                 this.handleSend();
               }
             }
@@ -24884,6 +25054,31 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 }
               });
             });
+          }
+          if (elements.dummyClearErrorLogBtn) {
+            // ログは localStorage に残りリロードでも消えない (自動リロードで
+            // 消えないことが狙いなので、それ自体は正しい)。ただし読み出す手段が
+            // dummy のデバッグモードしかない以上、「直す→もう一度出す」を回すと
+            // 前回起動時のログが混ざり続ける。読む側から捨てる手段を用意する。
+            // 設定の保存とは独立に即時実行する (保存せず閉じても戻らない)。
+            elements.dummyClearErrorLogBtn.addEventListener(
+              "click",
+              async () => {
+                const count = errorRecovery.errorLog.length;
+                if (count === 0) {
+                  await uiUtils.showCustomAlert(
+                    "記録されているエラーログはありません。",
+                  );
+                  return;
+                }
+                const confirmed = await uiUtils.showCustomConfirm(
+                  `記録されているエラーログ ${count} 件を削除しますか？`,
+                );
+                if (!confirmed) return;
+                errorRecovery.clearErrorLog();
+                await uiUtils.showCustomAlert("エラーログを削除しました。");
+              },
+            );
           }
           byId("force-recovery-btn").addEventListener("click", async () => {
             const confirmed = await uiUtils.showCustomConfirm(
@@ -25212,7 +25407,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
           elements.showUserIconToggle.addEventListener("change", () => {
             state.settings.showUserIcon = elements.showUserIconToggle.checked;
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
           });
           elements.uploadUserIconBtn.addEventListener("click", () =>
             elements.userIconInput.click(),
@@ -25227,12 +25422,12 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           );
           elements.showUserNameToggle.addEventListener("change", () => {
             state.settings.showUserName = elements.showUserNameToggle.checked;
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
           });
 
           elements.showAiIconToggle.addEventListener("change", () => {
             state.settings.showAiIcon = elements.showAiIconToggle.checked;
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
           });
           elements.uploadAiIconBtn.addEventListener("click", () =>
             elements.aiIconInput.click(),
@@ -25247,7 +25442,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           );
           elements.showAiNameToggle.addEventListener("change", () => {
             state.settings.showAiName = elements.showAiNameToggle.checked;
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
           });
           elements.iconNameFontSizeInput.addEventListener("input", () => {
             const newSize = parseInt(elements.iconNameFontSizeInput.value, 10);
@@ -25320,7 +25515,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             state.settings.showUserNameBubble =
               elements.userNameBubbleToggle.checked;
             uiUtils.applySidePanelSettingsToUI();
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
           });
           elements.userNameBubbleUseThemeColorToggle.addEventListener(
             "change",
@@ -25328,7 +25523,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               state.settings.userNameBubbleUseThemeColor =
                 elements.userNameBubbleUseThemeColorToggle.checked;
               uiUtils.applySidePanelSettingsToUI();
-              uiUtils.renderChatMessages(true, true);
+              uiUtils.renderChatMessages(true);
             },
           );
           elements.userNameBubbleColorInput.addEventListener("input", () => {
@@ -25336,7 +25531,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               elements.userNameBubbleColorInput.value.trim() ||
               DEFAULT_USER_NAME_BUBBLE_COLOR;
             uiUtils.applySidePanelSettingsToUI();
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
           });
           elements.userNameBubbleOpacityInput.addEventListener("input", () => {
             state.settings.userNameBubbleOpacity =
@@ -25344,13 +25539,13 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 ? DEFAULT_USER_NAME_BUBBLE_OPACITY
                 : parseFloat(elements.userNameBubbleOpacityInput.value);
             uiUtils.applySidePanelSettingsToUI();
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
           });
           elements.aiNameBubbleToggle.addEventListener("change", () => {
             state.settings.showAiNameBubble =
               elements.aiNameBubbleToggle.checked;
             uiUtils.applySidePanelSettingsToUI();
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
           });
           elements.aiNameBubbleUseThemeColorToggle.addEventListener(
             "change",
@@ -25358,7 +25553,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               state.settings.aiNameBubbleUseThemeColor =
                 elements.aiNameBubbleUseThemeColorToggle.checked;
               uiUtils.applySidePanelSettingsToUI();
-              uiUtils.renderChatMessages(true, true);
+              uiUtils.renderChatMessages(true);
             },
           );
           elements.aiNameBubbleColorInput.addEventListener("input", () => {
@@ -25366,7 +25561,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               elements.aiNameBubbleColorInput.value.trim() ||
               DEFAULT_AI_NAME_BUBBLE_COLOR;
             uiUtils.applySidePanelSettingsToUI();
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
           });
           elements.aiNameBubbleOpacityInput.addEventListener("input", () => {
             state.settings.aiNameBubbleOpacity =
@@ -25374,7 +25569,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 ? DEFAULT_AI_NAME_BUBBLE_OPACITY
                 : parseFloat(elements.aiNameBubbleOpacityInput.value);
             uiUtils.applySidePanelSettingsToUI();
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
           });
 
           this._setupOpacitySlider(
@@ -26101,8 +26296,11 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   return;
                 }
 
+                // toggleMessageCollapse は appLogic 側の関数。uiUtils から
+                // 呼ぼうとすると毎クリック TypeError になり、errorRecovery の
+                // 連続エラー判定(60秒に3回)を踏んで強制リロードまで走っていた。
                 if (button.classList.contains("message-toggle-button")) {
-                  uiUtils.toggleMessageCollapse(index);
+                  appLogic.toggleMessageCollapse(index);
                   return;
                 }
 
@@ -26471,16 +26669,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               this.cancelAttachment();
             }
           });
-          elements.messageContainer.addEventListener("click", (event) => {
-            const targetButton = event.target.closest(".message-toggle-button");
-            if (
-              targetButton &&
-              targetButton.dataset.action === "toggle-collapse"
-            ) {
-              const index = parseInt(targetButton.dataset.index, 10);
-              this.toggleMessageCollapse(index);
-            }
-          });
+          // 折り畳みボタンの click は messageContainer のキャプチャ側リスナーで
+          // 一本化して処理する。ここに二重目を張ると1クリックで2回トグルされ、
+          // 見かけ上ボタンが効かなくなる。
           elements.enableContentVisibilityToggle.addEventListener(
             "change",
             (e) => {
@@ -27237,7 +27428,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           uiUtils.updateAttachmentBadgeVisibility();
         },
         async confirmStartNewChat() {
-          if (state.isSending) {
+          if (isSendBusy()) {
             const confirmed = await uiUtils.showCustomConfirm(
               "送信中です。中断して新規チャットを開始しますか？",
             );
@@ -27302,7 +27493,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           state.areAllMessagesHidden = false;
           uiUtils.updateToggleAllContentButton();
           state.messageCollapsedStates.clear();
-          state.thoughtSummaryOpenStates.clear();
           uiUtils.renderChatMessages();
           uiUtils.updateChatTitle();
           elements.userInput.value = "";
@@ -28561,7 +28751,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
         async loadChat(id) {
           let confirmedLoad = true;
-          if (state.isSending) {
+          if (isSendBusy()) {
             if (!state.settings.disableLoadChatConfirmationWhileSending) {
               confirmedLoad = await uiUtils.showCustomConfirm(
                 "送信中です。中断して別のチャットを読み込みますか？",
@@ -28596,6 +28786,20 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             clearTimeout(state.twinEngineSummarySaveTimer);
             state.twinEngineSummarySaveTimer = null;
             await this.persistTwinEngineSummaryContent();
+          }
+
+          // 折り畳み状態の保存はデバウンスしてある。ここで吐き出さないと、
+          // 直前の折り畳み操作が現チャットに書かれないまま state を
+          // 差し替えてしまい、タイマーは新しいチャットを保存して終わる。
+          if (this._collapseStateSaveTimer) {
+            clearTimeout(this._collapseStateSaveTimer);
+            this._collapseStateSaveTimer = null;
+            if (
+              state.settings.persistMessageCollapseState &&
+              state.currentChatId
+            ) {
+              await dbUtils.saveChat().catch(console.error);
+            }
           }
 
           try {
@@ -28648,7 +28852,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               state.areAllMessagesHidden = false;
               uiUtils.updateToggleAllContentButton();
               state.messageCollapsedStates.clear();
-              state.thoughtSummaryOpenStates.clear();
               if (
                 state.settings.persistMessageCollapseState &&
                 chat.collapsedStates
@@ -28662,15 +28865,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   },
                 );
               }
-              (chat.messages || []).forEach((msg, idx) => {
-                if (msg.thoughtSummaryOpen !== undefined) {
-                  state.thoughtSummaryOpenStates.set(
-                    idx,
-                    msg.thoughtSummaryOpen,
-                  );
-                }
-              });
-
               mark("LoadChat: State Setup");
               uiUtils.renderChatMessages();
               mark("LoadChat: DOM Render");
@@ -28724,7 +28918,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
         },
         async duplicateChat(id) {
-          if (state.isSending) {
+          if (isSendBusy()) {
             const conf = await uiUtils.showCustomConfirm(
               "送信中です。中断してチャットを複製しますか？",
             );
@@ -28920,7 +29114,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             );
             return;
           }
-          if (state.isSending) {
+          if (isSendBusy()) {
             await uiUtils.showCustomAlert(
               "送信中です。完了後に再度お試しください。",
             );
@@ -29066,7 +29260,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
         },
 
-        async proofreadText(textToProofread) {
+        async proofreadText(textToProofread, parentAbortSignal = null) {
           console.log("--- 校正処理開始 ---");
 
           const activeConfigId = state.settings.activeProofreadingConfigId;
@@ -29114,6 +29308,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             presencePenalty,
             frequencyPenalty,
             thinkingBudget,
+            // 校正は送信処理の一部。親を中断したらこちらも止める。
+            _abortSignal: parentAbortSignal,
           };
 
           try {
@@ -29137,13 +29333,91 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             throw error;
           }
         },
+        // 送信処理の本体は _handleSendCore。ここは「例外がどこで出ても送信状態を
+        // 必ず戻す」ためだけの薄い層。
+        //
+        // _handleSendCore は sendInFlight を入口で立てるが、try/catch/finally が
+        // 始まるのはずっと後(API呼び出しの直前)で、その手前には
+        //   ・commitAllOpenEdits() の中の saveChat()  … 容量超過等で普通に reject する
+        //   ・dummy プロバイダ分岐の saveChat() 2箇所
+        //   ・システムプロンプト/apiMessages 組み立ての同期例外
+        // という無防備な区間がある。ここで例外が漏れると releaseSendInFlight() にも
+        // setSendingState(false) にも到達せず、sendInFlight が true のまま固定される。
+        // 送信ボタンは「送」の見た目のまま、押しても入口ガードで無言 return するだけに
+        // なり、リロード以外に復帰手段が無くなる。呼び出し側も catch していないため
+        // unhandled rejection にもなる。
+        //
+        // 背景送信(AI間会話・校正・要約)は呼び出し側が結果とエラーを見るので、
+        // 状態には触れず素通しで再スローする。
         async handleSend(
           isRetry = false,
           retryUserMessageIndex = -1,
           sourceSessionContext = null,
-          isTopLevelCall = true,
         ) {
-          if (!sourceSessionContext && isTopLevelCall) {
+          try {
+            return await this._handleSendCore(
+              isRetry,
+              retryUserMessageIndex,
+              sourceSessionContext,
+            );
+          } catch (error) {
+            if (sourceSessionContext) throw error;
+            // 本体の catch が処理済みのエラーはここまで来ない(非背景送信では
+            // 再スローしないため)。到達するのは上記の無防備区間の例外だけ。
+            uiUtils.setSendingState(false);
+            // 非背景送信で state.abortController を張るのはこの呼び出しだけなので、
+            // 所有権を確かめずに片付けてよい。
+            state.abortController = null;
+            state.partialStreamContent = "";
+            state.partialThoughtStreamContent = "";
+            uiUtils.displayError(
+              error?.message || "送信処理を開始できませんでした。",
+            );
+          }
+        },
+        async _handleSendCore(
+          isRetry = false,
+          retryUserMessageIndex = -1,
+          sourceSessionContext = null,
+        ) {
+          // 多重送信ガードは await より前に置く。commitAllOpenEdits は編集中の
+          // 変更があると saveChat() を挟むため、この await の間に2発目の送信が
+          // 入りうる。setSendingState(true) はさらに後なので、isSending だけを
+          // 見ていると両方とも通過し、ユーザーメッセージの二重追加・API二重発射・
+          // state.abortController の上書き(先発が中断不能になる)を起こす。
+          // sendInFlight はここで同期的に立て、その区間も塞ぐ。
+          if (!sourceSessionContext && isSendBusy()) {
+            return;
+          }
+          // AbortController もこの入口で用意する。API 呼び出しの直前で生成して
+          // いた頃は、sendInFlight だけが立っている区間 (commitAllOpenEdits の
+          // 中の saveChat など) で state.abortController が null のままで、
+          // その間の中断操作が握り潰されていた。ボタンも「送」の見た目のまま
+          // だったため、送信も中断もできない区間になっていた。
+          // 入れ子呼び出し(校正など)は親の signal を引き継ぎ、親を中断すれば
+          // 道連れで止まるようにする。
+          const sendAbortController = new AbortController();
+          const sendSignal =
+            sourceSessionContext?._abortSignal || sendAbortController.signal;
+          if (!sourceSessionContext) {
+            uiUtils.setSendInFlight(true);
+            state.abortController = sendAbortController;
+            // isSending はまだ立てない (ローディング表示は実際に要求が
+            // 始まってから)。ボタンだけ先に中断できる見た目にする。
+            uiUtils.setSendButtonBusy(true);
+          }
+          // 送信に入らずに抜ける経路では、ここで立てたものを必ず戻す。
+          // setSendingState(true) に到達した後は setSendingState(false) が
+          // 同じ後始末をするため、ここで面倒を見るのは前半だけでよい。
+          const releaseSendInFlight = () => {
+            if (sourceSessionContext) return;
+            uiUtils.setSendInFlight(false);
+            if (state.abortController === sendAbortController) {
+              state.abortController = null;
+            }
+            uiUtils.setSendButtonBusy(false);
+          };
+          if (!sourceSessionContext) {
             await this.commitAllOpenEdits();
           }
 
@@ -29152,7 +29426,13 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           let apiKeyToUse, modelNameToUse, selectedApiProvider;
 
           if (isBackgroundProcess) {
-            selectedApiProvider = sourceSessionContext.apiProvider;
+            // フォールバックはここで効かせる。以前は下の `p` の側だけが
+            // `|| state.settings.apiProvider` を持っていたため、apiProvider を
+            // 積み忘れたコンテキストでは p だけが埋まり、実際の API 分岐を
+            // 決める selectedApiProvider は undefined のまま「不明なAPI
+            // プロバイダー」で落ちていた。二重に持たず一箇所に寄せる。
+            selectedApiProvider =
+              sourceSessionContext.apiProvider || state.settings.apiProvider;
             apiKeyToUse = sourceSessionContext._apiKeyOverride;
             modelNameToUse = sourceSessionContext._modelNameOverride;
           } else {
@@ -29220,6 +29500,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               state.currentMessages[retryUserMessageIndex];
             if (!retryUserMessage || retryUserMessage.role !== "user") {
               uiUtils.setSendingState(false);
+              releaseSendInFlight();
               return;
             }
             text = retryUserMessage.content || "";
@@ -29236,154 +29517,30 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             const hasAttachments = attachmentsToSend.length > 0;
             const isDummyProvider = selectedApiProvider === "dummy";
 
-            if (state.isSending) {
-              return;
-            }
-
             if (!isDummyProvider && isInputEmpty && !hasAttachments) {
+              releaseSendInFlight();
               return;
             }
           }
 
+          // dummy は API を叩かないシミュレータで、この先の「設定の解決 →
+          // リクエスト組み立て → ストリーム消費 → 応答確定」をひとつも通らず
+          // 完結する。本体に混ぜておくと、実経路の修正が dummy 側に反映され
+          // ないまま放置されがちなので (兄弟応答の扱いが実際にそうなっていた)
+          // 独立させておく。
           if (selectedApiProvider === "dummy") {
-            if (!isBackgroundProcess) {
-              uiUtils.setSendingState(true);
-              if (isRetry) {
-                if (retryUserMessageIndex + 1 < state.currentMessages.length) {
-                  state.currentMessages.splice(retryUserMessageIndex + 1);
-                }
-                uiUtils.renderChatMessages(true);
-              } else {
-                const userMessage = {
-                  role: "user",
-                  content: text,
-                  timestamp: Date.now(),
-                  attachments: attachmentsToSend,
-                  generatedByApiProvider: null,
-                };
-                state.currentMessages.push(userMessage);
-                const userMessageIndex = state.currentMessages.length - 1;
-                uiUtils.appendMessage(
-                  userMessage.role,
-                  userMessage.content,
-                  userMessageIndex,
-                  false,
-                  null,
-                  userMessage.attachments,
-                );
-
-                elements.userInput.value = "";
-                state.pendingAttachments = [];
-                uiUtils.adjustTextareaHeight();
-                uiUtils.updateAttachmentBadgeVisibility();
-              }
-              await dbUtils.saveChat();
-              await uiDelay(300 + Math.random() * 400);
-            }
-
-            let dummyResponseContent = "";
-
-            if (
-              state.settings.dummyTwinEngineDebugMode &&
-              !isBackgroundProcess
-            ) {
-              const userTurnCount = state.currentMessages.filter(
-                (msg) => msg.role === "user",
-              ).length;
-              const summarizeAfterTurns =
-                state.settings.twinEngineSummarizeAfterTurns || 0;
-              const isTwinEngineActive =
-                state.settings.showTwinEngineSettings &&
-                userTurnCount > summarizeAfterTurns;
-
-              let debugOutput = "--- Twin-engine デバッグモード ---\n\n";
-              if (isTwinEngineActive) {
-                debugOutput += `Twin-engineはアクティブです。\n(現在のユーザーターン数: ${userTurnCount} / 閾値: ${summarizeAfterTurns})\n\n`;
-
-                const messagesToSummarize = [...state.currentMessages];
-                const summaryPrompt =
-                  state.settings.twinEngineSummaryPrompt ||
-                  "以下の会話を簡潔に要約してください。";
-
-                debugOutput += "--- システムプロンプト (要約指示) ---\n";
-                debugOutput += `${summaryPrompt}\n\n`;
-
-                debugOutput += "--- 会話履歴 ---\n";
-                messagesToSummarize.forEach((msg) => {
-                  debugOutput += `[${msg.role}]\n${msg.content}\n`;
-                  if (msg.attachments && msg.attachments.length > 0) {
-                    debugOutput += `  (添付ファイル: ${msg.attachments.map((a) => a.name).join(", ")})\n`;
-                  }
-                  debugOutput += "\n";
-                });
-
-                const twinEngineDummyUser = state.settings.twinEngineDummyUser;
-                const twinEngineEnableDummyUser =
-                  state.settings.twinEngineEnableDummyUser;
-                if (twinEngineEnableDummyUser && twinEngineDummyUser) {
-                  debugOutput += "--- ダミーUserプロンプト (Twin-engine) ---\n";
-                  debugOutput += `[user]\n${twinEngineDummyUser}\n\n`;
-                }
-
-                const twinEngineDummyModel =
-                  state.settings.twinEngineDummyModel;
-                const twinEngineEnableDummyModel =
-                  state.settings.twinEngineEnableDummyModel;
-                if (twinEngineEnableDummyModel && twinEngineDummyModel) {
-                  debugOutput +=
-                    "--- ダミーModelプロンプト (Twin-engine) ---\n";
-                  debugOutput += `[model]\n${twinEngineDummyModel}\n\n`;
-                }
-
-                dummyResponseContent = debugOutput.trim();
-              } else {
-                dummyResponseContent = `--- Twin-engine デバッグモード ---\n\nTwin-engineはまだ起動していません。\n(Twin-engine有効: ${state.settings.showTwinEngineSettings}, 現在のユーザーターン数: ${userTurnCount}, 閾値: ${summarizeAfterTurns})`;
-              }
-            } else {
-              if (
-                state.settings.dummyEnableDummyModel &&
-                state.settings.dummyDummyModel
-              ) {
-                dummyResponseContent += state.settings.dummyDummyModel;
-              }
-              if (state.settings.dummyErrorDebugMode) {
-                const errorLog = errorRecovery.getErrorLogAsString();
-                if (dummyResponseContent) {
-                  dummyResponseContent += "\n\n";
-                }
-                dummyResponseContent += errorLog;
-              }
-            }
-
-            if (isBackgroundProcess) {
-              return {
-                content: dummyResponseContent,
-                metadata: { finishReason: "stop" },
-              };
-            }
-
-            const modelMessage = {
-              role: "model",
-              content: dummyResponseContent,
-              timestamp: Date.now(),
-              generatedByApiProvider: "dummy",
-            };
-            state.currentMessages.push(modelMessage);
-            const modelMessageIndex = state.currentMessages.length - 1;
-            uiUtils.appendMessage(
-              modelMessage.role,
-              modelMessage.content,
-              modelMessageIndex,
-            );
-            await dbUtils.saveChat();
-            uiUtils.setSendingState(false);
-            if (state.settings.autoScrollOnNewMessage) uiUtils.scrollToBottom();
-            return;
+            return await this._runDummySend({
+              isBackgroundProcess,
+              isRetry,
+              retryUserMessageIndex,
+              text,
+              attachmentsToSend,
+              sendSignal,
+              releaseSendInFlight,
+              sourceSessionContext,
+            });
           }
 
-          let currentContextSessionId = isBackgroundProcess
-            ? sourceSessionContext.sessionId
-            : state.currentChatId;
           let currentContextMessages = isBackgroundProcess
             ? [...sourceSessionContext.messages]
             : [...state.currentMessages];
@@ -29475,9 +29632,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
           let contextLlmAggregatorTopK;
 
-          const p = isBackgroundProcess
-            ? sourceSessionContext.apiProvider || state.settings.apiProvider
-            : selectedApiProvider;
+          const p = selectedApiProvider;
           const prefix =
             p === "deepseek"
               ? "deepSeek"
@@ -29574,7 +29729,12 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               state.settings.xaiReasoningEffort;
           }
 
-          if (!apiKeyToUse && selectedApiProvider !== "dummy") {
+          // 設定不備で送信できない系はここで確定して失敗している。モーダルを
+          // 出す前に送信状態を降ろす。後回しにすると、ダイアログを閉じるまで
+          // 送信ボタンが「止」(中断できる見た目) のまま残る。
+          // dummy は上の分岐で必ず return しているため、ここには来ない。
+          if (!apiKeyToUse) {
+            releaseSendInFlight();
             if (!isBackgroundProcess) {
               await uiUtils.showCustomAlert(
                 `${selectedApiProvider} APIキーが設定されていません。設定画面を開きます。`,
@@ -29587,6 +29747,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           if (selectedApiProvider === "llmaggregator") {
             const activeBackend = multiBackendUtils.getActiveBackend();
             if (!activeBackend || !activeBackend.url) {
+              releaseSendInFlight();
               if (!isBackgroundProcess) {
                 await uiUtils.showCustomAlert(
                   "アクティブなLLM Aggregatorバックエンドが設定されていません。",
@@ -29596,6 +29757,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               return "バックエンド未設定";
             }
             if (!isAllowedAggregatorDomain(activeBackend.url)) {
+              releaseSendInFlight();
               if (!isBackgroundProcess) {
                 await uiUtils.showCustomAlert(
                   "LLM AggregatorのバックエンドURLがホワイトリスト外のため、送信できません。設定を確認してください。",
@@ -29606,25 +29768,21 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             }
           }
 
-          // AbortController は API 関数任せにせず、ここで用意する。API 関数内で
-          // 生成していた頃は、送信ボタンが「止」になってから fetch が始まるまで
-          // (直前のDB保存の await の間) state.abortController が null で、その間の
-          // 中断操作が握り潰されていた。入れ子呼び出し(校正など)は親の signal を
-          // 引き継ぎ、親を中断すれば道連れで止まるようにする。
-          const sendAbortController = new AbortController();
-          const sendSignal =
-            sourceSessionContext?._abortSignal || sendAbortController.signal;
-          if (!isBackgroundProcess && isTopLevelCall) {
-            state.abortController = sendAbortController;
-            uiUtils.setSendingState(true);
+          // 入口からここまでの await (commitAllOpenEdits など) の間に中断された
+          // 場合は、まだ何も変更していない今のうちに降りる。ここを過ぎると
+          // ユーザーメッセージの push が始まるため、後から抜けると空振りの
+          // 発言だけが残る。
+          if (!isBackgroundProcess && sendSignal.aborted) {
+            releaseSendInFlight();
+            return;
           }
           if (!isBackgroundProcess) {
+            uiUtils.setSendingState(true);
             state.partialStreamContent = "";
             state.partialThoughtStreamContent = "";
           }
 
           let userMessageIndex = isRetry ? retryUserMessageIndex : -1;
-          let existingSiblingGroupId = null;
           let firstResponseIndexForRetry = -1;
           let siblingGroupIdToUse = null;
           let messagesToProcess;
@@ -29676,30 +29834,12 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             currentContextMessages.push(userMessage);
             userMessageIndex = currentContextMessages.length - 1;
           } else if (isRetry) {
-            let siblingStartIndex = userMessageIndex + 1;
-            while (
-              siblingStartIndex < currentContextMessages.length &&
-              currentContextMessages[siblingStartIndex].role !== "model"
-            ) {
-              siblingStartIndex++;
-            }
-            if (
-              siblingStartIndex < currentContextMessages.length &&
-              currentContextMessages[siblingStartIndex].role === "model"
-            ) {
-              firstResponseIndexForRetry = siblingStartIndex;
-              const firstResponse =
-                currentContextMessages[firstResponseIndexForRetry];
-              if (firstResponse.isCascaded && firstResponse.siblingGroupId) {
-                existingSiblingGroupId = firstResponse.siblingGroupId;
-                currentContextMessages.forEach((msg) => {
-                  if (msg.siblingGroupId === existingSiblingGroupId) {
-                    msg.isSelected = false;
-                  }
-                });
-                siblingGroupIdToUse = existingSiblingGroupId;
-              }
-            }
+            const target = this.prepareRetryCascadeTarget(
+              currentContextMessages,
+              userMessageIndex,
+            );
+            firstResponseIndexForRetry = target.firstResponseIndex;
+            siblingGroupIdToUse = target.existingGroupId;
           }
 
           const userTurnCount = isBackgroundProcess
@@ -29783,73 +29923,19 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
 
           if (!isBackgroundProcess) {
+            // 応答を待つ前にユーザー発言を確定させておく (途中でタブを閉じても
+            // 入力が消えないように)。以前はここに saveChat() 相当を手書きして
+            // いたが、タイトル導出・createdAt の引き継ぎ・添付の正規化がすべて
+            // 二重定義になり、新規チャット時に lastOpenedChatId を保存し忘れる
+            // ズレまで生んでいた。非バックグラウンド経路では
+            // currentContextMessages は state.currentMessages と同一内容なので、
+            // 正規の保存経路に一本化する。
             try {
-              let titleToSave = null;
-              let isNewChatForDBSave = !currentContextSessionId;
-              let existingChatForDBSave = null;
-
-              if (currentContextSessionId) {
-                existingChatForDBSave = await dbUtils.getChat(
-                  currentContextSessionId,
-                );
-                if (existingChatForDBSave) {
-                  titleToSave = existingChatForDBSave.title;
-                  isNewChatForDBSave = false;
-                } else {
-                  isNewChatForDBSave = true;
-                  currentContextSessionId = null;
-                  state.currentChatId = null;
-                }
-              }
-
-              if (isNewChatForDBSave || !titleToSave) {
-                const firstUserMsg = currentContextMessages.find(
-                  (m) => m.role === "user",
-                );
-                titleToSave = firstUserMsg
-                  ? firstUserMsg.content.substring(0, 50)
-                  : "無題のチャット";
-              }
-
-              const chatToSave = {
-                // 独自にシリアライズすると normalizeMessagesForSave と挙動が
-                // ズレる。以前はここで添付の base64Data を落としていたため、
-                // 応答完了前にタブを閉じると画像添付だけが履歴から消えていた。
-                messages: dbUtils.normalizeMessagesForSave(
-                  currentContextMessages,
-                ),
-                twinEngineSummaryContent:
-                  state.twinEngineSummaryContent || "",
-                updatedAt: Date.now(),
-                title: titleToSave,
-              };
-
-              if (isNewChatForDBSave) {
-                chatToSave.createdAt = Date.now();
-              } else if (existingChatForDBSave) {
-                chatToSave.id = currentContextSessionId;
-                chatToSave.createdAt = existingChatForDBSave.createdAt;
-              }
-
-              if (state.settings.persistMessageCollapseState) {
-                chatToSave.collapsedStates = Object.fromEntries(
-                  state.messageCollapsedStates,
-                );
-              }
-
-              const savedId = await dbUtils.writeChat(chatToSave);
-
-              if (!state.currentChatId && savedId) {
-                state.currentChatId = savedId;
-                uiUtils.updateChatTitle(chatToSave.title);
-              }
+              await dbUtils.saveChat();
             } catch (error) {
-              if (currentContextSessionId) {
-                uiUtils.displayError(
-                  "チャットの保存に失敗しましたが、送信を試みます。",
-                  false,
-                );
-              }
+              uiUtils.displayError(
+                "チャットの保存に失敗しましたが、送信を試みます。",
+              );
             }
           }
           const apiMessages = messagesToProcess
@@ -30041,6 +30127,27 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             }
           }
 
+          // 思考サマリを開いた状態で出すかは、ストリーム開始時と応答確定時の
+          // 2箇所で必要になる。以前は別々に書かれていて確定側だけ
+          // includeThoughts を見ておらず、思考を要求していないプロバイダでも
+          // 開いた扱いになって開始時の判定を上書きしていた。ここで一度だけ決める。
+          const expandThoughtsByDefaultForThisCall =
+            (selectedApiProvider === "gemini" &&
+              contextGeminiIncludeThoughts &&
+              state.settings.geminiExpandThoughtsByDefault) ||
+            (selectedApiProvider === "deepseek" &&
+              contextDeepSeekIncludeThoughts &&
+              state.settings.deepSeekExpandThoughtsByDefault) ||
+            (selectedApiProvider === "claude" &&
+              contextClaudeIncludeThoughts &&
+              state.settings.claudeExpandThoughtsByDefault) ||
+            (selectedApiProvider === "xai" &&
+              contextXaiIncludeThoughts &&
+              state.settings.xaiExpandThoughtsByDefault) ||
+            (selectedApiProvider === "llmaggregator" &&
+              contextDeepSeekIncludeThoughts &&
+              state.settings.llmAggregatorExpandThoughtsByDefault);
+
           let modelMessageObjectForStream = null;
 
           try {
@@ -30055,6 +30162,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 useStreamingForThisCall,
                 usePseudoForThisCall,
                 contextGeminiEnableGrounding,
+                sendSignal,
               );
             } else if (
               selectedApiProvider === "deepseek" ||
@@ -30068,6 +30176,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 systemInstructionForProvider,
                 useStreamingForThisCall,
                 selectedApiProvider,
+                sendSignal,
               );
             } else if (selectedApiProvider === "claude") {
               apiResponseObject = await apiUtils.callClaudeApi(
@@ -30077,6 +30186,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 commonGenerationConfig,
                 systemInstructionForProvider,
                 useStreamingForThisCall,
+                sendSignal,
               );
             } else if (selectedApiProvider === "openai") {
               const hasImage = apiMessages.some((m) =>
@@ -30094,6 +30204,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 systemInstructionForProvider,
                 useStreamingForThisCall,
                 hasImage,
+                sendSignal,
               );
             } else if (selectedApiProvider === "xai") {
               const hasImage = apiMessages.some((m) =>
@@ -30112,6 +30223,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 systemInstructionForProvider,
                 useStreamingForThisCall,
                 enableVisionForThisCall,
+                sendSignal,
               );
             } else {
               throw new Error("不明なAPIプロバイダーが選択されています。");
@@ -30136,45 +30248,15 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 xaiThoughtSummary: null,
                 timestamp: Date.now(),
                 generatedByApiProvider: selectedApiProvider,
-                thoughtSummaryOpen:
-                  (selectedApiProvider === "gemini" &&
-                    contextGeminiIncludeThoughts &&
-                    state.settings.geminiExpandThoughtsByDefault) ||
-                  (selectedApiProvider === "deepseek" &&
-                    contextDeepSeekIncludeThoughts &&
-                    state.settings.deepSeekExpandThoughtsByDefault) ||
-                  (selectedApiProvider === "claude" &&
-                    contextClaudeIncludeThoughts &&
-                    state.settings.claudeExpandThoughtsByDefault) ||
-                  (selectedApiProvider === "xai" &&
-                    contextXaiIncludeThoughts &&
-                    state.settings.xaiExpandThoughtsByDefault) ||
-                  (selectedApiProvider === "llmaggregator" &&
-                    contextDeepSeekIncludeThoughts &&
-                    state.settings.llmAggregatorExpandThoughtsByDefault),
+                thoughtSummaryOpen: expandThoughtsByDefaultForThisCall,
               };
 
               if (isRetry && firstResponseIndexForRetry !== -1) {
-                if (siblingGroupIdToUse === null) {
-                  siblingGroupIdToUse = `gid-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-                }
-                modelMessageObjectForStream.isCascaded = true;
-                modelMessageObjectForStream.siblingGroupId =
-                  siblingGroupIdToUse;
-                modelMessageObjectForStream.isSelected = true;
-
-                if (
-                  state.currentMessages[firstResponseIndexForRetry] &&
-                  !state.currentMessages[firstResponseIndexForRetry].isCascaded
-                ) {
-                  state.currentMessages[firstResponseIndexForRetry].isCascaded =
-                    true;
-                  state.currentMessages[
-                    firstResponseIndexForRetry
-                  ].siblingGroupId = siblingGroupIdToUse;
-                  state.currentMessages[firstResponseIndexForRetry].isSelected =
-                    false;
-                }
+                siblingGroupIdToUse = this.markRetryResponseAsCascadeSibling(
+                  modelMessageObjectForStream,
+                  firstResponseIndexForRetry,
+                  siblingGroupIdToUse,
+                );
               }
 
               state.currentMessages.push(modelMessageObjectForStream);
@@ -30191,42 +30273,45 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               let responseStreamIterator;
               if (selectedApiProvider === "gemini") {
                 responseStreamIterator =
-                  apiUtils.handleGeminiStreamingResponse(apiResponseObject);
+                  apiUtils.handleGeminiStreamingResponse(
+                    apiResponseObject,
+                    sendSignal,
+                  );
               } else if (
                 selectedApiProvider === "deepseek" ||
                 selectedApiProvider === "llmaggregator"
               ) {
                 responseStreamIterator =
-                  apiUtils.handleDeepSeekStreamingResponse(apiResponseObject);
+                  apiUtils.handleDeepSeekStreamingResponse(
+                    apiResponseObject,
+                    sendSignal,
+                  );
               } else if (selectedApiProvider === "claude") {
                 responseStreamIterator =
-                  apiUtils.handleClaudeStreamingResponse(apiResponseObject);
+                  apiUtils.handleClaudeStreamingResponse(
+                    apiResponseObject,
+                    sendSignal,
+                  );
               } else if (selectedApiProvider === "openai") {
                 responseStreamIterator =
                   apiUtils.handleOpenAICompatibleStreamingResponse(
                     apiResponseObject,
                     "openai",
+                    sendSignal,
                   );
               } else if (selectedApiProvider === "xai") {
                 responseStreamIterator =
                   apiUtils.handleOpenAICompatibleStreamingResponse(
                     apiResponseObject,
                     "xai",
+                    sendSignal,
                   );
               }
 
-              const currentContextStreamSpeed =
-                selectedApiProvider === "gemini"
-                  ? contextStreamingSpeed
-                  : selectedApiProvider === "deepseek"
-                    ? state.settings.deepSeekStreamingSpeed
-                    : selectedApiProvider === "claude"
-                      ? state.settings.claudeStreamingSpeed
-                      : selectedApiProvider === "xai"
-                        ? state.settings.xaiStreamingSpeed
-                        : selectedApiProvider === "llmaggregator"
-                          ? state.settings.llmAggregatorStreamingSpeed
-                          : state.settings.openaiStreamingSpeed;
+              // contextStreamingSpeed は既にプロバイダ別のキーから引いてある
+              // (gemini 以外だけ state.settings を直読みする理由はなく、
+              // その分岐はセッション側の上書き値を無視していた)。
+              const currentContextStreamSpeed = contextStreamingSpeed;
 
               const messageIndexForDisplay = isBackgroundProcess
                 ? -1
@@ -30235,7 +30320,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   : -1;
 
               for await (const streamData of responseStreamIterator) {
-                if (state.abortController?.signal.aborted) {
+                if (sendSignal.aborted) {
                   modelResponseMetadata.finishReason = "ABORTED";
                   throw new Error("リクエストがキャンセルされました。");
                 }
@@ -30244,38 +30329,53 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   if (streamData.thoughtText) {
                     if (isBackgroundProcess) {
                       modelThoughtSummaryContent += streamData.thoughtText;
-                    } else {
+                    } else if (currentContextStreamSpeed > 0) {
                       for (const char of streamData.thoughtText) {
-                        if (state.abortController?.signal.aborted) break;
+                        if (sendSignal.aborted) break;
                         state.partialThoughtStreamContent += char;
                         uiUtils.updateStreamingMessage(
                           messageIndexForDisplay,
                           char,
                           true,
                         );
-                        if (currentContextStreamSpeed > 0)
-                          await uiDelay(currentContextStreamSpeed);
+                        await uiDelay(currentContextStreamSpeed);
                       }
+                    } else {
+                      // 1文字ずつ回す意味があるのは表示ウェイトを入れる時だけ。
+                      // 実描画は updateStreamingMessage 側で間引かれており、
+                      // 速度0ならチャンク単位で足して1回呼べば足りる。
+                      state.partialThoughtStreamContent += streamData.thoughtText;
+                      uiUtils.updateStreamingMessage(
+                        messageIndexForDisplay,
+                        streamData.thoughtText,
+                        true,
+                      );
                     }
                   }
                   if (streamData.contentText) {
                     if (isBackgroundProcess) {
                       modelResponseRawContent += streamData.contentText;
-                    } else {
+                    } else if (currentContextStreamSpeed > 0) {
                       for (const char of streamData.contentText) {
-                        if (state.abortController?.signal.aborted) break;
+                        if (sendSignal.aborted) break;
                         state.partialStreamContent += char;
                         uiUtils.updateStreamingMessage(
                           messageIndexForDisplay,
                           char,
                           false,
                         );
-                        if (currentContextStreamSpeed > 0)
-                          await uiDelay(currentContextStreamSpeed);
+                        await uiDelay(currentContextStreamSpeed);
                       }
+                    } else {
+                      state.partialStreamContent += streamData.contentText;
+                      uiUtils.updateStreamingMessage(
+                        messageIndexForDisplay,
+                        streamData.contentText,
+                        false,
+                      );
                     }
                   }
-                  if (state.abortController?.signal.aborted) {
+                  if (sendSignal.aborted) {
                     modelResponseMetadata.finishReason = "ABORTED";
                     throw new Error("リクエストがキャンセルされました。");
                   }
@@ -30360,7 +30460,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               // 中断判定だけはここに必要。後段の処理に入る前に抜ける。
               if (
                 modelResponseMetadata.finishReason === "ABORTED" ||
-                state.abortController?.signal.aborted
+                sendSignal.aborted
               ) {
                 throw new Error("リクエストがキャンセルされました。");
               }
@@ -30523,7 +30623,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               try {
                 state.isProofreading = true;
                 uiUtils.updateLoadingIndicator();
-                const proofreadContent = await this.proofreadText(finalContent);
+                const proofreadContent = await this.proofreadText(
+                  finalContent,
+                  sendSignal,
+                );
                 finalContent = proofreadContent;
               } catch (proofreadError) {
                 finalContent += `\n\n[校正処理に失敗しました: ${proofreadError.message}]`;
@@ -30592,27 +30695,20 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   usageMetadata: finalUsage,
                   generatedByApiProvider: selectedApiProvider,
                 };
-                const targetUserIndexForCascade = userMessageIndex;
-                if (targetUserIndexForCascade !== -1 && !isBackgroundProcess) {
-                  if (siblingGroupIdToUse === null)
-                    siblingGroupIdToUse = `gid-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-                  newModelMessage.isCascaded = true;
-                  newModelMessage.isSelected = true;
-                  newModelMessage.siblingGroupId = siblingGroupIdToUse;
-                  if (
-                    isRetry &&
-                    firstResponseIndexForRetry !== -1 &&
-                    state.currentMessages[firstResponseIndexForRetry] &&
-                    !state.currentMessages[firstResponseIndexForRetry]
-                      .isCascaded
-                  ) {
-                    state.currentMessages[
-                      firstResponseIndexForRetry
-                    ].isCascaded = true;
-                    state.currentMessages[
-                      firstResponseIndexForRetry
-                    ].siblingGroupId = siblingGroupIdToUse;
-                  }
+                // カスケード(兄弟応答)にするのはリトライで既存の応答がある
+                // 時だけ。ストリーミング側の分岐と同じ条件に揃える。
+                // 以前はここだけ「userMessageIndex が有効なら常に」立てて
+                // いたため、ストリーミングOFFでは通常の初回応答まで
+                // 「1件しかない応答グループ」として isCascaded/siblingGroupId
+                // 付きでDBに保存されていた。表示は total>1 のガードで
+                // 抑止されるが、削除確認だけが「応答グループ全体 (1件) を
+                // 削除しますか？」という文言になっていた。
+                if (isRetry && firstResponseIndexForRetry !== -1) {
+                  siblingGroupIdToUse = this.markRetryResponseAsCascadeSibling(
+                    newModelMessage,
+                    firstResponseIndexForRetry,
+                    siblingGroupIdToUse,
+                  );
                 }
                 finalModelMessageIndex = state.currentMessages.length;
                 state.currentMessages.push(newModelMessage);
@@ -30654,20 +30750,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 }
 
                 msgToUpdate.thoughtSummaryOpen =
-                  (selectedApiProvider === "gemini" &&
-                    state.settings.geminiExpandThoughtsByDefault) ||
-                  (selectedApiProvider === "deepseek" &&
-                    state.settings.deepSeekExpandThoughtsByDefault) ||
-                  (selectedApiProvider === "claude" &&
-                    state.settings.claudeExpandThoughtsByDefault) ||
-                  (selectedApiProvider === "xai" &&
-                    state.settings.xaiExpandThoughtsByDefault) ||
-                  (selectedApiProvider === "llmaggregator" &&
-                    state.settings.llmAggregatorExpandThoughtsByDefault);
-                state.thoughtSummaryOpenStates.set(
-                  finalModelMessageIndex,
-                  msgToUpdate.thoughtSummaryOpen,
-                );
+                  expandThoughtsByDefaultForThisCall;
 
                 if (useStreamingForThisCall) {
                   uiUtils.finalizeStreamingMessage(finalModelMessageIndex);
@@ -30689,15 +30772,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               }
             } else {
               if (useStreamingForThisCall && modelMessageObjectForStream) {
-                const tempPlaceholderIndex = state.currentMessages.indexOf(
-                  modelMessageObjectForStream,
-                );
-                const placeholderElement = byId(
-                  `streaming-message-${tempPlaceholderIndex}`,
-                );
-                if (placeholderElement) placeholderElement.remove();
-                if (tempPlaceholderIndex !== -1)
-                  state.currentMessages.splice(tempPlaceholderIndex, 1);
+                this.discardStreamingPlaceholder(modelMessageObjectForStream);
               }
             }
 
@@ -30760,13 +30835,20 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 msgToUpdate.content = finalPartialContent;
                 msgToUpdate.timestamp = Date.now();
                 msgToUpdate.error = false;
-                msgToUpdate.finishReason = "STOP";
+                // 本文には「(中断)」「(通信が切断されました)」を付けているのに
+                // STOP 固定だとメタデータだけが実態と食い違う。
+                msgToUpdate.finishReason = isAbort ? "ABORTED" : "ERROR";
                 msgToUpdate.safetyRatings = modelResponseMetadata.safetyRatings;
                 msgToUpdate.usageMetadata = finalUsageMetadataFromStream;
                 msgToUpdate.generatedByApiProvider = selectedApiProvider;
 
+                // 他プロバイダと同じく includeThoughts を条件に含める。
+                // gemini だけ無条件だったため、思考を要求していない設定でも
+                // 中断・切断時に限って thoughtSummary が書き込まれていた。
                 if (selectedApiProvider === "gemini") {
-                  msgToUpdate.thoughtSummary = finalPartialThoughtValue;
+                  if (contextGeminiIncludeThoughts) {
+                    msgToUpdate.thoughtSummary = finalPartialThoughtValue;
+                  }
                   msgToUpdate.groundingMetadata = currentGroundingMetadata;
                 } else if (
                   (selectedApiProvider === "deepseek" ||
@@ -30790,33 +30872,35 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   uiUtils.finalizeStreamingMessage(streamingMessageIndex);
                   await dbUtils.saveChat();
                 } catch (saveError) {
-                  uiUtils.displayError(displayErrorMessage, !isAbort);
+                  // 通信エラー文だけを出すと「保存にも失敗した」事実が消える。
+                  // 画面に見えている途中経過はDBに入っていないので、リロードで
+                  // 消えることまで伝える。
+                  uiUtils.displayError(
+                    `${displayErrorMessage} / さらに、ここまでの内容を保存できませんでした (${saveError?.message || saveError})。リロードすると失われます。`,
+                  );
                 }
               } else {
-                uiUtils.displayError(displayErrorMessage, !isAbort);
+                uiUtils.displayError(displayErrorMessage);
               }
             } else {
-              if (
-                useStreamingForThisCall &&
-                !isAbort &&
-                modelMessageObjectForStream
-              ) {
-                const tempPlaceholderIndex = state.currentMessages.indexOf(
-                  modelMessageObjectForStream,
-                );
-                const placeholderElement = byId(
-                  `streaming-message-${tempPlaceholderIndex}`,
-                );
-                if (placeholderElement) placeholderElement.remove();
-                if (tempPlaceholderIndex !== -1)
-                  state.currentMessages.splice(tempPlaceholderIndex, 1);
+              // ここに来るのは残す中身が無い場合(1文字も届く前の中断を含む)。
+              // 以前は中断だけ除去を飛ばしていたため、空の model メッセージが
+              // state.currentMessages に残って次の保存でDBにも入り、DOM も
+              // streaming-message-* のまま確定されずに残っていた。
+              if (useStreamingForThisCall && modelMessageObjectForStream) {
+                this.discardStreamingPlaceholder(modelMessageObjectForStream);
               }
-              uiUtils.displayError(displayErrorMessage, !isAbort);
+              uiUtils.displayError(displayErrorMessage);
             }
           } finally {
-            if (!isBackgroundProcess && isTopLevelCall) {
+            if (!isBackgroundProcess) {
               uiUtils.setSendingState(false);
-              state.abortController = null;
+              // 自分が張ったものだけ片付ける。無条件に null にすると、
+              // 校正など入れ子の呼び出しが差し替えていた場合に他人の
+              // controller を捨ててしまう。
+              if (state.abortController === sendAbortController) {
+                state.abortController = null;
+              }
               state.partialStreamContent = "";
               state.partialThoughtStreamContent = "";
               if (state.settings.autoScrollOnNewMessage) {
@@ -30826,6 +30910,400 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             }
           }
           if (isBackgroundProcess) return null;
+        },
+        // dummy プロバイダのシミュレータ。API を叩かず、実経路と同じ表示
+        // 経路 (ユーザー発言の追加 → 応答の生成 → ストリーミング表示 →
+        // 確定 → 保存) だけを再現する。_handleSendCore から独立させてある
+        // のは、実経路の修正がこちらに反映されないまま放置される事故を
+        // 防ぐためと、APIキー無しで送信周りを試せるようにするため。
+        // 背景送信では {content, metadata} を返し、通常送信では画面と DB を
+        // 更新して undefined を返す (呼び出し元はそのまま return する)。
+        async _runDummySend({
+          isBackgroundProcess,
+          isRetry,
+          retryUserMessageIndex,
+          text,
+          attachmentsToSend,
+          sendSignal,
+          releaseSendInFlight,
+          sourceSessionContext,
+        }) {
+          let dummyFirstResponseIndexForRetry = -1;
+          let dummySiblingGroupIdToUse = null;
+          if (!isBackgroundProcess) {
+            uiUtils.setSendingState(true);
+            if (isRetry) {
+              // ここで splice して既存の応答を捨てていた頃は、dummy だけが
+              // 実プロバイダと違う挙動 (兄弟を作らず上書き) になっていた。
+              // そのため APIキー無しでカスケードを試す手段が無く、この周りの
+              // 不具合はキーを入れないと再現できなかった。実経路と揃える。
+              // なお「対象のユーザー発言 + 既存の兄弟グループ」より後は
+              // retryFromMessage が既に切り捨て済みなので、ここでの切り捨ては
+              // そもそも不要 (残っているのは兄弟にすべき応答だけ)。
+              const target = this.prepareRetryCascadeTarget(
+                state.currentMessages,
+                retryUserMessageIndex,
+              );
+              dummyFirstResponseIndexForRetry = target.firstResponseIndex;
+              dummySiblingGroupIdToUse = target.existingGroupId;
+              uiUtils.renderChatMessages(true);
+            } else {
+              const userMessage = {
+                role: "user",
+                content: text,
+                timestamp: Date.now(),
+                attachments: attachmentsToSend,
+                generatedByApiProvider: null,
+              };
+              state.currentMessages.push(userMessage);
+              const userMessageIndex = state.currentMessages.length - 1;
+              // 実経路 (_handleSendCore のユーザー発言追加) と同じ後処理を通す。
+              // 以前はこの2つが漏れており、dummy で始めたチャットだけ
+              //   ・折りたたみ状態が未登録のまま
+              //   ・ベースURL未検出 → 相対URLの画像が解決されない
+              // という状態になっていた。
+              state.messageCollapsedStates.set(userMessageIndex, false);
+              if (
+                state.currentMessages.filter((m) => m.role === "user")
+                  .length === 1
+              ) {
+                this.updateChatBaseUrl(state.currentMessages);
+              }
+              uiUtils.appendMessage(
+                userMessage.role,
+                userMessage.content,
+                userMessageIndex,
+                false,
+                null,
+                userMessage.attachments,
+              );
+
+              elements.userInput.value = "";
+              state.pendingAttachments = [];
+              uiUtils.adjustTextareaHeight();
+              uiUtils.updateAttachmentBadgeVisibility();
+              if (state.settings.autoScrollOnNewMessage)
+                uiUtils.scrollToBottom();
+            }
+            await dbUtils.saveChat();
+            await uiDelay(300 + Math.random() * 400);
+          }
+
+          let dummyResponseContent = "";
+
+          if (
+            state.settings.dummyTwinEngineDebugMode &&
+            !isBackgroundProcess
+          ) {
+            const userTurnCount = state.currentMessages.filter(
+              (msg) => msg.role === "user",
+            ).length;
+            const summarizeAfterTurns =
+              state.settings.twinEngineSummarizeAfterTurns || 0;
+            // ターン数の閾値だけを見て「アクティブ」と言うと、実際には何も
+            // 起きない組み合わせまでアクティブ扱いになる。実経路の条件は
+            // 二つに分かれていて、
+            //   ・要約を「作る」 (自動)  … fullAuto が必要
+            //   ・要約を「使う」        … 要約本文が空でないことが必要
+            // なので、両方を別々に出す。
+            const isEnabled = state.settings.showTwinEngineSettings;
+            const isTurnThresholdMet = userTurnCount > summarizeAfterTurns;
+            const isTwinEngineActive = isEnabled && isTurnThresholdMet;
+            const hasSummaryContent = !!(
+              state.twinEngineSummaryContent &&
+              state.twinEngineSummaryContent.trim() !== ""
+            );
+            const willAutoSummarize =
+              isTwinEngineActive && state.settings.twinEngineEnableFullAuto;
+            // 「使われる」のは次の送信時なので、閾値の判定もそのときの
+            // ターン数 (= 今の数 + 次のユーザー発言1件) で行う。今の数で
+            // 比べていた頃は userTurnCount === 閾値 のときだけ false と
+            // 出るのに実際は使われる、というズレがあった。
+            const willUseSummary =
+              isEnabled && userTurnCount + 1 > summarizeAfterTurns &&
+              hasSummaryContent;
+
+            let debugOutput = "--- Twin-engine デバッグモード ---\n\n";
+            debugOutput += "--- 現在の状態 ---\n";
+            debugOutput += `Twin-engine有効: ${isEnabled}\n`;
+            debugOutput += `ユーザーターン数: ${userTurnCount} / 閾値: ${summarizeAfterTurns} (閾値超え: ${isTurnThresholdMet})\n`;
+            debugOutput += `全自動要約: ${!!state.settings.twinEngineEnableFullAuto}\n`;
+            debugOutput += `保持中の要約: ${hasSummaryContent ? `あり (${state.twinEngineSummaryContent.trim().length}文字)` : "なし"}\n`;
+            // dummy 送信は _handleSendCore の API ブロックまで到達しないため、
+            // 自動要約のトリガ (triggerTwinEngineSummaryInBackground) にも
+            // 要約の差し込み (shouldUseSummary) にも実際には届かない。ここに
+            // 出るのは「実プロバイダで同じ状態のまま送ったらどうなるか」で
+            // あって、この送信の結果ではない。true と出ているのに要約が
+            // 増えない、と読み違えやすいので明記する。
+            debugOutput += `→ 実プロバイダなら送信後に自動要約が走る: ${willAutoSummarize}\n`;
+            debugOutput += `→ 実プロバイダなら次の送信で要約が使われる: ${willUseSummary}\n`;
+            debugOutput +=
+              "(dummy送信では要約の実行・使用ともに行われません)\n\n";
+
+            if (isTwinEngineActive) {
+              const messagesToSummarize = [...state.currentMessages];
+              const summaryPrompt =
+                state.settings.twinEngineSummaryPrompt ||
+                "以下の会話を簡潔に要約してください。";
+
+              const activeConfig = this.getActiveTwinEngineConfig();
+              debugOutput += "--- 要約API設定 ---\n";
+              if (activeConfig) {
+                const modelName =
+                  activeConfig.modelName ||
+                  twinEngineApiConfigUtils.getDefaultModelForProvider(
+                    activeConfig.provider,
+                  );
+                debugOutput += `プロバイダ: ${activeConfig.provider} / モデル: ${modelName || "(既定なし)"}\n`;
+                debugOutput += `APIキー: ${activeConfig.apiKey ? "設定済み" : activeConfig.provider === "dummy" ? "不要 (dummy)" : "未設定 (このままでは要約は失敗します)"}\n\n`;
+              } else {
+                debugOutput +=
+                  "アクティブな設定がありません (このままでは要約は失敗します)\n\n";
+              }
+
+              debugOutput += "--- システムプロンプト (要約指示) ---\n";
+              debugOutput += `${summaryPrompt}\n\n`;
+
+              debugOutput += "--- 会話履歴 ---\n";
+              messagesToSummarize.forEach((msg) => {
+                debugOutput += `[${msg.role}]\n${msg.content}\n`;
+                if (msg.attachments && msg.attachments.length > 0) {
+                  debugOutput += `  (添付ファイル: ${msg.attachments.map((a) => a.name).join(", ")})\n`;
+                }
+                debugOutput += "\n";
+              });
+
+              const twinEngineDummyUser = state.settings.twinEngineDummyUser;
+              const twinEngineEnableDummyUser =
+                state.settings.twinEngineEnableDummyUser;
+              if (twinEngineEnableDummyUser && twinEngineDummyUser) {
+                debugOutput += "--- ダミーUserプロンプト (Twin-engine) ---\n";
+                debugOutput += `[user]\n${twinEngineDummyUser}\n\n`;
+              }
+
+              const twinEngineDummyModel =
+                state.settings.twinEngineDummyModel;
+              const twinEngineEnableDummyModel =
+                state.settings.twinEngineEnableDummyModel;
+              if (twinEngineEnableDummyModel && twinEngineDummyModel) {
+                debugOutput +=
+                  "--- ダミーModelプロンプト (Twin-engine) ---\n";
+                debugOutput += `[model]\n${twinEngineDummyModel}\n\n`;
+              }
+
+              // 送信するプロンプトではなく応答の後処理だが、要約本文が
+              // なぜ前置き付きになるのかがここに出ていないと追えない。
+              if (
+                state.settings.twinEngineConcatDummyModel &&
+                twinEngineDummyModel
+              ) {
+                debugOutput +=
+                  "--- 要約結果への前置 (concatDummyModel) ---\n";
+                debugOutput += `${twinEngineDummyModel}\n\n`;
+              }
+            } else {
+              debugOutput +=
+                "Twin-engineはまだ起動していないため、送信されるプロンプトはありません。\n";
+            }
+            dummyResponseContent = debugOutput.trim();
+          } else {
+            // Twin-engine の要約と AI間会話は context に dummyModel/
+            // enableDummyModel を積んでくる (実プロバイダはそちらを読む)。
+            // dummy だけが常にグローバルの Dummy AI 設定を見ていたため、
+            // 要約プロバイダに dummy を選ぶと twinEngineDummyModel ではなく
+            // dummyDummyModel が要約結果になっていた。context が持っていれば
+            // そちらを優先する。
+            //
+            // 校正の context はこの2つを積んでいない (校正設定に該当項目が
+            // 無いため)。undefined を「無効」と解釈すると dummy を校正
+            // プロバイダにしたときに必ず空応答になり、校正経路の検証手段が
+            // 消えるので、その場合だけグローバル設定へ落とす。
+            const hasContextDummyModel =
+              isBackgroundProcess &&
+              sourceSessionContext?.enableDummyModel !== undefined;
+            const effectiveDummyModel = hasContextDummyModel
+              ? sourceSessionContext.dummyModel
+              : state.settings.dummyDummyModel;
+            const effectiveEnableDummyModel = hasContextDummyModel
+              ? sourceSessionContext.enableDummyModel
+              : state.settings.dummyEnableDummyModel;
+            if (effectiveEnableDummyModel && effectiveDummyModel) {
+              dummyResponseContent += effectiveDummyModel;
+            }
+            // エラーログは画面で読むためのデバッグ表示なので、Twin-engine
+            // デバッグと同じく背景送信では出さない。ガードが無かった頃は
+            // dummy を校正プロバイダにするとエラーログがそのまま「校正結果」
+            // として本文に差し込まれていた。
+            if (state.settings.dummyErrorDebugMode && !isBackgroundProcess) {
+              const errorLog = errorRecovery.getErrorLogAsString();
+              if (dummyResponseContent) {
+                dummyResponseContent += "\n\n";
+              }
+              // 応答本文は markdown としてパースされる。スタックトレースには
+              // `*` `_` `#` や行頭インデントが普通に出てくるため、そのまま
+              // 入れると強調・見出し・コードブロックに化けて読めなくなる。
+              // フェンスで囲って生のまま出す (ログ側に ``` が現れることは
+              // 無いが、念のため4連バッククォートで閉じにくくしておく)。
+              dummyResponseContent += `\`\`\`\`\n${errorLog}\n\`\`\`\``;
+            }
+          }
+
+          if (isBackgroundProcess) {
+            // 背景送信は uiDelay も通らず即座に返るため、中断しても
+            // AI間会話のループが全力で回り続けていた。実プロバイダは fetch が
+            // abort されて例外になるので、ここも同じく中断で打ち切る。
+            if (sendSignal.aborted) {
+              throw new Error("リクエストがキャンセルされました。");
+            }
+            return {
+              content: dummyResponseContent,
+              metadata: { finishReason: "stop" },
+            };
+          }
+
+          // ストリーミングOFFの経路には中断の判定が一つも無く、中断ボタンを
+          // 押しても冒頭の疑似待ち時間ごと素通しして応答が確定・保存されて
+          // いた (中断が効くのはストリーミングONのときだけ、という非対称)。
+          // ここまでの await は冒頭の待ち時間だけで部分応答は存在しないため、
+          // 実プロバイダが「1文字も届く前に中断された」ときと同じく、応答を
+          // 残さずに引き上げる。ストリーミングONで既に中断済みの場合も、
+          // 下のループが即 break して同じ結末になるだけなので区別しない。
+          if (sendSignal.aborted) {
+            // ただし prepareRetryCascadeTarget は「新しい兄弟がこの後に
+            // 来る」前提で既存グループの isSelected を全部降ろしており、
+            // その状態は上の saveChat で保存済み。応答を作らずに引き上げる
+            // なら、選択が誰にも無いグループを残さないよう選び直しておく
+            // (discardStreamingPlaceholder が捨てるときにやっているのと
+            // 同じ後始末)。降ろされているのは既存グループがあった場合
+            // だけなので、gid の有無で判定できる。
+            if (dummySiblingGroupIdToUse) {
+              const siblings = state.currentMessages.filter(
+                (msg) =>
+                  msg.role === "model" &&
+                  msg.siblingGroupId === dummySiblingGroupIdToUse,
+              );
+              if (
+                siblings.length > 0 &&
+                !siblings.some((msg) => msg.isSelected)
+              ) {
+                siblings[siblings.length - 1].isSelected = true;
+                uiUtils.renderChatMessages(true);
+                await dbUtils.saveChat();
+              }
+            }
+            uiUtils.setSendingState(false);
+            releaseSendInFlight();
+            return;
+          }
+
+          const modelMessage = {
+            role: "model",
+            content: dummyResponseContent,
+            timestamp: Date.now(),
+            generatedByApiProvider: "dummy",
+            // 背景送信では metadata に finishReason を載せて返しているのに
+            // 画面経路のメッセージには (中断時以外) 何も入らず、保存された
+            // 履歴だけが実プロバイダと形を変えていた。
+            finishReason: "stop",
+          };
+          if (isRetry && dummyFirstResponseIndexForRetry !== -1) {
+            dummySiblingGroupIdToUse =
+              this.markRetryResponseAsCascadeSibling(
+                modelMessage,
+                dummyFirstResponseIndexForRetry,
+                dummySiblingGroupIdToUse,
+              );
+          }
+          state.currentMessages.push(modelMessage);
+          const modelMessageIndex = state.currentMessages.length - 1;
+
+          if (state.settings.dummyStreamingOutput) {
+            // 実プロバイダと同じ表示経路(プレースホルダ→partialStreamContent
+            // →updateStreamingMessage→finalizeStreamingMessage)を通す。
+            // 応答は API から来ないので、本流と同じ「速度>0なら1文字ずつ、
+            // 0ならチャンク単位」を再現する。速度>0のときは結局1文字ずつ
+            // 流すため、疑似チャンクへの分割は速度0のときだけ意味を持つ。
+            const streamSpeed =
+              state.settings.dummyStreamingSpeed ?? DEFAULT_STREAMING_SPEED;
+            modelMessage.content = "";
+            state.partialStreamContent = "";
+            state.partialThoughtStreamContent = "";
+            state.messageCollapsedStates.set(modelMessageIndex, false);
+            uiUtils.appendMessage("model", "", modelMessageIndex, true);
+
+            if (streamSpeed > 0) {
+              for (const char of dummyResponseContent) {
+                if (sendSignal.aborted) break;
+                state.partialStreamContent += char;
+                uiUtils.updateStreamingMessage(modelMessageIndex, char, false);
+                await uiDelay(streamSpeed);
+              }
+            } else {
+              for (let i = 0; i < dummyResponseContent.length; ) {
+                if (sendSignal.aborted) break;
+                const size = 1 + Math.floor(Math.random() * 20);
+                const chunk = dummyResponseContent.slice(i, i + size);
+                i += size;
+                state.partialStreamContent += chunk;
+                uiUtils.updateStreamingMessage(
+                  modelMessageIndex,
+                  chunk,
+                  false,
+                );
+              }
+            }
+
+            if (sendSignal.aborted && state.partialStreamContent === "") {
+              // 1文字も届かないまま中断した場合は空の応答を残さない。
+              // 実プロバイダは catch 側でこれをやっているが、dummy は例外を
+              // 投げずに完走するため、ここで同じ後始末をする。
+              this.discardStreamingPlaceholder(modelMessage);
+            } else {
+              // 中断時は実プロバイダと同様、そこまでの部分応答を残す。本文に
+              // 「(中断)」を付け、finishReason も実態に合わせる。
+              modelMessage.content = sendSignal.aborted
+                ? state.partialStreamContent + "\n\n(中断)"
+                : state.partialStreamContent;
+              if (sendSignal.aborted) modelMessage.finishReason = "ABORTED";
+              uiUtils.finalizeStreamingMessage(modelMessageIndex);
+            }
+            state.partialStreamContent = "";
+            state.partialThoughtStreamContent = "";
+          } else if (modelMessage.isCascaded) {
+            // カスケードUI (◀ n/N ▶ と非選択応答の非表示) を組めるのは
+            // renderChatMessages だけ。appendMessage は cascadeInfo を
+            // 受け取らないため、ここで足すと切り替えUIの無い応答が並ぶ。
+            // 実プロバイダの非ストリーミング経路と同じ扱いにする。
+            state.messageCollapsedStates.set(modelMessageIndex, false);
+            uiUtils.renderChatMessages(
+              !state.settings.autoScrollOnNewMessage,
+            );
+          } else {
+            uiUtils.appendMessage(
+              modelMessage.role,
+              modelMessage.content,
+              modelMessageIndex,
+            );
+          }
+          await dbUtils.saveChat();
+          // 実経路と同じく応答の確定後に通知する。中断したものは通知しない
+          // (実経路は中断すると catch 側に抜けてここに相当する処理を通らない)。
+          // 応答を捨てた場合は末尾がユーザー発言になるので、role の判定で
+          // そのまま除外できる。
+          const lastMessage =
+            state.currentMessages[state.currentMessages.length - 1];
+          if (
+            !sendSignal.aborted &&
+            lastMessage &&
+            lastMessage.role === "model"
+          ) {
+            this.sendWebhookNotification(lastMessage).catch(console.error);
+          }
+          uiUtils.setSendingState(false);
+          // この経路は _handleSendCore の try/finally を一切通らないため、
+          // 入口で張った state.abortController は自分で片付ける。
+          releaseSendInFlight();
+          if (state.settings.autoScrollOnNewMessage) uiUtils.scrollToBottom();
         },
         async toggleApiProvider() {
           const providersInCycle = Object.entries(
@@ -30875,6 +31353,12 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           const settled = state.sendSettledPromise;
           if (state.abortController) {
             state.abortController.abort();
+          }
+          // AI間会話のステップ1は背景送信で、state.abortController を
+          // 張らない(張ると本体の送信を壊す)。専用の controller を別に
+          // 持たせ、中断操作の対象に含める。
+          if (state.aiToAiAbortController) {
+            state.aiToAiAbortController.abort();
           }
           if (!settled) return Promise.resolve();
           return Promise.race([
@@ -31381,7 +31865,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               state.aiIconUrl = objectUrl;
             }
             uiUtils.updateIconSettingsUI();
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
           } catch (error) {
             await uiUtils.showCustomAlert(
               `${type === "user" ? "ユーザー" : "AI"}アイコンの処理エラー: ${error}`,
@@ -31411,7 +31895,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               await dbUtils.saveSetting("aiIconBlob", null);
             }
             uiUtils.updateIconSettingsUI();
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
           } catch (error) {
             await uiUtils.showCustomAlert(
               `${type === "user" ? "ユーザー" : "AI"}アイコンの削除エラー: ${error}`,
@@ -32454,6 +32938,18 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             elements.dummyErrorDebugModeCheckbox.checked;
           newSettings.dummyTwinEngineDebugMode =
             elements.dummyTwinEngineDebugModeCheckbox.checked;
+          newSettings.dummyStreamingOutput =
+            elements.dummyStreamingOutputCheckbox.checked;
+          // 空欄以外も弾く。number入力でも負値は入るし、parseInt が NaN を
+          // 返せばそのまま uiDelay(NaN) まで届く。他の数値設定と同じ扱い。
+          const dummyStreamingSpeed = parseInt(
+            elements.dummyStreamingSpeedInput.value,
+            10,
+          );
+          newSettings.dummyStreamingSpeed =
+            isNaN(dummyStreamingSpeed) || dummyStreamingSpeed < 0
+              ? DEFAULT_STREAMING_SPEED
+              : dummyStreamingSpeed;
           newSettings.dummyDummyModel =
             elements.dummyDummyModelInput.value.trim();
           newSettings.dummyEnableDummyModel =
@@ -32766,7 +33262,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         },
 
         async startEditMessage(index, messageElement) {
-          if (state.isSending) {
+          if (isSendBusy()) {
             await uiUtils.showCustomAlert("送信中は編集できません。");
             return;
           }
@@ -33185,7 +33681,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           if (state.editingMessageIndex === index) {
             this.cancelEditMessage(index);
           }
-          if (state.isSending) {
+          if (isSendBusy()) {
             await uiUtils.showCustomAlert("送信中は削除できません。");
             return;
           }
@@ -33232,6 +33728,15 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
 
           if (confirmedDelete) {
+            // 確認待ちの間に送信が始まっていることがある。ストリーミング中に
+            // splice するとインデックスが総ずれし、表示中のプレースホルダと
+            // state.currentMessages の対応が壊れる。ここで見直す。
+            if (isSendBusy()) {
+              await uiUtils.showCustomAlert(
+                "送信が開始されたため、削除を中止しました。",
+              );
+              return;
+            }
             const originalFirstUserMsgIndex = state.currentMessages.findIndex(
               (m) => m.role === "user",
             );
@@ -33245,9 +33750,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               .filter((i) => !deletedIndexSet.has(i));
 
             const oldCollapsedStates = new Map(state.messageCollapsedStates);
-            const oldThoughtOpenStates = new Map(
-              state.thoughtSummaryOpenStates,
-            );
 
             indicesToDelete
               .sort((a, b) => b - a)
@@ -33267,25 +33769,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 state.messageCollapsedStates.set(newIdx, false);
               }
             });
-            state.thoughtSummaryOpenStates.clear();
-            state.currentMessages.forEach((msg, newIdx) => {
-              const oldIdxEquivalent = survivingOldIndices[newIdx];
-              if (oldThoughtOpenStates.has(oldIdxEquivalent)) {
-                state.thoughtSummaryOpenStates.set(
-                  newIdx,
-                  oldThoughtOpenStates.get(oldIdxEquivalent),
-                );
-              } else {
-                const messageApiProvider =
-                  msg?.generatedByApiProvider || state.settings.apiProvider;
-                state.thoughtSummaryOpenStates.set(
-                  newIdx,
-                  shouldExpandThoughtsByDefault(messageApiProvider),
-                );
-              }
-            });
 
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
 
             const newFirstUserMsgIndex = state.currentMessages.findIndex(
               (m) => m.role === "user",
@@ -33335,12 +33820,13 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           return -1;
         },
         async retryFromMessage(index) {
-          await this.commitAllOpenEdits();
-
-          if (state.isSending) {
+          // handleSend と同じ理由で、ガードは commitAllOpenEdits の await より前。
+          if (isSendBusy()) {
             await uiUtils.showCustomAlert("送信中です。");
             return;
           }
+
+          await this.commitAllOpenEdits();
 
           const userMessage = state.currentMessages[index];
           if (!userMessage || userMessage.role !== "user") return;
@@ -33355,6 +33841,14 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
 
           if (confirmed) {
+            // deleteMessage と同じく、確認待ちの間に送信が始まっている場合が
+            // ある。この後 splice するため、ここで見直す。
+            if (isSendBusy()) {
+              await uiUtils.showCustomAlert(
+                "送信が開始されたため、再生成を中止しました。",
+              );
+              return;
+            }
             const isTwinEngineAutoOn =
               state.settings.showTwinEngineSettings &&
               state.settings.twinEngineEnableFullAuto;
@@ -33447,7 +33941,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 i++
               ) {
                 state.messageCollapsedStates.delete(i);
-                state.thoughtSummaryOpenStates.delete(i);
               }
               state.currentMessages.splice(deleteStartIndex);
             }
@@ -33485,8 +33978,102 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               }
             }
 
-            await this.handleSend(true, index);
+            try {
+              await this.handleSend(true, index);
+            } finally {
+              // retrying-hidden は display:none。外す側が無かったため、
+              // ストリーミング応答(全体再描画を伴わない finalize で確定する)
+              // の後は旧応答が画面から消えたままになっていた。中断・エラーで
+              // 抜けた場合も同じなので finally で必ず戻す。
+              elementsToHide.forEach((el) =>
+                el.classList.remove("retrying-hidden"),
+              );
+            }
           }
+        },
+        // リトライ対象のユーザー発言に対する「既存の最初の応答」を探し、
+        // それが兄弟グループなら既存の選択を全部降ろす (新しい応答が選択
+        // 状態になるため)。戻り値の existingGroupId が null なら、まだ
+        // グループになっていない = 採番はこれから。
+        prepareRetryCascadeTarget(messages, userMessageIndex) {
+          let i = userMessageIndex + 1;
+          while (i < messages.length && messages[i].role !== "model") {
+            i++;
+          }
+          if (i >= messages.length || messages[i].role !== "model") {
+            return { firstResponseIndex: -1, existingGroupId: null };
+          }
+          const firstResponse = messages[i];
+          let existingGroupId = null;
+          if (firstResponse.isCascaded && firstResponse.siblingGroupId) {
+            existingGroupId = firstResponse.siblingGroupId;
+            messages.forEach((msg) => {
+              if (msg.siblingGroupId === existingGroupId) {
+                msg.isSelected = false;
+              }
+            });
+          }
+          return { firstResponseIndex: i, existingGroupId };
+        },
+        // リトライで作った応答に兄弟(カスケード)の印を付ける。送信経路が
+        // ストリーミング / 非ストリーミング / dummy の3つあり、以前は同じ処理が
+        // 経路ごとに書かれていたため、片方だけ直っている状態が生まれていた
+        // (dummy は兄弟を作らず既存の応答を切り捨てる挙動のまま取り残されていた)。
+        // gid を採番しうるので、実際に使った gid を返す。
+        markRetryResponseAsCascadeSibling(
+          newMessage,
+          firstResponseIndex,
+          existingGroupId,
+        ) {
+          const groupId =
+            existingGroupId ||
+            `gid-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+          newMessage.isCascaded = true;
+          newMessage.siblingGroupId = groupId;
+          newMessage.isSelected = true;
+          const firstResponse = state.currentMessages[firstResponseIndex];
+          if (firstResponse && !firstResponse.isCascaded) {
+            firstResponse.isCascaded = true;
+            firstResponse.siblingGroupId = groupId;
+            // 新しい応答を isSelected にする以上、既存側は明示的に降ろす。
+            // undefined 頼みだとグループ化前の値が残る。
+            firstResponse.isSelected = false;
+          }
+          return groupId;
+        },
+        // ストリーミング用に先出ししたプレースホルダを、中身が無いまま捨てる
+        // (1文字も届く前に中断・エラーになった場合)。プレースホルダは常に
+        // 末尾に push されているので、折りたたみ状態は自分の分を消すだけでよい。
+        //
+        // リトライ中だった場合、この応答は既に兄弟グループで唯一の isSelected
+        // になっている (prepareRetryCascadeTarget が既存の選択を降ろしている)。
+        // 黙って消すとグループが「選択なし」= どれも表示されない状態になるため、
+        // 選び直す。1件だけ残るならグループを解消する
+        // (confirmDeleteCascadeResponse と同じ扱い)。
+        discardStreamingPlaceholder(messageObject) {
+          const index = state.currentMessages.indexOf(messageObject);
+          if (index === -1) return;
+          const placeholderElement = byId(`streaming-message-${index}`);
+          if (placeholderElement) placeholderElement.remove();
+          state.currentMessages.splice(index, 1);
+          state.messageCollapsedStates.delete(index);
+
+          const groupId = messageObject.siblingGroupId;
+          if (!groupId) return;
+          const siblings = state.currentMessages.filter(
+            (m) => m.role === "model" && m.siblingGroupId === groupId,
+          );
+          if (siblings.length === 0) return;
+          if (!siblings.some((m) => m.isSelected)) {
+            siblings[siblings.length - 1].isSelected = true;
+          }
+          if (siblings.length === 1) {
+            const lone = siblings[0];
+            delete lone.isCascaded;
+            delete lone.siblingGroupId;
+            delete lone.isSelected;
+          }
+          uiUtils.renderChatMessages(true);
         },
         getCascadedSiblings(index, includeSelf = false) {
           const targetMsg = state.currentMessages[index];
@@ -33551,7 +34138,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             const newlySelectedIndex =
               siblingsWithIndices[targetSiblingIndexInGroup].originalIndex;
 
-            uiUtils.renderChatMessages(true, true);
+            uiUtils.renderChatMessages(true);
 
             requestAnimationFrame(() => {
               const newlySelectedElement =
@@ -33593,7 +34180,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           ) {
             return;
           }
-          if (state.isSending) {
+          if (isSendBusy()) {
             await uiUtils.showCustomAlert("送信中は削除できません。");
             return;
           }
@@ -33611,12 +34198,18 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
 
           if (confirmed) {
+            // deleteMessage と同じく、確認待ちの間に送信が始まりうる。
+            if (isSendBusy()) {
+              await uiUtils.showCustomAlert(
+                "送信が開始されたため、削除を中止しました。",
+              );
+              return;
+            }
             const wasSelected = msgToDelete.isSelected;
             const groupId = msgToDelete.siblingGroupId;
 
             state.currentMessages.splice(indexToDelete, 1);
             state.messageCollapsedStates.delete(indexToDelete);
-            state.thoughtSummaryOpenStates.delete(indexToDelete);
 
             const oldCollapsedStates = new Map(state.messageCollapsedStates);
             state.messageCollapsedStates.clear();
@@ -33630,27 +34223,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 );
               } else {
                 state.messageCollapsedStates.set(newIdx, false);
-              }
-            });
-            const oldThoughtOpenStates = new Map(
-              state.thoughtSummaryOpenStates,
-            );
-            state.thoughtSummaryOpenStates.clear();
-            state.currentMessages.forEach((msg, newIdx) => {
-              const oldIdxEquivalent =
-                newIdx >= indexToDelete ? newIdx + 1 : newIdx;
-              if (oldThoughtOpenStates.has(oldIdxEquivalent)) {
-                state.thoughtSummaryOpenStates.set(
-                  newIdx,
-                  oldThoughtOpenStates.get(oldIdxEquivalent),
-                );
-              } else {
-                const messageApiProvider =
-                  msg?.generatedByApiProvider || state.settings.apiProvider;
-                state.thoughtSummaryOpenStates.set(
-                  newIdx,
-                  shouldExpandThoughtsByDefault(messageApiProvider),
-                );
               }
             });
 
@@ -33689,6 +34261,17 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   newlySelectedIndex = lastSiblingItem.originalIndex;
                 }
               }
+            }
+
+            // 1件しか残らなかったグループは「グループ」ではないので、印を
+            // 落として通常の応答に戻す。残しておくと表示は total>1 ガードで
+            // 抑止されて無害な一方、deleteMessage が兄弟一括削除の分岐に入り
+            // 「応答グループ全体 (1件) を削除しますか？」という文言になる。
+            if (remainingSiblingsWithIndices.length === 1) {
+              const lone = remainingSiblingsWithIndices[0].msg;
+              delete lone.isCascaded;
+              delete lone.siblingGroupId;
+              delete lone.isSelected;
             }
 
             uiUtils.renderChatMessages(true);
@@ -33908,6 +34491,28 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           elements.fileUploadDialog.close("cancel");
           uiUtils.updateAttachmentBadgeVisibility();
         },
+        // 折り畳みはボタン連打で何度でも起きるが、そのたびに全メッセージを
+        // シリアライズして IndexedDB に書くのは重い。表示は即座に切り替え、
+        // 永続化だけまとめる。表示状態の保存が多少遅れても実害はない。
+        _collapseStateSaveTimer: null,
+        _persistCollapseStates() {
+          if (
+            !state.settings.persistMessageCollapseState ||
+            !state.currentChatId
+          ) {
+            return;
+          }
+          if (this._collapseStateSaveTimer) {
+            clearTimeout(this._collapseStateSaveTimer);
+          }
+          this._collapseStateSaveTimer = setTimeout(() => {
+            this._collapseStateSaveTimer = null;
+            // 待たないが、失敗を握り潰さないと unhandled rejection になり
+            // errorRecovery の連続エラー判定を無関係に押し上げてしまう。
+            dbUtils.saveChat().catch(console.error);
+          }, COLLAPSE_STATE_SAVE_DEBOUNCE_MS);
+        },
+
         toggleMessageCollapse(index) {
           const messageElement = elements.messageContainer.querySelector(
             `.message[data-index="${index}"]`,
@@ -33924,14 +34529,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               isCollapsed,
             );
             state.messageCollapsedStates.set(index, isCollapsed);
-            if (
-              state.settings.persistMessageCollapseState &&
-              state.currentChatId
-            ) {
-              // 表示操作をブロックしないので待たないが、失敗を握り潰さないと
-              // unhandled rejection になる。折り畳み状態の保存失敗は致命的でない。
-              dbUtils.saveChat().catch(console.error);
-            }
+            this._persistCollapseStates();
 
             toggleButtons.forEach((button) => {
               let textCollapse, textExpand, baseTitle;
@@ -33966,12 +34564,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             contentDiv.classList.remove("collapsed");
             messageElement.classList.remove("message-content-collapsed-fully");
             state.messageCollapsedStates.set(index, false);
-            if (
-              state.settings.persistMessageCollapseState &&
-              state.currentChatId
-            ) {
-              dbUtils.saveChat().catch(console.error);
-            }
+            this._persistCollapseStates();
 
             if (toggleButtons) {
               toggleButtons.forEach((button) => {
@@ -33989,7 +34582,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
         },
         toggleAllMessagesVisibility() {
-          if (state.isSending) {
+          if (isSendBusy()) {
             uiUtils.showCustomAlert("送信中は操作できません。");
             return;
           }
@@ -34205,7 +34798,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           uiUtils.updateSessionLinkingUI();
         },
         async initiateAiToAiStep() {
-          if (state.isAiToAiChatProcessing || state.isSending) {
+          if (state.isAiToAiChatProcessing || isSendBusy()) {
             await uiUtils.showCustomAlert("現在処理中です。");
             return;
           }
@@ -34253,6 +34846,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
 
           await this.commitAllOpenEdits();
+
+          const aiToAiAbortController = new AbortController();
+          state.aiToAiAbortController = aiToAiAbortController;
 
           uiUtils.setAiToAiProcessingState(
             true,
@@ -34332,6 +34928,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               apiProvider: providerForSettingsB,
               _apiKeyOverride: runtimeForB.apiKey,
               _modelNameOverride: runtimeForB.modelName,
+              _abortSignal: aiToAiAbortController.signal,
             };
 
             const responseFromB = await this.handleSend(false, -1, contextForB);
@@ -34368,22 +34965,45 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
               await this.handleSend();
             } finally {
-              elements.userInput.value = draftText;
-              state.pendingAttachments = draftAttachments;
-              uiUtils.adjustTextareaHeight();
-              uiUtils.updateAttachmentBadgeVisibility();
+              // 送信が始まった時点で handleSend が入力欄を空にする。その後に
+              // ユーザーが打ち始めていた場合、無条件に下書きを書き戻すと
+              // 打った内容を消してしまう。入力欄が空 (送信済み) か、
+              // 差し込んだ inputForA のまま (送信されなかった) の時だけ戻す。
+              const current = elements.userInput.value;
+              if (current === "" || current === inputForA) {
+                elements.userInput.value = draftText;
+                state.pendingAttachments = draftAttachments;
+                uiUtils.adjustTextareaHeight();
+                uiUtils.updateAttachmentBadgeVisibility();
+              }
             }
           } catch (error) {
-            await uiUtils.showCustomAlert(
-              `AI間会話処理中にエラーが発生しました: ${error.message}`,
-            );
+            // ユーザーが中断ボタンを押した結果もここに落ちてくる。中断を
+            // 「エラーが発生しました」のダイアログで知らせるのは誤報なので、
+            // 通常の失敗と分ける。
+            const isAbort =
+              error?.name === "AbortError" ||
+              error?.message === "リクエストがキャンセルされました。" ||
+              aiToAiAbortController.signal.aborted;
+            if (!isAbort) {
+              await uiUtils.showCustomAlert(
+                `AI間会話処理中にエラーが発生しました: ${error.message}`,
+              );
+            }
             if (
               state.currentChatId === sessionA_Id &&
               elements.chatScreen.classList.contains("active")
             ) {
-              uiUtils.displayError(`AI間会話エラー: ${error.message}`, false);
+              uiUtils.displayError(
+                isAbort
+                  ? "AI間会話を中断しました。"
+                  : `AI間会話エラー: ${error.message}`,
+              );
             }
           } finally {
+            if (state.aiToAiAbortController === aiToAiAbortController) {
+              state.aiToAiAbortController = null;
+            }
             uiUtils.setAiToAiProcessingState(false);
           }
         },
@@ -36410,13 +37030,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
           let baseUrl = GEMINI_API_BASE_URL;
 
-          let signal;
-          if (customSignal) {
-            signal = customSignal;
-          } else {
-            state.abortController = new AbortController();
-            signal = state.abortController.signal;
-          }
+          // signal は呼び出し側が用意したものだけを使う。ここで
+          // state.abortController を張り替えると、送信側が握っている
+          // controller を横取りして中断操作が効かなくなる。
+          const signal = customSignal || new AbortController().signal;
 
           const isImageGenModel = isImageGenerationModel(model);
           const enableImageGen =
@@ -36693,7 +37310,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
           return response.blob();
         },
-        async *handleGeminiStreamingResponse(response) {
+        async *handleGeminiStreamingResponse(response, abortSignal = null) {
           if (!response.body) {
             throw new Error("レスポンスボディがありません。");
           }
@@ -36708,7 +37325,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
           try {
             while (true) {
-              if (state.abortController?.signal.aborted && !isCancelled) {
+              if (
+                (abortSignal ?? state.abortController?.signal)?.aborted &&
+                !isCancelled
+              ) {
                 isCancelled = true;
                 await reader.cancel("User aborted");
                 throw new Error("リクエストがキャンセルされました。");
@@ -36900,11 +37520,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               `${provider.toUpperCase()} APIキーが設定されていません。`,
             );
           }
-          let signal = externalSignal;
-          if (!signal) {
-            state.abortController = new AbortController();
-            signal = state.abortController.signal;
-          }
+          // signal は呼び出し側が用意したものだけを使う。ここで
+          // state.abortController を張り替えると、送信側が握っている
+          // controller を横取りして中断操作が効かなくなる。
+          const signal = externalSignal || new AbortController().signal;
 
           const endpoint = `${baseUrl.replace(/\/$/, "")}/chat/completions`;
           const wantsImageOutput =
@@ -37051,7 +37670,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             throw error;
           }
         },
-        async *handleDeepSeekStreamingResponse(response) {
+        async *handleDeepSeekStreamingResponse(response, abortSignal = null) {
           if (!response.body) {
             throw new Error("DeepSeekレスポンスボディがありません。");
           }
@@ -37066,7 +37685,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
           try {
             while (true) {
-              if (state.abortController?.signal.aborted && !isCancelled) {
+              if (
+                (abortSignal ?? state.abortController?.signal)?.aborted &&
+                !isCancelled
+              ) {
                 isCancelled = true;
                 await reader.cancel("User aborted");
                 throw new Error("リクエストがキャンセルされました。");
@@ -37174,13 +37796,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           if (!apiKey) {
             throw new Error("Claude APIキーが設定されていません。");
           }
-          let signal;
-          if (externalSignal) {
-            signal = externalSignal;
-          } else {
-            state.abortController = new AbortController();
-            signal = state.abortController.signal;
-          }
+          // signal は呼び出し側が用意したものだけを使う。ここで
+          // state.abortController を張り替えると、送信側が握っている
+          // controller を横取りして中断操作が効かなくなる。
+          const signal = externalSignal || new AbortController().signal;
 
           const baseUrl = CLAUDE_API_BASE_URL;
 
@@ -37317,7 +37936,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             system: systemContent || undefined,
           };
         },
-        async *handleClaudeStreamingResponse(response) {
+        async *handleClaudeStreamingResponse(response, abortSignal = null) {
           if (!response.body) {
             throw new Error("Claudeレスポンスボディがありません。");
           }
@@ -37331,7 +37950,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
           try {
             while (true) {
-              if (state.abortController?.signal.aborted && !isCancelled) {
+              if (
+                (abortSignal ?? state.abortController?.signal)?.aborted &&
+                !isCancelled
+              ) {
                 isCancelled = true;
                 await reader.cancel("User aborted");
                 throw new Error("リクエストがキャンセルされました。");
@@ -37537,13 +38159,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             throw new Error(`${provider} のAPIキーが設定されていません。`);
           }
 
-          let signal;
-          if (externalSignal) {
-            signal = externalSignal;
-          } else {
-            state.abortController = new AbortController();
-            signal = state.abortController.signal;
-          }
+          // signal は呼び出し側が用意したものだけを使う。ここで
+          // state.abortController を張り替えると、送信側が握っている
+          // controller を横取りして中断操作が効かなくなる。
+          const signal = externalSignal || new AbortController().signal;
 
           const headers = {
             "Content-Type": "application/json",
@@ -37579,7 +38198,11 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
           return response;
         },
-        async *handleOpenAICompatibleStreamingResponse(response, providerName) {
+        async *handleOpenAICompatibleStreamingResponse(
+          response,
+          providerName,
+          abortSignal = null,
+        ) {
           if (!response.body) {
             throw new Error(`${providerName}レスポンスボディがありません。`);
           }
@@ -37593,7 +38216,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
           try {
             while (true) {
-              if (state.abortController?.signal.aborted) {
+              if ((abortSignal ?? state.abortController?.signal)?.aborted) {
                 isCancelled = true;
                 await reader.cancel();
                 throw new Error("リクエストがキャンセルされました。");
@@ -37692,13 +38315,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           if (!apiKey) {
             throw new Error("xAI APIキーが設定されていません。");
           }
-          let signal;
-          if (externalSignal) {
-            signal = externalSignal;
-          } else {
-            state.abortController = new AbortController();
-            signal = state.abortController.signal;
-          }
+          // signal は呼び出し側が用意したものだけを使う。ここで
+          // state.abortController を張り替えると、送信側が握っている
+          // controller を横取りして中断操作が効かなくなる。
+          const signal = externalSignal || new AbortController().signal;
 
           const headers = {
             "Content-Type": "application/json",
@@ -38507,6 +39127,51 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         RELOAD_COUNT_KEY: "GeminiPWA_DB_RuntimeRecoveryCount",
         maxAutoReloads: 2,
 
+        // エラーログをメモリだけに置くと、まさに調べたい「落ちて自動リロード
+        // された直前」の記録がリロードで消え、dummy のデバッグモードで読み出す
+        // 頃には必ず空になっている。カウンタと同じく localStorage 側に置き、
+        // "GeminiPWA_DB" 前方一致で clearStorageSelectively から保護する
+        // (sessionStorage は復旧時に clear() されるので使えない)。
+        ERROR_LOG_KEY: "GeminiPWA_DB_RuntimeErrorLog",
+        // 1件あたりの上限。stack を含む info は容量超過を起こしうる。
+        maxLogEntryLength: 4000,
+
+        _loadPersistedLog() {
+          try {
+            const raw = localStorage.getItem(this.ERROR_LOG_KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (error) {
+            return [];
+          }
+        },
+
+        // 保存自体が失敗しても記録の本体(メモリ側)は生きているので、
+        // ここでの失敗は握り潰してよい。容量超過のときだけ件数を削って再試行する。
+        _persistLog() {
+          try {
+            localStorage.setItem(
+              this.ERROR_LOG_KEY,
+              JSON.stringify(this.errorLog),
+            );
+          } catch (error) {
+            try {
+              localStorage.setItem(
+                this.ERROR_LOG_KEY,
+                JSON.stringify(this.errorLog.slice(0, 5)),
+              );
+            } catch (retryError) {}
+          }
+        },
+
+        clearErrorLog() {
+          this.errorLog = [];
+          try {
+            localStorage.removeItem(this.ERROR_LOG_KEY);
+          } catch (error) {}
+        },
+
         _getReloadCount() {
           try {
             const n = parseInt(
@@ -38534,15 +39199,20 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
         logError(type, errorInfo) {
           const now = new Date();
+          let info = this.serializeErrorInfo(errorInfo);
+          if (info && info.length > this.maxLogEntryLength) {
+            info = `${info.slice(0, this.maxLogEntryLength)}\n... (以下省略)`;
+          }
           const logEntry = {
             timestamp: now.toISOString(),
             type: type,
-            info: this.serializeErrorInfo(errorInfo),
+            info,
           };
           this.errorLog.unshift(logEntry);
           if (this.errorLog.length > this.maxLogSize) {
             this.errorLog.pop();
           }
+          this._persistLog();
         },
 
         serializeErrorInfo(errorInfo) {
@@ -38595,12 +39265,18 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           return this.errorLog
             .map(
               (log) =>
-                `Timestamp: ${log.timestamp}\nType: ${log.type}\nInfo:\n${log.info}`,
+                `Timestamp: ${log.timestamp}${log.fromPreviousSession ? " (前回起動時)" : ""}\nType: ${log.type}\nInfo:\n${log.info}`,
             )
             .join("\n\n====================\n\n");
         },
 
         init() {
+          // 前回起動時のログを引き継ぐ。今回のものと混ざると読み違えるので
+          // 印を付けておく。
+          this.errorLog = this._loadPersistedLog()
+            .map((log) => ({ ...log, fromPreviousSession: true }))
+            .slice(0, this.maxLogSize);
+
           window.addEventListener("error", (event) => {
             this.handleError("JavaScript Error", {
               message: event.message,
