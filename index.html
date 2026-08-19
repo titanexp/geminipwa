@@ -6168,7 +6168,9 @@
         background-color: rgba(0, 0, 0, 0.9);
       }
 
+      /* トークンモニターは内部保守用。通常UIからは完全に到達不能にする。 */
       #token-monitor-panel {
+        display: none !important;
         position: fixed;
         bottom: 70px;
         right: 10px;
@@ -6884,8 +6886,8 @@
         }
 
         function reloadWithCacheBust(reason) {
-          // 復旧処理は sessionStorage.clear() を通るため、リロード直前に
-          // カウンタを書き戻す。ここが無いと段階が進まない。
+          // 復旧処理ではGeminiPWA所有キーだけを削除するため、リロード直前に
+          // 復旧カウンタを書き戻して段階を確実に引き継ぐ。
           try {
             sessionStorage.setItem(
               RECOVERY_ATTEMPT_KEY,
@@ -6963,7 +6965,12 @@
           try {
             if ("caches" in window) {
               const cacheNames = await caches.keys();
-              await Promise.all(cacheNames.map((name) => caches.delete(name)));
+              // 同一originに別アプリが同居しても巻き込まない。
+              await Promise.all(
+                cacheNames
+                  .filter((name) => name.startsWith("gemini-pwa"))
+                  .map((name) => caches.delete(name)),
+              );
             }
           } catch (e) {}
           try {
@@ -7328,14 +7335,6 @@
             title="全メッセージの表示/非表示を切り替え"
           >
             🖼️
-          </button>
-          <button
-            id="toggle-token-monitor-btn"
-            class="header-button hidden"
-            aria-label="トークンモニターを開閉"
-            title="トークン使用量モニター"
-          >
-            📊
           </button>
           <button
             id="twin-engine-summary-btn"
@@ -13348,8 +13347,8 @@
                             新しいWebhookを追加
                           </button>
                           <p class="os-note">
-                            ※
-                            AIの応答完了時に、有効化されたすべてのURLへPOSTリクエストを自動転送します。
+                            ※ AIの応答完了時に、有効化されたすべてのURLへPOSTリクエストを自動転送します。<br />
+                            JSON形式は <code>application/json</code> で送信するため、転送先がこのアプリのオリジンをCORSで許可している必要があります。CORS非対応先では送信失敗として記録されます。
                           </p>
                         </div>
                         <label class="checkbox-label">
@@ -13500,13 +13499,6 @@
                             id="show-toggle-all-content-button-toggle"
                           />
                           「全表示/非表示(🖼️)」ボタンを表示する
-                        </label>
-                        <label class="checkbox-label">
-                          <input
-                            type="checkbox"
-                            id="show-token-monitor-button-toggle"
-                          />
-                          「トークンモニター(📊)」ボタンを表示する
                         </label>
                       </div>
                     </details>
@@ -14941,6 +14933,35 @@
       const CHATS_STORE = "chats";
       const CHAT_UPDATEDAT_INDEX = "updatedAtIndex";
       const CHAT_CREATEDAT_INDEX = "createdAtIndex";
+
+      // Web Storage は origin 単位で共有されるため、clear() は使わない。
+      // GeminiPWA が所有するキーだけを列挙削除し、同一origin上の他アプリを保護する。
+      const APP_WEB_STORAGE_PREFIX = "GeminiPWA";
+      function clearGeminiPwaWebStorage() {
+        const clearOwnedKeys = (storage) => {
+          if (!storage) return 0;
+          const keys = [];
+          for (let i = 0; i < storage.length; i++) {
+            const key = storage.key(i);
+            if (key && key.startsWith(APP_WEB_STORAGE_PREFIX)) keys.push(key);
+          }
+          keys.forEach((key) => storage.removeItem(key));
+          return keys.length;
+        };
+
+        let removed = 0;
+        try {
+          removed += clearOwnedKeys(localStorage);
+        } catch (error) {
+          console.warn("GeminiPWA localStorage cleanup failed:", error);
+        }
+        try {
+          removed += clearOwnedKeys(sessionStorage);
+        } catch (error) {
+          console.warn("GeminiPWA sessionStorage cleanup failed:", error);
+        }
+        return removed;
+      }
       // Single source of truth for the IndexedDB schema. dbUtils uses this both to
       // create missing stores/indexes and to decide whether a version upgrade is
       // needed at all, so keep new stores/indexes here only.
