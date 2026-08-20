@@ -6269,16 +6269,138 @@
         --sd-accent-soft: rgba(255, 122, 47, 0.16);
       }
 
+      @property --ribbon-hold-progress {
+        syntax: "<angle>";
+        initial-value: 0deg;
+        inherits: false;
+      }
+
+      /* 長押しは「押せている」だけでなく、発火までの残り時間も見せる。
+         スクロールバー色の半透明な弧が12時位置から時計回りに伸びる。 */
       .ribbon-trigger {
+        position: relative;
+        isolation: isolate;
+        overflow: visible;
         touch-action: none;
         font-variant-numeric: normal;
         user-select: none;
         -webkit-user-select: none;
+        --ribbon-hold-accent: rgba(100, 100, 100, 0.3);
+        --ribbon-hold-accent-rgb: 100, 100, 100;
+        --ribbon-hold-progress: 0deg;
+        --ribbon-hold-duration: 420ms;
+        transition:
+          transform 0.12s cubic-bezier(0.2, 0, 0, 1),
+          color 0.12s ease,
+          text-shadow 0.12s ease,
+          box-shadow 0.12s ease;
       }
-      .ribbon-trigger.armed {
-        color: var(--sd-accent, #ff7a2f);
-        text-shadow: 0 0 10px rgba(255, 122, 47, 0.9);
-        transform: scale(0.92);
+      body.dark-mode .ribbon-trigger {
+        --ribbon-hold-accent: rgba(200, 200, 200, 0.26);
+        --ribbon-hold-accent-rgb: 200, 200, 200;
+      }
+      .ribbon-trigger::before {
+        content: "";
+        position: absolute;
+        inset: -5px;
+        z-index: -1;
+        border-radius: 999px;
+        background: conic-gradient(
+          from -90deg,
+          var(--ribbon-hold-accent) var(--ribbon-hold-progress),
+          transparent 0
+        );
+        -webkit-mask: radial-gradient(
+          farthest-side,
+          transparent calc(100% - 2.5px),
+          #000 calc(100% - 2px)
+        );
+        mask: radial-gradient(
+          farthest-side,
+          transparent calc(100% - 2.5px),
+          #000 calc(100% - 2px)
+        );
+        opacity: 0;
+        transform: scale(0.84);
+        filter: drop-shadow(
+          0 0 4px rgba(var(--ribbon-hold-accent-rgb), 0.26)
+        );
+        pointer-events: none;
+        transition:
+          opacity 0.1s ease,
+          transform 0.14s cubic-bezier(0.2, 0, 0, 1);
+      }
+      .ribbon-trigger::after {
+        content: "長押しで設定";
+        position: absolute;
+        right: -4px;
+        z-index: 2;
+        padding: 5px 8px;
+        border: 1px solid var(--ribbon-hold-accent);
+        border-radius: 999px;
+        background: rgba(27, 30, 39, 0.96);
+        box-shadow: 0 5px 14px rgba(0, 0, 0, 0.28);
+        color: rgba(var(--ribbon-hold-accent-rgb), 0.72);
+        font-family: var(--font-family);
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1;
+        letter-spacing: 0.03em;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition:
+          opacity 0.12s ease,
+          transform 0.14s cubic-bezier(0.2, 0, 0, 1);
+      }
+      .ribbon-trigger[data-ribbon-side="top"]::after {
+        top: calc(100% + 9px);
+        transform: translateY(-3px) scale(0.96);
+      }
+      .ribbon-trigger[data-ribbon-side="bottom"]::after {
+        bottom: calc(100% + 9px);
+        transform: translateY(3px) scale(0.96);
+      }
+      .ribbon-trigger.hold-pending {
+        color: var(--ribbon-hold-accent);
+        text-shadow:
+          0 0 9px rgba(var(--ribbon-hold-accent-rgb), 0.32);
+        box-shadow:
+          0 0 0 3px rgba(var(--ribbon-hold-accent-rgb), 0.05),
+          0 0 16px rgba(var(--ribbon-hold-accent-rgb), 0.1);
+        transform: scale(0.94);
+      }
+      .ribbon-trigger.hold-pending::before {
+        opacity: 1;
+        transform: scale(1);
+        animation: ribbon-hold-progress var(--ribbon-hold-duration) linear
+          forwards;
+      }
+      .ribbon-trigger.hold-pending::after {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+      .ribbon-trigger.hold-complete::before {
+        --ribbon-hold-progress: 360deg;
+        opacity: 0.82;
+        transform: scale(1.04);
+        animation: none;
+      }
+      @keyframes ribbon-hold-progress {
+        to {
+          --ribbon-hold-progress: 360deg;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .ribbon-trigger,
+        .ribbon-trigger::before,
+        .ribbon-trigger::after {
+          transition: none;
+        }
+        .ribbon-trigger.hold-pending::before {
+          --ribbon-hold-progress: 360deg;
+          animation: none;
+        }
       }
 
       #image-gen-ribbon-scrim {
@@ -6560,8 +6682,8 @@
       defer
     ></script>
     <script
-      src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"
-      integrity="sha384-+NGfjU8KzpDLXRHduEqW+ZiJr2rIg+cidUVk7B51R5xK7cHwMKQfrdFwGdrq1Bcz"
+      src="https://cdn.jsdelivr.net/npm/mermaid@10.9.5/dist/mermaid.min.js"
+      integrity="sha384-enVdc7lTHDGtpROV85t9+VqPC2EyyB0hsRD0MrvQnHUsHmTHIz2D8SPP4EnBkstH"
       crossorigin="anonymous"
       defer
     ></script>
@@ -6832,8 +6954,17 @@
           } catch (e) {}
 
           try {
-            localStorage.clear();
-            sessionStorage.clear();
+            // 自動復旧経路のため、自アプリのkeyのみ削除(同一origin同居アプリを保護)
+            const removeAppKeys = (storage) => {
+              const keys = [];
+              for (let i = 0; i < storage.length; i++) {
+                const key = storage.key(i);
+                if (key && key.startsWith("GeminiPWA")) keys.push(key);
+              }
+              keys.forEach((key) => storage.removeItem(key));
+            };
+            removeAppKeys(localStorage);
+            removeAppKeys(sessionStorage);
           } catch (e) {}
 
           await clearAllCachesAndReload();
@@ -7346,6 +7477,9 @@
             class="header-button ribbon-trigger"
             data-ribbon-side="top"
             aria-label="画像生成クイック設定"
+            aria-controls="image-gen-ribbon"
+            aria-haspopup="dialog"
+            aria-expanded="false"
             title="タップ: プリセット切替 / 長押し: 設定パネル"
           >
             Ⅰ
@@ -7382,6 +7516,9 @@
             class="footer-action-button ribbon-trigger"
             data-ribbon-side="bottom"
             aria-label="画像生成クイック設定"
+            aria-controls="image-gen-ribbon"
+            aria-haspopup="dialog"
+            aria-expanded="false"
             title="タップ: プリセット切替 / 長押し: 設定パネル"
           >
             Ⅰ
