@@ -33109,31 +33109,11 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             },
           ];
 
-          // 巡回対象に入っているプロバイダのみタブに出す。
-          // ただし現在使用中のものは巡回外でも必ず出す。
-          const visibleProviders = () =>
-            PROVIDERS.filter(
-              (p) =>
-                state.settings.apiProviderCycle?.[p.id] ||
-                state.settings.apiProvider === p.id,
-            );
-
-          let activeTab = null;
-
-          const setProvider = async (providerId) => {
-            if (state.settings.apiProvider === providerId) return;
-            state.settings.apiProvider = providerId;
-            try {
-              await dbUtils.saveSetting("apiProvider", providerId);
-              elements.apiProviderSelect.value = providerId;
-              uiUtils.updateChatScreenElementVisibility();
-              uiUtils.toggleApiSettingsVisibility(providerId);
-              uiUtils.adjustTextareaHeight();
-              uiUtils.updateApiKeyCycleButtons();
-            } catch (error) {
-              console.error("APIプロバイダー設定の保存に失敗:", error);
-            }
-          };
+          // 長押しポップアップは「現在使用中のプロバイダ専用」にする。
+          // プロバイダの巡回そのものは短押しボタンへ役割を分離し、
+          // ポップアップ内で別プロバイダの設定へ迷い込まないようにする。
+          const currentProvider = () =>
+            PROVIDERS.find((p) => p.id === state.settings.apiProvider) || null;
 
           const setModel = async (provider, value) => {
             const select = provider.select();
@@ -33148,62 +33128,51 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           };
 
           const render = () => {
-            const providers = visibleProviders();
-            if (!providers.some((p) => p.id === activeTab)) {
-              activeTab = state.settings.apiProvider;
-              if (!providers.some((p) => p.id === activeTab))
-                activeTab = providers[0]?.id || null;
-            }
+            const provider = currentProvider();
 
             const tabsNav = elements.apiProviderRibbonTabs;
             const body = elements.apiProviderRibbonBody;
+            const title = panel.querySelector(".ribbon-head-title");
             tabsNav.innerHTML = "";
             body.innerHTML = "";
 
-            providers.forEach((p) => {
-              const btn = document.createElement("button");
-              btn.type = "button";
-              btn.className = "ribbon-tab";
-              btn.textContent =
-                p.id === state.settings.apiProvider
-                  ? `● ${p.label}`
-                  : p.label;
-              btn.classList.toggle("active", p.id === activeTab);
-              btn.addEventListener("click", () => {
-                activeTab = p.id;
-                render();
-              });
-              tabsNav.appendChild(btn);
-            });
+            if (!provider) {
+              if (title) title.textContent = "API プロバイダ設定";
+              panel.setAttribute("aria-label", "APIプロバイダ設定");
+              tabsNav.classList.add("hidden");
+              const note = document.createElement("div");
+              note.className = "ribbon-group";
+              note.textContent = "現在のAPIプロバイダを取得できません。";
+              body.appendChild(note);
+              return;
+            }
 
-            const provider = providers.find((p) => p.id === activeTab);
-            if (!provider) return;
+            // 現在のプロバイダだけを対象にするので、プロバイダ選択タブは不要。
+            // 代わりにタイトルそのものをプロバイダ名へ同期する。
+            tabsNav.classList.add("hidden");
+            if (title) title.textContent = `${provider.label} 設定`;
+            panel.setAttribute(
+              "aria-label",
+              `${provider.label} APIプロバイダ設定`,
+            );
 
-            // 使用中でないプロバイダのタブには「切り替え」チップを出す
-            const useGroup = document.createElement("div");
-            useGroup.className = "ribbon-group";
-            const useLabel = document.createElement("div");
-            useLabel.className = "ribbon-group-label";
-            useLabel.textContent = "プロバイダ";
-            const useChips = document.createElement("div");
-            useChips.className = "ribbon-chips";
-            const useChip = document.createElement("button");
-            useChip.type = "button";
-            useChip.className = "ribbon-chip";
-            const isCurrent = provider.id === state.settings.apiProvider;
-            useChip.textContent = isCurrent
-              ? `${provider.label} を使用中`
-              : `${provider.label} に切り替え`;
-            useChip.classList.toggle("active", isCurrent);
-            useChip.addEventListener("click", async () => {
-              await setProvider(provider.id);
-              render();
-            });
-            useChips.appendChild(useChip);
-            useGroup.append(useLabel, useChips);
-            body.appendChild(useGroup);
+            const currentGroup = document.createElement("div");
+            currentGroup.className = "ribbon-group";
+            const currentLabel = document.createElement("div");
+            currentLabel.className = "ribbon-group-label";
+            currentLabel.textContent = "現在のAPIプロバイダ";
+            const currentChips = document.createElement("div");
+            currentChips.className = "ribbon-chips";
+            const currentChip = document.createElement("span");
+            currentChip.className = "ribbon-chip active";
+            currentChip.style.cursor = "default";
+            currentChip.style.pointerEvents = "none";
+            currentChip.textContent = `● ${provider.label}`;
+            currentChips.appendChild(currentChip);
+            currentGroup.append(currentLabel, currentChips);
+            body.appendChild(currentGroup);
 
-            // モデル選択チップ
+            // 現在のプロバイダに対応するモデルだけを表示する。
             const select = provider.select();
             if (select && select.options.length > 0) {
               const modelGroup = document.createElement("div");
@@ -33288,7 +33257,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           };
 
           const openPanel = (trigger) => {
-            activeTab = state.settings.apiProvider;
+            // 開くたびに state.settings.apiProvider を読み直す。
+            // 直前の短押し切替や設定画面での変更が必ず反映される。
             render();
             positionPanel(trigger);
             elements.apiProviderRibbonScrim.classList.add("visible");
@@ -33375,6 +33345,15 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             "click",
             closePanel,
           );
+
+          // 設定画面側でAPIプロバイダが変更された場合も、
+          // ポップアップ表示中ならその場で専用内容へ切り替える。
+          if (elements.apiProviderSelect) {
+            elements.apiProviderSelect.addEventListener("change", () => {
+              if (panel.classList.contains("open")) render();
+            });
+          }
+
           document.addEventListener("keydown", (e) => {
             if (e.key === "Escape" && panel.classList.contains("open"))
               closePanel();
