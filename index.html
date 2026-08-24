@@ -6303,7 +6303,8 @@
       /* ===== 画像生成 クイック設定リボン =====
          配色はアプリのテーマ変数に依存せず、Stable Diffusion WebUI 風の
          ダークスレート + オレンジアクセントで固定する。 */
-      #image-gen-ribbon {
+      #image-gen-ribbon,
+      #api-provider-ribbon {
         --sd-bg: #1b1e27;
         --sd-bg-raised: #242833;
         --sd-bg-chip: #2d323f;
@@ -6441,7 +6442,29 @@
         }
       }
 
-      #image-gen-ribbon-scrim {
+      /* APIプロバイダ設定ポップアップ表示中は、切替ボタンだけをスクリムより
+         手前に出す。ヘッダーは sticky+z-index で独自の重ね順を作るため、
+         ヘッダー/フッターごと持ち上げたうえで pointer-events を切り、
+         切替ボタンにだけ操作を戻す。こうすると「切替ボタン＝閉じずに巡回」
+         「それ以外の枠外＝閉じる」を両立できる。 */
+      #chat-screen.provider-popup-open .app-header {
+        z-index: 21;
+        pointer-events: none;
+      }
+      #chat-screen.provider-popup-open .chat-input-area {
+        position: relative;
+        z-index: 21;
+        pointer-events: none;
+      }
+      #chat-screen.provider-popup-open .api-provider-toggle-btn {
+        pointer-events: auto;
+      }
+      #chat-screen.provider-popup-open #api-provider-ribbon {
+        z-index: 22;
+      }
+
+      #image-gen-ribbon-scrim,
+      #api-provider-ribbon-scrim {
         position: absolute;
         inset: 0;
         z-index: 19;
@@ -6452,7 +6475,8 @@
           opacity 0.18s ease,
           visibility 0.18s ease;
       }
-      #image-gen-ribbon-scrim.visible {
+      #image-gen-ribbon-scrim.visible,
+      #api-provider-ribbon-scrim.visible {
         visibility: visible;
         opacity: 1;
       }
@@ -33261,6 +33285,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             // 直前の短押し切替や設定画面での変更が必ず反映される。
             render();
             positionPanel(trigger);
+            elements.chatScreen.classList.add("provider-popup-open");
             elements.apiProviderRibbonScrim.classList.add("visible");
             setTimeout(() => {
               panel.classList.add("open");
@@ -33271,6 +33296,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           const closePanel = () => {
             panel.classList.remove("open");
             panel.setAttribute("aria-hidden", "true");
+            elements.chatScreen.classList.remove("provider-popup-open");
             elements.apiProviderRibbonScrim.classList.remove("visible");
           };
 
@@ -33323,10 +33349,15 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               )
                 cancel();
             });
-            trigger.addEventListener("pointerup", () => {
-              if (timer) {
-                cancel();
-                appLogic.toggleApiProvider();
+            trigger.addEventListener("pointerup", async () => {
+              if (!timer) return;
+              cancel();
+              const wasOpen = panel.classList.contains("open");
+              await appLogic.toggleApiProvider();
+              // ポップアップを開いたまま切り替えた場合は閉じずに追従させる。
+              if (wasOpen && panel.classList.contains("open")) {
+                render();
+                positionPanel(trigger);
               }
             });
             trigger.addEventListener("pointercancel", cancel);
