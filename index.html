@@ -8003,12 +8003,58 @@
                 <option value="gemini">Gemini (Google)</option>
                 <option value="xai">Grok (xAI API)</option>
                 <option value="llmaggregator">LLM Aggregator</option>
+                <option value="dummy">Dummy 画像生成 (デバッグ)</option>
               </select>
               <p style="font-size: 11px; color: var(--text-secondary)">
                 ※ Grok (xAI)
                 選択時はチャット設定のxAI
                 APIキーを使用します。アスペクト比・解像度・画像添付は非対応で、枚数のみ反映されます。
               </p>
+              <p style="font-size: 11px; color: var(--text-secondary)">
+                ※ Dummy
+                はAPIを呼ばず、端末内で色だけの画像を生成するデバッグ用プロバイダです。APIキーは不要で、アスペクト比・解像度・枚数がそのまま反映されます。
+              </p>
+              <div
+                id="image-gen-dummy-debug"
+                class="hidden"
+                style="
+                  margin-top: 10px;
+                  padding: 10px;
+                  border: 1px dashed var(--border-tertiary);
+                  border-radius: 6px;
+                "
+              >
+                <label for="image-gen-dummy-style">ダミー画像スタイル:</label>
+                <select
+                  id="image-gen-dummy-style"
+                  aria-label="ダミー画像スタイル"
+                >
+                  <option value="auto">モデル選択に従う</option>
+                  <option value="solid">単色</option>
+                  <option value="gradient">グラデーション</option>
+                  <option value="checker">チェッカー</option>
+                  <option value="noise">ノイズ</option>
+                </select>
+                <label for="image-gen-dummy-delay"
+                  >擬似応答遅延 (ミリ秒):</label
+                >
+                <input
+                  type="number"
+                  id="image-gen-dummy-delay"
+                  min="0"
+                  max="60000"
+                  step="100"
+                  aria-label="ダミー画像生成の擬似応答遅延"
+                />
+                <label style="display: block; margin-top: 8px">
+                  <input type="checkbox" id="image-gen-dummy-show-info" />
+                  生成情報（モデル・サイズ・プロンプト）を本文に併記
+                </label>
+                <label style="display: block">
+                  <input type="checkbox" id="image-gen-dummy-force-error" />
+                  常にエラーを返す（エラー表示の確認用）
+                </label>
+              </div>
               <br />
               <label for="image-gen-settings-model">画像生成モデル:</label>
               <select id="image-gen-settings-model" aria-label="画像生成モデル">
@@ -15782,6 +15828,14 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             text: "Nano Banana 2 (google/gemini-3.1-flash-image)",
           },
         ],
+        // デバッグ用。APIを呼ばずローカルで塗り絵を返すだけのモデル群で、
+        // モデル名がそのまま描画スタイルになる。
+        dummy: [
+          { value: "dummy-gradient", text: "Dummy グラデーション" },
+          { value: "dummy-solid", text: "Dummy 単色" },
+          { value: "dummy-checker", text: "Dummy チェッカー" },
+          { value: "dummy-noise", text: "Dummy ノイズ" },
+        ],
       };
 
       const VIDEO_GEN_MODEL_OPTIONS_BY_PROVIDER = {
@@ -16558,6 +16612,11 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         addImageGenApiKeyBtn: byId("add-image-gen-api-key-btn"),
         imageGenNewApiKeysInput: byId("image-gen-new-api-keys-input"),
         imageGenSettingsProviderSelect: byId("image-gen-settings-provider"),
+        imageGenDummyDebugGroup: byId("image-gen-dummy-debug"),
+        imageGenDummyStyleSelect: byId("image-gen-dummy-style"),
+        imageGenDummyDelayInput: byId("image-gen-dummy-delay"),
+        imageGenDummyShowInfoCheckbox: byId("image-gen-dummy-show-info"),
+        imageGenDummyForceErrorCheckbox: byId("image-gen-dummy-force-error"),
         imageGenSettingsModelSelect: byId("image-gen-settings-model"),
         imageGenAdditionalModelsTextarea: byId("image-gen-additional-models"),
         imageGenSettingsAspectSelect: byId("image-gen-settings-aspect"),
@@ -16679,6 +16738,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           imageGenDefaultResolution: "",
           imageGenDefaultCount: "",
           imageGenProvider: "gemini",
+          imageGenDummyStyle: "auto",
+          imageGenDummyDelayMs: 600,
+          imageGenDummyShowInfo: true,
+          imageGenDummyForceError: false,
           imageGenPresetIndex: 0,
           imageGenApiKey: "",
           imageGenApiKeys: [],
@@ -21598,12 +21661,20 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 : "チャット設定のGemini APIキーと共有されます";
           }
         },
+        // ダミープロバイダ選択時だけデバッグ用の入力群を出す。
+        syncImageGenDummyDebugVisibility() {
+          if (!elements.imageGenDummyDebugGroup) return;
+          const isDummy =
+            (state.settings.imageGenProvider || "gemini") === "dummy";
+          elements.imageGenDummyDebugGroup.classList.toggle("hidden", !isDummy);
+        },
         syncImageGenPanelUI() {
           if (elements.imageGenSettingsProviderSelect) {
             elements.imageGenSettingsProviderSelect.value =
               state.settings.imageGenProvider || "gemini";
             elements.imageGenSettingsProviderSelect.disabled = false;
           }
+          this.syncImageGenDummyDebugVisibility();
           this.populateImageGenModelOptions(
             elements.imageGenSettingsModelSelect,
             state.settings.imageGenProvider || "gemini",
@@ -21845,6 +21916,20 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             elements.imageGenSettingsProviderSelect.value =
               state.settings.imageGenProvider || "gemini";
           }
+          if (elements.imageGenDummyStyleSelect)
+            elements.imageGenDummyStyleSelect.value =
+              state.settings.imageGenDummyStyle || "auto";
+          if (elements.imageGenDummyDelayInput)
+            elements.imageGenDummyDelayInput.value = String(
+              state.settings.imageGenDummyDelayMs ?? 600,
+            );
+          if (elements.imageGenDummyShowInfoCheckbox)
+            elements.imageGenDummyShowInfoCheckbox.checked =
+              state.settings.imageGenDummyShowInfo !== false;
+          if (elements.imageGenDummyForceErrorCheckbox)
+            elements.imageGenDummyForceErrorCheckbox.checked =
+              !!state.settings.imageGenDummyForceError;
+          this.syncImageGenDummyDebugVisibility();
           elements.imageGenAdditionalModelsTextarea.value =
             state.settings.imageGenAdditionalModels || "";
           elements.imageGenSettingsAspectSelect.value =
@@ -25647,6 +25732,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               () => {
                 state.settings.imageGenProvider =
                   elements.imageGenSettingsProviderSelect.value;
+                uiUtils.syncImageGenDummyDebugVisibility();
                 uiUtils.populateImageGenModelOptions(
                   elements.imageGenSettingsModelSelect,
                   state.settings.imageGenProvider,
@@ -29304,6 +29390,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
         },
         getImageGenApiContext(provider = this.getCurrentImageGenProvider()) {
+          // ダミーは端末内で完結するのでAPIキーもバックエンドURLも要らない。
+          if (provider === "dummy") {
+            return { provider, apiKey: "", backendUrl: "" };
+          }
           if (provider === "gemini") {
             // 動画生成側と同様に、専用キーが無ければメインの Gemini キーへ
             // フォールバックする。
@@ -29711,6 +29801,190 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             artifacts,
           };
         },
+        // ===== ダミー画像生成 (デバッグ用) =====
+        // API を呼ばずに canvas で「画像っぽいもの」を作って、生成結果の
+        // 保存・表示・履歴・スタックまでの経路をキー無しで確認するための実装。
+        resolveDummyImageSize(aspect, resolution) {
+          const BASE_BY_RESOLUTION = {
+            "512": 512,
+            "1K": 1024,
+            "2K": 2048,
+            "4K": 4096,
+          };
+          // 4K を素直に描くとメモリも時間も無駄なので、デバッグ用途では
+          // 長辺 2048px で頭打ちにする。
+          const base = Math.min(BASE_BY_RESOLUTION[resolution] || 1024, 2048);
+          const match = /^(\d+):(\d+)$/.exec(aspect || "");
+          if (!match) return { width: base, height: base };
+          const w = parseInt(match[1], 10);
+          const h = parseInt(match[2], 10);
+          if (!w || !h) return { width: base, height: base };
+          return w >= h
+            ? { width: base, height: Math.max(1, Math.round((base * h) / w)) }
+            : { width: Math.max(1, Math.round((base * w) / h)), height: base };
+        },
+        // 同じプロンプトなら同じ色が出た方がデバッグしやすいので、
+        // 文字列から決定的に色相を決める。
+        hashDummySeed(text) {
+          let hash = 2166136261;
+          const source = String(text || "dummy");
+          for (let i = 0; i < source.length; i++) {
+            hash ^= source.charCodeAt(i);
+            hash = Math.imul(hash, 16777619);
+          }
+          return Math.abs(hash);
+        },
+        resolveDummyImageStyle(model) {
+          const configured = state.settings.imageGenDummyStyle || "auto";
+          if (configured !== "auto") return configured;
+          const name = String(model || "");
+          if (name.includes("solid")) return "solid";
+          if (name.includes("checker")) return "checker";
+          if (name.includes("noise")) return "noise";
+          return "gradient";
+        },
+        drawDummyImage(canvas, { style, seed, hue, label, caption }) {
+          const ctx = canvas.getContext("2d");
+          const { width, height } = canvas;
+          const accentHue = (hue + 140) % 360;
+          if (style === "solid") {
+            ctx.fillStyle = `hsl(${hue}, 62%, 58%)`;
+            ctx.fillRect(0, 0, width, height);
+          } else if (style === "checker") {
+            const cell = Math.max(16, Math.round(Math.min(width, height) / 8));
+            for (let y = 0; y < height; y += cell) {
+              for (let x = 0; x < width; x += cell) {
+                const parity = ((x / cell) | 0) + ((y / cell) | 0);
+                ctx.fillStyle =
+                  parity % 2 === 0
+                    ? `hsl(${hue}, 60%, 62%)`
+                    : `hsl(${accentHue}, 60%, 38%)`;
+                ctx.fillRect(x, y, cell, cell);
+              }
+            }
+          } else if (style === "noise") {
+            const block = Math.max(8, Math.round(Math.min(width, height) / 48));
+            let n = seed;
+            for (let y = 0; y < height; y += block) {
+              for (let x = 0; x < width; x += block) {
+                n = (Math.imul(n, 1103515245) + 12345) >>> 0;
+                const lightness = 30 + (n % 55);
+                ctx.fillStyle = `hsl(${(hue + (n % 60)) % 360}, 55%, ${lightness}%)`;
+                ctx.fillRect(x, y, block, block);
+              }
+            }
+          } else {
+            const gradient = ctx.createLinearGradient(0, 0, width, height);
+            gradient.addColorStop(0, `hsl(${hue}, 70%, 62%)`);
+            gradient.addColorStop(0.5, `hsl(${(hue + 40) % 360}, 65%, 50%)`);
+            gradient.addColorStop(1, `hsl(${accentHue}, 60%, 38%)`);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+          }
+
+          // どのダミーかを目視で判別できるよう、枠と説明を焼き込む。
+          const pad = Math.max(8, Math.round(Math.min(width, height) * 0.03));
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+          ctx.lineWidth = Math.max(2, Math.round(Math.min(width, height) / 160));
+          ctx.strokeRect(pad, pad, width - pad * 2, height - pad * 2);
+
+          const fontSize = Math.max(
+            14,
+            Math.round(Math.min(width, height) * 0.06),
+          );
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+          ctx.font = `bold ${fontSize}px sans-serif`;
+          ctx.fillText(label, width / 2 + 2, height / 2 + 2);
+          ctx.fillStyle = "#ffffff";
+          ctx.fillText(label, width / 2, height / 2);
+
+          if (caption) {
+            const smallSize = Math.max(11, Math.round(fontSize * 0.42));
+            ctx.font = `${smallSize}px sans-serif`;
+            ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+            ctx.fillText(caption, width / 2 + 1, height / 2 + fontSize * 1.1 + 1);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+            ctx.fillText(caption, width / 2, height / 2 + fontSize * 1.1);
+          }
+        },
+        dummyDelay(ms, signal) {
+          if (!ms || ms <= 0) return Promise.resolve();
+          return new Promise((resolve, reject) => {
+            const onAbort = () => {
+              clearTimeout(timerId);
+              reject(new DOMException("Aborted", "AbortError"));
+            };
+            const timerId = setTimeout(() => {
+              signal?.removeEventListener("abort", onAbort);
+              resolve();
+            }, ms);
+            if (signal?.aborted) {
+              onAbort();
+              return;
+            }
+            signal?.addEventListener("abort", onAbort, { once: true });
+          });
+        },
+        async runDummyImageGeneration({ model, aspect, resolution, count }) {
+          const signal = state.imageGenAbortController?.signal;
+          await this.dummyDelay(
+            state.settings.imageGenDummyDelayMs ?? 600,
+            signal,
+          );
+          if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+          if (state.settings.imageGenDummyForceError) {
+            throw new Error(
+              "[Dummy] 強制エラーが有効です。画像生成に失敗しました。",
+            );
+          }
+
+          const prompt = this.getImageGenLatestUserMessage()?.content || "";
+          const { width, height } = this.resolveDummyImageSize(
+            aspect,
+            resolution,
+          );
+          const style = this.resolveDummyImageStyle(model);
+          const total = Math.min(Math.max(parseInt(count, 10) || 1, 1), 4);
+          const artifacts = [];
+          for (let index = 0; index < total; index++) {
+            const seed = this.hashDummySeed(`${prompt}#${model}#${index}`);
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            this.drawDummyImage(canvas, {
+              style,
+              seed,
+              hue: seed % 360,
+              label: `DUMMY ${index + 1}/${total}`,
+              caption: `${width}x${height} / ${style}`,
+            });
+            const base64Data = canvas.toDataURL("image/png").split(",")[1];
+            const artifact = await this.createImageGenImageArtifactFromBase64(
+              base64Data,
+              "image/png",
+              {
+                model,
+                label: `Dummy image ${index + 1}`,
+                fileName: `dummy_image_${Date.now()}_${index + 1}.png`,
+              },
+            );
+            if (artifact) artifacts.push(artifact);
+          }
+
+          const content = state.settings.imageGenDummyShowInfo
+            ? [
+                "[Dummy provider] APIは呼び出していません。",
+                `style: ${style} / size: ${width}x${height} / count: ${total}`,
+                `model: ${model}`,
+                prompt ? `prompt: ${prompt}` : null,
+              ]
+                .filter(Boolean)
+                .join("\n")
+            : "";
+          return { content, artifacts };
+        },
         async runStillImageGeneration() {
           // 途中で失敗・中断すると、IndexedDB に保存済みの生成物がどの
           // メッセージからも参照されない孤児として残る。run 単位で控えを
@@ -29747,7 +30021,19 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           });
           let responseContent = "";
           let responseArtifacts = [];
-          if (provider === "xai") {
+          if (provider === "dummy") {
+            const parsed = await this.runDummyImageGeneration({
+              model,
+              aspect,
+              resolution,
+              count:
+                state.settings.geminiImageCount ||
+                state.settings.imageGenDefaultCount ||
+                "1",
+            });
+            responseContent = parsed.content;
+            responseArtifacts = parsed.artifacts;
+          } else if (provider === "xai") {
             const countValue = parseInt(
               state.settings.geminiImageCount ||
                 state.settings.imageGenDefaultCount ||
@@ -34038,6 +34324,25 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             : state.settings.imageGenProvider || "gemini";
           newSettings.imageGenDefaultModel =
             elements.imageGenSettingsModelSelect.value;
+          if (elements.imageGenDummyStyleSelect)
+            newSettings.imageGenDummyStyle =
+              elements.imageGenDummyStyleSelect.value;
+          if (elements.imageGenDummyDelayInput) {
+            const dummyDelay = parseInt(
+              elements.imageGenDummyDelayInput.value,
+              10,
+            );
+            newSettings.imageGenDummyDelayMs =
+              Number.isFinite(dummyDelay) && dummyDelay >= 0
+                ? Math.min(dummyDelay, 60000)
+                : 0;
+          }
+          if (elements.imageGenDummyShowInfoCheckbox)
+            newSettings.imageGenDummyShowInfo =
+              elements.imageGenDummyShowInfoCheckbox.checked;
+          if (elements.imageGenDummyForceErrorCheckbox)
+            newSettings.imageGenDummyForceError =
+              elements.imageGenDummyForceErrorCheckbox.checked;
           newSettings.imageGenAdditionalModels =
             elements.imageGenAdditionalModelsTextarea.value.trim();
           newSettings.geminiImageAspectRatio =
