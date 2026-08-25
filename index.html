@@ -2295,6 +2295,25 @@
         gap: 10px;
       }
 
+      /* スマホ: ヘッダー/フッターの長押しでOS側の文字選択・コールアウトを出さない。
+         フッター内の入力欄は編集性を維持するため明示的に例外化する。 */
+      @media (hover: none), (pointer: coarse) {
+        .app-header,
+        .chat-input-area {
+          -webkit-user-select: none;
+          user-select: none;
+          -webkit-touch-callout: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .app-header :is(input, textarea, [contenteditable="true"]),
+        .chat-input-area :is(input, textarea, [contenteditable="true"]) {
+          -webkit-user-select: text;
+          user-select: text;
+          -webkit-touch-callout: default;
+        }
+      }
+
       .footer-action-button {
         height: 40px;
         width: 40px;
@@ -4607,6 +4626,81 @@
 
       #imagePreviewDialog .dialog-actions {
         margin-top: 10px;
+      }
+
+      #imageGenStackDialog {
+        padding: 16px;
+        width: min(560px, 92vw);
+        max-width: 92vw;
+      }
+
+      #imageGenStackDialog .dialog-content {
+        padding: 0;
+        margin: 0;
+        max-height: 70vh;
+        overflow-y: auto;
+      }
+
+      .image-stack-title {
+        margin: 0 0 12px 0;
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .image-stack-title .image-stack-count {
+        font-weight: 400;
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-left: 6px;
+      }
+
+      .image-stack-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+        gap: 8px;
+      }
+
+      .image-stack-item {
+        position: relative;
+        aspect-ratio: 1 / 1;
+        padding: 0;
+        min-width: 0;
+        border: 1px solid var(--border-tertiary);
+        border-radius: 8px;
+        overflow: hidden;
+        background-color: var(--bg-secondary);
+        cursor: pointer;
+      }
+
+      .image-stack-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        transition: transform 0.2s ease;
+      }
+
+      .image-stack-item:hover img {
+        transform: scale(1.06);
+      }
+
+      .image-stack-item .image-stack-index {
+        position: absolute;
+        left: 4px;
+        bottom: 4px;
+        padding: 1px 6px;
+        border-radius: 10px;
+        font-size: 11px;
+        line-height: 1.5;
+        background-color: rgba(0, 0, 0, 0.55);
+        color: #ffffff;
+      }
+
+      .image-stack-empty {
+        padding: 24px 0;
+        text-align: center;
+        font-size: 14px;
+        color: var(--text-secondary);
       }
 
       .api-keys-list {
@@ -7569,6 +7663,15 @@
             Ⅰ
           </button>
           <button
+            id="image-gen-stack-btn-header"
+            class="header-button"
+            title="画像スタック"
+            aria-label="生成した画像の一覧"
+            aria-haspopup="dialog"
+          >
+            🖼
+          </button>
+          <button
             id="goto-settings-from-image-gen-btn"
             class="header-button"
             aria-label="設定へ"
@@ -7594,6 +7697,15 @@
             style="position: relative"
           >
             +<span class="attachment-badge"></span>
+          </button>
+          <button
+            id="image-gen-stack-btn"
+            class="footer-action-button"
+            title="画像スタック"
+            aria-label="生成した画像の一覧"
+            aria-haspopup="dialog"
+          >
+            🖼
           </button>
           <button
             id="image-gen-ribbon-btn-footer"
@@ -7967,6 +8079,43 @@
               >
                 ※
                 有効時、画像生成リクエストの先頭にこのシステムプロンプトが付与されます。
+              </p>
+            </div>
+          </details>
+
+          <details open class="settings-group">
+            <summary
+              style="
+                font-size: 16px;
+                color: var(--text-link);
+                border-bottom: 1px solid var(--border-tertiary);
+                padding-bottom: 5px;
+                margin-bottom: 15px;
+                display: list-item;
+                list-style: revert;
+                cursor: pointer;
+                font-weight: bold;
+              "
+            >
+              画像スタックボタンの表示
+            </summary>
+            <div style="margin-top: 10px">
+              <label class="checkbox-label">
+                <input type="checkbox" id="image-gen-stack-btn-header-visible" />
+                ヘッダーに画像スタックボタンを表示する
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="image-gen-stack-btn-footer-visible" />
+                フッターに画像スタックボタンを表示する
+              </label>
+              <p
+                style="
+                  font-size: 11px;
+                  color: var(--text-secondary);
+                  margin-top: 5px;
+                "
+              >
+                ※ ボタンを押すと、このセッションで生成した画像の一覧がポップアップで表示されます。
               </p>
             </div>
           </details>
@@ -14933,6 +15082,18 @@
         </button>
       </div>
     </dialog>
+    <dialog id="imageGenStackDialog" class="custom-dialog">
+      <p class="image-stack-title">
+        🖼 画像スタック<span class="image-stack-count"></span>
+      </p>
+      <div class="dialog-content">
+        <div class="image-stack-grid"></div>
+      </div>
+      <div class="dialog-actions">
+        <button value="ok" class="dialog-ok-btn">閉じる</button>
+      </div>
+    </dialog>
+
     <dialog id="imagePreviewDialog" class="custom-dialog">
       <div class="dialog-content">
         <img src="" alt="画像プレビュー" />
@@ -16284,6 +16445,15 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         gotoHistoryFromImageGenBtn: byId("goto-history-from-image-gen-btn"),
         gotoSettingsFromImageGenBtn: byId("goto-settings-from-image-gen-btn"),
         imageGenAttachFileBtn: byId("image-gen-attach-file-btn"),
+        imageGenStackBtn: byId("image-gen-stack-btn"),
+        imageGenStackBtnHeader: byId("image-gen-stack-btn-header"),
+        imageGenStackBtnHeaderVisibleCheckbox: byId(
+          "image-gen-stack-btn-header-visible",
+        ),
+        imageGenStackBtnFooterVisibleCheckbox: byId(
+          "image-gen-stack-btn-footer-visible",
+        ),
+        imageGenStackDialog: byId("imageGenStackDialog"),
         imageGenHistoryScreen: byId("image-gen-history-screen"),
         imageGenSettingsScreen: byId("image-gen-settings-screen"),
         backToImageGenFromHistoryBtn: byId("back-to-image-gen-from-history"),
@@ -16409,6 +16579,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           geminiImageCount: "",
           imageGenSystemPrompt: "",
           imageGenEnableSystemPrompt: false,
+          imageGenStackBtnInHeader: true,
+          imageGenStackBtnInFooter: true,
           imageGenAdditionalModels: "",
           imageGenDefaultModel: DEFAULT_IMAGE_GEN_MODEL,
           imageGenDefaultAspect: "",
@@ -21599,6 +21771,13 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             state.settings.imageGenSystemPrompt || "";
           elements.imageGenEnableSystemPromptCheckbox.checked =
             state.settings.imageGenEnableSystemPrompt;
+          if (elements.imageGenStackBtnHeaderVisibleCheckbox)
+            elements.imageGenStackBtnHeaderVisibleCheckbox.checked =
+              state.settings.imageGenStackBtnInHeader !== false;
+          if (elements.imageGenStackBtnFooterVisibleCheckbox)
+            elements.imageGenStackBtnFooterVisibleCheckbox.checked =
+              state.settings.imageGenStackBtnInFooter !== false;
+          uiUtils.applyImageGenStackBtnVisibility();
           uiUtils.syncImageGenPanelUI();
           uiUtils.syncVideoGenUI();
 
@@ -23675,6 +23854,77 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             apiProviderSelect.value = "";
           }
         },
+        collectImageGenStack() {
+          const stack = [];
+          let latestPrompt = "";
+          state.imageGenMessages.forEach((msg) => {
+            if (msg.role === "user") latestPrompt = msg.content || "";
+            (msg.artifacts || []).forEach((artifact) => {
+              if (artifact.kind !== "image") return;
+              const src = artifact.objectUrl || artifact.dataUrl;
+              if (!src) return;
+              stack.push({ src, prompt: artifact.label || latestPrompt });
+            });
+          });
+          return stack;
+        },
+        applyImageGenStackBtnVisibility() {
+          if (elements.imageGenStackBtnHeader)
+            elements.imageGenStackBtnHeader.classList.toggle(
+              "hidden",
+              state.settings.imageGenStackBtnInHeader === false,
+            );
+          if (elements.imageGenStackBtn)
+            elements.imageGenStackBtn.classList.toggle(
+              "hidden",
+              state.settings.imageGenStackBtnInFooter === false,
+            );
+        },
+        showImageGenStack() {
+          const dialog = elements.imageGenStackDialog;
+          if (!dialog) return;
+          const grid = dialog.querySelector(".image-stack-grid");
+          const countLabel = dialog.querySelector(".image-stack-count");
+          const okBtn = dialog.querySelector(".dialog-ok-btn");
+          const stack = this.collectImageGenStack();
+
+          grid.innerHTML = "";
+          countLabel.textContent = stack.length > 0 ? `${stack.length}枚` : "";
+
+          if (stack.length === 0) {
+            const empty = document.createElement("p");
+            empty.classList.add("image-stack-empty");
+            empty.textContent = "生成した画像はまだありません。";
+            grid.appendChild(empty);
+          } else {
+            // 新しいものが先頭に来るようにする
+            stack
+              .slice()
+              .reverse()
+              .forEach((item, i) => {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.classList.add("image-stack-item");
+                button.title = item.prompt || "";
+                const img = document.createElement("img");
+                img.src = item.src;
+                img.alt = item.prompt || `stacked-image-${i + 1}`;
+                img.loading = "lazy";
+                const index = document.createElement("span");
+                index.classList.add("image-stack-index");
+                index.textContent = String(stack.length - i);
+                button.append(img, index);
+                button.addEventListener("click", () => {
+                  dialog.close();
+                  this.showImagePreview(item.src, img.alt);
+                });
+                grid.appendChild(button);
+              });
+          }
+
+          okBtn.onclick = () => dialog.close();
+          dialog.showModal();
+        },
         showImagePreview(src, alt = "画像プレビュー") {
           const dialog = elements.imagePreviewDialog;
           const dialogImg = dialog.querySelector("img");
@@ -25236,6 +25486,38 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               () => {
                 state.settings.imageGenDefaultModel =
                   elements.imageGenSettingsModelSelect.value;
+                appLogic.saveSettings(false);
+              },
+            );
+          }
+          if (elements.imageGenStackBtn) {
+            elements.imageGenStackBtn.addEventListener("click", () => {
+              uiUtils.showImageGenStack();
+            });
+          }
+          if (elements.imageGenStackBtnHeader) {
+            elements.imageGenStackBtnHeader.addEventListener("click", () => {
+              uiUtils.showImageGenStack();
+            });
+          }
+          if (elements.imageGenStackBtnHeaderVisibleCheckbox) {
+            elements.imageGenStackBtnHeaderVisibleCheckbox.addEventListener(
+              "change",
+              () => {
+                state.settings.imageGenStackBtnInHeader =
+                  elements.imageGenStackBtnHeaderVisibleCheckbox.checked;
+                uiUtils.applyImageGenStackBtnVisibility();
+                appLogic.saveSettings(false);
+              },
+            );
+          }
+          if (elements.imageGenStackBtnFooterVisibleCheckbox) {
+            elements.imageGenStackBtnFooterVisibleCheckbox.addEventListener(
+              "change",
+              () => {
+                state.settings.imageGenStackBtnInFooter =
+                  elements.imageGenStackBtnFooterVisibleCheckbox.checked;
+                uiUtils.applyImageGenStackBtnVisibility();
                 appLogic.saveSettings(false);
               },
             );
@@ -33566,6 +33848,12 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             elements.imageGenSystemPromptTextarea.value.trim();
           newSettings.imageGenEnableSystemPrompt =
             elements.imageGenEnableSystemPromptCheckbox.checked;
+          if (elements.imageGenStackBtnHeaderVisibleCheckbox)
+            newSettings.imageGenStackBtnInHeader =
+              elements.imageGenStackBtnHeaderVisibleCheckbox.checked;
+          if (elements.imageGenStackBtnFooterVisibleCheckbox)
+            newSettings.imageGenStackBtnInFooter =
+              elements.imageGenStackBtnFooterVisibleCheckbox.checked;
 
           // 動画生成専用設定パネルの保存
           if (elements.videoGenSettingsProviderSelect)
