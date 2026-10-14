@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="ja">
+<html lang="ja" class="zoom-locked">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>GeminiPWA</title>
     <link rel="manifest" href="manifest.json" />
     <meta name="theme-color" id="theme-color-meta" content="#4a90e2" />
@@ -798,6 +798,24 @@
           color 0.3s ease;
         overflow: hidden;
         touch-action: manipulation;
+      }
+
+      /* Restore touch-friendly no-zoom mode without blocking one-finger scrolling. */
+      html.zoom-locked,
+      html.zoom-locked body {
+        touch-action: pan-x pan-y;
+      }
+      html.zoom-locked #chat-screen .main-content,
+      html.zoom-locked #image-gen-screen .main-content {
+        touch-action: pan-y;
+      }
+      /* iOS Safari can zoom the visual viewport when an input is under 16px. */
+      @media (hover: none) and (pointer: coarse) {
+        html.zoom-locked input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+        html.zoom-locked textarea,
+        html.zoom-locked select {
+          font-size: max(16px, 1em) !important;
+        }
       }
 
       button {
@@ -13669,11 +13687,11 @@
                         </label>
                         <label class="checkbox-label">
                           <input type="checkbox" id="prevent-zoom-toggle" />
-                          ズームを禁止する (テキスト入力時の自動ズーム防止)
+                          スマホの画面ズームを禁止する (タップ・ピンチ・入力時)
                         </label>
                         <p class="os-note">
                           ※
-                          スマホ等でテキスト入力時に意図せずズームするのを防ぎます。
+                          既定でON。OFFにするとブラウザの拡大機能を使えます。
                         </p>
                         <label class="checkbox-label">
                           <input type="checkbox" id="swipe-navigation-toggle" />
@@ -16074,7 +16092,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
       const LIGHT_MODE_HEADER_COLOR = "#4a90e2";
       const LIGHT_MODE_PRIMARY_COLOR = "#ffffff";
 
-      const APP_VERSION = "0.26ti (627)";
+      const APP_VERSION = "0.26ti (628)";
       const SWIPE_THRESHOLD = 50;
       const ZOOM_THRESHOLD = 1.01;
       const DEFAULT_MAX_FILE_SIZE_MB = 10;
@@ -17383,9 +17401,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           enableProofreading: false,
           proofreadingApiConfigs: [],
           activeProofreadingConfigId: null,
-          // 既定でピンチズームを殺すのはアクセシビリティ上の後退（WCAG 1.4.4）。
-          // 必要な人が設定で有効にする形にする。
-          preventZoom: false,
+          // スマホの誤タップ／入力フォーカス時の画面ズームは既定で禁止。
+          // 必要な場合は設定からブラウザズームを再度有効化できる。
+          preventZoom: true,
           minimizeHeaderFooter: false,
           enableResponsiveScaling: false,
           responsiveBaseHeight: 900,
@@ -18611,6 +18629,15 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                       state.settings[key] = loadedValue;
                     }
                   }
+                }
+
+                // 旧版では preventZoom が false 既定だったため、既存ユーザーにも
+                // このリリースで一度だけ有効化する。その後の手動設定は尊重する。
+                if (!loadedSettings.mobileZoomGuardV2Initialized) {
+                  state.settings.preventZoom = true;
+                  this.saveSetting("preventZoom", true)
+                    .then(() => this.saveSetting("mobileZoomGuardV2Initialized", true))
+                    .catch((error) => console.warn("Zoom-guard settings migration failed:", error));
                 }
 
                 // 旧・確認ダイアログ個別設定 → 一括設定へ移行
@@ -22392,6 +22419,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             content += ", maximum-scale=1.0, user-scalable=no";
           }
           viewportMeta.content = content;
+          document.documentElement.classList.toggle(
+            "zoom-locked",
+            state.settings.preventZoom === true,
+          );
         },
         applyTheme() {
           const themeProfile = getThemeProfile(state.settings.theme);
@@ -24165,13 +24196,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             elements.videoGenSettingsScreen.style.transform = "translateX(0)";
           }
 
-          if (screenName === "imageGen" || screenName === "videoGen") {
-            let viewportMeta = qs('meta[name="viewport"]');
-            if (viewportMeta)
-              viewportMeta.content = "width=device-width, initial-scale=1.0";
-          } else {
-            this.applyZoomPreventionSetting();
-          }
+          // 画像生成・動画生成への移動でもズーム禁止を解除しない。
+          this.applyZoomPreventionSetting();
 
           requestAnimationFrame(() => {
             allScreens.forEach((screen) => {
@@ -44998,6 +45024,34 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
       // 起動ウォッチドッグは、この印の有無で「データ破損の疑い」と
       // 「アプリのコード自体が動いていない」を区別する。
       window.__mainScriptParsed = true;
+
+      // Safari legacy gesture events bypass CSS touch-action on some iOS versions.
+      // Only cancel actual zoom gestures; never cancel ordinary one-finger scrolling.
+      const blockNativePageZoom = (event) => {
+        if (
+          document.documentElement.classList.contains("zoom-locked") &&
+          event.cancelable
+        ) {
+          event.preventDefault();
+        }
+      };
+      ["gesturestart", "gesturechange", "gestureend"].forEach((type) => {
+        document.addEventListener(type, blockNativePageZoom, {
+          passive: false,
+          capture: true,
+        });
+      });
+      document.addEventListener(
+        "touchmove",
+        (event) => {
+          if (event.touches.length > 1) blockNativePageZoom(event);
+        },
+        { passive: false, capture: true },
+      );
+      document.addEventListener("dblclick", blockNativePageZoom, {
+        passive: false,
+        capture: true,
+      });
 
       appLogic.initializeApp();
     </script>

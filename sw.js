@@ -1,6 +1,6 @@
 // sw.js
 
-const CACHE_NAME = 'gemini-pwa-cache-v2'; // キャッシュ名を変更すると強制的に更新がかかる場合があ
+const CACHE_NAME = 'gemini-pwa-cache-v3'; // キャッシュ名を変更すると強制的に更新がかかる場合があ
 const urlsToCache = [
   './', // ルートパス (index.html を指すことが多い)
   './index.html',
@@ -37,6 +37,27 @@ self.addEventListener('fetch', (event) => {
   if (requestUrl.hostname === 'generativelanguage.googleapis.com' && event.request.method === 'POST') {
     event.respondWith(fetch(event.request));
     return; // このリクエストに対するService Workerの処理はここで終了
+  }
+
+  // Application navigations are network-first. Cache-first previously kept a stale,
+  // truncated index.html alive even after GitHub Pages had deployed a fixed build.
+  if (event.request.mode === 'navigate' && requestUrl.origin === self.location.origin) {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' }).then((response) => {
+        if (!response.ok) throw new Error(`Navigation HTTP ${response.status}`);
+        const copy = response.clone();
+        const indexUrl = new URL('./index.html', self.registration.scope).href;
+        event.waitUntil(
+          caches.open(CACHE_NAME).then((cache) => cache.put(indexUrl, copy))
+            .catch((error) => console.warn('SW: Failed to refresh offline index:', error))
+        );
+        return response;
+      }).catch(async () => {
+        const indexUrl = new URL('./index.html', self.registration.scope).href;
+        return (await caches.match(indexUrl)) || new Response('Offline', { status: 503 });
+      })
+    );
+    return;
   }
 
   // それ以外のリクエスト (主にGET) はキャッシュ優先戦略 (Cache falling back to network)
