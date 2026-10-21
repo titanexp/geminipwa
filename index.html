@@ -15979,6 +15979,163 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         },
       };
 
+      // 各社の usage を、保存・表示・統計が読む共通形
+      // { candidatesTokenCount, totalTokenCount, cachedTokenCount } に揃える。
+      // ストリーミング・非ストリーミングの両経路がここだけを通る。以前は
+      // 経路ごとに同じ計算を書いていたため、推論トークンの二重計上
+      // (xAI 非ストリーミング / OpenAI ストリーミング) が起きていた。
+      const usageNormalizer = {
+        normalize(provider, usage) {
+          if (!usage) return null;
+          // Gemini の usageMetadata は元から共通形の命名。
+          if (provider === "gemini") return usage;
+          if (provider === "claude") {
+            return {
+              candidatesTokenCount: usage.output_tokens,
+              // Anthropicの input_tokens はキャッシュ分を含まないため、
+              // 加算しないとキャッシュヒット時に総数が激減して見える。
+              totalTokenCount:
+                usage.input_tokens +
+                (usage.cache_read_input_tokens || 0) +
+                (usage.cache_creation_input_tokens || 0) +
+                usage.output_tokens,
+              cachedTokenCount: promptCacheUtils.readCachedTokens(
+                "claude",
+                usage,
+              ),
+            };
+          }
+          if (provider === "deepseek" || provider === "llmaggregator") {
+            return {
+              candidatesTokenCount: usage.completion_tokens,
+              totalTokenCount: usage.total_tokens,
+              cachedTokenCount: promptCacheUtils.readCachedTokens(
+                provider,
+                usage,
+              ),
+            };
+          }
+          // OpenAI は reasoning_tokens が completion_tokens の内訳。
+          // xAI は別枠で返すので、出力側にここで1回だけ足す。
+          const reasoningTokens =
+            provider === "xai"
+              ? usage.completion_tokens_details?.reasoning_tokens || 0
+              : 0;
+          const candidates = usage.completion_tokens + reasoningTokens;
+          return {
+            candidatesTokenCount: candidates,
+            totalTokenCount: usage.prompt_tokens + candidates,
+            cachedTokenCount: promptCacheUtils.readCachedTokens(
+              provider,
+              usage,
+            ),
+          };
+        },
+      };
+
+      function messagesHaveImage(apiMessages) {
+        return apiMessages.some((m) =>
+          m.parts.some(
+            (p) => p.inlineData && p.inlineData.mimeType.startsWith("image/"),
+          ),
+        );
+      }
+
+      // 非ストリーミング応答を、本文・思考・メタデータ・usage・引用に分解する。
+      // usage と finishReason が無い場合は undefined を返し、呼び出し側の既定値を残す。
+      function parseNonStreamingResponse(provider, data, includeThoughts) {
+        let content = "";
+        let thoughtSummary = "";
+        let metadata;
+        let usage;
+        let grounding;
+        if (provider === "gemini") {
+          const candidate = data.candidates?.[0];
+          if (candidate) {
+            metadata = {
+              finishReason: candidate.finishReason,
+              safetyRatings: candidate.safetyRatings,
+            };
+            candidate.content?.parts?.forEach((part) => {
+              if (part.thought === true && includeThoughts) {
+                thoughtSummary += (part.text || "") + "\n\n";
+              } else if (part.text && part.thought !== true) {
+                content += (part.text || "") + "\n\n";
+              } else if (part.inlineData) {
+                const mimeType = part.inlineData.mimeType || "image/jpeg";
+                const base64Data = part.inlineData.data;
+                content += `\n\n![image](data:${mimeType};base64,${base64Data})\n\n`;
+              }
+            });
+            thoughtSummary = thoughtSummary.trim();
+            content = content.trim();
+            grounding = candidate.groundingMetadata || null;
+            if (
+              candidate.finishReason &&
+              candidate.finishReason !== "STOP" &&
+              candidate.finishReason !== "MAX_TOKENS"
+            )
+              content += `\n\n(理由: ${candidate.finishReason})`;
+            if (
+              !content &&
+              candidate.finishReason === "STOP" &&
+              !thoughtSummary
+            )
+              content = "(応答が空です)";
+          } else {
+            content = "応答候補がありません";
+            if (data.promptFeedback) {
+              content += ` (理由: ${data.promptFeedback.blockReason || "不明"})`;
+              metadata = {
+                promptFeedback: data.promptFeedback,
+                finishReason: data.promptFeedback.blockReason || "ERROR",
+              };
+            } else {
+              metadata = { finishReason: "ERROR" };
+            }
+          }
+          usage = data.usageMetadata || null;
+        } else if (provider === "deepseek" || provider === "llmaggregator") {
+          const choice = data.choices?.[0];
+          if (choice) {
+            content = choice.message?.content || "";
+            metadata = { finishReason: choice.finish_reason };
+            if (data.usage) usage = usageNormalizer.normalize(provider, data.usage);
+            if (includeThoughts && data.parsedReasoningContent)
+              thoughtSummary = data.parsedReasoningContent;
+          } else {
+            content = `${provider.toUpperCase()}からの応答がありません。`;
+            metadata = { finishReason: "ERROR" };
+            if (data.error) content += ` (エラー: ${data.error.message})`;
+          }
+        } else if (provider === "claude") {
+          if (data.content && data.content.length > 0) {
+            data.content.forEach((block) => {
+              if (block.type === "text") content += block.text;
+              else if (block.type === "thinking" && includeThoughts)
+                thoughtSummary += (block.thinking || "") + "\n\n";
+            });
+            thoughtSummary = thoughtSummary.trim();
+          }
+          metadata = { finishReason: data.stop_reason || "stop" };
+          if (data.usage) usage = usageNormalizer.normalize("claude", data.usage);
+          if (!content && data.stop_reason === "end_turn")
+            content = "(応答が空です)";
+        } else if (provider === "openai" || provider === "xai") {
+          metadata = {};
+          if (data.choices && data.choices.length > 0) {
+            content = data.choices[0].message?.content || "";
+            metadata = { finishReason: data.choices[0].finish_reason };
+            if (provider === "xai" && data.choices[0].message.reasoning_content)
+              thoughtSummary = data.choices[0].message.reasoning_content;
+          }
+          if (data.usage) usage = usageNormalizer.normalize(provider, data.usage);
+          if (!content && metadata.finishReason === "stop")
+            content = "(応答が空です)";
+        }
+        return { content, thoughtSummary, metadata, usage, grounding };
+      }
+
       const DUPLICATE_SUFFIX = " (コピー)";
       const IMPORT_PREFIX = "(取込) ";
 
@@ -32900,12 +33057,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   sendSignal,
                 );
               } else if (selectedApiProvider === "openai") {
-                const hasImage = apiMessages.some((m) =>
-                  m.parts.some(
-                    (p) =>
-                      p.inlineData && p.inlineData.mimeType.startsWith("image/"),
-                  ),
-                );
+                const hasImage = messagesHaveImage(apiMessages);
                 apiResponseObject = await apiUtils.callOpenAICompatibleApi(
                   apiKeyToUse,
                   modelNameToUse,
@@ -32918,14 +33070,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   sendSignal,
                 );
               } else if (selectedApiProvider === "xai") {
-                const hasImage = apiMessages.some((m) =>
-                  m.parts.some(
-                    (p) =>
-                      p.inlineData && p.inlineData.mimeType.startsWith("image/"),
-                  ),
-                );
                 const enableVisionForThisCall =
-                  contextXaiVisionEnable || hasImage;
+                  contextXaiVisionEnable || messagesHaveImage(apiMessages);
                 apiResponseObject = await apiUtils.callXaiApi(
                   apiKeyToUse,
                   modelNameToUse,
@@ -32996,43 +33142,17 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             }
 
             if (useStreamingForThisCall) {
-              let responseStreamIterator;
-              if (selectedApiProvider === "gemini") {
-                responseStreamIterator =
-                  apiUtils.handleGeminiStreamingResponse(
-                    apiResponseObject,
-                    sendSignal,
-                  );
-              } else if (
-                selectedApiProvider === "deepseek" ||
-                selectedApiProvider === "llmaggregator"
-              ) {
-                responseStreamIterator =
-                  apiUtils.handleDeepSeekStreamingResponse(
-                    apiResponseObject,
-                    sendSignal,
-                  );
-              } else if (selectedApiProvider === "claude") {
-                responseStreamIterator =
-                  apiUtils.handleClaudeStreamingResponse(
-                    apiResponseObject,
-                    sendSignal,
-                  );
-              } else if (selectedApiProvider === "openai") {
-                responseStreamIterator =
-                  apiUtils.handleOpenAICompatibleStreamingResponse(
-                    apiResponseObject,
-                    "openai",
-                    sendSignal,
-                  );
-              } else if (selectedApiProvider === "xai") {
-                responseStreamIterator =
-                  apiUtils.handleOpenAICompatibleStreamingResponse(
-                    apiResponseObject,
-                    "xai",
-                    sendSignal,
-                  );
-              }
+              // プロバイダごとのストリーム解析器。OpenAI と xAI は同じ解析器を
+              // プロバイダ名違いで使う。
+              const streamHandlers = {
+                gemini: () => apiUtils.handleGeminiStreamingResponse(apiResponseObject, sendSignal),
+                deepseek: () => apiUtils.handleDeepSeekStreamingResponse(apiResponseObject, sendSignal),
+                llmaggregator: () => apiUtils.handleDeepSeekStreamingResponse(apiResponseObject, sendSignal),
+                claude: () => apiUtils.handleClaudeStreamingResponse(apiResponseObject, sendSignal),
+                openai: () => apiUtils.handleOpenAICompatibleStreamingResponse(apiResponseObject, "openai", sendSignal),
+                xai: () => apiUtils.handleOpenAICompatibleStreamingResponse(apiResponseObject, "xai", sendSignal),
+              };
+              const responseStreamIterator = streamHandlers[selectedApiProvider]?.();
 
               // contextStreamingSpeed は既にプロバイダ別のキーから引いてある
               // (gemini 以外だけ state.settings を直読みする理由はなく、
@@ -33258,151 +33378,16 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
             if (!useStreamingForThisCall) {
               const data = await apiResponseObject.json();
-              let rawContentFromApi = "";
-              if (selectedApiProvider === "gemini") {
-                const candidate = data.candidates?.[0];
-                if (candidate) {
-                  finalMetadata = {
-                    finishReason: candidate.finishReason,
-                    safetyRatings: candidate.safetyRatings,
-                  };
-                  candidate.content?.parts?.forEach((part) => {
-                    if (part.thought === true && contextIncludeThoughts) {
-                      finalThoughtSummary += (part.text || "") + "\n\n";
-                    } else if (part.text && part.thought !== true) {
-                      rawContentFromApi += (part.text || "") + "\n\n";
-                    } else if (part.inlineData) {
-                      const mimeType = part.inlineData.mimeType || "image/jpeg";
-                      const base64Data = part.inlineData.data;
-                      rawContentFromApi += `\n\n![image](data:${mimeType};base64,${base64Data})\n\n`;
-                    }
-                  });
-                  finalThoughtSummary = finalThoughtSummary.trim();
-                  rawContentFromApi = rawContentFromApi.trim();
-                  finalGrounding = candidate.groundingMetadata || null;
-                  finalUsage = data.usageMetadata || null;
-                  if (
-                    candidate.finishReason &&
-                    candidate.finishReason !== "STOP" &&
-                    candidate.finishReason !== "MAX_TOKENS"
-                  )
-                    rawContentFromApi += `\n\n(理由: ${candidate.finishReason})`;
-                  if (
-                    !rawContentFromApi &&
-                    candidate.finishReason === "STOP" &&
-                    !finalThoughtSummary
-                  )
-                    rawContentFromApi = "(応答が空です)";
-                } else {
-                  rawContentFromApi = "応答候補がありません";
-                  if (data.promptFeedback) {
-                    rawContentFromApi += ` (理由: ${data.promptFeedback.blockReason || "不明"})`;
-                    finalMetadata = {
-                      promptFeedback: data.promptFeedback,
-                      finishReason: data.promptFeedback.blockReason || "ERROR",
-                    };
-                  } else {
-                    finalMetadata.finishReason = "ERROR";
-                  }
-                  finalUsage = data.usageMetadata || null;
-                }
-              } else if (
-                selectedApiProvider === "deepseek" ||
-                selectedApiProvider === "llmaggregator"
-              ) {
-                const choice = data.choices?.[0];
-                if (choice) {
-                  rawContentFromApi = choice.message?.content || "";
-                  finalMetadata = { finishReason: choice.finish_reason };
-                  if (data.usage)
-                    finalUsage = {
-                      candidatesTokenCount: data.usage.completion_tokens,
-                      totalTokenCount: data.usage.total_tokens,
-                      cachedTokenCount: promptCacheUtils.readCachedTokens(
-                        selectedApiProvider,
-                        data.usage,
-                      ),
-                    };
-                  if (
-                    contextIncludeThoughts &&
-                    data.parsedReasoningContent
-                  )
-                    finalThoughtSummary = data.parsedReasoningContent;
-                } else {
-                  rawContentFromApi = `${selectedApiProvider.toUpperCase()}からの応答がありません。`;
-                  finalMetadata = { finishReason: "ERROR" };
-                  if (data.error)
-                    rawContentFromApi += ` (エラー: ${data.error.message})`;
-                }
-              } else if (selectedApiProvider === "claude") {
-                if (data.content && data.content.length > 0) {
-                  data.content.forEach((block) => {
-                    if (block.type === "text") rawContentFromApi += block.text;
-                    else if (
-                      block.type === "thinking" &&
-                      contextIncludeThoughts
-                    )
-                      finalThoughtSummary += (block.thinking || "") + "\n\n";
-                  });
-                  finalThoughtSummary = finalThoughtSummary.trim();
-                }
-                finalMetadata = { finishReason: data.stop_reason || "stop" };
-                if (data.usage)
-                  finalUsage = {
-                    candidatesTokenCount: data.usage.output_tokens,
-                    // Anthropicの input_tokens はキャッシュ分を含まないため、
-                    // 加算しないとキャッシュヒット時に総数が激減して見える。
-                    totalTokenCount:
-                      data.usage.input_tokens +
-                      (data.usage.cache_read_input_tokens || 0) +
-                      (data.usage.cache_creation_input_tokens || 0) +
-                      data.usage.output_tokens,
-                    cachedTokenCount: promptCacheUtils.readCachedTokens(
-                      "claude",
-                      data.usage,
-                    ),
-                  };
-                if (!rawContentFromApi && data.stop_reason === "end_turn")
-                  rawContentFromApi = "(応答が空です)";
-              } else if (
-                selectedApiProvider === "openai" ||
-                selectedApiProvider === "xai"
-              ) {
-                if (data.choices && data.choices.length > 0) {
-                  rawContentFromApi = data.choices[0].message?.content || "";
-                  finalMetadata = {
-                    finishReason: data.choices[0].finish_reason,
-                  };
-                  if (
-                    selectedApiProvider === "xai" &&
-                    data.choices[0].message.reasoning_content
-                  )
-                    finalThoughtSummary =
-                      data.choices[0].message.reasoning_content;
-                }
-                if (data.usage) {
-                  let reasoningTokens =
-                    selectedApiProvider === "xai" &&
-                    data.usage.completion_tokens_details?.reasoning_tokens
-                      ? data.usage.completion_tokens_details.reasoning_tokens
-                      : 0;
-                  finalUsage = {
-                    candidatesTokenCount:
-                      data.usage.completion_tokens + reasoningTokens,
-                    totalTokenCount:
-                      data.usage.prompt_tokens +
-                      data.usage.completion_tokens +
-                      reasoningTokens,
-                    cachedTokenCount: promptCacheUtils.readCachedTokens(
-                      selectedApiProvider,
-                      data.usage,
-                    ),
-                  };
-                }
-                if (!rawContentFromApi && finalMetadata.finishReason === "stop")
-                  rawContentFromApi = "(応答が空です)";
-              }
-              finalContent = dummyModelPrefix + rawContentFromApi;
+              const parsed = parseNonStreamingResponse(
+                selectedApiProvider,
+                data,
+                contextIncludeThoughts,
+              );
+              finalContent = dummyModelPrefix + parsed.content;
+              finalThoughtSummary = parsed.thoughtSummary;
+              if (parsed.metadata) finalMetadata = parsed.metadata;
+              if (parsed.usage !== undefined) finalUsage = parsed.usage;
+              if (parsed.grounding !== undefined) finalGrounding = parsed.grounding;
             }
 
             const finishReasonForProofreading = finalMetadata.finishReason;
@@ -41060,16 +41045,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 : finalFinishReason || "stop",
               safetyRatings: null,
               groundingMetadata: null,
-              usageMetadata: finalUsage
-                ? {
-                    candidatesTokenCount: finalUsage.completion_tokens,
-                    totalTokenCount: finalUsage.total_tokens,
-                    cachedTokenCount: promptCacheUtils.readCachedTokens(
-                      "openai",
-                      finalUsage,
-                    ),
-                  }
-                : null,
+              usageMetadata: usageNormalizer.normalize("deepseek", finalUsage),
               fullReasoningContent: accumulatedFullReasoningContent || null,
             };
           } catch (error) {
@@ -41343,21 +41319,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 ? "ABORTED"
                 : finalFinishReason || "stop",
               safetyRatings: null,
-              usageMetadata: finalUsage
-                ? {
-                    candidatesTokenCount: finalUsage.output_tokens,
-                    // Anthropicの input_tokens はキャッシュ分を含まない
-                    totalTokenCount:
-                      finalUsage.input_tokens +
-                      (finalUsage.cache_read_input_tokens || 0) +
-                      (finalUsage.cache_creation_input_tokens || 0) +
-                      finalUsage.output_tokens,
-                    cachedTokenCount: promptCacheUtils.readCachedTokens(
-                      "claude",
-                      finalUsage,
-                    ),
-                  }
-                : null,
+              usageMetadata: usageNormalizer.normalize("claude", finalUsage),
             };
           } catch (error) {
             yield {
@@ -41589,13 +41551,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                       finishReason = chunk.choices[0].finish_reason;
                     }
                   }
-                  if (chunk.usage) {
-                    usage = chunk.usage;
-                    if (usage.completion_tokens_details?.reasoning_tokens) {
-                      usage.completion_tokens +=
-                        usage.completion_tokens_details.reasoning_tokens;
-                    }
-                  }
+                  if (chunk.usage) usage = chunk.usage;
                 } catch (e) {}
               }
               if (finishReason) break;
@@ -41603,13 +41559,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             yield {
               type: "metadata",
               finishReason: isCancelled ? "ABORTED" : finishReason || "stop",
-              usageMetadata: usage
-                ? {
-                    candidatesTokenCount: usage.completion_tokens,
-                    totalTokenCount:
-                      usage.prompt_tokens + usage.completion_tokens,
-                  }
-                : null,
+              usageMetadata: usageNormalizer.normalize(providerName, usage),
               safetyRatings: null,
               groundingMetadata: null,
             };
@@ -41692,10 +41642,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             const choice = data.choices?.[0];
             if (choice && choice.message && choice.message.reasoning_content) {
               reasoningContent = choice.message.reasoning_content;
-            }
-            if (data.usage?.completion_tokens_details?.reasoning_tokens) {
-              data.usage.completion_tokens +=
-                data.usage.completion_tokens_details.reasoning_tokens;
             }
             response.json = async () => ({
               ...data,
