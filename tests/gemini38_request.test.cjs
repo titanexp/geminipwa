@@ -37,14 +37,18 @@ const buildMessages = new Function(
   "contextTemperature", "contextMaxTokens", "contextTopP",
   "contextPresencePenalty", "contextFrequencyPenalty",
   "contextGeminiTopK", "contextGeminiThinkingBudget",
-  "contextGeminiThinkingLevel38", "contextIncludeThoughts",
+  "contextGeminiThinkingLevel38", "contextGeminiThinkingLevelArgon",
+  "contextIncludeThoughts",
   messagesCode + "\nreturn { apiMessages, commonGenerationConfig };"
 );
 function messageCase(model, level, includeThoughts = false) {
   return buildMessages(
     [{ role: "user", parts: [{ text: "Hello" }] }],
     "gemini", model, true, "dummy user", true, "dummy model",
-    0.7, 2048, 0.9, 0, 0, 40, 777, level, includeThoughts
+    0.7, 2048, 0.9, 0, 0, 40, 777,
+    model === "gemini-3.8-flash" ? level : "",
+    model === "gemini-4-argon" ? level : "",
+    includeThoughts
   );
 }
 
@@ -62,11 +66,11 @@ const state = { settings: {
   geminiThinkingBudget: 777, geminiIncludeThoughts: true,
   geminiImageAspectRatio: "", geminiImageResolution: ""
 } };
-function requestCase(model, messages, config) {
+function requestCase(model, messages, config, serviceTier) {
   return buildRequest(
     model, config, messages,
     { parts: [{ text: "System prompt" }] },
-    undefined, state, false, false
+    serviceTier, state, false, false
   );
 }
 
@@ -97,6 +101,37 @@ const defaultReq = requestCase(
 );
 assert.ok(!defaultReq.generationConfig?.thinkingConfig?.thinkingLevel);
 
+// Argon has the same valid levels as 3.8, but maintains its own saved setting.
+for (const level of ["low", "medium", "high"]) {
+  const { apiMessages, commonGenerationConfig } = messageCase(
+    "gemini-4-argon", level, true
+  );
+  assert.deepEqual(apiMessages.map((m) => m.role), ["user", "user"]);
+  assert.deepEqual(commonGenerationConfig.thinkingConfig, {
+    thinkingLevel: level.toUpperCase(), includeThoughts: true
+  });
+  commonGenerationConfig.candidateCount = 2;
+  const req = requestCase(
+    "gemini-4-argon", apiMessages, commonGenerationConfig, "flex"
+  );
+  assert.equal(req.service_tier, "flex");
+  for (const field of [
+    "temperature", "topP", "topK", "presencePenalty",
+    "frequencyPenalty", "candidateCount"
+  ]) assert.ok(!(field in req.generationConfig), field);
+  assert.deepEqual(req.generationConfig.thinkingConfig, {
+    thinkingLevel: level.toUpperCase(), includeThoughts: true
+  });
+  assert.ok(!("thinkingBudget" in req.generationConfig.thinkingConfig));
+}
+const argonDefault = messageCase("gemini-4-argon", "", false);
+const argonDefaultRequest = requestCase(
+  "gemini-4-argon", argonDefault.apiMessages, argonDefault.commonGenerationConfig
+);
+assert.ok(!argonDefaultRequest.generationConfig?.thinkingConfig?.thinkingLevel);
+assert.ok(!argonDefaultRequest.generationConfig?.thinkingConfig?.thinkingBudget);
+assert.ok(!("service_tier" in argonDefaultRequest));
+
 // Existing behavior for earlier models must remain intact.
 const legacy = messageCase("gemini-2.5-pro", "low");
 assert.deepEqual(legacy.apiMessages.map((m) => m.role), ["user", "user", "model"]);
@@ -111,5 +146,8 @@ const argon = requestCase("gemini-4-argon", [], {
 assert.ok(!argon.generationConfig?.thinkingConfig?.thinkingBudget);
 
 assert.equal((html.match(/id="gemini-thinking-level-38"/g) || []).length, 1);
-assert.match(html, /contextConcatDummyModel && dummyModelTextToUse && !isGemini38FlashRequest/);
-console.log("PASS: 3.8 request compatibility, 2.5/Argon regression, inline JS syntax");
+assert.equal((html.match(/id="gemini-thinking-level-argon"/g) || []).length, 1);
+assert.ok(html.includes("geminiThinkingLevelArgon"));
+assert.ok(!/id="gemini-thinking-level-argon"[\s\S]{0,250}value="(?:none|minimal)"/i.test(html));
+assert.match(html, /contextConcatDummyModel && dummyModelTextToUse && !usesGeminiThinkingLevel/);
+console.log("PASS: 3.8 + Argon levels/defaults/prefill/safety/Flex, 2.5 legacy, inline JS syntax");

@@ -25,6 +25,10 @@ https://titan823.github.io/geminipwa/#chat
 - titanexp β版のGeminiシステムプロンプト送信方式を `systemInstruction` のみに統一。`userPrefix` 切替UIと保存・セッション／AI間会話・画像生成に残っていた分岐を削除。旧設定で `userPrefix` が保存されていても送信には使用せず、プロンプト本文と他プロバイダーの送信仕様は維持。バージョン表記の変更なし
 - titanexp β版の履歴タブで、💬メッセージ件数をタイトル行の📌ピン留めボタン左隣へ移動。件数専用の2段目を廃止し、ピンボタンの上下余白を減らしてtitan823版に近い縦幅へ調整。検索結果のプレビュー、ピン留め、現在の履歴の枠線表示は維持。バージョン表記は変更なし
 - 履歴画面から「開いている」バッジと「あなたの発言で終了／AIの返答で終了」の表示を削除。現在のチャットの枠線表示、メッセージ件数、検索用の本文プレビュー、ピン留めなどは維持（バージョン表記の変更なし）
+- Gemini 4 ArgonでもThinking Level（Low／Medium／High、未指定ならMedium）を設定可能に。3.8 Flashとは独立して保存
+- Argon・3.8 Flashでは非対応のNONE／MINIMAL／旧Thinking Budgetを送信せず、従来モデルのBudget設定は保持
+- Argonの末尾ダミーModel事前入力・回答連結を抑止（保存値は保持）。Flexの切替は従来通り
+- Thinking Level・Flex・旧モデルの互換性をオフライン回帰テストで確認。バージョン番号は変更なし
 - Gemini 3.8 Flash向けの送信形式を修正。旧サンプリングパラメータとThinking Budgetを送信せず、Thinking Level（Low・Medium・High）に対応
 - 3.8 Flashでは非対応のダミーModel事前入力と回答連結を抑止（保存済み設定は維持）
 - Gemini 2.5系・Argonの既存動作を含むオフライン回帰テストを追加
