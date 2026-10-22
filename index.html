@@ -10528,7 +10528,19 @@
                   思考プロセス
                 </summary>
                 <div style="padding-left: 15px">
-                  <div class="param-grid">
+                  <div id="gemini-thinking-level-38-row" hidden>
+                    <label for="gemini-thinking-level-38">Thinking Level (Gemini 3.8 Flash):</label>
+                    <select id="gemini-thinking-level-38" aria-label="Gemini 3.8 Flash Thinking Level">
+                      <option value="">モデル既定 (medium)</option>
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                    <p style="font-size: 11px; color: var(--text-secondary)">
+                      ※ 3.8 FlashではThinking Budgetは使用しません。
+                    </p>
+                  </div>
+                  <div id="gemini-thinking-budget-legacy" class="param-grid">
                     <div class="param-slider-container">
                       <label for="gemini-thinking-budget"
                         >Thinking Budget:</label
@@ -10635,7 +10647,7 @@
                       </div>
                     </div>
                   </div>
-                  <p
+                  <p id="gemini-thinking-budget-legacy-note"
                     style="
                       font-size: 11px;
                       color: var(--text-secondary);
@@ -12482,6 +12494,9 @@
                 <input type="checkbox" id="gemini-enable-dummy-model" />
                 このダミーModelプロンプトを有効にする
               </label>
+              <p style="font-size: 11px; color: var(--text-secondary); margin-top: 0">
+                ※ Gemini 3.8 Flashでは事前入力に非対応のため送信・連結しません（設定値は保持）。
+              </p>
               <label
                 class="checkbox-label"
                 style="margin-top: -5px; margin-bottom: 15px"
@@ -16784,6 +16799,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         geminiPresencePenaltyInput: byId("gemini-presence-penalty"),
         geminiFrequencyPenaltyInput: byId("gemini-frequency-penalty"),
         geminiThinkingBudgetInput: byId("gemini-thinking-budget"),
+        geminiThinkingLevel38Row: byId("gemini-thinking-level-38-row"),
+        geminiThinkingLevel38Select: byId("gemini-thinking-level-38"),
+        geminiThinkingBudgetLegacy: byId("gemini-thinking-budget-legacy"),
+        geminiThinkingBudgetLegacyNote: byId("gemini-thinking-budget-legacy-note"),
         geminiIncludeThoughtsToggle: byId("gemini-include-thoughts-toggle"),
         geminiExpandThoughtsByDefaultToggle: byId(
           "gemini-expand-thoughts-by-default-toggle",
@@ -17470,6 +17489,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           geminiPresencePenalty: null,
           geminiFrequencyPenalty: null,
           geminiThinkingBudget: null,
+          geminiThinkingLevel38: "",
           geminiMaxTokensSliderMax: null,
           geminiTopKSliderMax: null,
           geminiThinkingBudgetSliderMax: null,
@@ -23031,6 +23051,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             state.settings.geminiThinkingBudget === null
               ? ""
               : state.settings.geminiThinkingBudget;
+          elements.geminiThinkingLevel38Select.value =
+            ["", "low", "medium", "high"].includes(state.settings.geminiThinkingLevel38)
+              ? state.settings.geminiThinkingLevel38
+              : "";
           elements.geminiIncludeThoughtsToggle.checked =
             state.settings.geminiIncludeThoughts;
           elements.geminiExpandThoughtsByDefaultToggle.checked =
@@ -24222,8 +24246,14 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
         },
         updateGeminiArgonFlexAvailability() {
-          const isArgon = elements.geminiModelNameSelect.value === "gemini-4-argon";
+          const selectedModel = elements.geminiModelNameSelect.value;
+          const isArgon = selectedModel === "gemini-4-argon";
           elements.geminiArgonFlexRow.hidden = !isArgon;
+          const is38Flash = selectedModel === "gemini-3.8-flash";
+          elements.geminiThinkingLevel38Row.hidden = !is38Flash;
+          elements.geminiThinkingBudgetLegacy.hidden = is38Flash;
+          elements.geminiThinkingBudgetLegacy.style.display = is38Flash ? "none" : "";
+          elements.geminiThinkingBudgetLegacyNote.hidden = is38Flash;
         },
         updateUserModelOptions() {
           this._updateUserDefinedModelGroup(
@@ -32602,6 +32632,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
           let contextGeminiTopK,
             contextGeminiThinkingBudget,
+            contextGeminiThinkingLevel38,
             contextGeminiPseudoStreaming,
             contextGeminiEnableGrounding,
             contextGeminiSystemPromptSendMode;
@@ -32665,6 +32696,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             contextGeminiThinkingBudget =
               sourceSessionContext?.thinkingBudget ??
               state.settings.geminiThinkingBudget;
+            contextGeminiThinkingLevel38 =
+              sourceSessionContext?.thinkingLevel38 ??
+              state.settings.geminiThinkingLevel38;
             contextGeminiPseudoStreaming =
               sourceSessionContext?.pseudoStreaming ??
               state.settings.geminiPseudoStreaming;
@@ -32951,12 +32985,18 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               ? contextDummyModel.trim()
               : null;
 
+          // Gemini 3.8 Flash は応答の事前入力 (末尾の model ターン) を受け付けない。
+          // 設定は保存したまま、このリクエストでのみ送信しない。
+          const isGemini38FlashRequest =
+            selectedApiProvider === "gemini" &&
+            modelNameToUse === "gemini-3.8-flash";
+
           if (dummyUserTextToUse)
             apiMessages.push({
               role: "user",
               parts: [{ text: dummyUserTextToUse }],
             });
-          if (dummyModelTextToUse)
+          if (dummyModelTextToUse && !isGemini38FlashRequest)
             apiMessages.push({
               role: "model",
               parts: [{ text: dummyModelTextToUse }],
@@ -32977,12 +33017,18 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             if (contextGeminiTopK !== null)
               commonGenerationConfig.topK = contextGeminiTopK;
             if (
-              contextGeminiThinkingBudget !== null ||
+              (isGemini38FlashRequest && ["low", "medium", "high"].includes(contextGeminiThinkingLevel38)) ||
+              (!isGemini38FlashRequest && contextGeminiThinkingBudget !== null) ||
               contextIncludeThoughts
             ) {
               commonGenerationConfig.thinkingConfig =
                 commonGenerationConfig.thinkingConfig || {};
-              if (
+              if (isGemini38FlashRequest &&
+                  ["low", "medium", "high"].includes(contextGeminiThinkingLevel38)) {
+                commonGenerationConfig.thinkingConfig.thinkingLevel =
+                  contextGeminiThinkingLevel38.toUpperCase();
+              } else if (
+                !isGemini38FlashRequest &&
                 contextGeminiThinkingBudget !== null &&
                 Number.isInteger(contextGeminiThinkingBudget) &&
                 contextGeminiThinkingBudget >= 0
@@ -33210,7 +33256,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             }
 
             const dummyModelPrefix =
-              contextConcatDummyModel && dummyModelTextToUse
+              contextConcatDummyModel && dummyModelTextToUse && !isGemini38FlashRequest
                 ? dummyModelTextToUse
                 : "";
             if (!isBackgroundProcess) {
@@ -35668,6 +35714,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             true,
             0,
           );
+          newSettings.geminiThinkingLevel38 =
+            elements.geminiThinkingLevel38Select.value;
           newSettings.geminiMaxTokensSliderMax =
             getSliderMaxValue("gemini-max-tokens");
           newSettings.geminiTopKSliderMax = getSliderMaxValue("gemini-top-k");
@@ -38051,6 +38099,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           if (provider === "gemini") {
             config.topK = state.settings.geminiTopK;
             config.thinkingBudget = state.settings.geminiThinkingBudget;
+            config.thinkingLevel38 = state.settings.geminiThinkingLevel38;
             config.includeThoughts = state.settings.geminiIncludeThoughts;
             config.expandThoughtsByDefault =
               state.settings.geminiExpandThoughtsByDefault;
@@ -40462,8 +40511,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           }
 
           if (
-            state.settings.geminiThinkingBudget !== null ||
-            state.settings.geminiIncludeThoughts
+            model !== "gemini-3.8-flash" &&
+            (state.settings.geminiThinkingBudget !== null ||
+              state.settings.geminiIncludeThoughts)
           ) {
             finalGenerationConfig.thinkingConfig =
               finalGenerationConfig.thinkingConfig || {};
@@ -40482,16 +40532,21 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               delete finalGenerationConfig.thinkingConfig;
           }
 
-          if (model === "gemini-4-argon") {
-            // Argon は sampling の temperature/topP/topK を使用しない。
+          if (model === "gemini-4-argon" || model === "gemini-3.8-flash") {
+            // 新モデルは旧サンプリングパラメータを使用しない。
             delete finalGenerationConfig.temperature;
             delete finalGenerationConfig.topP;
             delete finalGenerationConfig.topK;
             delete finalGenerationConfig.presencePenalty;
             delete finalGenerationConfig.frequencyPenalty;
-            // Argon の思考制御は thinkingLevel。旧 thinkingBudget は送らない。
+            delete finalGenerationConfig.candidateCount;
+            // 思考制御は thinkingLevel。旧 thinkingBudget は送らない。
             if (finalGenerationConfig.thinkingConfig) {
               delete finalGenerationConfig.thinkingConfig.thinkingBudget;
+              if (model === "gemini-3.8-flash" &&
+                  !["LOW", "MEDIUM", "HIGH"].includes(finalGenerationConfig.thinkingConfig.thinkingLevel)) {
+                delete finalGenerationConfig.thinkingConfig.thinkingLevel;
+              }
               if (Object.keys(finalGenerationConfig.thinkingConfig).length === 0)
                 delete finalGenerationConfig.thinkingConfig;
             }
