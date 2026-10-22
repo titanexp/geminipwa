@@ -3518,6 +3518,55 @@
       }
 
       /* --- トグルスイッチ（右端で縦に揃う） --- */
+      /* Gemini Argon の階層スイッチも「表示・操作設定」と同形にする。 */
+      .gemini-tier-switch-container {
+        padding: 8px 15px 8px 15px;
+      }
+      .gemini-tier-switch-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-height: 40px;
+        cursor: pointer;
+      }
+      .gemini-tier-switch-row span { flex: 1 1 auto; }
+      .gemini-tier-switch-row input[type="checkbox"] {
+        position: relative;
+        flex: 0 0 auto;
+        width: 42px;
+        height: 25px;
+        margin-left: auto;
+        border: 0;
+        border-radius: 999px;
+        background-color: var(--border-secondary);
+        appearance: none;
+        -webkit-appearance: none;
+        cursor: pointer;
+        transition: background-color .18s ease;
+      }
+      .gemini-tier-switch-row input[type="checkbox"]::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 21px;
+        height: 21px;
+        border-radius: 50%;
+        background-color: #fff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+        transition: transform .18s ease;
+      }
+      .gemini-tier-switch-row input[type="checkbox"]:checked {
+        background-color: var(--bg-button);
+      }
+      .gemini-tier-switch-row input[type="checkbox"]:checked::after {
+        transform: translateX(17px);
+      }
+      .gemini-tier-note {
+        color: var(--text-secondary);
+        font-size: 11px;
+        margin: 4px 0 0;
+      }
       #settings-group-other .checkbox-label input[type="checkbox"] {
         position: relative;
         order: 2;
@@ -9412,6 +9461,7 @@
                   id="gemini-user-defined-models-group"
                 ></optgroup>
                 <optgroup label="現行">
+                  <option value="gemini-4-argon">Gemini 4 Argon</option>
                   <option value="gemini-3.1-pro-preview">
                     Gemini 3.1 Pro Preview
                   </option>
@@ -10647,6 +10697,13 @@
                 >
                   その他パラメータ (Gemini)
                 </summary>
+                <div id="gemini-argon-flex-row" class="gemini-tier-switch-container" hidden>
+                  <label class="checkbox-label gemini-tier-switch-row" for="gemini-argon-flex-toggle">
+                    <span>Gemini 4 Argon — Flex (OFF: Standard / ON: Flex)</span>
+                    <input type="checkbox" id="gemini-argon-flex-toggle" aria-label="Gemini 4 Argon Flex 推論" />
+                  </label>
+                  <p class="gemini-tier-note">※ Flex は低料金ですが応答が遅くなることがあります。失敗しても Standard に自動切替しません。</p>
+                </div>
                 <div class="param-grid" style="padding-left: 15px">
                   <div class="param-slider-container">
                     <label for="gemini-max-tokens">Max Tokens:</label>
@@ -16666,6 +16723,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         geminiSettingsGroup: byId("gemini-settings-group"),
         geminiApiKeyInput: byId("gemini-api-key"),
         geminiModelNameSelect: byId("gemini-model-name"),
+        geminiArgonFlexRow: byId("gemini-argon-flex-row"),
+        geminiArgonFlexToggle: byId("gemini-argon-flex-toggle"),
         geminiUserDefinedModelsGroup: byId("gemini-user-defined-models-group"),
         geminiAdditionalModelsTextarea: byId("gemini-additional-models"),
         deepSeekSettingsGroup: byId("deepseek-settings-group"),
@@ -17403,6 +17462,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           maxTotalAttachmentSizeMB: DEFAULT_MAX_TOTAL_ATTACHMENT_SIZE_MB,
           apiKey: "",
           modelName: DEFAULT_MODEL,
+          geminiArgonFlex: false,
           additionalModels: "",
           commonSystemPrompt: "",
           enableCommonSystemPromptDefault: false,
@@ -23592,6 +23652,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           this.updateChatScreenElementVisibility();
           this.updateHistoryHeaderButtonVisibility();
           this.updateUserModelOptions();
+          elements.geminiArgonFlexToggle.checked =
+            state.settings.geminiArgonFlex === true;
+          this.updateGeminiArgonFlexAvailability();
           this.updateDeepSeekUserModelOptions();
           this.updateClaudeUserModelOptions();
           this.updateOpenAIUserModelOptions();
@@ -24163,6 +24226,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             if (state.settings[settingKey] !== undefined)
               state.settings[settingKey] = defaultModelName;
           }
+        },
+        updateGeminiArgonFlexAvailability() {
+          const isArgon = elements.geminiModelNameSelect.value === "gemini-4-argon";
+          elements.geminiArgonFlexRow.hidden = !isArgon;
         },
         updateUserModelOptions() {
           this._updateUserDefinedModelGroup(
@@ -27489,6 +27556,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
           elements.saveSettingsBtns.forEach((button) => {
             button.addEventListener("click", () => this.saveSettings(true));
+          });
+          elements.geminiModelNameSelect.addEventListener("change", () => {
+            uiUtils.updateGeminiArgonFlexAvailability();
           });
           elements.updateAppBtn.addEventListener("click", () =>
             this.updateApp(),
@@ -33071,6 +33141,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   usePseudoForThisCall,
                   contextGeminiEnableGrounding,
                   sendSignal,
+                  modelNameToUse === "gemini-4-argon" &&
+                  state.settings.geminiArgonFlex === true
+                    ? "flex"
+                    : undefined,
                 );
               } else if (
                 selectedApiProvider === "deepseek" ||
@@ -35561,6 +35635,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             elements.enableCommonSystemPromptDefaultCheckbox.checked;
 
           newSettings.modelName = elements.geminiModelNameSelect.value;
+          newSettings.geminiArgonFlex = elements.geminiArgonFlexToggle.checked;
           newSettings.additionalModels =
             elements.geminiAdditionalModelsTextarea.value.trim();
           newSettings.geminiSystemPrompt =
@@ -40339,6 +40414,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           usePseudo,
           enableGrounding,
           customSignal,
+          serviceTier,
         ) {
           if (!apiKey) {
             throw new Error("APIキーが設定されていません。");
@@ -40412,8 +40488,27 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               delete finalGenerationConfig.thinkingConfig;
           }
 
+          if (model === "gemini-4-argon") {
+            // Argon は sampling の temperature/topP/topK を使用しない。
+            delete finalGenerationConfig.temperature;
+            delete finalGenerationConfig.topP;
+            delete finalGenerationConfig.topK;
+            delete finalGenerationConfig.presencePenalty;
+            delete finalGenerationConfig.frequencyPenalty;
+            // Argon の思考制御は thinkingLevel。旧 thinkingBudget は送らない。
+            if (finalGenerationConfig.thinkingConfig) {
+              delete finalGenerationConfig.thinkingConfig.thinkingBudget;
+              if (Object.keys(finalGenerationConfig.thinkingConfig).length === 0)
+                delete finalGenerationConfig.thinkingConfig;
+            }
+          }
+
           const requestBody = {
             contents: messagesForApi,
+            // Standard は従来通りフィールド省略。高料金への自動切替はしない。
+            ...(model === "gemini-4-argon" && serviceTier === "flex"
+              ? { service_tier: "flex" }
+              : {}),
             ...(Object.keys(finalGenerationConfig).length > 0 && {
               generationConfig: finalGenerationConfig,
             }),
@@ -40453,6 +40548,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               headers: {
                 "Content-Type": "application/json",
                 "x-goog-api-key": apiKey,
+                ...(requestBody.service_tier === "flex"
+                  ? { "X-Server-Timeout": "900" }
+                  : {}),
               },
               body: JSON.stringify(requestBody),
               signal,
