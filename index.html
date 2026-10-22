@@ -10441,30 +10441,7 @@
                 このシステムプロンプトを有効にする
                 (共通システムプロンプトより優先度高)
               </label>
-              <label for="gemini-system-prompt-send-mode"
-                >システムプロンプト送信方式 (Gemini):</label
-              >
-              <select
-                id="gemini-system-prompt-send-mode"
-                aria-label="Gemini システムプロンプト送信方式"
-              >
-                <option value="systemInstruction">
-                  System Instruction として送信
-                </option>
-                <option value="userPrefix">
-                  最初のUserメッセージ先頭に含める
-                </option>
-              </select>
-              <p
-                style="
-                  font-size: 11px;
-                  color: var(--text-secondary);
-                  margin-top: -5px;
-                  margin-bottom: 15px;
-                "
-              >
-                ※User扱いにするとGeminiのsystemInstruction枠を使いません。
-              </p>
+
 
               <details
                 id="settings-group-gemini-thinking-params"
@@ -16744,9 +16721,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         geminiEnableSystemPromptDefaultCheckbox: byId(
           "gemini-enable-system-prompt-default",
         ),
-        geminiSystemPromptSendModeSelect: byId(
-          "gemini-system-prompt-send-mode",
-        ),
         geminiTemperatureInput: byId("gemini-temperature"),
         geminiMaxTokensInput: byId("gemini-max-tokens"),
         geminiTopKInput: byId("gemini-top-k"),
@@ -17436,7 +17410,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           enableCommonSystemPromptDefault: false,
           geminiSystemPrompt: "",
           geminiEnableSystemPromptDefault: true,
-          geminiSystemPromptSendMode: "systemInstruction",
           geminiTemperature: null,
           geminiMaxTokens: null,
           geminiTopK: null,
@@ -18886,14 +18859,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                   state.settings.disableAllConfirmations = true;
                 }
 
-                if (
-                  !["systemInstruction", "userPrefix"].includes(
-                    state.settings.geminiSystemPromptSendMode,
-                  )
-                ) {
-                  state.settings.geminiSystemPromptSendMode =
-                    defaultSettings.geminiSystemPromptSendMode;
-                }
 
                 if (
                   (!loadedSettings.twinEngineApiConfigs ||
@@ -22977,8 +22942,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             state.settings.geminiSystemPrompt || "";
           elements.geminiEnableSystemPromptDefaultCheckbox.checked =
             state.settings.geminiEnableSystemPromptDefault;
-          elements.geminiSystemPromptSendModeSelect.value =
-            state.settings.geminiSystemPromptSendMode || "systemInstruction";
           setupParamUI("gemini-max-tokens", "geminiMaxTokensSliderMax");
           setupParamUI("gemini-temperature");
           setupParamUI("gemini-top-k", "geminiTopKSliderMax");
@@ -31002,7 +30965,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           return parts;
         },
         async buildImageGenApiMessages() {
-          const imageGenProvider = state.settings.imageGenProvider || "gemini";
           let messagesToProcess = state.imageGenMessages.filter(
             (m) => m.role !== "error",
           );
@@ -31060,16 +31022,11 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             state.settings.imageGenEnableSystemPrompt &&
             state.settings.imageGenSystemPrompt
           ) {
-            if (
-              imageGenProvider !== "gemini" ||
-              state.settings.geminiSystemPromptSendMode !== "userPrefix"
-            ) {
-              systemInstruction = {
-                role: "system",
-                parts: [{ text: state.settings.imageGenSystemPrompt }],
-              };
-              apiMessages.shift();
-            }
+            systemInstruction = {
+              role: "system",
+              parts: [{ text: state.settings.imageGenSystemPrompt }],
+            };
+            apiMessages.shift();
           }
           return { apiMessages, systemInstruction };
         },
@@ -32586,8 +32543,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             contextGeminiThinkingBudget,
             contextGeminiThinkingLevel38,
             contextGeminiPseudoStreaming,
-            contextGeminiEnableGrounding,
-            contextGeminiSystemPromptSendMode;
+            contextGeminiEnableGrounding;
 
           let contextClaudeTopK, contextClaudeThinkingBudget;
 
@@ -32657,9 +32613,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             contextGeminiEnableGrounding =
               sourceSessionContext?.enableGrounding ??
               state.settings.geminiEnableGrounding;
-            contextGeminiSystemPromptSendMode =
-              sourceSessionContext?.systemPromptSendMode ??
-              state.settings.geminiSystemPromptSendMode;
           } else if (p === "llmaggregator") {
             contextLlmAggregatorTopK =
               sourceSessionContext?.topK ?? state.settings.llmAggregatorTopK;
@@ -33022,37 +32975,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
           if (systemPromptTextToUseForApi) {
             if (selectedApiProvider === "gemini") {
-              const geminiSystemPromptSendMode = [
-                "systemInstruction",
-                "userPrefix",
-              ].includes(contextGeminiSystemPromptSendMode)
-                ? contextGeminiSystemPromptSendMode
-                : "systemInstruction";
-
-              if (geminiSystemPromptSendMode === "userPrefix") {
-                const firstUserApiMessage = apiMessages.find(
-                  (msg) => msg.role === "user",
-                );
-                const systemPromptPart = {
-                  text: systemPromptTextToUseForApi,
-                };
-                if (firstUserApiMessage) {
-                  firstUserApiMessage.parts = [
-                    systemPromptPart,
-                    ...(firstUserApiMessage.parts || []),
-                  ];
-                } else {
-                  apiMessages.unshift({
-                    role: "user",
-                    parts: [systemPromptPart],
-                  });
-                }
-              } else {
-                systemInstructionForProvider = {
-                  role: "system",
-                  parts: [{ text: systemPromptTextToUseForApi }],
-                };
-              }
+              systemInstructionForProvider = {
+                role: "system",
+                parts: [{ text: systemPromptTextToUseForApi }],
+              };
             } else if (
               selectedApiProvider === "deepseek" ||
               selectedApiProvider === "claude" ||
@@ -35634,8 +35560,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             elements.geminiSystemPromptDefaultTextarea.value.trim();
           newSettings.geminiEnableSystemPromptDefault =
             elements.geminiEnableSystemPromptDefaultCheckbox.checked;
-          newSettings.geminiSystemPromptSendMode =
-            elements.geminiSystemPromptSendModeSelect.value;
           newSettings.geminiMaxTokens = getParamValue(
             "gemini-max-tokens",
             true,
@@ -38057,8 +37981,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               state.settings.geminiExpandThoughtsByDefault;
             config.pseudoStreaming = state.settings.geminiPseudoStreaming;
             config.enableGrounding = state.settings.geminiEnableGrounding;
-            config.systemPromptSendMode =
-              state.settings.geminiSystemPromptSendMode;
           } else if (provider === "deepseek") {
             config.includeThoughts =
               state.settings.deepSeekIncludeDeepSeekThoughts;
@@ -38281,7 +38203,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               reasoningEffort: runtimeForB.reasoningEffort,
               pseudoStreaming: runtimeForB.pseudoStreaming,
               enableGrounding: runtimeForB.enableGrounding,
-              systemPromptSendMode: runtimeForB.systemPromptSendMode,
               visionEnable: runtimeForB.visionEnable,
               inputText: inputForB,
               attachments: [],
