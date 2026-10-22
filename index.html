@@ -3830,9 +3830,17 @@
         line-height: 1.6;
         color: inherit;
         word-wrap: break-word;
-        overflow-wrap: break-word;
         position: relative;
         z-index: 1;
+      }
+      /* Native iOS/Android selection must remain available inside chat replies. */
+      @media (hover: none), (pointer: coarse) {
+        #chat-screen .message-content,
+        #chat-screen .thought-summary-content {
+          -webkit-user-select: text;
+          user-select: text;
+          -webkit-touch-callout: default;
+        }
       }
 
       .message-content > *:first-child {
@@ -28960,6 +28968,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 return;
               }
 
+              // Do not change bubble layout while the OS is selecting its text.
+              if (window.getSelection()?.isCollapsed === false) return;
+
               if (clickedMessage) {
                 const currentlyShown = elements.messageContainer.querySelector(
                   ".message.show-actions",
@@ -29544,12 +29555,17 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         },
         handleTouchStart(event) {
           if (!state.settings.enableSwipeNavigation) return;
-          if (window.getSelection().toString().length > 0) {
-            state.touchStartX = 0;
-            state.touchStartY = 0;
-            state.isSwiping = false;
+          this.resetSwipeState();
+          // Never hijack a native text-selection gesture. The previous
+          // getSelection().toString() also copied long selections on every
+          // touch event, which can stall the main thread on mobile.
+          if (window.getSelection()?.isCollapsed === false) return;
+          if (
+            event.target.closest?.(
+              ".message-content, .thought-summary-content",
+            )
+          )
             return;
-          }
           if (
             event.target.tagName === "TEXTAREA" ||
             event.target.tagName === "INPUT"
@@ -29570,7 +29586,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
 
         handleTouchMove(event) {
           if (!state.settings.enableSwipeNavigation) return;
-          if (window.getSelection().toString().length > 0) {
+          if (window.getSelection()?.isCollapsed === false) {
+            this.resetSwipeState();
             return;
           }
           if (
@@ -29598,6 +29615,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         },
         handleTouchEnd(event) {
           if (!state.settings.enableSwipeNavigation) {
+            this.resetSwipeState();
+            return;
+          }
+          if (window.getSelection()?.isCollapsed === false) {
             this.resetSwipeState();
             return;
           }
