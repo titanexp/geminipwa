@@ -122,6 +122,20 @@ async function send(model, config, input = messages, provider = "deepseek", stre
   const alias = await send("deepseek-v4-flash", {}, messages);
   assert.equal(alias.messages[1].content[1].type, "image_url");
   await assert.rejects(send("deepseek-v4-pro", {}, messages), /画像・ファイルに対応していません/);
+  // For old/custom models, an omitted thinking mode must not silently alter
+  // previously configured sampling parameters.
+  const oldName = await send("deepseek-chat", {
+    temperature: 0.71, presencePenalty: 0.3, frequencyPenalty: 0.2
+  }, [{ role: "user", parts: [{ text: "Legacy" }] }]);
+  assert.equal(oldName.temperature, 0.71);
+  assert.equal(oldName.presence_penalty, 0.3);
+  assert.equal(oldName.frequency_penalty, 0.2);
+  assert.ok(!("thinking" in oldName) && !("reasoning_effort" in oldName));
+  const currentDefault = await send("deepseek-v4-pro", {
+    temperature: 0.8, frequencyPenalty: 0.5
+  }, [{ role: "user", parts: [{ text: "V4" }] }]);
+  assert.ok(!("temperature" in currentDefault));
+  assert.ok(!("frequency_penalty" in currentDefault));
   // The common OpenAI-compatible aggregator must not receive DeepSeek-only fields.
   const agg = await send("openai/any", {
     deepSeekThinkingMode: "enabled", deepSeekReasoningEffort: "max",

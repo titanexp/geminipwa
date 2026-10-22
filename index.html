@@ -41056,9 +41056,16 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-flash';
             if (mode !== "disabled" && ["low", "high", "max"].includes(effort)) {
               dsRequestBody.reasoning_effort = effort;
             }
-            // DeepSeek V4.1 ignores these sampling settings in thinking mode.
-            // Leave the user's saved values untouched for non-thinking mode.
-            if (mode !== "disabled") {
+            // 新しいV4系列は既定でthinking ON。明示的なON、または既定ONの
+            // V4系列でのみ無効なサンプリング項目を削る。
+            // 古いモデル名やカスタムモデルの既定値は変えない。
+            const v4Model = [
+              "deepseek-flash",
+              "deepseek-v4-flash",
+              "deepseek-v4-flash-vision-exp",
+              "deepseek-v4-pro",
+            ].includes(model);
+            if (mode === "enabled" || (mode !== "disabled" && v4Model)) {
               delete dsRequestBody.temperature;
               delete dsRequestBody.presence_penalty;
               delete dsRequestBody.frequency_penalty;

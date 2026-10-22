@@ -23,7 +23,7 @@ https://titan823.github.io/geminipwa/#chat
 ## ■ 更新履歴
 ### 【2026/10/22】
 - titanexp β版のDeepSeek APIをV4.1 Flash向けに更新。正式モデル名 `deepseek-flash` を追加して新規設定の既定モデルとし、旧 `deepseek-v4-flash` も選択可能なまま保持（既存利用者の設定は書き換えない）。
-- DeepSeekのThinking Mode（モデル既定／ON／OFF）とReasoning Effort（モデル既定／Low／High／Max）を個別に保存し、`thinking.type` と `reasoning_effort` として送信。Include Thoughtsはあくまで思考内容の表示設定として維持。思考ON時に効果のないTemperature・Presence/Frequency Penaltyは送信しない（元の設定値は保持）。
+- DeepSeekのThinking Mode（モデル既定／ON／OFF）とReasoning Effort（モデル既定／Low／High／Max）を個別に保存し、`thinking.type` と `reasoning_effort` として送信。Include Thoughtsはあくまで思考内容の表示設定として維持。V4系列の思考ON時に効果のないTemperature・Presence/Frequency Penaltyは送信しない（元の設定値は保持）。旧・カスタムモデルのモード未指定時は既存のサンプリング設定を維持。
 - DeepSeek V4.1 FlashへのJPEG／PNG／GIF／WebP画像入力に対応。未対応モデルで画像を送った場合は無言で破棄せずエラーにする。ストリーミングの思考と本文が同一チャンクに来ても双方を処理する。
 - DeepSeekの送信本文・思考ON/OFF・Low/High/Max・画像入力・旧モデル・Aggregatorとの分離についてオフライン回帰テストを追加。実API通信は未検証。Search／Fetchは別料金・別エンドポイントのため自動呼び出しを実装せず（無断課金防止）。バージョン番号を変更しない。
 - titanexp β版のGeminiシステムプロンプト送信方式を `systemInstruction` のみに統一。`userPrefix` 切替UIと保存・セッション／AI間会話・画像生成に残っていた分岐を削除。旧設定で `userPrefix` が保存されていても送信には使用せず、プロンプト本文と他プロバイダーの送信仕様は維持。バージョン表記の変更なし
