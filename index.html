@@ -10918,22 +10918,13 @@
                   思考プロセス
                 </summary>
                 <div id="deepseek-thoughts-param" style="padding-left: 15px">
-                  <label for="deepseek-thinking-mode">Thinking Mode:</label>
-                  <select id="deepseek-thinking-mode" aria-label="DeepSeek Thinking Mode">
-                    <option value="">モデル既定 (ON)</option>
-                    <option value="enabled">ON</option>
-                    <option value="disabled">OFF</option>
-                  </select>
-                  <label for="deepseek-reasoning-effort">Reasoning Effort:</label>
-                  <select id="deepseek-reasoning-effort" aria-label="DeepSeek Reasoning Effort">
-                    <option value="">モデル既定 (High)</option>
+                  <label for="deepseek-thinking-level">Thinking:</label>
+                  <select id="deepseek-thinking-level" aria-label="DeepSeek Thinking">
+                    <option value="off">OFF</option>
                     <option value="low">Low</option>
                     <option value="high">High</option>
                     <option value="max">Max</option>
                   </select>
-                  <p style="font-size: 11px; color: var(--text-secondary);">
-                    ※ 思考OFFでは推論強度を送信しません。Include Thoughtsは思考内容の表示設定です。
-                  </p>
                   <label class="checkbox-label">
                     <input
                       type="checkbox"
@@ -10948,16 +10939,6 @@
                     />
                     💭思考プロセスを開いた状態にする
                   </label>
-                  <p
-                    style="
-                      font-size: 11px;
-                      color: var(--text-secondary);
-                      margin-top: -5px;
-                      margin-bottom: 10px;
-                    "
-                  >
-                    ※ deepseek-reasoner モデル等で利用可能。<br />
-                  </p>
                 </div>
               </details>
 
@@ -16795,8 +16776,7 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-flash';
         deepSeekPresencePenaltyInput: byId("deepseek-presence-penalty"),
         deepSeekFrequencyPenaltyInput: byId("deepseek-frequency-penalty"),
         deepSeekIncludeThoughtsToggle: byId("deepseek-include-thoughts-toggle"),
-        deepSeekThinkingModeSelect: byId("deepseek-thinking-mode"),
-        deepSeekReasoningEffortSelect: byId("deepseek-reasoning-effort"),
+        deepSeekThinkingLevelSelect: byId("deepseek-thinking-level"),
         deepSeekExpandThoughtsByDefaultToggle: byId(
           "deepseek-expand-thoughts-by-default-toggle",
         ),
@@ -17521,8 +17501,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-flash';
           deepSeekPresencePenalty: null,
           deepSeekFrequencyPenalty: null,
           deepSeekIncludeDeepSeekThoughts: false,
-          deepSeekThinkingMode: "",
-          deepSeekReasoningEffort: "",
+          deepSeekThinkingMode: "enabled",
+          deepSeekReasoningEffort: "high",
           deepSeekExpandThoughtsByDefault: false,
           deepSeekStreamingOutput: false,
           deepSeekStreamingSpeed: DEFAULT_STREAMING_SPEED,
@@ -23145,14 +23125,12 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-flash';
                 elements[`${key}ExpandThoughtsByDefaultToggle`].checked =
                   state.settings[`${key}ExpandThoughtsByDefault`];
               if (id === "deepseek") {
-                elements.deepSeekThinkingModeSelect.value =
-                  ["", "enabled", "disabled"].includes(state.settings.deepSeekThinkingMode)
-                    ? state.settings.deepSeekThinkingMode : "";
-                elements.deepSeekReasoningEffortSelect.value =
-                  ["", "low", "high", "max"].includes(state.settings.deepSeekReasoningEffort)
-                    ? state.settings.deepSeekReasoningEffort : "";
-                elements.deepSeekReasoningEffortSelect.disabled =
-                  elements.deepSeekThinkingModeSelect.value === "disabled";
+                elements.deepSeekThinkingLevelSelect.value =
+                  state.settings.deepSeekThinkingMode === "disabled"
+                    ? "off"
+                    : ["low", "high", "max"].includes(state.settings.deepSeekReasoningEffort)
+                      ? state.settings.deepSeekReasoningEffort
+                      : "high";
               }
             }
             if (id === "claude" && elements.claudeThinkingBudgetInput)
@@ -27540,10 +27518,6 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-flash';
           });
           elements.geminiModelNameSelect.addEventListener("change", () => {
             uiUtils.updateGeminiArgonFlexAvailability();
-          });
-          elements.deepSeekThinkingModeSelect.addEventListener("change", () => {
-            elements.deepSeekReasoningEffortSelect.disabled =
-              elements.deepSeekThinkingModeSelect.value === "disabled";
           });
           elements.updateAppBtn.addEventListener("click", () =>
             this.updateApp(),
@@ -35881,8 +35855,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-flash';
                 elements[`${p}ExpandThoughtsByDefaultToggle`].checked;
             }
             if (p === "deepSeek") {
-              newSettings.deepSeekThinkingMode = elements.deepSeekThinkingModeSelect.value;
-              newSettings.deepSeekReasoningEffort = elements.deepSeekReasoningEffortSelect.value;
+              const level = elements.deepSeekThinkingLevelSelect.value;
+              newSettings.deepSeekThinkingMode = level === "off" ? "disabled" : "enabled";
+              newSettings.deepSeekReasoningEffort = level === "off" ? "high" : level;
             }
             if (p === "xai")
               newSettings.xaiReasoningEffort =

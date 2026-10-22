@@ -14,10 +14,47 @@ for (const part of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) {
 assert.ok(scripts >= 1);
 assert.match(html, /<option value="deepseek-flash">/);
 assert.match(html, /DEFAULT_DEEPSEEK_MODEL = 'deepseek-flash'/);
-assert.equal((html.match(/id="deepseek-thinking-mode"/g) || []).length, 1);
-assert.equal((html.match(/id="deepseek-reasoning-effort"/g) || []).length, 1);
-assert.match(html, /newSettings\.deepSeekThinkingMode = elements\.deepSeekThinkingModeSelect\.value/);
-assert.match(html, /newSettings\.deepSeekReasoningEffort = elements\.deepSeekReasoningEffortSelect\.value/);
+assert.equal((html.match(/id="deepseek-thinking-level"/g) || []).length, 1);
+assert.equal((html.match(/id="deepseek-thinking-mode"/g) || []).length, 0);
+assert.equal((html.match(/id="deepseek-reasoning-effort"/g) || []).length, 0);
+const thinkingUi = html.match(/<select id="deepseek-thinking-level"[^>]*>([\s\S]*?)<\/select>/)?.[1] || "";
+assert.deepEqual([...thinkingUi.matchAll(/<option value="([^"]+)"/g)].map(m => m[1]),
+  ["off", "low", "high", "max"]);
+assert.ok(!thinkingUi.includes("モデル既定"));
+assert.match(html, /newSettings\.deepSeekThinkingMode = level === "off" \? "disabled" : "enabled"/);
+assert.match(html, /newSettings\.deepSeekReasoningEffort = level === "off" \? "high" : level/);
+assert.match(html, /state\.settings\.deepSeekThinkingMode === "disabled"/);
+const uiStart = html.indexOf("elements.deepSeekThinkingLevelSelect.value =\n");
+const uiEnd = html.indexOf("\n              }", uiStart);
+assert.ok(uiStart >= 0 && uiEnd > uiStart);
+const restoreThinking = new Function("elements", "state", html.slice(uiStart, uiEnd));
+for (const [mode, effort, expected] of [
+  ["disabled", "max", "off"],
+  ["enabled", "low", "low"],
+  ["enabled", "high", "high"],
+  ["enabled", "max", "max"],
+  ["", "", "high"],
+  ["unexpected", "unexpected", "high"],
+]) {
+  const elements = { deepSeekThinkingLevelSelect: { value: "" } };
+  restoreThinking(elements, { settings: {
+    deepSeekThinkingMode: mode, deepSeekReasoningEffort: effort
+  } });
+  assert.equal(elements.deepSeekThinkingLevelSelect.value, expected);
+}
+const saveStart = html.indexOf("const level = elements.deepSeekThinkingLevelSelect.value;");
+const saveEnd = html.indexOf("\n            }", saveStart);
+assert.ok(saveStart >= 0 && saveEnd > saveStart);
+const saveThinking = new Function("elements", "newSettings", html.slice(saveStart, saveEnd));
+for (const [level, mode, effort] of [
+  ["off", "disabled", "high"], ["low", "enabled", "low"],
+  ["high", "enabled", "high"], ["max", "enabled", "max"]
+]) {
+  const saved = {};
+  saveThinking({ deepSeekThinkingLevelSelect: { value: level } }, saved);
+  assert.equal(saved.deepSeekThinkingMode, mode);
+  assert.equal(saved.deepSeekReasoningEffort, effort);
+}
 assert.match(html, /contextDeepSeekThinkingMode =/);
 assert.match(html, /contextDeepSeekReasoningEffort =/);
 assert.match(html, /commonGenerationConfig\.deepSeekThinkingMode = contextDeepSeekThinkingMode/);
