@@ -21,6 +21,10 @@
 https://titan823.github.io/geminipwa/#chat
 
 ## ■ 更新履歴
+### 【2026/10/22】
+- Gemini 3.8 Flash向けの送信形式を修正。旧サンプリングパラメータとThinking Budgetを送信せず、Thinking Level（Low・Medium・High）に対応
+- 3.8 Flashでは非対応のダミーModel事前入力と回答連結を抑止（保存済み設定は維持）
+- Gemini 2.5系・Argonの既存動作を含むオフライン回帰テストを追加
 ### 【2025/05/23】
 - メッセージ削除時の確認ダイアログを無効にするオプションを追加
 ### 【2025/05/21】
