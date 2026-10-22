@@ -9584,6 +9584,7 @@
                   id="deepseek-user-defined-models-group"
                 ></optgroup>
                 <optgroup label="現行">
+                  <option value="deepseek-flash">DeepSeek V4.1 Flash (最新)</option>
                   <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
                   <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>
                 </optgroup>
@@ -10917,6 +10918,22 @@
                   思考プロセス
                 </summary>
                 <div id="deepseek-thoughts-param" style="padding-left: 15px">
+                  <label for="deepseek-thinking-mode">Thinking Mode:</label>
+                  <select id="deepseek-thinking-mode" aria-label="DeepSeek Thinking Mode">
+                    <option value="">モデル既定 (ON)</option>
+                    <option value="enabled">ON</option>
+                    <option value="disabled">OFF</option>
+                  </select>
+                  <label for="deepseek-reasoning-effort">Reasoning Effort:</label>
+                  <select id="deepseek-reasoning-effort" aria-label="DeepSeek Reasoning Effort">
+                    <option value="">モデル既定 (High)</option>
+                    <option value="low">Low</option>
+                    <option value="high">High</option>
+                    <option value="max">Max</option>
+                  </select>
+                  <p style="font-size: 11px; color: var(--text-secondary);">
+                    ※ 思考OFFでは推論強度を送信しません。Include Thoughtsは思考内容の表示設定です。
+                  </p>
                   <label class="checkbox-label">
                     <input
                       type="checkbox"
@@ -15857,7 +15874,7 @@
         { value: "dummy", text: "Dummy AI" },
       ];
 const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
-const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
+const DEFAULT_DEEPSEEK_MODEL = 'deepseek-flash';
         const DEFAULT_CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
         const DEFAULT_OPENAI_MODEL = 'gpt-3.5-turbo';
         const DEFAULT_XAI_MODEL = 'grok-4-1-fast-non-reasoning';
@@ -16778,6 +16795,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
         deepSeekPresencePenaltyInput: byId("deepseek-presence-penalty"),
         deepSeekFrequencyPenaltyInput: byId("deepseek-frequency-penalty"),
         deepSeekIncludeThoughtsToggle: byId("deepseek-include-thoughts-toggle"),
+        deepSeekThinkingModeSelect: byId("deepseek-thinking-mode"),
+        deepSeekReasoningEffortSelect: byId("deepseek-reasoning-effort"),
         deepSeekExpandThoughtsByDefaultToggle: byId(
           "deepseek-expand-thoughts-by-default-toggle",
         ),
@@ -17502,6 +17521,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           deepSeekPresencePenalty: null,
           deepSeekFrequencyPenalty: null,
           deepSeekIncludeDeepSeekThoughts: false,
+          deepSeekThinkingMode: "",
+          deepSeekReasoningEffort: "",
           deepSeekExpandThoughtsByDefault: false,
           deepSeekStreamingOutput: false,
           deepSeekStreamingSpeed: DEFAULT_STREAMING_SPEED,
@@ -23123,6 +23144,16 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               if (elements[`${key}ExpandThoughtsByDefaultToggle`])
                 elements[`${key}ExpandThoughtsByDefaultToggle`].checked =
                   state.settings[`${key}ExpandThoughtsByDefault`];
+              if (id === "deepseek") {
+                elements.deepSeekThinkingModeSelect.value =
+                  ["", "enabled", "disabled"].includes(state.settings.deepSeekThinkingMode)
+                    ? state.settings.deepSeekThinkingMode : "";
+                elements.deepSeekReasoningEffortSelect.value =
+                  ["", "low", "high", "max"].includes(state.settings.deepSeekReasoningEffort)
+                    ? state.settings.deepSeekReasoningEffort : "";
+                elements.deepSeekReasoningEffortSelect.disabled =
+                  elements.deepSeekThinkingModeSelect.value === "disabled";
+              }
             }
             if (id === "claude" && elements.claudeThinkingBudgetInput)
               elements.claudeThinkingBudgetInput.value =
@@ -27509,6 +27540,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           });
           elements.geminiModelNameSelect.addEventListener("change", () => {
             uiUtils.updateGeminiArgonFlexAvailability();
+          });
+          elements.deepSeekThinkingModeSelect.addEventListener("change", () => {
+            elements.deepSeekReasoningEffortSelect.disabled =
+              elements.deepSeekThinkingModeSelect.value === "disabled";
           });
           elements.updateAppBtn.addEventListener("click", () =>
             this.updateApp(),
@@ -32572,6 +32607,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           let contextXaiVisionEnable, contextXaiReasoningEffort;
 
           let contextLlmAggregatorTopK;
+          let contextDeepSeekThinkingMode = "";
+          let contextDeepSeekReasoningEffort = "";
 
           const p = selectedApiProvider;
 
@@ -32641,6 +32678,11 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           } else if (p === "llmaggregator") {
             contextLlmAggregatorTopK =
               sourceSessionContext?.topK ?? state.settings.llmAggregatorTopK;
+          } else if (p === "deepseek") {
+            contextDeepSeekThinkingMode =
+              sourceSessionContext?.deepSeekThinkingMode ?? state.settings.deepSeekThinkingMode ?? "";
+            contextDeepSeekReasoningEffort =
+              sourceSessionContext?.deepSeekReasoningEffort ?? state.settings.deepSeekReasoningEffort ?? "";
           } else if (p === "claude") {
             contextClaudeTopK =
               sourceSessionContext?.topK ?? state.settings.claudeTopK;
@@ -33001,6 +33043,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
           } else if (selectedApiProvider === "llmaggregator") {
             if (contextLlmAggregatorTopK !== null)
               commonGenerationConfig.topK = contextLlmAggregatorTopK;
+          } else if (selectedApiProvider === "deepseek") {
+            commonGenerationConfig.deepSeekThinkingMode = contextDeepSeekThinkingMode;
+            commonGenerationConfig.deepSeekReasoningEffort = contextDeepSeekReasoningEffort;
           }
 
           let systemInstructionForProvider = null;
@@ -35835,6 +35880,10 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               newSettings[`${p}ExpandThoughtsByDefault`] =
                 elements[`${p}ExpandThoughtsByDefaultToggle`].checked;
             }
+            if (p === "deepSeek") {
+              newSettings.deepSeekThinkingMode = elements.deepSeekThinkingModeSelect.value;
+              newSettings.deepSeekReasoningEffort = elements.deepSeekReasoningEffortSelect.value;
+            }
             if (p === "xai")
               newSettings.xaiReasoningEffort =
                 elements.xaiReasoningEffortSelect.value;
@@ -38023,6 +38072,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               state.settings.deepSeekIncludeDeepSeekThoughts;
             config.expandThoughtsByDefault =
               state.settings.deepSeekExpandThoughtsByDefault;
+            config.deepSeekThinkingMode = state.settings.deepSeekThinkingMode;
+            config.deepSeekReasoningEffort = state.settings.deepSeekReasoningEffort;
           } else if (provider === "llmaggregator") {
             config.topK = state.settings.llmAggregatorTopK;
             config.includeThoughts = state.settings.llmAggregatorIncludeThoughts;
@@ -40911,6 +40962,9 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
             provider === "llmaggregator" &&
             Array.isArray(generationConfig?.responseModalities) &&
             generationConfig.responseModalities.includes("IMAGE");
+          const supportsDeepSeekVision =
+            provider === "deepseek" &&
+            ["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"].includes(model);
 
           const dsMessages = [];
           const systemText =
@@ -40937,9 +40991,12 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                 textParts.push(part.text.trim());
                 openAiContentParts.push({ type: "text", text: part.text });
               } else if (
-                wantsImageOutput &&
+                (wantsImageOutput || supportsDeepSeekVision) &&
+                msg.role === "user" &&
                 part.inlineData?.data &&
-                part.inlineData?.mimeType?.startsWith("image/")
+                ["image/jpeg", "image/png", "image/gif", "image/webp"].includes(
+                  part.inlineData?.mimeType?.toLowerCase()
+                )
               ) {
                 openAiContentParts.push({
                   type: "image_url",
@@ -40947,11 +41004,17 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                     url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`,
                   },
                 });
+              } else if (provider === "deepseek" && part.inlineData?.data) {
+                throw new Error(
+                  "このDeepSeekモデルは添付画像・ファイルに対応していません。画像はdeepseek-flashでJPEG/PNG/GIF/WebPを指定してください。"
+                );
               }
             });
             const fullContent = textParts.join("\n").trim();
 
-            if (wantsImageOutput && openAiContentParts.length > 0) {
+            if ((wantsImageOutput || supportsDeepSeekVision) &&
+                openAiContentParts.some((part) => part.type === "image_url")) {
+              // Chat Completions Vision requires an array for user messages.
               dsMessages.push({
                 role: msg.role === "model" ? "assistant" : msg.role,
                 content: openAiContentParts,
@@ -40984,6 +41047,23 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
               frequency_penalty: generationConfig.frequencyPenalty,
             }),
           };
+          if (provider === "deepseek") {
+            const mode = generationConfig.deepSeekThinkingMode;
+            const effort = generationConfig.deepSeekReasoningEffort;
+            if (mode === "enabled" || mode === "disabled") {
+              dsRequestBody.thinking = { type: mode };
+            }
+            if (mode !== "disabled" && ["low", "high", "max"].includes(effort)) {
+              dsRequestBody.reasoning_effort = effort;
+            }
+            // DeepSeek V4.1 ignores these sampling settings in thinking mode.
+            // Leave the user's saved values untouched for non-thinking mode.
+            if (mode !== "disabled") {
+              delete dsRequestBody.temperature;
+              delete dsRequestBody.presence_penalty;
+              delete dsRequestBody.frequency_penalty;
+            }
+          }
 
           if (provider === "llmaggregator" && wantsImageOutput) {
             dsRequestBody.response_modalities =
@@ -41104,7 +41184,8 @@ const DEFAULT_DEEPSEEK_MODEL = 'deepseek-v4-flash';
                       if (delta.reasoning_content) {
                         reasoningTextChunk = delta.reasoning_content;
                         accumulatedFullReasoningContent += reasoningTextChunk;
-                      } else if (delta.content) {
+                      }
+                      if (delta.content) {
                         contentTextChunk = delta.content;
                       }
                     }

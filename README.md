@@ -22,6 +22,10 @@ https://titan823.github.io/geminipwa/#chat
 
 ## ■ 更新履歴
 ### 【2026/10/22】
+- titanexp β版のDeepSeek APIをV4.1 Flash向けに更新。正式モデル名 `deepseek-flash` を追加して新規設定の既定モデルとし、旧 `deepseek-v4-flash` も選択可能なまま保持（既存利用者の設定は書き換えない）。
+- DeepSeekのThinking Mode（モデル既定／ON／OFF）とReasoning Effort（モデル既定／Low／High／Max）を個別に保存し、`thinking.type` と `reasoning_effort` として送信。Include Thoughtsはあくまで思考内容の表示設定として維持。思考ON時に効果のないTemperature・Presence/Frequency Penaltyは送信しない（元の設定値は保持）。
+- DeepSeek V4.1 FlashへのJPEG／PNG／GIF／WebP画像入力に対応。未対応モデルで画像を送った場合は無言で破棄せずエラーにする。ストリーミングの思考と本文が同一チャンクに来ても双方を処理する。
+- DeepSeekの送信本文・思考ON/OFF・Low/High/Max・画像入力・旧モデル・Aggregatorとの分離についてオフライン回帰テストを追加。実API通信は未検証。Search／Fetchは別料金・別エンドポイントのため自動呼び出しを実装せず（無断課金防止）。バージョン番号を変更しない。
 - titanexp β版のGeminiシステムプロンプト送信方式を `systemInstruction` のみに統一。`userPrefix` 切替UIと保存・セッション／AI間会話・画像生成に残っていた分岐を削除。旧設定で `userPrefix` が保存されていても送信には使用せず、プロンプト本文と他プロバイダーの送信仕様は維持。バージョン表記の変更なし
 - titanexp β版の履歴タブで、💬メッセージ件数をタイトル行の📌ピン留めボタン左隣へ移動。件数専用の2段目を廃止し、ピンボタンの上下余白を減らしてtitan823版に近い縦幅へ調整。検索結果のプレビュー、ピン留め、現在の履歴の枠線表示は維持。バージョン表記は変更なし
 - 履歴画面から「開いている」バッジと「あなたの発言で終了／AIの返答で終了」の表示を削除。現在のチャットの枠線表示、メッセージ件数、検索用の本文プレビュー、ピン留めなどは維持（バージョン表記の変更なし）
